@@ -145,7 +145,16 @@ class ChatController extends _$ChatController {
     }
 
     final subscription = provider
-        .streamChat(ChatRequest(model: selection.model, messages: history))
+        .streamChat(
+          ChatRequest(
+            model: selection.model,
+            messages: history,
+            // 模型不支持推理时不下发任何推理字段。
+            reasoningEffort: selection.supportsReasoning
+                ? selection.effort
+                : null,
+          ),
+        )
         .listen(
           (chunk) {
             final reasoning = chunk.reasoningDelta;

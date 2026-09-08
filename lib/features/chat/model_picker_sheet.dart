@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../data/models/reasoning_effort.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
 import 'model_selection.dart';
 
@@ -95,24 +96,56 @@ class ModelPickerSheet extends ConsumerWidget {
                     child: Material(
                       type: MaterialType.transparency,
                       child: ListTile(
-                        title: Text(model),
+                        title: Text(model.id),
+                        subtitle: model.supportsReasoning
+                            ? const Text('支持推理')
+                            : null,
                         selected:
                             selection?.profile.id == profile.id &&
-                            selection?.model == model,
+                            selection?.model == model.id,
                         trailing:
                             selection?.profile.id == profile.id &&
-                                selection?.model == model
+                                selection?.model == model.id
                             ? Icon(Symbols.check, color: colorScheme.primary)
                             : null,
                         onTap: () {
                           ref
                               .read(modelSelectionProvider.notifier)
-                              .select(profile.id, model);
+                              .select(profile.id, model.id);
                           Navigator.of(context).pop();
                         },
                       ),
                     ),
                   ),
+              ],
+              // 当前模型支持推理时才出现推理等级选择。
+              if (selection != null && selection.supportsReasoning) ...[
+                const SizedBox(height: AppSpacing.l),
+                Text(
+                  '推理等级',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    color: colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s),
+                SizedBox(
+                  width: double.infinity,
+                  child: SegmentedButton<ReasoningEffort>(
+                    segments: [
+                      for (final effort in ReasoningEffort.values)
+                        ButtonSegment(
+                          value: effort,
+                          label: Text(effort.label),
+                        ),
+                    ],
+                    selected: {selection.effort},
+                    onSelectionChanged: (selected) {
+                      ref
+                          .read(modelSelectionProvider.notifier)
+                          .selectEffort(selected.first);
+                    },
+                  ),
+                ),
               ],
             ],
           );

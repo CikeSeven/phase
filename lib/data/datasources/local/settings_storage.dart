@@ -26,6 +26,7 @@ class SettingsStorage {
 
   static const _lastProfileIdKey = 'last_profile_id';
   static const _lastModelKey = 'last_model';
+  static const _lastReasoningEffortKey = 'last_reasoning_effort';
 
   String? readLastProfileId() => _prefs.getString(_lastProfileIdKey);
 
@@ -38,6 +39,14 @@ class SettingsStorage {
   }) async {
     await _prefs.setString(_lastProfileIdKey, profileId);
     await _prefs.setString(_lastModelKey, model);
+  }
+
+  /// 最近使用的推理等级（ReasoningEffort.name）；未设置时返回 null。
+  String? readLastReasoningEffort() =>
+      _prefs.getString(_lastReasoningEffortKey);
+
+  Future<void> writeLastReasoningEffort(String effortName) {
+    return _prefs.setString(_lastReasoningEffortKey, effortName);
   }
 }
 

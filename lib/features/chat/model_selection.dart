@@ -1,17 +1,29 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../data/datasources/local/settings_storage.dart';
+import '../../../data/models/profile_model.dart';
 import '../../../data/models/provider_profile.dart';
+import '../../../data/models/reasoning_effort.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
 
 part 'model_selection.g.dart';
 
-/// 当前生效的「服务商 × 模型」组合。
+/// 当前生效的「服务商 × 模型 × 推理等级」组合。
 class ChatModelSelection {
-  const ChatModelSelection({required this.profile, required this.model});
+  const ChatModelSelection({
+    required this.profile,
+    required this.model,
+    required this.supportsReasoning,
+    required this.effort,
+  });
 
   final ProviderProfile profile;
   final String model;
+
+  /// 当前模型是否声明支持推理；false 时 effort 不下发。
+  final bool supportsReasoning;
+
+  final ReasoningEffort effort;
 }
 
 /// 模型选择：优先「最近使用」（shared_preferences），
@@ -44,12 +56,26 @@ class ModelSelection extends _$ModelSelection {
       model = profile.defaultModel ??
           (profile.modelCandidates.isEmpty
               ? null
-              : profile.modelCandidates.first);
+              : profile.modelCandidates.first.id);
     }
     if (model == null) {
       return null;
     }
-    return ChatModelSelection(profile: profile, model: model);
+
+    var supportsReasoning = guessSupportsReasoning(model);
+    for (final candidate in profile.modelCandidates) {
+      if (candidate.id == model) {
+        supportsReasoning = candidate.supportsReasoning;
+        break;
+      }
+    }
+
+    return ChatModelSelection(
+      profile: profile,
+      model: model,
+      supportsReasoning: supportsReasoning,
+      effort: ReasoningEffort.fromName(settings.readLastReasoningEffort()),
+    );
   }
 
   /// 用户显式选择后持久化，并让派生状态重建。
@@ -57,6 +83,14 @@ class ModelSelection extends _$ModelSelection {
     await ref
         .read(settingsStorageProvider)
         .writeLastModelSelection(profileId: profileId, model: model);
+    ref.invalidateSelf();
+  }
+
+  /// 推理等级全局最近使用，持久化后重建派生状态。
+  Future<void> selectEffort(ReasoningEffort effort) async {
+    await ref
+        .read(settingsStorageProvider)
+        .writeLastReasoningEffort(effort.name);
     ref.invalidateSelf();
   }
 }
