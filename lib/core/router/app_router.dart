@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -10,28 +11,44 @@ import '../../features/settings/settings_page.dart';
 part 'app_router.g.dart';
 
 /// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
+///
+/// 每条路由必须显式给出 pageBuilder：go_router 18 靠检测 material_ui 包的
+/// MaterialApp 决定页面类型，而本应用用的是 Flutter SDK 内置的 MaterialApp，
+/// 检测失败会让所有路由退化为无动画的 NoTransitionPage（且失去预测性返回）。
 @Riverpod(keepAlive: true)
 GoRouter appRouter(Ref ref) {
+  MaterialPage<void> materialPage(GoRouterState state, Widget child) {
+    return MaterialPage(key: state.pageKey, child: child);
+  }
+
   return GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(path: '/', builder: (context, state) => const ChatPage()),
+      GoRoute(
+        path: '/',
+        pageBuilder: (context, state) => materialPage(state, const ChatPage()),
+      ),
       GoRoute(
         path: '/settings',
-        builder: (context, state) => const SettingsPage(),
+        pageBuilder: (context, state) =>
+            materialPage(state, const SettingsPage()),
         routes: [
           GoRoute(
             path: 'providers',
-            builder: (context, state) => const ProvidersPage(),
+            pageBuilder: (context, state) =>
+                materialPage(state, const ProvidersPage()),
             routes: [
               GoRoute(
                 path: 'new',
-                builder: (context, state) => const ProviderEditPage(),
+                pageBuilder: (context, state) =>
+                    materialPage(state, const ProviderEditPage()),
               ),
               GoRoute(
                 path: ':id',
-                builder: (context, state) =>
-                    ProviderEditPage(profileId: state.pathParameters['id']),
+                pageBuilder: (context, state) => materialPage(
+                  state,
+                  ProviderEditPage(profileId: state.pathParameters['id']),
+                ),
               ),
             ],
           ),
@@ -39,7 +56,8 @@ GoRouter appRouter(Ref ref) {
       ),
       GoRoute(
         path: '/assistants',
-        builder: (context, state) => const AssistantsPage(),
+        pageBuilder: (context, state) =>
+            materialPage(state, const AssistantsPage()),
       ),
     ],
   );
