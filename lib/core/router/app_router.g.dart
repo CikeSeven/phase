@@ -8,23 +8,29 @@ part of 'app_router.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// 应用路由表。
+/// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
 ///
-/// TODO(motion): 按 DESIGN.md §7 统一 FadeThrough / SharedAxis 页面过渡。
+/// 每条路由必须显式给出 pageBuilder：go_router 18 靠检测 material_ui 包的
+/// MaterialApp 决定页面类型，而本应用用的是 Flutter SDK 内置的 MaterialApp，
+/// 检测失败会让所有路由退化为无动画的 NoTransitionPage（且失去预测性返回）。
 
 @ProviderFor(appRouter)
 final appRouterProvider = AppRouterProvider._();
 
-/// 应用路由表。
+/// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
 ///
-/// TODO(motion): 按 DESIGN.md §7 统一 FadeThrough / SharedAxis 页面过渡。
+/// 每条路由必须显式给出 pageBuilder：go_router 18 靠检测 material_ui 包的
+/// MaterialApp 决定页面类型，而本应用用的是 Flutter SDK 内置的 MaterialApp，
+/// 检测失败会让所有路由退化为无动画的 NoTransitionPage（且失去预测性返回）。
 
 final class AppRouterProvider
     extends $FunctionalProvider<GoRouter, GoRouter, GoRouter>
     with $Provider<GoRouter> {
-  /// 应用路由表。
+  /// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
   ///
-  /// TODO(motion): 按 DESIGN.md §7 统一 FadeThrough / SharedAxis 页面过渡。
+  /// 每条路由必须显式给出 pageBuilder：go_router 18 靠检测 material_ui 包的
+  /// MaterialApp 决定页面类型，而本应用用的是 Flutter SDK 内置的 MaterialApp，
+  /// 检测失败会让所有路由退化为无动画的 NoTransitionPage（且失去预测性返回）。
   AppRouterProvider._()
     : super(
         from: null,
@@ -58,4 +64,4 @@ final class AppRouterProvider
   }
 }
 
-String _$appRouterHash() => r'68f14061e95e3ad5300d8ceb9e641b03b49ca3fe';
+String _$appRouterHash() => r'2a98a50feeaf0a6fb75b0be325cd712787070ae9';
