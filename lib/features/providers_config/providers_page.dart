@@ -2,20 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../data/models/provider_profile.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
-
-part 'providers_page.g.dart';
-
-/// 服务商配置列表流。
-@riverpod
-Stream<List<ProviderProfile>> providerProfiles(Ref ref) {
-  return ref.watch(providerProfileRepositoryProvider).watchProfiles();
-}
 
 /// 服务商配置列表页（`/settings/providers`）。
 class ProvidersPage extends ConsumerWidget {
