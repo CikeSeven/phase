@@ -899,6 +899,17 @@ class $ProviderProfilesTable extends ProviderProfiles
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _defaultModelMeta = const VerificationMeta(
+    'defaultModel',
+  );
+  @override
+  late final GeneratedColumn<String> defaultModel = GeneratedColumn<String>(
+    'default_model',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -916,6 +927,7 @@ class $ProviderProfilesTable extends ProviderProfiles
     name,
     baseUrl,
     modelsJson,
+    defaultModel,
     createdAt,
   ];
   @override
@@ -957,6 +969,15 @@ class $ProviderProfilesTable extends ProviderProfiles
         modelsJson.isAcceptableOrUnknown(data['models_json']!, _modelsJsonMeta),
       );
     }
+    if (data.containsKey('default_model')) {
+      context.handle(
+        _defaultModelMeta,
+        defaultModel.isAcceptableOrUnknown(
+          data['default_model']!,
+          _defaultModelMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -990,6 +1011,10 @@ class $ProviderProfilesTable extends ProviderProfiles
         DriftSqlType.string,
         data['${effectivePrefix}models_json'],
       )!,
+      defaultModel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}default_model'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1011,12 +1036,16 @@ class ProviderProfileRow extends DataClass
 
   /// 模型 id 列表的 JSON 编码（`List<String>`）。
   final String modelsJson;
+
+  /// 该服务商下默认使用的模型；未设置时由上层回退到候选模型第一个。
+  final String? defaultModel;
   final DateTime createdAt;
   const ProviderProfileRow({
     required this.id,
     required this.name,
     required this.baseUrl,
     required this.modelsJson,
+    this.defaultModel,
     required this.createdAt,
   });
   @override
@@ -1026,6 +1055,9 @@ class ProviderProfileRow extends DataClass
     map['name'] = Variable<String>(name);
     map['base_url'] = Variable<String>(baseUrl);
     map['models_json'] = Variable<String>(modelsJson);
+    if (!nullToAbsent || defaultModel != null) {
+      map['default_model'] = Variable<String>(defaultModel);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -1036,6 +1068,9 @@ class ProviderProfileRow extends DataClass
       name: Value(name),
       baseUrl: Value(baseUrl),
       modelsJson: Value(modelsJson),
+      defaultModel: defaultModel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(defaultModel),
       createdAt: Value(createdAt),
     );
   }
@@ -1050,6 +1085,7 @@ class ProviderProfileRow extends DataClass
       name: serializer.fromJson<String>(json['name']),
       baseUrl: serializer.fromJson<String>(json['baseUrl']),
       modelsJson: serializer.fromJson<String>(json['modelsJson']),
+      defaultModel: serializer.fromJson<String?>(json['defaultModel']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1061,6 +1097,7 @@ class ProviderProfileRow extends DataClass
       'name': serializer.toJson<String>(name),
       'baseUrl': serializer.toJson<String>(baseUrl),
       'modelsJson': serializer.toJson<String>(modelsJson),
+      'defaultModel': serializer.toJson<String?>(defaultModel),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1070,12 +1107,14 @@ class ProviderProfileRow extends DataClass
     String? name,
     String? baseUrl,
     String? modelsJson,
+    Value<String?> defaultModel = const Value.absent(),
     DateTime? createdAt,
   }) => ProviderProfileRow(
     id: id ?? this.id,
     name: name ?? this.name,
     baseUrl: baseUrl ?? this.baseUrl,
     modelsJson: modelsJson ?? this.modelsJson,
+    defaultModel: defaultModel.present ? defaultModel.value : this.defaultModel,
     createdAt: createdAt ?? this.createdAt,
   );
   ProviderProfileRow copyWithCompanion(ProviderProfilesCompanion data) {
@@ -1086,6 +1125,9 @@ class ProviderProfileRow extends DataClass
       modelsJson: data.modelsJson.present
           ? data.modelsJson.value
           : this.modelsJson,
+      defaultModel: data.defaultModel.present
+          ? data.defaultModel.value
+          : this.defaultModel,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1097,13 +1139,15 @@ class ProviderProfileRow extends DataClass
           ..write('name: $name, ')
           ..write('baseUrl: $baseUrl, ')
           ..write('modelsJson: $modelsJson, ')
+          ..write('defaultModel: $defaultModel, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(id, name, baseUrl, modelsJson, createdAt);
+  int get hashCode =>
+      Object.hash(id, name, baseUrl, modelsJson, defaultModel, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1112,6 +1156,7 @@ class ProviderProfileRow extends DataClass
           other.name == this.name &&
           other.baseUrl == this.baseUrl &&
           other.modelsJson == this.modelsJson &&
+          other.defaultModel == this.defaultModel &&
           other.createdAt == this.createdAt);
 }
 
@@ -1120,6 +1165,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
   final Value<String> name;
   final Value<String> baseUrl;
   final Value<String> modelsJson;
+  final Value<String?> defaultModel;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const ProviderProfilesCompanion({
@@ -1127,6 +1173,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     this.name = const Value.absent(),
     this.baseUrl = const Value.absent(),
     this.modelsJson = const Value.absent(),
+    this.defaultModel = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1135,6 +1182,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     required String name,
     required String baseUrl,
     this.modelsJson = const Value.absent(),
+    this.defaultModel = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1146,6 +1194,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     Expression<String>? name,
     Expression<String>? baseUrl,
     Expression<String>? modelsJson,
+    Expression<String>? defaultModel,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -1154,6 +1203,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
       if (name != null) 'name': name,
       if (baseUrl != null) 'base_url': baseUrl,
       if (modelsJson != null) 'models_json': modelsJson,
+      if (defaultModel != null) 'default_model': defaultModel,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1164,6 +1214,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     Value<String>? name,
     Value<String>? baseUrl,
     Value<String>? modelsJson,
+    Value<String?>? defaultModel,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -1172,6 +1223,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
       name: name ?? this.name,
       baseUrl: baseUrl ?? this.baseUrl,
       modelsJson: modelsJson ?? this.modelsJson,
+      defaultModel: defaultModel ?? this.defaultModel,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1192,6 +1244,9 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     if (modelsJson.present) {
       map['models_json'] = Variable<String>(modelsJson.value);
     }
+    if (defaultModel.present) {
+      map['default_model'] = Variable<String>(defaultModel.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1208,6 +1263,7 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
           ..write('name: $name, ')
           ..write('baseUrl: $baseUrl, ')
           ..write('modelsJson: $modelsJson, ')
+          ..write('defaultModel: $defaultModel, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1912,6 +1968,7 @@ typedef $$ProviderProfilesTableCreateCompanionBuilder =
       required String name,
       required String baseUrl,
       Value<String> modelsJson,
+      Value<String?> defaultModel,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -1921,6 +1978,7 @@ typedef $$ProviderProfilesTableUpdateCompanionBuilder =
       Value<String> name,
       Value<String> baseUrl,
       Value<String> modelsJson,
+      Value<String?> defaultModel,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -1951,6 +2009,11 @@ class $$ProviderProfilesTableFilterComposer
 
   ColumnFilters<String> get modelsJson => $composableBuilder(
     column: $table.modelsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get defaultModel => $composableBuilder(
+    column: $table.defaultModel,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1989,6 +2052,11 @@ class $$ProviderProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get defaultModel => $composableBuilder(
+    column: $table.defaultModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2015,6 +2083,11 @@ class $$ProviderProfilesTableAnnotationComposer
 
   GeneratedColumn<String> get modelsJson => $composableBuilder(
     column: $table.modelsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get defaultModel => $composableBuilder(
+    column: $table.defaultModel,
     builder: (column) => column,
   );
 
@@ -2063,6 +2136,7 @@ class $$ProviderProfilesTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> baseUrl = const Value.absent(),
                 Value<String> modelsJson = const Value.absent(),
+                Value<String?> defaultModel = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProviderProfilesCompanion(
@@ -2070,6 +2144,7 @@ class $$ProviderProfilesTableTableManager
                 name: name,
                 baseUrl: baseUrl,
                 modelsJson: modelsJson,
+                defaultModel: defaultModel,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -2079,6 +2154,7 @@ class $$ProviderProfilesTableTableManager
                 required String name,
                 required String baseUrl,
                 Value<String> modelsJson = const Value.absent(),
+                Value<String?> defaultModel = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => ProviderProfilesCompanion.insert(
@@ -2086,6 +2162,7 @@ class $$ProviderProfilesTableTableManager
                 name: name,
                 baseUrl: baseUrl,
                 modelsJson: modelsJson,
+                defaultModel: defaultModel,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

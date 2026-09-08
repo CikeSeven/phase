@@ -28,6 +28,17 @@ class ConversationRepository {
     );
   }
 
+  /// 一次性读取某会话的全部消息（构造请求上下文用）。
+  Future<List<ChatMessage>> getMessages(String conversationId) async {
+    try {
+      final rows = await _db.getMessageRows(conversationId);
+      return rows.map(_toChatMessage).toList();
+    } on Exception catch (e, st) {
+      AppLogger.error('读取消息失败', e, st);
+      throw UnknownFailure('读取消息失败', cause: e);
+    }
+  }
+
   Future<Conversation> createConversation({String title = '新会话'}) async {
     try {
       final now = DateTime.now();

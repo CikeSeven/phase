@@ -20,6 +20,7 @@ class ProviderProfile {
     required this.baseUrl,
     this.type = ProviderType.openaiCompatible,
     this.models = const [],
+    this.defaultModel,
     this.createdAt,
   });
 
@@ -36,13 +37,20 @@ class ProviderProfile {
   /// 用户维护的可用模型 id 列表（可后续由 listModels 拉取填充）。
   final List<String> models;
 
+  /// 默认使用的模型；为空时上层回退到 [modelCandidates] 第一个。
+  final String? defaultModel;
+
   final DateTime? createdAt;
+
+  /// 可选模型候选：默认模型优先，与 [models] 合并去重。
+  List<String> get modelCandidates => {?defaultModel, ...models}.toList();
 
   ProviderProfile copyWith({
     String? name,
     String? baseUrl,
     ProviderType? type,
     List<String>? models,
+    String? defaultModel,
   }) {
     return ProviderProfile(
       id: id,
@@ -50,6 +58,7 @@ class ProviderProfile {
       baseUrl: baseUrl ?? this.baseUrl,
       type: type ?? this.type,
       models: models ?? this.models,
+      defaultModel: defaultModel ?? this.defaultModel,
       createdAt: createdAt,
     );
   }

@@ -47,6 +47,9 @@ class ProviderProfiles extends Table {
 
   /// 模型 id 列表的 JSON 编码（`List<String>`）。
   TextColumn get modelsJson => text().withDefault(const Constant('[]'))();
+
+  /// 该服务商下默认使用的模型；未设置时由上层回退到候选模型第一个。
+  TextColumn get defaultModel => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -60,7 +63,19 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'phase'));
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        await migrator.addColumn(
+          providerProfiles,
+          providerProfiles.defaultModel,
+        );
+      }
+    },
+  );
 
   // --- 会话 ---
 
@@ -105,6 +120,13 @@ class AppDatabase extends _$AppDatabase {
     return into(messages).insert(companion);
   }
 
+  Future<List<MessageRow>> getMessageRows(String conversationId) {
+    return (select(messages)
+          ..where((t) => t.conversationId.equals(conversationId))
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
+  }
+
   Future<int> updateMessageContent(
     String id, {
     required String content,
@@ -121,6 +143,12 @@ class AppDatabase extends _$AppDatabase {
     return (select(providerProfiles)
           ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
         .watch();
+  }
+
+  Future<List<ProviderProfileRow>> getProviderProfileRows() {
+    return (select(providerProfiles)
+          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+        .get();
   }
 
   Future<ProviderProfileRow?> getProviderProfileRow(String id) {

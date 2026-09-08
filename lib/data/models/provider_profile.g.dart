@@ -19,6 +19,7 @@ ProviderProfile _$ProviderProfileFromJson(Map<String, dynamic> json) =>
               ?.map((e) => e as String)
               .toList() ??
           const [],
+      defaultModel: json['defaultModel'] as String?,
       createdAt: json['createdAt'] == null
           ? null
           : DateTime.parse(json['createdAt'] as String),
@@ -31,6 +32,7 @@ Map<String, dynamic> _$ProviderProfileToJson(ProviderProfile instance) =>
       'baseUrl': instance.baseUrl,
       'type': _$ProviderTypeEnumMap[instance.type]!,
       'models': instance.models,
+      'defaultModel': instance.defaultModel,
       'createdAt': instance.createdAt?.toIso8601String(),
     };
 

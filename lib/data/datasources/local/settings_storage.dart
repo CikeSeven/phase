@@ -23,6 +23,22 @@ class SettingsStorage {
   Future<void> writeThemeMode(ThemeMode mode) {
     return _prefs.setString(_themeModeKey, mode.name);
   }
+
+  static const _lastProfileIdKey = 'last_profile_id';
+  static const _lastModelKey = 'last_model';
+
+  String? readLastProfileId() => _prefs.getString(_lastProfileIdKey);
+
+  String? readLastModel() => _prefs.getString(_lastModelKey);
+
+  /// 记录「最近使用的服务商 × 模型」，下次启动与默认选择以此为准。
+  Future<void> writeLastModelSelection({
+    required String profileId,
+    required String model,
+  }) async {
+    await _prefs.setString(_lastProfileIdKey, profileId);
+    await _prefs.setString(_lastModelKey, model);
+  }
 }
 
 /// 在 main() 中用真实实例 override。

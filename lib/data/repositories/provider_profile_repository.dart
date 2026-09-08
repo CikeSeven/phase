@@ -35,21 +35,26 @@ class ProviderProfileRepository {
     }
   }
 
-  /// 新增或更新配置（id 为空时生成新 id）。
+  /// 新增或更新配置（id 为空时生成新 id；defaultModel 空串归一为 null）。
   Future<ProviderProfile> saveProfile({
     String? id,
     required String name,
     required String baseUrl,
+    String? defaultModel,
     List<String> models = const [],
   }) async {
     try {
       final profileId = id ?? generateId();
+      final normalizedDefault = defaultModel == null || defaultModel.isEmpty
+          ? null
+          : defaultModel;
       await _db.upsertProviderProfile(
         ProviderProfilesCompanion.insert(
           id: profileId,
           name: name,
           baseUrl: baseUrl,
           modelsJson: Value(jsonEncode(models)),
+          defaultModel: Value(normalizedDefault),
           createdAt: DateTime.now(),
         ),
       );
@@ -58,11 +63,22 @@ class ProviderProfileRepository {
         name: name,
         baseUrl: baseUrl,
         models: models,
+        defaultModel: normalizedDefault,
         createdAt: DateTime.now(),
       );
     } on Exception catch (e, st) {
       AppLogger.error('保存服务商配置失败', e, st);
       throw UnknownFailure('保存服务商配置失败', cause: e);
+    }
+  }
+
+  Future<List<ProviderProfile>> listProfiles() async {
+    try {
+      final rows = await _db.getProviderProfileRows();
+      return rows.map(_toProfile).toList();
+    } on Exception catch (e, st) {
+      AppLogger.error('读取服务商配置失败', e, st);
+      throw UnknownFailure('读取服务商配置失败', cause: e);
     }
   }
 
@@ -91,6 +107,7 @@ class ProviderProfileRepository {
       name: row.name,
       baseUrl: row.baseUrl,
       models: _decodeModels(row.modelsJson),
+      defaultModel: row.defaultModel,
       createdAt: row.createdAt,
     );
   }
@@ -110,4 +127,10 @@ ProviderProfileRepository providerProfileRepository(Ref ref) {
     ref.watch(appDatabaseProvider),
     ref.watch(secureKeyStorageProvider),
   );
+}
+
+/// 服务商配置列表流。
+@riverpod
+Stream<List<ProviderProfile>> providerProfiles(Ref ref) {
+  return ref.watch(providerProfileRepositoryProvider).watchProfiles();
 }
