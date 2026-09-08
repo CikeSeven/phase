@@ -174,8 +174,16 @@ class _BlinkingCursorState extends State<_BlinkingCursor>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     // 系统「减少动态效果」开启时不闪烁（DESIGN.md §6）。
-    if (!MediaQuery.of(context).disableAnimations) {
+    // MediaQuery 只能在 didChangeDependencies 之后读取，不能放 initState。
+    if (MediaQuery.of(context).disableAnimations) {
+      _controller.stop();
+    } else if (!_controller.isAnimating) {
       _controller.repeat(reverse: true);
     }
   }
