@@ -9,9 +9,7 @@ import '../../features/settings/settings_page.dart';
 
 part 'app_router.g.dart';
 
-/// 应用路由表。
-///
-/// TODO(motion): 按 DESIGN.md §7 统一 FadeThrough / SharedAxis 页面过渡。
+/// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
 @Riverpod(keepAlive: true)
 GoRouter appRouter(Ref ref) {
   return GoRouter(
