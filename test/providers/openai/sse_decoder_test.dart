@@ -34,6 +34,27 @@ void main() {
       expect(chunk.delta, isEmpty);
     });
 
+    test('解析 reasoning_content 字段（DeepSeek R1 风格）', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data: {"choices":[{"delta":{"reasoning_content":"在想","content":""},'
+        '"finish_reason":null}]}',
+      );
+      expect(chunk, isNotNull);
+      expect(chunk!.reasoningDelta, '在想');
+      expect(chunk.delta, isEmpty);
+      expect(chunk.done, isFalse);
+    });
+
+    test('reasoning_content 与 content 可同帧出现', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data: {"choices":[{"delta":{"reasoning_content":"想",'
+        '"content":"答"},"finish_reason":null}]}',
+      );
+      expect(chunk, isNotNull);
+      expect(chunk!.reasoningDelta, '想');
+      expect(chunk.delta, '答');
+    });
+
     test('解析 usage 信息', () {
       final chunk = OpenAiSseDecoder.parseLine(
         'data: {"choices":[{"delta":{"content":""},"finish_reason":"stop"}],'

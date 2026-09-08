@@ -163,6 +163,24 @@ void main() {
     expect(request.messages.single.content, text);
   });
 
+  test('reasoning 增量与正文一起累积落库', () async {
+    await insertProfile();
+    fakeProvider.streamFactory = () => Stream.fromIterable([
+      const ChatChunk(delta: '', reasoningDelta: '先想'),
+      const ChatChunk(delta: '', reasoningDelta: '一下'),
+      const ChatChunk(delta: '答案'),
+    ]);
+
+    await controller().send('你好');
+    final conversationId = state().conversationId!;
+
+    final messages = await db.getMessageRows(conversationId);
+    expect(messages[1].reasoning, '先想一下');
+    expect(messages[1].content, '答案');
+    expect(messages[1].status, ChatMessageStatus.done);
+    expect(state().isGenerating, isFalse);
+  });
+
   test('stop 取消流式生成，保留已生成内容并标记 done', () async {
     await insertProfile();
     final chunks = StreamController<ChatChunk>();

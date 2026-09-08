@@ -52,6 +52,7 @@ class ChatController extends _$ChatController {
   Completer<void>? _doneCompleter;
   Timer? _flushTimer;
   final StringBuffer _buffer = StringBuffer();
+  final StringBuffer _reasoningBuffer = StringBuffer();
   String? _streamingMessageId;
   Failure? _streamError;
 
@@ -130,6 +131,7 @@ class ChatController extends _$ChatController {
         .read(aiProviderFactoryProvider)(selection.profile, apiKey);
 
     _buffer.clear();
+    _reasoningBuffer.clear();
     _streamingMessageId = aiMessage.id;
     _streamError = null;
 
@@ -146,8 +148,17 @@ class ChatController extends _$ChatController {
         .streamChat(ChatRequest(model: selection.model, messages: history))
         .listen(
           (chunk) {
+            final reasoning = chunk.reasoningDelta;
+            var dirty = false;
+            if (reasoning != null && reasoning.isNotEmpty) {
+              _reasoningBuffer.write(reasoning);
+              dirty = true;
+            }
             if (chunk.delta.isNotEmpty) {
               _buffer.write(chunk.delta);
+              dirty = true;
+            }
+            if (dirty) {
               _scheduleFlush();
             }
           },
@@ -179,12 +190,14 @@ class ChatController extends _$ChatController {
         await repository.updateMessageContent(
           messageId,
           content: failure.userMessage,
+          reasoning: _currentReasoning,
           status: ChatMessageStatus.error,
         );
       } else {
         await repository.updateMessageContent(
           messageId,
           content: _buffer.toString(),
+          reasoning: _currentReasoning,
           status: ChatMessageStatus.done,
         );
       }
@@ -204,6 +217,10 @@ class ChatController extends _$ChatController {
     _doneCompleter?.complete();
   }
 
+  /// 累积的思考内容；一次都没收到时保持 null（非推理模型不落空串）。
+  String? get _currentReasoning =>
+      _reasoningBuffer.isEmpty ? null : _reasoningBuffer.toString();
+
   void _scheduleFlush() {
     _flushTimer ??= Timer(_flushInterval, _flushNow);
   }
@@ -218,6 +235,7 @@ class ChatController extends _$ChatController {
       ref.read(conversationRepositoryProvider).updateMessageContent(
         messageId,
         content: _buffer.toString(),
+        reasoning: _currentReasoning,
         status: ChatMessageStatus.streaming,
       ),
     );

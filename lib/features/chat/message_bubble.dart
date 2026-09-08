@@ -113,9 +113,21 @@ class MessageBubble extends StatelessWidget {
     final bodyLarge = Theme.of(context).textTheme.bodyLarge;
     final style = bodyLarge?.copyWith(color: textColor, height: 1.5);
     // AI 消息按 Markdown 渲染；流式输出直接追加文本，不做逐字动画。
-    final content = _isUser
-        ? Text(message.content, style: style)
-        : GptMarkdown(
+    final Widget content;
+    if (_isUser) {
+      content = Text(message.content, style: style);
+    } else {
+      final reasoning = message.reasoning;
+      content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (reasoning != null && reasoning.isNotEmpty)
+            _ReasoningSection(
+              reasoning: reasoning,
+              streaming: message.status == ChatMessageStatus.streaming,
+            ),
+          GptMarkdown(
             message.content,
             style: style,
             styleSheet: GptMarkdownStyleSheet(
@@ -129,7 +141,10 @@ class MessageBubble extends StatelessWidget {
                 copiedLabel: '已复制',
               ),
             ),
-          );
+          ),
+        ],
+      );
+    }
     if (message.status != ChatMessageStatus.streaming) {
       return content;
     }
@@ -153,9 +168,100 @@ class MessageBubble extends StatelessWidget {
   }
 }
 
+/// AI 气泡内 Markdown 上方的「思考」区块。
+///
+/// 流式进行中自动展开、结束后默认收起；用户手动折叠/展开后不再跟随。
+class _ReasoningSection extends StatefulWidget {
+  const _ReasoningSection({required this.reasoning, required this.streaming});
+
+  final String reasoning;
+  final bool streaming;
+
+  @override
+  State<_ReasoningSection> createState() => _ReasoningSectionState();
+}
+
+class _ReasoningSectionState extends State<_ReasoningSection> {
+  late bool _expanded = widget.streaming;
+  var _userToggled = false;
+
+  @override
+  void didUpdateWidget(covariant _ReasoningSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 未手动干预时跟随流式状态：进行中展开，结束后收起。
+    if (!_userToggled && oldWidget.streaming != widget.streaming) {
+      _expanded = widget.streaming;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final labelStyle = Theme.of(
+      context,
+    ).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        InkWell(
+          borderRadius: AppRadius.smallAll,
+          onTap: () => setState(() {
+            _expanded = !_expanded;
+            _userToggled = true;
+          }),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            child: Row(
+              children: [
+                Icon(
+                  Symbols.psychology,
+                  size: 20,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: AppSpacing.s),
+                Expanded(
+                  child: Text(
+                    widget.streaming ? '思考中…' : '已思考',
+                    style: labelStyle,
+                  ),
+                ),
+                Icon(
+                  _expanded ? Symbols.expand_less : Symbols.expand_more,
+                  size: 20,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded)
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(
+              top: AppSpacing.xs,
+              bottom: AppSpacing.s,
+            ),
+            padding: const EdgeInsets.only(left: AppSpacing.m),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: colorScheme.outlineVariant, width: 2),
+              ),
+            ),
+            child: Text(
+              widget.reasoning,
+              style: labelStyle?.copyWith(height: 1.5),
+            ),
+          )
+        else
+          const SizedBox(height: AppSpacing.s),
+      ],
+    );
+  }
+}
+
 /// 流式输出末尾的闪烁光标（DESIGN.md §5.2）。
-class _BlinkingCursor extends StatefulWidget {
-  const _BlinkingCursor({this.style});
+class _BlinkingCursor extends StatefulWidget {  const _BlinkingCursor({this.style});
 
   final TextStyle? style;
 
