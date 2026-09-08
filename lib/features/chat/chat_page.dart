@@ -22,15 +22,10 @@ class ChatPage extends ConsumerWidget {
     final conversationId = chatState.conversationId;
 
     return Scaffold(
+      // 加宽边缘拖开区域，避免与系统返回手势冲突时难以滑出抽屉。
+      drawerEdgeDragWidth: 48,
       appBar: AppBar(
         title: const Text('相月'),
-        actions: [
-          IconButton(
-            icon: const Icon(Symbols.settings),
-            tooltip: '设置',
-            onPressed: () => context.push('/settings'),
-          ),
-        ],
       ),
       drawer: const _ConversationDrawer(),
       body: Column(
@@ -127,53 +122,70 @@ class _ErrorState extends StatelessWidget {
   }
 }
 
-/// 会话抽屉（DESIGN.md §5.1）：顶部「新会话」+ 会话 ListTile 列表。
+/// 会话抽屉（DESIGN.md §5.1）：顶部「新会话」+ 会话 ListTile 列表，底部固定设置入口。
 class _ConversationDrawer extends ConsumerWidget {
   const _ConversationDrawer();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final conversationsAsync = ref.watch(conversationsProvider);
-    return NavigationDrawer(
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.l,
-            AppSpacing.l,
-            AppSpacing.l,
-            AppSpacing.s,
-          ),
-          child: FilledButton.tonalIcon(
-            onPressed: () {
-              ref.read(chatControllerProvider.notifier).startNewConversation();
-              Navigator.of(context).pop();
-            },
-            icon: const Icon(Symbols.add),
-            label: const Text('新会话'),
-          ),
-        ),
-        ...conversationsAsync.when(
-          data: (conversations) => [
-            for (final conversation in conversations)
-              _ConversationTile(conversation: conversation),
-          ],
-          loading: () => [
-            const Padding(
-              padding: EdgeInsets.all(AppSpacing.xl),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          ],
-          error: (error, _) => [
+    // 不用 NavigationDrawer：其内部是整体滚动布局，无法把设置入口钉在底部。
+    return Drawer(
+      backgroundColor: Theme.of(context).colorScheme.surfaceContainerLow,
+      child: SafeArea(
+        child: Column(
+          children: [
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              child: Text(
-                error is Failure ? error.userMessage : '加载会话列表失败',
-                style: Theme.of(context).textTheme.bodySmall,
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.l,
+                AppSpacing.l,
+                AppSpacing.l,
+                AppSpacing.s,
+              ),
+              child: FilledButton.tonalIcon(
+                onPressed: () {
+                  ref
+                      .read(chatControllerProvider.notifier)
+                      .startNewConversation();
+                  Navigator.of(context).pop();
+                },
+                icon: const Icon(Symbols.add),
+                label: const Text('新会话'),
               ),
             ),
+            Expanded(
+              child: conversationsAsync.when(
+                data: (conversations) => ListView(
+                  children: [
+                    for (final conversation in conversations)
+                      _ConversationTile(conversation: conversation),
+                  ],
+                ),
+                loading: () => const Padding(
+                  padding: EdgeInsets.all(AppSpacing.xl),
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+                error: (error, _) => Padding(
+                  padding: const EdgeInsets.all(AppSpacing.l),
+                  child: Text(
+                    error is Failure ? error.userMessage : '加载会话列表失败',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Symbols.settings),
+              title: const Text('设置'),
+              onTap: () {
+                Navigator.of(context).pop();
+                context.push('/settings');
+              },
+            ),
           ],
         ),
-      ],
+      ),
     );
   }
 }

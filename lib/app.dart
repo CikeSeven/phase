@@ -15,6 +15,7 @@ class PhaseApp extends ConsumerWidget {
     final themeMode = ref.watch(themeModeControllerProvider);
     return MaterialApp.router(
       title: '相月',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
