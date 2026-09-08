@@ -5,6 +5,8 @@ import 'package:phase/app.dart';
 import 'package:phase/core/router/app_router.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/conversation.dart';
+import 'package:phase/data/models/provider_profile.dart';
+import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,6 +23,9 @@ void main() {
           sharedPreferencesProvider.overrideWith((ref) => preferences),
           conversationsProvider.overrideWith(
             (ref) => Stream.value(const <Conversation>[]),
+          ),
+          providerProfilesProvider.overrideWith(
+            (ref) => Stream.value(const <ProviderProfile>[]),
           ),
         ],
         child: const PhaseApp(),
