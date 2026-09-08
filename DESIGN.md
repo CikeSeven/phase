@@ -96,7 +96,7 @@
 ## 6. Android 返回与动效
 
 - Android Manifest 开启 `android:enableOnBackInvokedCallback="true"`。
-- Theme 使用 `FadeForwardsPageTransitionsBuilder`（M3 前进淡入 / 返回淡出），原生支持 Android 14+ 预测性返回预览；较低版本自动回退为普通转场。
+- Theme 使用 `PredictiveBackPageTransitionsBuilder`（Flutter 的 Android 默认）：返回手势进行中显示 Android 14+ 预测性返回预览，普通跳转回退为 FadeForwards 转场；低版本系统自动回退普通转场。
 - 可拦截返回时使用 `PopScope`，禁止新增 `WillPopScope`；`canPop` 必须提前可计算，不能在返回手势开始后异步决定。
 - 页面切换遵循 Material 3 / Android predictive back 动效，常规时长 200–300ms。
 - 流式输出不做逐字动画，文本直接追加；动画只出现在状态切换（发送→生成中→完成）。

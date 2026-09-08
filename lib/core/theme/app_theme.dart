@@ -27,8 +27,10 @@ abstract final class AppTheme {
       scaffoldBackgroundColor: colorScheme.surfaceContainerLowest,
       pageTransitionsTheme: PageTransitionsTheme(
         builders: {
-          // M3 前进淡入 + 返回淡出转场，且原生支持 Android 14+ 预测性返回预览。
-          TargetPlatform.android: const FadeForwardsPageTransitionsBuilder(),
+          // Android U+ 预测性返回预览；非手势跳转回退为 FadeForwards 转场。
+          TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
+            fallbackColor: colorScheme.surface,
+          ),
         },
       ),
       appBarTheme: AppBarTheme(
