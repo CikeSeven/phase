@@ -16,29 +16,48 @@ class SettingsPage extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: ListView(
+        padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
         children: [
           const _SectionHeader('外观'),
-          ListTile(
-            leading: const Icon(Symbols.dark_mode),
-            title: const Text('主题模式'),
-            subtitle: Text(_themeModeLabel(themeMode)),
-            trailing: const Icon(Symbols.chevron_right),
-            onTap: () => _pickThemeMode(context, ref, themeMode),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: const Icon(Symbols.dark_mode),
+                title: const Text('主题模式'),
+                subtitle: Text(_themeModeLabel(themeMode)),
+                trailing: const Icon(Symbols.chevron_right),
+                onTap: () => _pickThemeMode(context, ref, themeMode),
+              ),
+            ),
           ),
           const _SectionHeader('服务商'),
-          ListTile(
-            leading: const Icon(Symbols.cloud),
-            title: const Text('服务商配置'),
-            subtitle: const Text('管理 Base URL、API Key 与模型'),
-            trailing: const Icon(Symbols.chevron_right),
-            onTap: () => context.push('/settings/providers'),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: const Icon(Symbols.cloud),
+                title: const Text('服务商配置'),
+                subtitle: const Text('管理 Base URL、API Key 与模型'),
+                trailing: const Icon(Symbols.chevron_right),
+                onTap: () => context.push('/settings/providers'),
+              ),
+            ),
           ),
           const _SectionHeader('关于'),
-          const ListTile(
-            leading: Icon(Symbols.info),
-            title: Text('相月'),
-            // TODO(release): 接 package_info 后替换为真实版本号。
-            subtitle: Text('版本 0.1.0'),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.s),
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: Icon(Symbols.info),
+                title: Text('相月'),
+                // TODO(release): 接 package_info 后替换为真实版本号。
+                subtitle: Text('版本 0.1.0'),
+              ),
+            ),
           ),
         ],
       ),
@@ -60,20 +79,31 @@ class SettingsPage extends ConsumerWidget {
   ) async {
     final selected = await showDialog<ThemeMode>(
       context: context,
-      builder: (context) => SimpleDialog(
-        title: const Text('主题模式'),
-        children: [
-          for (final mode in ThemeMode.values)
-            ListTile(
-              title: Text(_themeModeLabel(mode)),
-              trailing: mode == current ? const Icon(Symbols.check) : null,
-              onTap: () => Navigator.of(context).pop(mode),
-            ),
-        ],
-      ),
+      builder: (context) {
+        final colorScheme = Theme.of(context).colorScheme;
+        return AlertDialog(
+          icon: Icon(Symbols.dark_mode, color: colorScheme.primary),
+          title: const Text('主题模式'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (final mode in ThemeMode.values)
+                ListTile(
+                  title: Text(_themeModeLabel(mode)),
+                  trailing: mode == current
+                      ? Icon(Symbols.check, color: colorScheme.primary)
+                      : null,
+                  onTap: () => Navigator.of(context).pop(mode),
+                ),
+            ],
+          ),
+        );
+      },
     );
     if (selected != null) {
-      await ref.read(themeModeControllerProvider.notifier).setThemeMode(selected);
+      await ref
+          .read(themeModeControllerProvider.notifier)
+          .setThemeMode(selected);
     }
   }
 }
@@ -94,9 +124,8 @@ class _SectionHeader extends StatelessWidget {
       ),
       child: Text(
         title,
-        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-        ),
+        style: Theme.of(context).textTheme.titleSmall
+            ?.copyWith(color: Theme.of(context).colorScheme.primary),
       ),
     );
   }

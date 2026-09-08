@@ -32,5 +32,15 @@ void main() {
     // 输入栏与发送按钮已装配。
     expect(find.byTooltip('发送'), findsOneWidget);
     expect(find.byType(TextField), findsOneWidget);
+
+    // 抽屉手势覆盖整个页面，不依赖左侧窄边缘区域。
+    await tester.timedDragFrom(
+      const Offset(240, 300),
+      const Offset(560, 300),
+      const Duration(milliseconds: 420),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('新会话'), findsOneWidget);
+    expect(find.text('设置'), findsOneWidget);
   });
 }

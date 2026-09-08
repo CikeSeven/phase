@@ -5,8 +5,8 @@ import '../../../core/theme/app_spacing.dart';
 
 /// 助手管理占位页（`/assistants`）。
 ///
-/// TODO(assistants): 助手（Assistant）= system prompt + 默认模型与参数的
-/// 封装，管理界面待实现。
+/// TODO(assistants): 助手 CRUD 与「助手 = system prompt + 默认模型/参数」
+/// 的绑定逻辑落地后替换本页。
 class AssistantsPage extends StatelessWidget {
   const AssistantsPage({super.key});
 

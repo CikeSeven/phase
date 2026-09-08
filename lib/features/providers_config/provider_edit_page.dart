@@ -74,69 +74,68 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.l),
-                children: [
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: '名称',
-                      hintText: '如：DeepSeek 官方',
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.all(AppSpacing.l),
+                  children: [
+                    TextFormField(
+                      controller: _nameController,
+                      decoration: const InputDecoration(
+                        labelText: '名称',
+                        hintText: '如：DeepSeek 官方',
+                      ),
+                      textInputAction: TextInputAction.next,
+                      validator: _required,
                     ),
-                    textInputAction: TextInputAction.next,
-                    validator: _required,
-                  ),
-                  const SizedBox(height: AppSpacing.l),
-                  TextFormField(
-                    controller: _baseUrlController,
-                    decoration: const InputDecoration(
-                      labelText: 'Base URL',
-                      hintText: 'https://api.openai.com/v1',
+                    const SizedBox(height: AppSpacing.l),
+                    TextFormField(
+                      controller: _baseUrlController,
+                      decoration: const InputDecoration(
+                        labelText: 'Base URL',
+                        hintText: 'https://api.openai.com/v1',
+                      ),
+                      keyboardType: TextInputType.url,
+                      textInputAction: TextInputAction.next,
+                      validator: _required,
                     ),
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.next,
-                    validator: _required,
-                  ),
-                  const SizedBox(height: AppSpacing.l),
-                  TextFormField(
-                    controller: _apiKeyController,
-                    obscureText: !_apiKeyVisible,
-                    decoration: InputDecoration(
-                      labelText: 'API Key',
-                      suffixIcon: IconButton(
-                        icon: Icon(
-                          _apiKeyVisible
-                              ? Symbols.visibility_off
-                              : Symbols.visibility,
-                        ),
-                        tooltip: _apiKeyVisible ? '隐藏密钥' : '显示密钥',
-                        onPressed: () => setState(
-                          () => _apiKeyVisible = !_apiKeyVisible,
+                    const SizedBox(height: AppSpacing.l),
+                    TextFormField(
+                      controller: _apiKeyController,
+                      obscureText: !_apiKeyVisible,
+                      decoration: InputDecoration(
+                        labelText: 'API Key',
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _apiKeyVisible
+                                ? Symbols.visibility_off
+                                : Symbols.visibility,
+                          ),
+                          tooltip: _apiKeyVisible ? '隐藏密钥' : '显示密钥',
+                          onPressed: () =>
+                              setState(() => _apiKeyVisible = !_apiKeyVisible),
                         ),
                       ),
+                      textInputAction: TextInputAction.done,
                     ),
-                    textInputAction: TextInputAction.done,
-                  ),
-                  const SizedBox(height: AppSpacing.s),
-                  Text(
-                    '密钥仅保存在本机安全存储中',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    const SizedBox(height: AppSpacing.s),
+                    Text(
+                      '密钥仅保存在本机安全存储中',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon: const Icon(Symbols.check),
-                    label: const Text('保存'),
-                  ),
-                  // TODO(provider): 连接性校验按钮（validateKey），
-                  // 结果显示为行内状态（成功 primary / 失败 error）。
-                  // TODO(provider): 模型列表拉取（listModels）与选择。
-                ],
+                    const SizedBox(height: AppSpacing.xl),
+                    FilledButton.icon(
+                      onPressed: _saving ? null : _save,
+                      icon: const Icon(Symbols.check),
+                      label: const Text('保存'),
+                    ),
+                    // TODO(provider): 连接性校验按钮（validateKey），
+                    // 结果显示为行内状态（成功 primary / 失败 error）。
+                    // TODO(provider): 模型列表拉取（listModels）与选择。
+                  ],
+                ),
               ),
-            ),
     );
   }
 

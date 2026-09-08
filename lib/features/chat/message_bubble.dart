@@ -94,15 +94,12 @@ class MessageBubble extends StatelessWidget {
                 ),
                 child: Text(
                   message.modelName!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
                 ),
               ),
             Align(
-              alignment: _isUser
-                  ? Alignment.centerRight
-                  : Alignment.centerLeft,
+              alignment: _isUser ? Alignment.centerRight : Alignment.centerLeft,
               child: bubble,
             ),
           ],
@@ -112,9 +109,8 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context, Color textColor) {
-    final style = Theme.of(
-      context,
-    ).textTheme.bodyLarge?.copyWith(color: textColor, height: 1.5);
+    final style = Theme.of(context).textTheme.bodyLarge
+        ?.copyWith(color: textColor, height: 1.5);
     // AI 消息按 Markdown 渲染；流式输出直接追加文本，不做逐字动画。
     final content = _isUser
         ? Text(message.content, style: style)

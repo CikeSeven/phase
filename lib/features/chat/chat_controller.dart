@@ -76,5 +76,7 @@ Stream<List<Conversation>> conversations(Ref ref) {
 /// 某会话的消息流。
 @riverpod
 Stream<List<ChatMessage>> chatMessages(Ref ref, String conversationId) {
-  return ref.watch(conversationRepositoryProvider).watchMessages(conversationId);
+  return ref
+      .watch(conversationRepositoryProvider)
+      .watchMessages(conversationId);
 }

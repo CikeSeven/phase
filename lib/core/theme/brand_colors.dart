@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 /// 品牌辅助色「月华金」，基准 `#C9A227`。
 ///
 /// 不经 `ColorScheme.fromSeed`，以 [ThemeExtension] 挂入主题（DESIGN.md §2.1）。
-/// 用于品牌标识、选中态强调、置顶标记等低频场景，每屏至多一处金色元素。
+/// 用于品牌标识、置顶标记等低频场景，每屏至多一处金色元素。
 @immutable
 class BrandColors extends ThemeExtension<BrandColors> {
   const BrandColors({
@@ -20,7 +20,7 @@ class BrandColors extends ThemeExtension<BrandColors> {
 
   /// 浅色主题取值：金色压深以保证白底对比度。
   static const light = BrandColors(
-    gold: Color(0xFF8A6D00),
+    gold: Color(0xFF9A7B12),
     onGold: Color(0xFFFFFFFF),
     goldContainer: Color(0xFFF4E5B0),
     onGoldContainer: Color(0xFF4A3C00),
@@ -28,7 +28,7 @@ class BrandColors extends ThemeExtension<BrandColors> {
 
   /// 深色主题取值：金色提亮以浮出深色 surface。
   static const dark = BrandColors(
-    gold: Color(0xFFE3C24A),
+    gold: Color(0xFFD9B53F),
     onGold: Color(0xFF3A2E00),
     goldContainer: Color(0xFF554A12),
     onGoldContainer: Color(0xFFF0DA9A),
@@ -58,11 +58,7 @@ class BrandColors extends ThemeExtension<BrandColors> {
       gold: Color.lerp(gold, other.gold, t)!,
       onGold: Color.lerp(onGold, other.onGold, t)!,
       goldContainer: Color.lerp(goldContainer, other.goldContainer, t)!,
-      onGoldContainer: Color.lerp(
-        onGoldContainer,
-        other.onGoldContainer,
-        t,
-      )!,
+      onGoldContainer: Color.lerp(onGoldContainer, other.onGoldContainer, t)!,
     );
   }
 }

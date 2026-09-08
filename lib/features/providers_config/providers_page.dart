@@ -24,6 +24,7 @@ class ProvidersPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profilesAsync = ref.watch(providerProfilesProvider);
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(title: const Text('服务商配置')),
       floatingActionButton: FloatingActionButton(
@@ -41,34 +42,45 @@ class ProvidersPage extends ConsumerWidget {
                   Icon(
                     Symbols.cloud,
                     size: 48,
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    color: colorScheme.onSurfaceVariant,
                   ),
                   const SizedBox(height: AppSpacing.l),
                   Text(
                     '还没有服务商，点击右下角添加',
                     style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
               ),
             );
           }
-          return ListView.builder(
+          return ListView.separated(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.s,
+              AppSpacing.l,
+              AppSpacing.s,
+              AppSpacing.xxl,
+            ),
             itemCount: profiles.length,
+            separatorBuilder: (context, index) =>
+                const SizedBox(height: AppSpacing.s),
             itemBuilder: (context, index) {
               final profile = profiles[index];
-              return ListTile(
-                leading: const Icon(Symbols.cloud),
-                title: Text(profile.name),
-                subtitle: Text(
-                  profile.baseUrl,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              return Material(
+                type: MaterialType.transparency,
+                child: ListTile(
+                  leading: const Icon(Symbols.cloud),
+                  title: Text(profile.name),
+                  subtitle: Text(
+                    profile.baseUrl,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: const Icon(Symbols.chevron_right),
+                  onTap: () =>
+                      context.push('/settings/providers/${profile.id}'),
                 ),
-                trailing: const Icon(Symbols.chevron_right),
-                onTap: () =>
-                    context.push('/settings/providers/${profile.id}'),
               );
             },
           );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_radius.dart';
+import 'app_spacing.dart';
 import 'brand_colors.dart';
 
 /// 落地 DESIGN.md 的主题构建：月夜靛蓝种子色 + 月华金扩展。
@@ -23,27 +24,97 @@ abstract final class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       extensions: [brandColors],
-      // 内容优先：AppBar 不加阴影，靠色调分层。
-      appBarTheme: const AppBarTheme(centerTitle: false, elevation: 0),
-      inputDecorationTheme: InputDecorationTheme(
-        border: OutlineInputBorder(
-          borderRadius: AppRadius.mediumAll,
-          borderSide: BorderSide(color: colorScheme.outline),
+      scaffoldBackgroundColor: colorScheme.surfaceContainerLowest,
+      pageTransitionsTheme: PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
+            fallbackColor: colorScheme.surface,
+          ),
+        },
+      ),
+      appBarTheme: AppBarTheme(
+        centerTitle: false,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        backgroundColor: colorScheme.surface.withValues(alpha: 0.72),
+        surfaceTintColor: colorScheme.surface.withValues(alpha: 0),
+        foregroundColor: colorScheme.onSurface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            bottom: Radius.circular(AppRadius.large),
+          ),
         ),
-        enabledBorder: OutlineInputBorder(
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surfaceContainerHigh.withValues(alpha: 0.76),
+        border: OutlineInputBorder(
           borderRadius: AppRadius.mediumAll,
           borderSide: BorderSide(color: colorScheme.outlineVariant),
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: AppRadius.mediumAll,
+          borderSide: BorderSide(
+            color: colorScheme.outlineVariant.withValues(alpha: 0.72),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: AppRadius.mediumAll,
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+        ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
+          horizontal: AppSpacing.l,
+          vertical: AppSpacing.m,
         ),
       ),
       dialogTheme: DialogThemeData(
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.mediumAll),
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.extraLargeAll),
+        backgroundColor: colorScheme.surfaceContainerHigh,
+        surfaceTintColor: colorScheme.surfaceTint.withValues(alpha: 0.12),
       ),
-      snackBarTheme: const SnackBarThemeData(behavior: SnackBarBehavior.floating),
-      drawerTheme: DrawerThemeData(backgroundColor: colorScheme.surface),
+      bottomSheetTheme: BottomSheetThemeData(
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.extraLarge),
+          ),
+        ),
+        backgroundColor: colorScheme.surfaceContainerHigh,
+        surfaceTintColor: colorScheme.surfaceTint.withValues(alpha: 0.12),
+      ),
+      cardTheme: CardThemeData(
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.largeAll),
+        color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.72),
+        surfaceTintColor: colorScheme.surfaceTint.withValues(alpha: 0.08),
+        elevation: 0,
+      ),
+      listTileTheme: ListTileThemeData(
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.mediumAll),
+        tileColor: colorScheme.surfaceContainerHigh.withValues(alpha: 0.56),
+        selectedTileColor: colorScheme.primaryContainer.withValues(alpha: 0.82),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        minVerticalPadding: 8,
+      ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          minimumSize: const Size(0, 52),
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.fullAll),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.fullAll),
+        elevation: 2,
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.fullAll),
+        backgroundColor: colorScheme.inverseSurface.withValues(alpha: 0.94),
+      ),
+      drawerTheme: DrawerThemeData(
+        backgroundColor: colorScheme.surface.withValues(alpha: 0.72),
+        surfaceTintColor: colorScheme.surfaceTint.withValues(alpha: 0.08),
+        elevation: 0,
+      ),
     );
   }
 }
