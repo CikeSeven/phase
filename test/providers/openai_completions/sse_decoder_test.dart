@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
-import 'package:phase/providers/openai/openai_compatible_provider.dart';
-import 'package:phase/providers/openai/sse_decoder.dart';
+import 'package:phase/providers/dio_failure_mapper.dart';
+import 'package:phase/providers/openai_completions/sse_decoder.dart';
 
 void main() {
   group('OpenAiSseDecoder.parseLine', () {

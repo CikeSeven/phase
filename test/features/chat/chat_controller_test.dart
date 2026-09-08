@@ -15,6 +15,7 @@ import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/chat/model_selection.dart';
+import 'package:phase/data/models/reasoning_effort.dart';
 import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -113,6 +114,44 @@ void main() {
   ChatController controller() => container.read(chatControllerProvider.notifier);
 
   ChatState state() => container.read(chatControllerProvider);
+
+  test('支持推理的模型把推理等级传入 ChatRequest，不支持则不传', () async {
+    // 推理模型：默认 medium 档应随请求下发。
+    await db.upsertProviderProfile(
+      ProviderProfilesCompanion.insert(
+        id: 'p-r',
+        name: '推理服务商',
+        baseUrl: 'https://example.com/v1',
+        modelsJson: const Value(
+          '[{"id":"model-r","supportsReasoning":true}]',
+        ),
+        defaultModel: const Value('model-r'),
+        createdAt: DateTime.now(),
+      ),
+    );
+    fakeProvider.streamFactory =
+        () => Stream.fromIterable([const ChatChunk(delta: '好')]);
+    await controller().send('你好');
+    expect(
+      fakeProvider.lastRequest!.reasoningEffort,
+      ReasoningEffort.medium,
+    );
+
+    // 非推理模型（老格式字符串列表，启发式不命中）：不下发。
+    await insertProfile(id: 'p-n');
+    // 新插入的 profile 要成为「最近使用」才会被选中。
+    final settings = container.read(settingsStorageProvider);
+    await settings.writeLastModelSelection(
+      profileId: 'p-n',
+      model: 'model-a',
+    );
+    // refresh 立即重建并等待新值，避免读到失效前的旧选择。
+    container.refresh(modelSelectionProvider);
+    await container.read(modelSelectionProvider.future);
+
+    await controller().send('再来');
+    expect(fakeProvider.lastRequest!.reasoningEffort, isNull);
+  });
 
   test('send 自动建会话、两条消息落库、AI 内容逐步累积并最终 done', () async {
     await insertProfile();

@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/chat_chunk.dart';
-import 'package:phase/providers/openai/think_tag_filter.dart';
+import 'package:phase/providers/openai_completions/think_tag_filter.dart';
 
 void main() {
   /// 把若干 content 增量过一遍状态机，返回 (正文, 思考) 的聚合结果。
