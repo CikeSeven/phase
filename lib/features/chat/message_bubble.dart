@@ -109,26 +109,37 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildContent(BuildContext context, Color textColor) {
-    final style = Theme.of(context).textTheme.bodyLarge
-        ?.copyWith(color: textColor, height: 1.5);
+    final colorScheme = Theme.of(context).colorScheme;
+    final bodyLarge = Theme.of(context).textTheme.bodyLarge;
+    final style = bodyLarge?.copyWith(color: textColor, height: 1.5);
     // AI 消息按 Markdown 渲染；流式输出直接追加文本，不做逐字动画。
     final content = _isUser
         ? Text(message.content, style: style)
-        : GptMarkdown(message.content, style: style);
+        : GptMarkdown(
+            message.content,
+            style: style,
+            styleSheet: GptMarkdownStyleSheet(
+              // 代码块语义槽位见 DESIGN.md §2.2；复制按钮为 gpt_markdown 自带能力。
+              codeBlock: CodeBlockStyle(
+                backgroundColor: colorScheme.surfaceContainerHigh,
+                textColor: colorScheme.onSurfaceVariant,
+                borderRadius: const Radius.circular(AppRadius.medium),
+                fontSize: (bodyLarge?.fontSize ?? 16) - 1,
+                copyLabel: '复制代码',
+                copiedLabel: '已复制',
+              ),
+            ),
+          );
     if (message.status != ChatMessageStatus.streaming) {
       return content;
     }
-    // 流式中的闪烁光标占位（DESIGN.md §5.2）。
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Flexible(child: content),
-        Text(
-          '▍',
-          style: style?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
+        _BlinkingCursor(
+          style: style?.copyWith(color: colorScheme.onSurfaceVariant),
         ),
       ],
     );
@@ -139,5 +150,47 @@ class MessageBubble extends StatelessWidget {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(const SnackBar(content: Text('已复制')));
+  }
+}
+
+/// 流式输出末尾的闪烁光标（DESIGN.md §5.2）。
+class _BlinkingCursor extends StatefulWidget {
+  const _BlinkingCursor({this.style});
+
+  final TextStyle? style;
+
+  @override
+  State<_BlinkingCursor> createState() => _BlinkingCursorState();
+}
+
+class _BlinkingCursorState extends State<_BlinkingCursor>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    );
+    // 系统「减少动态效果」开启时不闪烁（DESIGN.md §6）。
+    if (!MediaQuery.of(context).disableAnimations) {
+      _controller.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _controller,
+      child: Text('▍', style: widget.style),
+    );
   }
 }

@@ -21,9 +21,19 @@ final class ChatControllerProvider
         retry: null,
         name: r'chatControllerProvider',
         isAutoDispose: true,
-        dependencies: null,
-        $allTransitiveDependencies: null,
+        dependencies: <ProviderOrFamily>[modelSelectionProvider],
+        $allTransitiveDependencies: <ProviderOrFamily>[
+          ChatControllerProvider.$allTransitiveDependencies0,
+          ChatControllerProvider.$allTransitiveDependencies1,
+          ChatControllerProvider.$allTransitiveDependencies2,
+        ],
       );
+
+  static final $allTransitiveDependencies0 = modelSelectionProvider;
+  static final $allTransitiveDependencies1 =
+      ModelSelectionProvider.$allTransitiveDependencies0;
+  static final $allTransitiveDependencies2 =
+      ModelSelectionProvider.$allTransitiveDependencies1;
 
   @override
   String debugGetCreateSourceHash() => _$chatControllerHash();
@@ -41,7 +51,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'ff20ecb1257afcd2043919e651a1a18db2f17923';
+String _$chatControllerHash() => r'417bde592696fe2af9b5805c267847ac32a1ebb6';
 
 abstract class _$ChatController extends $Notifier<ChatState> {
   ChatState build();

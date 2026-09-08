@@ -15,6 +15,8 @@ import '../../../data/repositories/conversation_repository.dart';
 import 'chat_controller.dart';
 import 'chat_input_bar.dart';
 import 'message_bubble.dart';
+import 'model_picker_sheet.dart';
+import 'model_selection.dart';
 
 /// 聊天页（`/`）：抽屉会话列表 + 消息区 + 底部输入栏。
 class ChatPage extends ConsumerStatefulWidget {
@@ -58,6 +60,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatControllerProvider);
     final conversationId = chatState.conversationId;
+    final selectionAsync = ref.watch(modelSelectionProvider);
+    final modelLabel = selectionAsync.when(
+      data: (selection) => selection?.model ?? '未配置模型',
+      loading: () => '…',
+      error: (_, _) => '未配置模型',
+    );
     final drawerWidth = math.min(
       MediaQuery.sizeOf(context).width * 0.88,
       420.0,
@@ -77,7 +85,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         child: Scaffold(
           key: _scaffoldKey,
           drawerEnableOpenDragGesture: false,
-          appBar: AppBar(title: const Text('相月')),
+          appBar: AppBar(
+            title: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => showModelPickerSheet(context),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('相月'),
+                  Text(
+                    modelLabel,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           drawer: _ConversationDrawer(width: drawerWidth),
           body: Column(
             children: [

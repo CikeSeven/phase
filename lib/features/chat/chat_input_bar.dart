@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
+import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/frosted_surface.dart';
 import 'chat_controller.dart';
+import 'model_selection.dart';
 
 /// 底部输入栏（DESIGN.md §5.3）。
 ///
@@ -99,10 +102,39 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _controller.text;
+    if (text.trim().isEmpty) {
+      return;
+    }
+    // 配置缺失时先引导，不产生任何消息（ChatController.send 内有同样防御）。
+    final selection = await ref.read(modelSelectionProvider.future);
+    if (selection == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: const Text('请先在设置中配置服务商与模型'),
+              action: SnackBarAction(
+                label: '去配置',
+                onPressed: () => context.push('/settings/providers'),
+              ),
+            ),
+          );
+      }
+      return;
+    }
     _controller.clear();
     setState(() => _canSend = false);
-    ref.read(chatControllerProvider.notifier).send(text);
+    try {
+      await ref.read(chatControllerProvider.notifier).send(text);
+    } on Failure catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(e.userMessage)));
+      }
+    }
   }
 }
