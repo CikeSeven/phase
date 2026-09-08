@@ -435,6 +435,17 @@ class $MessagesTable extends Messages
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _reasoningMeta = const VerificationMeta(
+    'reasoning',
+  );
+  @override
+  late final GeneratedColumn<String> reasoning = GeneratedColumn<String>(
+    'reasoning',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -454,6 +465,7 @@ class $MessagesTable extends Messages
     content,
     status,
     modelName,
+    reasoning,
     createdAt,
   ];
   @override
@@ -496,6 +508,12 @@ class $MessagesTable extends Messages
       context.handle(
         _modelNameMeta,
         modelName.isAcceptableOrUnknown(data['model_name']!, _modelNameMeta),
+      );
+    }
+    if (data.containsKey('reasoning')) {
+      context.handle(
+        _reasoningMeta,
+        reasoning.isAcceptableOrUnknown(data['reasoning']!, _reasoningMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -543,6 +561,10 @@ class $MessagesTable extends Messages
         DriftSqlType.string,
         data['${effectivePrefix}model_name'],
       ),
+      reasoning: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}reasoning'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -570,6 +592,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
   final String content;
   final ChatMessageStatus status;
   final String? modelName;
+
+  /// 推理模型的思考内容；非推理模型为 null。
+  final String? reasoning;
   final DateTime createdAt;
   const MessageRow({
     required this.id,
@@ -578,6 +603,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     required this.content,
     required this.status,
     this.modelName,
+    this.reasoning,
     required this.createdAt,
   });
   @override
@@ -597,6 +623,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     if (!nullToAbsent || modelName != null) {
       map['model_name'] = Variable<String>(modelName);
     }
+    if (!nullToAbsent || reasoning != null) {
+      map['reasoning'] = Variable<String>(reasoning);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -611,6 +640,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       modelName: modelName == null && nullToAbsent
           ? const Value.absent()
           : Value(modelName),
+      reasoning: reasoning == null && nullToAbsent
+          ? const Value.absent()
+          : Value(reasoning),
       createdAt: Value(createdAt),
     );
   }
@@ -631,6 +663,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
         serializer.fromJson<String>(json['status']),
       ),
       modelName: serializer.fromJson<String?>(json['modelName']),
+      reasoning: serializer.fromJson<String?>(json['reasoning']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -648,6 +681,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
         $MessagesTable.$converterstatus.toJson(status),
       ),
       'modelName': serializer.toJson<String?>(modelName),
+      'reasoning': serializer.toJson<String?>(reasoning),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -659,6 +693,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     String? content,
     ChatMessageStatus? status,
     Value<String?> modelName = const Value.absent(),
+    Value<String?> reasoning = const Value.absent(),
     DateTime? createdAt,
   }) => MessageRow(
     id: id ?? this.id,
@@ -667,6 +702,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     content: content ?? this.content,
     status: status ?? this.status,
     modelName: modelName.present ? modelName.value : this.modelName,
+    reasoning: reasoning.present ? reasoning.value : this.reasoning,
     createdAt: createdAt ?? this.createdAt,
   );
   MessageRow copyWithCompanion(MessagesCompanion data) {
@@ -679,6 +715,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       content: data.content.present ? data.content.value : this.content,
       status: data.status.present ? data.status.value : this.status,
       modelName: data.modelName.present ? data.modelName.value : this.modelName,
+      reasoning: data.reasoning.present ? data.reasoning.value : this.reasoning,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -692,6 +729,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           ..write('content: $content, ')
           ..write('status: $status, ')
           ..write('modelName: $modelName, ')
+          ..write('reasoning: $reasoning, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -705,6 +743,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     content,
     status,
     modelName,
+    reasoning,
     createdAt,
   );
   @override
@@ -717,6 +756,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           other.content == this.content &&
           other.status == this.status &&
           other.modelName == this.modelName &&
+          other.reasoning == this.reasoning &&
           other.createdAt == this.createdAt);
 }
 
@@ -727,6 +767,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
   final Value<String> content;
   final Value<ChatMessageStatus> status;
   final Value<String?> modelName;
+  final Value<String?> reasoning;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const MessagesCompanion({
@@ -736,6 +777,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     this.content = const Value.absent(),
     this.status = const Value.absent(),
     this.modelName = const Value.absent(),
+    this.reasoning = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -746,6 +788,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     required String content,
     required ChatMessageStatus status,
     this.modelName = const Value.absent(),
+    this.reasoning = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -761,6 +804,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Expression<String>? content,
     Expression<String>? status,
     Expression<String>? modelName,
+    Expression<String>? reasoning,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -771,6 +815,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       if (content != null) 'content': content,
       if (status != null) 'status': status,
       if (modelName != null) 'model_name': modelName,
+      if (reasoning != null) 'reasoning': reasoning,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -783,6 +828,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Value<String>? content,
     Value<ChatMessageStatus>? status,
     Value<String?>? modelName,
+    Value<String?>? reasoning,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -793,6 +839,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       content: content ?? this.content,
       status: status ?? this.status,
       modelName: modelName ?? this.modelName,
+      reasoning: reasoning ?? this.reasoning,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -823,6 +870,9 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     if (modelName.present) {
       map['model_name'] = Variable<String>(modelName.value);
     }
+    if (reasoning.present) {
+      map['reasoning'] = Variable<String>(reasoning.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -841,6 +891,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
           ..write('content: $content, ')
           ..write('status: $status, ')
           ..write('modelName: $modelName, ')
+          ..write('reasoning: $reasoning, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1615,6 +1666,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   required String content,
   required ChatMessageStatus status,
   Value<String?> modelName,
+  Value<String?> reasoning,
   required DateTime createdAt,
   Value<int> rowid,
 });
@@ -1625,6 +1677,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String> content,
   Value<ChatMessageStatus> status,
   Value<String?> modelName,
+  Value<String?> reasoning,
   Value<DateTime> createdAt,
   Value<int> rowid,
 });
@@ -1685,6 +1738,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get modelName => $composableBuilder(
     column: $table.modelName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reasoning => $composableBuilder(
+    column: $table.reasoning,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1751,6 +1809,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get reasoning => $composableBuilder(
+    column: $table.reasoning,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -1803,6 +1866,9 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<String> get modelName =>
       $composableBuilder(column: $table.modelName, builder: (column) => column);
+
+  GeneratedColumn<String> get reasoning =>
+      $composableBuilder(column: $table.reasoning, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -1865,6 +1931,7 @@ class $$MessagesTableTableManager
                 Value<String> content = const Value.absent(),
                 Value<ChatMessageStatus> status = const Value.absent(),
                 Value<String?> modelName = const Value.absent(),
+                Value<String?> reasoning = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
@@ -1874,6 +1941,7 @@ class $$MessagesTableTableManager
                 content: content,
                 status: status,
                 modelName: modelName,
+                reasoning: reasoning,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -1885,6 +1953,7 @@ class $$MessagesTableTableManager
                 required String content,
                 required ChatMessageStatus status,
                 Value<String?> modelName = const Value.absent(),
+                Value<String?> reasoning = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
@@ -1894,6 +1963,7 @@ class $$MessagesTableTableManager
                 content: content,
                 status: status,
                 modelName: modelName,
+                reasoning: reasoning,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

@@ -20,6 +20,7 @@ class ChatMessage {
     required this.content,
     this.status = ChatMessageStatus.done,
     this.modelName,
+    this.reasoning,
     this.createdAt,
   });
 
@@ -31,6 +32,9 @@ class ChatMessage {
   /// AI 消息对应的模型名（气泡上方小字标注）。
   final String? modelName;
 
+  /// 推理模型的思考内容；非推理模型为 null。
+  final String? reasoning;
+
   final DateTime? createdAt;
 
   ChatMessage copyWith({
@@ -39,6 +43,7 @@ class ChatMessage {
     String? content,
     ChatMessageStatus? status,
     String? modelName,
+    String? reasoning,
     DateTime? createdAt,
   }) {
     return ChatMessage(
@@ -47,6 +52,7 @@ class ChatMessage {
       content: content ?? this.content,
       status: status ?? this.status,
       modelName: modelName ?? this.modelName,
+      reasoning: reasoning ?? this.reasoning,
       createdAt: createdAt ?? this.createdAt,
     );
   }

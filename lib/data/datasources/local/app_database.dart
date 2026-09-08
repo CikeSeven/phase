@@ -32,6 +32,9 @@ class Messages extends Table {
   TextColumn get content => text()();
   TextColumn get status => textEnum<ChatMessageStatus>()();
   TextColumn get modelName => text().nullable()();
+
+  /// 推理模型的思考内容；非推理模型为 null。
+  TextColumn get reasoning => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -63,7 +66,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'phase'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -73,6 +76,9 @@ class AppDatabase extends _$AppDatabase {
           providerProfiles,
           providerProfiles.defaultModel,
         );
+      }
+      if (from < 3) {
+        await migrator.addColumn(messages, messages.reasoning);
       }
     },
   );
@@ -130,10 +136,15 @@ class AppDatabase extends _$AppDatabase {
   Future<int> updateMessageContent(
     String id, {
     required String content,
+    required String? reasoning,
     required ChatMessageStatus status,
   }) {
     return (update(messages)..where((t) => t.id.equals(id))).write(
-      MessagesCompanion(content: Value(content), status: Value(status)),
+      MessagesCompanion(
+        content: Value(content),
+        reasoning: Value(reasoning),
+        status: Value(status),
+      ),
     );
   }
 

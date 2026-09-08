@@ -14,6 +14,7 @@ ChatMessage _$ChatMessageFromJson(Map<String, dynamic> json) => ChatMessage(
       $enumDecodeNullable(_$ChatMessageStatusEnumMap, json['status']) ??
       ChatMessageStatus.done,
   modelName: json['modelName'] as String?,
+  reasoning: json['reasoning'] as String?,
   createdAt: json['createdAt'] == null
       ? null
       : DateTime.parse(json['createdAt'] as String),
@@ -26,6 +27,7 @@ Map<String, dynamic> _$ChatMessageToJson(ChatMessage instance) =>
       'content': instance.content,
       'status': _$ChatMessageStatusEnumMap[instance.status]!,
       'modelName': instance.modelName,
+      'reasoning': instance.reasoning,
       'createdAt': instance.createdAt?.toIso8601String(),
     };
 

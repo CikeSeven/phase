@@ -136,14 +136,20 @@ class ConversationRepository {
     }
   }
 
-  /// 流式输出时增量更新内容，结束时更新状态。
+  /// 流式输出时增量更新内容与思考，结束时更新状态。
   Future<void> updateMessageContent(
     String id, {
     required String content,
+    required String? reasoning,
     required ChatMessageStatus status,
   }) async {
     try {
-      await _db.updateMessageContent(id, content: content, status: status);
+      await _db.updateMessageContent(
+        id,
+        content: content,
+        reasoning: reasoning,
+        status: status,
+      );
     } on Exception catch (e, st) {
       AppLogger.error('更新消息失败', e, st);
       throw UnknownFailure('更新消息失败', cause: e);
@@ -167,6 +173,7 @@ class ConversationRepository {
       content: row.content,
       status: row.status,
       modelName: row.modelName,
+      reasoning: row.reasoning,
       createdAt: row.createdAt,
     );
   }

@@ -8,6 +8,7 @@ part of 'chat_chunk.dart';
 
 ChatChunk _$ChatChunkFromJson(Map<String, dynamic> json) => ChatChunk(
   delta: json['delta'] as String,
+  reasoningDelta: json['reasoningDelta'] as String?,
   done: json['done'] as bool? ?? false,
   usage: json['usage'] == null
       ? null
@@ -16,6 +17,7 @@ ChatChunk _$ChatChunkFromJson(Map<String, dynamic> json) => ChatChunk(
 
 Map<String, dynamic> _$ChatChunkToJson(ChatChunk instance) => <String, dynamic>{
   'delta': instance.delta,
+  'reasoningDelta': instance.reasoningDelta,
   'done': instance.done,
   'usage': instance.usage,
 };

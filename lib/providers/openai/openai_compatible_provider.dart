@@ -10,6 +10,7 @@ import '../../data/models/chat_request.dart';
 import '../../data/models/provider_profile.dart';
 import '../ai_provider.dart';
 import 'sse_decoder.dart';
+import 'think_tag_filter.dart';
 
 /// 把 dio 异常映射为统一的 [Failure] 体系。
 ///
@@ -106,7 +107,10 @@ class OpenAiCompatibleProvider implements AiProvider {
         if (body == null) {
           throw const ServerFailure('响应体为空');
         }
-        await controller.addStream(OpenAiSseDecoder.decode(body.stream));
+        // think 标签拆分放在解码之后，保持 SSE 解析器纯粹。
+        await controller.addStream(
+          splitThinkTags(OpenAiSseDecoder.decode(body.stream)),
+        );
       } on DioException catch (e) {
         if (!controller.isClosed) {
           controller.addError(mapDioExceptionToFailure(e));

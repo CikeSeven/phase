@@ -47,9 +47,16 @@ abstract final class OpenAiSseDecoder {
     }
     final delta = choice['delta'];
     final content = delta is Map<String, dynamic> ? delta['content'] : null;
+    // DeepSeek R1 等推理模型在独立字段里返回思考内容。
+    final reasoning = delta is Map<String, dynamic>
+        ? delta['reasoning_content']
+        : null;
     final finished = choice['finish_reason'] != null;
     return ChatChunk(
       delta: content is String ? content : '',
+      reasoningDelta: reasoning is String && reasoning.isNotEmpty
+          ? reasoning
+          : null,
       done: finished,
       usage: usage,
     );
