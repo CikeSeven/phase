@@ -12,6 +12,11 @@ ChatRequest _$ChatRequestFromJson(Map<String, dynamic> json) => ChatRequest(
       .map((e) => ChatMessage.fromJson(e as Map<String, dynamic>))
       .toList(),
   temperature: (json['temperature'] as num?)?.toDouble(),
+  reasoningEffort: $enumDecodeNullable(
+    _$ReasoningEffortEnumMap,
+    json['reasoningEffort'],
+  ),
+  maxTokens: (json['maxTokens'] as num?)?.toInt(),
 );
 
 Map<String, dynamic> _$ChatRequestToJson(ChatRequest instance) =>
@@ -19,4 +24,13 @@ Map<String, dynamic> _$ChatRequestToJson(ChatRequest instance) =>
       'model': instance.model,
       'messages': instance.messages.map((e) => e.toJson()).toList(),
       'temperature': instance.temperature,
+      'reasoningEffort': _$ReasoningEffortEnumMap[instance.reasoningEffort],
+      'maxTokens': instance.maxTokens,
     };
+
+const _$ReasoningEffortEnumMap = {
+  ReasoningEffort.off: 'off',
+  ReasoningEffort.low: 'low',
+  ReasoningEffort.medium: 'medium',
+  ReasoningEffort.high: 'high',
+};

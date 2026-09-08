@@ -11,15 +11,21 @@ ProviderProfile _$ProviderProfileFromJson(Map<String, dynamic> json) =>
       id: json['id'] as String,
       name: json['name'] as String,
       baseUrl: json['baseUrl'] as String,
-      type:
-          $enumDecodeNullable(_$ProviderTypeEnumMap, json['type']) ??
-          ProviderType.openaiCompatible,
+      protocol:
+          $enumDecodeNullable(_$ApiProtocolEnumMap, json['protocol']) ??
+          ApiProtocol.openaiCompletions,
+      presetId: json['presetId'] as String? ?? 'custom',
       models:
           (json['models'] as List<dynamic>?)
-              ?.map((e) => e as String)
+              ?.map((e) => ProfileModel.fromJson(e as Map<String, dynamic>))
               .toList() ??
           const [],
       defaultModel: json['defaultModel'] as String?,
+      compatOverrides: json['compatOverrides'] == null
+          ? null
+          : OpenAiCompat.fromJson(
+              json['compatOverrides'] as Map<String, dynamic>,
+            ),
       createdAt: json['createdAt'] == null
           ? null
           : DateTime.parse(json['createdAt'] as String),
@@ -30,12 +36,17 @@ Map<String, dynamic> _$ProviderProfileToJson(ProviderProfile instance) =>
       'id': instance.id,
       'name': instance.name,
       'baseUrl': instance.baseUrl,
-      'type': _$ProviderTypeEnumMap[instance.type]!,
-      'models': instance.models,
+      'protocol': _$ApiProtocolEnumMap[instance.protocol]!,
+      'presetId': instance.presetId,
+      'models': instance.models.map((e) => e.toJson()).toList(),
       'defaultModel': instance.defaultModel,
+      'compatOverrides': instance.compatOverrides?.toJson(),
       'createdAt': instance.createdAt?.toIso8601String(),
     };
 
-const _$ProviderTypeEnumMap = {
-  ProviderType.openaiCompatible: 'openaiCompatible',
+const _$ApiProtocolEnumMap = {
+  ApiProtocol.openaiCompletions: 'openaiCompletions',
+  ApiProtocol.openaiResponses: 'openaiResponses',
+  ApiProtocol.anthropicMessages: 'anthropicMessages',
+  ApiProtocol.googleGenerativeAi: 'googleGenerativeAi',
 };

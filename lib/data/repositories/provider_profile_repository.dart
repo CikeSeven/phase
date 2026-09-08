@@ -8,6 +8,9 @@ import '../../core/utils/id.dart';
 import '../../core/utils/logger.dart';
 import '../datasources/local/app_database.dart';
 import '../datasources/local/secure_key_storage.dart';
+import '../models/api_protocol.dart';
+import '../models/openai_compat.dart';
+import '../models/profile_model.dart';
 import '../models/provider_profile.dart';
 
 part 'provider_profile_repository.g.dart';
@@ -40,8 +43,11 @@ class ProviderProfileRepository {
     String? id,
     required String name,
     required String baseUrl,
+    ApiProtocol protocol = ApiProtocol.openaiCompletions,
+    String presetId = 'custom',
     String? defaultModel,
-    List<String> models = const [],
+    List<ProfileModel> models = const [],
+    OpenAiCompat? compatOverrides,
   }) async {
     try {
       final profileId = id ?? generateId();
@@ -53,8 +59,13 @@ class ProviderProfileRepository {
           id: profileId,
           name: name,
           baseUrl: baseUrl,
-          modelsJson: Value(jsonEncode(models)),
+          protocol: Value(protocol.name),
+          presetId: Value(presetId),
+          modelsJson: Value(encodeProfileModels(models)),
           defaultModel: Value(normalizedDefault),
+          compatJson: Value(
+            compatOverrides == null ? null : jsonEncode(compatOverrides.toJson()),
+          ),
           createdAt: DateTime.now(),
         ),
       );
@@ -62,8 +73,11 @@ class ProviderProfileRepository {
         id: profileId,
         name: name,
         baseUrl: baseUrl,
+        protocol: protocol,
+        presetId: presetId,
         models: models,
         defaultModel: normalizedDefault,
+        compatOverrides: compatOverrides,
         createdAt: DateTime.now(),
       );
     } on Exception catch (e, st) {
@@ -106,17 +120,26 @@ class ProviderProfileRepository {
       id: row.id,
       name: row.name,
       baseUrl: row.baseUrl,
-      models: _decodeModels(row.modelsJson),
+      protocol: apiProtocolFromName(row.protocol),
+      presetId: row.presetId,
+      models: decodeProfileModels(row.modelsJson),
       defaultModel: row.defaultModel,
+      compatOverrides: _decodeCompat(row.compatJson),
       createdAt: row.createdAt,
     );
   }
 
-  List<String> _decodeModels(String modelsJson) {
+  OpenAiCompat? _decodeCompat(String? compatJson) {
+    if (compatJson == null) {
+      return null;
+    }
     try {
-      return (jsonDecode(modelsJson) as List<dynamic>).cast<String>();
+      final decoded = jsonDecode(compatJson);
+      return decoded is Map<String, dynamic>
+          ? OpenAiCompat.fromJson(decoded)
+          : null;
     } on FormatException {
-      return const [];
+      return null;
     }
   }
 }

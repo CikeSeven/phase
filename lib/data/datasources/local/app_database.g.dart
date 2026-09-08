@@ -938,6 +938,30 @@ class $ProviderProfilesTable extends ProviderProfiles
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _protocolMeta = const VerificationMeta(
+    'protocol',
+  );
+  @override
+  late final GeneratedColumn<String> protocol = GeneratedColumn<String>(
+    'protocol',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('openaiCompletions'),
+  );
+  static const VerificationMeta _presetIdMeta = const VerificationMeta(
+    'presetId',
+  );
+  @override
+  late final GeneratedColumn<String> presetId = GeneratedColumn<String>(
+    'preset_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('custom'),
+  );
   static const VerificationMeta _modelsJsonMeta = const VerificationMeta(
     'modelsJson',
   );
@@ -961,6 +985,17 @@ class $ProviderProfilesTable extends ProviderProfiles
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _compatJsonMeta = const VerificationMeta(
+    'compatJson',
+  );
+  @override
+  late final GeneratedColumn<String> compatJson = GeneratedColumn<String>(
+    'compat_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -977,8 +1012,11 @@ class $ProviderProfilesTable extends ProviderProfiles
     id,
     name,
     baseUrl,
+    protocol,
+    presetId,
     modelsJson,
     defaultModel,
+    compatJson,
     createdAt,
   ];
   @override
@@ -1014,6 +1052,18 @@ class $ProviderProfilesTable extends ProviderProfiles
     } else if (isInserting) {
       context.missing(_baseUrlMeta);
     }
+    if (data.containsKey('protocol')) {
+      context.handle(
+        _protocolMeta,
+        protocol.isAcceptableOrUnknown(data['protocol']!, _protocolMeta),
+      );
+    }
+    if (data.containsKey('preset_id')) {
+      context.handle(
+        _presetIdMeta,
+        presetId.isAcceptableOrUnknown(data['preset_id']!, _presetIdMeta),
+      );
+    }
     if (data.containsKey('models_json')) {
       context.handle(
         _modelsJsonMeta,
@@ -1027,6 +1077,12 @@ class $ProviderProfilesTable extends ProviderProfiles
           data['default_model']!,
           _defaultModelMeta,
         ),
+      );
+    }
+    if (data.containsKey('compat_json')) {
+      context.handle(
+        _compatJsonMeta,
+        compatJson.isAcceptableOrUnknown(data['compat_json']!, _compatJsonMeta),
       );
     }
     if (data.containsKey('created_at')) {
@@ -1058,6 +1114,14 @@ class $ProviderProfilesTable extends ProviderProfiles
         DriftSqlType.string,
         data['${effectivePrefix}base_url'],
       )!,
+      protocol: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}protocol'],
+      )!,
+      presetId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}preset_id'],
+      )!,
       modelsJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}models_json'],
@@ -1065,6 +1129,10 @@ class $ProviderProfilesTable extends ProviderProfiles
       defaultModel: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}default_model'],
+      ),
+      compatJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}compat_json'],
       ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
@@ -1085,18 +1153,30 @@ class ProviderProfileRow extends DataClass
   final String name;
   final String baseUrl;
 
-  /// 模型 id 列表的 JSON 编码（`List<String>`）。
+  /// 报文协议（ApiProtocol.name，v4 起；老数据默认 openaiCompletions）。
+  final String protocol;
+
+  /// 创建时选用的预设 id（v4 起；老数据默认 custom）。
+  final String presetId;
+
+  /// 模型列表的 JSON 编码（`List<ProfileModel>`，兼容老的字符串列表）。
   final String modelsJson;
 
   /// 该服务商下默认使用的模型；未设置时由上层回退到候选模型第一个。
   final String? defaultModel;
+
+  /// OpenAI 兼容协议的差异覆盖（OpenAiCompat JSON）；null 时按 baseUrl 嗅探。
+  final String? compatJson;
   final DateTime createdAt;
   const ProviderProfileRow({
     required this.id,
     required this.name,
     required this.baseUrl,
+    required this.protocol,
+    required this.presetId,
     required this.modelsJson,
     this.defaultModel,
+    this.compatJson,
     required this.createdAt,
   });
   @override
@@ -1105,9 +1185,14 @@ class ProviderProfileRow extends DataClass
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['base_url'] = Variable<String>(baseUrl);
+    map['protocol'] = Variable<String>(protocol);
+    map['preset_id'] = Variable<String>(presetId);
     map['models_json'] = Variable<String>(modelsJson);
     if (!nullToAbsent || defaultModel != null) {
       map['default_model'] = Variable<String>(defaultModel);
+    }
+    if (!nullToAbsent || compatJson != null) {
+      map['compat_json'] = Variable<String>(compatJson);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -1118,10 +1203,15 @@ class ProviderProfileRow extends DataClass
       id: Value(id),
       name: Value(name),
       baseUrl: Value(baseUrl),
+      protocol: Value(protocol),
+      presetId: Value(presetId),
       modelsJson: Value(modelsJson),
       defaultModel: defaultModel == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultModel),
+      compatJson: compatJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(compatJson),
       createdAt: Value(createdAt),
     );
   }
@@ -1135,8 +1225,11 @@ class ProviderProfileRow extends DataClass
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       baseUrl: serializer.fromJson<String>(json['baseUrl']),
+      protocol: serializer.fromJson<String>(json['protocol']),
+      presetId: serializer.fromJson<String>(json['presetId']),
       modelsJson: serializer.fromJson<String>(json['modelsJson']),
       defaultModel: serializer.fromJson<String?>(json['defaultModel']),
+      compatJson: serializer.fromJson<String?>(json['compatJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1147,8 +1240,11 @@ class ProviderProfileRow extends DataClass
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'baseUrl': serializer.toJson<String>(baseUrl),
+      'protocol': serializer.toJson<String>(protocol),
+      'presetId': serializer.toJson<String>(presetId),
       'modelsJson': serializer.toJson<String>(modelsJson),
       'defaultModel': serializer.toJson<String?>(defaultModel),
+      'compatJson': serializer.toJson<String?>(compatJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1157,15 +1253,21 @@ class ProviderProfileRow extends DataClass
     String? id,
     String? name,
     String? baseUrl,
+    String? protocol,
+    String? presetId,
     String? modelsJson,
     Value<String?> defaultModel = const Value.absent(),
+    Value<String?> compatJson = const Value.absent(),
     DateTime? createdAt,
   }) => ProviderProfileRow(
     id: id ?? this.id,
     name: name ?? this.name,
     baseUrl: baseUrl ?? this.baseUrl,
+    protocol: protocol ?? this.protocol,
+    presetId: presetId ?? this.presetId,
     modelsJson: modelsJson ?? this.modelsJson,
     defaultModel: defaultModel.present ? defaultModel.value : this.defaultModel,
+    compatJson: compatJson.present ? compatJson.value : this.compatJson,
     createdAt: createdAt ?? this.createdAt,
   );
   ProviderProfileRow copyWithCompanion(ProviderProfilesCompanion data) {
@@ -1173,12 +1275,17 @@ class ProviderProfileRow extends DataClass
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       baseUrl: data.baseUrl.present ? data.baseUrl.value : this.baseUrl,
+      protocol: data.protocol.present ? data.protocol.value : this.protocol,
+      presetId: data.presetId.present ? data.presetId.value : this.presetId,
       modelsJson: data.modelsJson.present
           ? data.modelsJson.value
           : this.modelsJson,
       defaultModel: data.defaultModel.present
           ? data.defaultModel.value
           : this.defaultModel,
+      compatJson: data.compatJson.present
+          ? data.compatJson.value
+          : this.compatJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1189,16 +1296,28 @@ class ProviderProfileRow extends DataClass
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('baseUrl: $baseUrl, ')
+          ..write('protocol: $protocol, ')
+          ..write('presetId: $presetId, ')
           ..write('modelsJson: $modelsJson, ')
           ..write('defaultModel: $defaultModel, ')
+          ..write('compatJson: $compatJson, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, baseUrl, modelsJson, defaultModel, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    baseUrl,
+    protocol,
+    presetId,
+    modelsJson,
+    defaultModel,
+    compatJson,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1206,8 +1325,11 @@ class ProviderProfileRow extends DataClass
           other.id == this.id &&
           other.name == this.name &&
           other.baseUrl == this.baseUrl &&
+          other.protocol == this.protocol &&
+          other.presetId == this.presetId &&
           other.modelsJson == this.modelsJson &&
           other.defaultModel == this.defaultModel &&
+          other.compatJson == this.compatJson &&
           other.createdAt == this.createdAt);
 }
 
@@ -1215,16 +1337,22 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
   final Value<String> id;
   final Value<String> name;
   final Value<String> baseUrl;
+  final Value<String> protocol;
+  final Value<String> presetId;
   final Value<String> modelsJson;
   final Value<String?> defaultModel;
+  final Value<String?> compatJson;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const ProviderProfilesCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.baseUrl = const Value.absent(),
+    this.protocol = const Value.absent(),
+    this.presetId = const Value.absent(),
     this.modelsJson = const Value.absent(),
     this.defaultModel = const Value.absent(),
+    this.compatJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1232,8 +1360,11 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     required String id,
     required String name,
     required String baseUrl,
+    this.protocol = const Value.absent(),
+    this.presetId = const Value.absent(),
     this.modelsJson = const Value.absent(),
     this.defaultModel = const Value.absent(),
+    this.compatJson = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1244,8 +1375,11 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? baseUrl,
+    Expression<String>? protocol,
+    Expression<String>? presetId,
     Expression<String>? modelsJson,
     Expression<String>? defaultModel,
+    Expression<String>? compatJson,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -1253,8 +1387,11 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (baseUrl != null) 'base_url': baseUrl,
+      if (protocol != null) 'protocol': protocol,
+      if (presetId != null) 'preset_id': presetId,
       if (modelsJson != null) 'models_json': modelsJson,
       if (defaultModel != null) 'default_model': defaultModel,
+      if (compatJson != null) 'compat_json': compatJson,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1264,8 +1401,11 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     Value<String>? id,
     Value<String>? name,
     Value<String>? baseUrl,
+    Value<String>? protocol,
+    Value<String>? presetId,
     Value<String>? modelsJson,
     Value<String?>? defaultModel,
+    Value<String?>? compatJson,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -1273,8 +1413,11 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
       id: id ?? this.id,
       name: name ?? this.name,
       baseUrl: baseUrl ?? this.baseUrl,
+      protocol: protocol ?? this.protocol,
+      presetId: presetId ?? this.presetId,
       modelsJson: modelsJson ?? this.modelsJson,
       defaultModel: defaultModel ?? this.defaultModel,
+      compatJson: compatJson ?? this.compatJson,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1292,11 +1435,20 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
     if (baseUrl.present) {
       map['base_url'] = Variable<String>(baseUrl.value);
     }
+    if (protocol.present) {
+      map['protocol'] = Variable<String>(protocol.value);
+    }
+    if (presetId.present) {
+      map['preset_id'] = Variable<String>(presetId.value);
+    }
     if (modelsJson.present) {
       map['models_json'] = Variable<String>(modelsJson.value);
     }
     if (defaultModel.present) {
       map['default_model'] = Variable<String>(defaultModel.value);
+    }
+    if (compatJson.present) {
+      map['compat_json'] = Variable<String>(compatJson.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -1313,8 +1465,11 @@ class ProviderProfilesCompanion extends UpdateCompanion<ProviderProfileRow> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('baseUrl: $baseUrl, ')
+          ..write('protocol: $protocol, ')
+          ..write('presetId: $presetId, ')
           ..write('modelsJson: $modelsJson, ')
           ..write('defaultModel: $defaultModel, ')
+          ..write('compatJson: $compatJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2037,8 +2192,11 @@ typedef $$ProviderProfilesTableCreateCompanionBuilder =
       required String id,
       required String name,
       required String baseUrl,
+      Value<String> protocol,
+      Value<String> presetId,
       Value<String> modelsJson,
       Value<String?> defaultModel,
+      Value<String?> compatJson,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -2047,8 +2205,11 @@ typedef $$ProviderProfilesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<String> baseUrl,
+      Value<String> protocol,
+      Value<String> presetId,
       Value<String> modelsJson,
       Value<String?> defaultModel,
+      Value<String?> compatJson,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -2077,6 +2238,16 @@ class $$ProviderProfilesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get protocol => $composableBuilder(
+    column: $table.protocol,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get presetId => $composableBuilder(
+    column: $table.presetId,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get modelsJson => $composableBuilder(
     column: $table.modelsJson,
     builder: (column) => ColumnFilters(column),
@@ -2084,6 +2255,11 @@ class $$ProviderProfilesTableFilterComposer
 
   ColumnFilters<String> get defaultModel => $composableBuilder(
     column: $table.defaultModel,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get compatJson => $composableBuilder(
+    column: $table.compatJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2117,6 +2293,16 @@ class $$ProviderProfilesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get protocol => $composableBuilder(
+    column: $table.protocol,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get presetId => $composableBuilder(
+    column: $table.presetId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get modelsJson => $composableBuilder(
     column: $table.modelsJson,
     builder: (column) => ColumnOrderings(column),
@@ -2124,6 +2310,11 @@ class $$ProviderProfilesTableOrderingComposer
 
   ColumnOrderings<String> get defaultModel => $composableBuilder(
     column: $table.defaultModel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get compatJson => $composableBuilder(
+    column: $table.compatJson,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -2151,6 +2342,12 @@ class $$ProviderProfilesTableAnnotationComposer
   GeneratedColumn<String> get baseUrl =>
       $composableBuilder(column: $table.baseUrl, builder: (column) => column);
 
+  GeneratedColumn<String> get protocol =>
+      $composableBuilder(column: $table.protocol, builder: (column) => column);
+
+  GeneratedColumn<String> get presetId =>
+      $composableBuilder(column: $table.presetId, builder: (column) => column);
+
   GeneratedColumn<String> get modelsJson => $composableBuilder(
     column: $table.modelsJson,
     builder: (column) => column,
@@ -2158,6 +2355,11 @@ class $$ProviderProfilesTableAnnotationComposer
 
   GeneratedColumn<String> get defaultModel => $composableBuilder(
     column: $table.defaultModel,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get compatJson => $composableBuilder(
+    column: $table.compatJson,
     builder: (column) => column,
   );
 
@@ -2205,16 +2407,22 @@ class $$ProviderProfilesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> baseUrl = const Value.absent(),
+                Value<String> protocol = const Value.absent(),
+                Value<String> presetId = const Value.absent(),
                 Value<String> modelsJson = const Value.absent(),
                 Value<String?> defaultModel = const Value.absent(),
+                Value<String?> compatJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ProviderProfilesCompanion(
                 id: id,
                 name: name,
                 baseUrl: baseUrl,
+                protocol: protocol,
+                presetId: presetId,
                 modelsJson: modelsJson,
                 defaultModel: defaultModel,
+                compatJson: compatJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -2223,16 +2431,22 @@ class $$ProviderProfilesTableTableManager
                 required String id,
                 required String name,
                 required String baseUrl,
+                Value<String> protocol = const Value.absent(),
+                Value<String> presetId = const Value.absent(),
                 Value<String> modelsJson = const Value.absent(),
                 Value<String?> defaultModel = const Value.absent(),
+                Value<String?> compatJson = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => ProviderProfilesCompanion.insert(
                 id: id,
                 name: name,
                 baseUrl: baseUrl,
+                protocol: protocol,
+                presetId: presetId,
                 modelsJson: modelsJson,
                 defaultModel: defaultModel,
+                compatJson: compatJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

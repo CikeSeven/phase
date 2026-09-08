@@ -48,11 +48,21 @@ class ProviderProfiles extends Table {
   TextColumn get name => text().withLength(min: 1, max: 100)();
   TextColumn get baseUrl => text()();
 
-  /// 模型 id 列表的 JSON 编码（`List<String>`）。
+  /// 报文协议（ApiProtocol.name，v4 起；老数据默认 openaiCompletions）。
+  TextColumn get protocol =>
+      text().withDefault(const Constant('openaiCompletions'))();
+
+  /// 创建时选用的预设 id（v4 起；老数据默认 custom）。
+  TextColumn get presetId => text().withDefault(const Constant('custom'))();
+
+  /// 模型列表的 JSON 编码（`List<ProfileModel>`，兼容老的字符串列表）。
   TextColumn get modelsJson => text().withDefault(const Constant('[]'))();
 
   /// 该服务商下默认使用的模型；未设置时由上层回退到候选模型第一个。
   TextColumn get defaultModel => text().nullable()();
+
+  /// OpenAI 兼容协议的差异覆盖（OpenAiCompat JSON）；null 时按 baseUrl 嗅探。
+  TextColumn get compatJson => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -66,7 +76,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'phase'));
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -79,6 +89,11 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 3) {
         await migrator.addColumn(messages, messages.reasoning);
+      }
+      if (from < 4) {
+        await migrator.addColumn(providerProfiles, providerProfiles.protocol);
+        await migrator.addColumn(providerProfiles, providerProfiles.presetId);
+        await migrator.addColumn(providerProfiles, providerProfiles.compatJson);
       }
     },
   );
