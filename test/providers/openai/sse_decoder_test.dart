@@ -82,7 +82,8 @@ void main() {
 
   group('OpenAiSseDecoder.decode', () {
     test('完整 SSE 字节流解析为 ChatChunk 序列', () async {
-      const sseText = 'data: {"choices":[{"delta":{"content":"你"},'
+      const sseText =
+          'data: {"choices":[{"delta":{"content":"你"},'
           '"finish_reason":null}]}\n'
           '\n'
           'data: {"choices":[{"delta":{"content":"好"},'
@@ -104,16 +105,17 @@ void main() {
     });
 
     test('跨 chunk 的半截行被正确拼接', () async {
-      const line = 'data: {"choices":[{"delta":{"content":"完整的一句"},'
+      const line =
+          'data: {"choices":[{"delta":{"content":"完整的一句"},'
           '"finish_reason":null}]}\n\n';
       final bytes = utf8.encode(line);
       // 以极小切片模拟网络分片，包含多字节 UTF-8 字符被切断的情况。
       final slices = [
-        for (var i = 0; i < bytes.length; i += 7) bytes.sublist(i, i + 7 > bytes.length ? bytes.length : i + 7),
+        for (var i = 0; i < bytes.length; i += 7)
+          bytes.sublist(i, i + 7 > bytes.length ? bytes.length : i + 7),
       ];
-      final chunks = await OpenAiSseDecoder.decode(
-        Stream.fromIterable(slices),
-      ).toList();
+      final chunks = await OpenAiSseDecoder.decode(Stream.fromIterable(slices))
+          .toList();
       expect(chunks, hasLength(1));
       expect(chunks.single.delta, '完整的一句');
     });
@@ -205,6 +207,30 @@ void main() {
         mapDioExceptionToFailure(dioError(DioExceptionType.unknown)),
         isA<UnknownFailure>(),
       );
+    });
+  });
+
+  // 网关字段变体：reasoning / reasoning_text 也应解析为思考增量（gpt 系网关常见）。
+  group('reasoning 字段变体', () {
+    test('delta.reasoning 解析为思考增量', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data: {"choices":[{"delta":{"reasoning":"嗯"},"index":0}]}',
+      );
+      expect(chunk?.reasoningDelta, '嗯');
+    });
+
+    test('delta.reasoning_text 解析为思考增量', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data: {"choices":[{"delta":{"reasoning_text":"想想"},"index":0}]}',
+      );
+      expect(chunk?.reasoningDelta, '想想');
+    });
+
+    test('reasoning_content 优先级高于 reasoning', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data: {"choices":[{"delta":{"reasoning_content":"A","reasoning":"B"},"index":0}]}',
+      );
+      expect(chunk?.reasoningDelta, 'A');
     });
   });
 }
