@@ -87,14 +87,20 @@ class SettingsPage extends ConsumerWidget {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (final mode in ThemeMode.values)
+              // 弹窗内选项不需要 listTileTheme 的卡片底色，透明底 + 间距更干净。
+              for (final mode in ThemeMode.values) ...[
+                if (mode != ThemeMode.values.first)
+                  const SizedBox(height: AppSpacing.xs),
                 ListTile(
+                  tileColor: Colors.transparent,
+                  selectedTileColor: Colors.transparent,
                   title: Text(_themeModeLabel(mode)),
                   trailing: mode == current
                       ? Icon(Symbols.check, color: colorScheme.primary)
                       : null,
                   onTap: () => Navigator.of(context).pop(mode),
                 ),
+              ],
             ],
           ),
         );
