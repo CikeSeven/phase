@@ -120,6 +120,7 @@ flutter run                                  # 调试运行
 - Flutter 已配置 `--android-sdk ~/android-sdk`：系统 SDK（`/opt/android-sdk`，root 所有只读）的用户级覆盖目录，大组件以符号链接共享，NDK 28.2.13676358 与 build-tools 36.0.0 安装于该目录（系统 SDK 缺这两个组件且无写权限）。
 - 系统自带的 `sdkmanager`（新版 android CLI）在只读 SDK 上会崩溃；如需安装 SDK 组件，用 `~/android-sdk/cmdline-tools-classic/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk "<组件>"`。
 - `android/app/build.gradle.kts` 中 `compileSdk = 37` 是显式覆盖（flutter_secure_storage 11.x 要求 ≥37），不要改回 `flutter.compileSdkVersion`。
+- **装机更新禁止使用 `flutter install`**：它默认先卸载旧版本（`uninstall = true`），会清空应用全部数据（数据库、shared_preferences、安全存储的 API Key）。更新已安装的 App 一律用覆盖安装：`$HOME/android-sdk/platform-tools/adb -s <设备id> install -r build/app/outputs/flutter-apk/app-debug.apk`。
 
 ## 7. Git 规范
 
