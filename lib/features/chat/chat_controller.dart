@@ -56,6 +56,9 @@ class ChatController extends _$ChatController {
   String? _streamingMessageId;
   Failure? _streamError;
 
+  /// 区分「用户主动停止」与「流空跑结束」：前者空缓冲标记 done，后者是异常。
+  bool _stoppedManually = false;
+
   @override
   ChatState build() {
     ref.onDispose(() {
@@ -134,6 +137,7 @@ class ChatController extends _$ChatController {
     _reasoningBuffer.clear();
     _streamingMessageId = aiMessage.id;
     _streamError = null;
+    _stoppedManually = false;
 
     // 不能用 StreamSubscription.asFuture 等待流结束：它会覆盖已注册的
     // onError，且取消后永不完成（stop 路径会挂死）。改用 Completer。
@@ -202,6 +206,15 @@ class ChatController extends _$ChatController {
           reasoning: _currentReasoning,
           status: ChatMessageStatus.error,
         );
+      } else if (!_stoppedManually && _buffer.isEmpty && _reasoningBuffer.isEmpty) {
+        // 网关用非 SSE 错误体（HTTP 200 + JSON）或忽略了推理参数时，
+        // 流会空跑结束；与其显示空气泡，不如明确报错。
+        await repository.updateMessageContent(
+          messageId,
+          content: '服务商返回了空响应，请检查模型名称与推理等级设置',
+          reasoning: null,
+          status: ChatMessageStatus.error,
+        );
       } else {
         await repository.updateMessageContent(
           messageId,
@@ -222,6 +235,7 @@ class ChatController extends _$ChatController {
     if (subscription == null) {
       return;
     }
+    _stoppedManually = true;
     unawaited(subscription.cancel());
     _doneCompleter?.complete();
   }

@@ -19,6 +19,7 @@ enum ReasoningEffort {
         return effort;
       }
     }
-    return ReasoningEffort.medium;
+    // 默认关：不在请求里夹带网关可能不认识的推理参数（曾有网关因此返回空响应）。
+    return ReasoningEffort.off;
   }
 }

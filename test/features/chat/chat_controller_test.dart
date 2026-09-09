@@ -257,6 +257,38 @@ void main() {
     expect(messages[1].content, const ServerFailure('boom').userMessage);
   });
 
+  test('流空跑结束（无任何增量）时 AI 消息标记 error 而非空气泡', () async {
+    await insertProfile();
+    fakeProvider.streamFactory = () => const Stream<ChatChunk>.empty();
+
+    await controller().send('你好');
+    final conversationId = state().conversationId!;
+
+    expect(state().isGenerating, isFalse);
+    final messages = await db.getMessageRows(conversationId);
+    expect(messages[1].status, ChatMessageStatus.error);
+    expect(messages[1].content, contains('空响应'));
+  });
+
+  test('立即停止（无任何增量）不误判为 error', () async {
+    await insertProfile();
+    final chunks = StreamController<ChatChunk>();
+    fakeProvider.streamFactory = () => chunks.stream;
+
+    final sendFuture = controller().send('你好');
+    await pumpEventQueue();
+    final conversationId = state().conversationId!;
+
+    controller().stop();
+    await sendFuture;
+
+    final messages = await db.getMessageRows(conversationId);
+    expect(messages[1].status, ChatMessageStatus.done);
+    expect(messages[1].content, isEmpty);
+
+    await chunks.close();
+  });
+
   test('未配置服务商时 send 抛 Failure，不创建会话与消息', () async {
     expect(
       () => controller().send('你好'),
