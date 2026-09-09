@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
@@ -30,6 +31,7 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerOpen = false;
+  double _composerExtent = 0;
 
   void _openDrawer() {
     _scaffoldKey.currentState?.openDrawer();
@@ -182,23 +184,38 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     constraints.maxHeight * 0.5,
                   ),
                 );
-                return Column(
+                // 消息区占满全高，输入栏悬浮其上；内容按实测输入栏高度留白，
+                // 可以滚到磨砂底后面透出。
+                return Stack(
                   children: [
-                    Expanded(
+                    Positioned.fill(
                       child: conversationId == null
-                          ? const ChatEmptyState()
+                          ? ChatEmptyState(bottomPadding: _composerExtent)
                           : _ConversationMessages(
                               key: ValueKey(conversationId),
                               conversationId: conversationId,
+                              bottomPadding: _composerExtent,
                             ),
                     ),
-                    Center(
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: 840,
-                          maxHeight: composerHeight,
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: 840,
+                            maxHeight: composerHeight,
+                          ),
+                          child: _ReportSize(
+                            onChanged: (height) {
+                              if (mounted && _composerExtent != height) {
+                                setState(() => _composerExtent = height);
+                              }
+                            },
+                            child: const ChatInputBar(),
+                          ),
                         ),
-                        child: const ChatInputBar(),
                       ),
                     ),
                   ],
@@ -213,9 +230,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 }
 
 class _ConversationMessages extends ConsumerWidget {
-  const _ConversationMessages({required this.conversationId, super.key});
+  const _ConversationMessages({
+    required this.conversationId,
+    required this.bottomPadding,
+    super.key,
+  });
 
   final String conversationId;
+  final double bottomPadding;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -223,11 +245,12 @@ class _ConversationMessages extends ConsumerWidget {
         .watch(chatMessagesProvider(conversationId))
         .when(
           data: (messages) => messages.isEmpty
-              ? const ChatEmptyState()
+              ? ChatEmptyState(bottomPadding: bottomPadding)
               : ChatTranscript(
                   key: ValueKey(conversationId),
                   conversationId: conversationId,
                   messages: messages,
+                  bottomPadding: bottomPadding,
                 ),
           loading: () => const Center(
             child: CircularProgressIndicator(semanticsLabel: '正在读取会话'),
@@ -243,5 +266,33 @@ class _ConversationMessages extends ConsumerWidget {
             ),
           ),
         );
+  }
+}
+
+/// 把子节点高度变化回传给父级的轻量代理，用于悬浮输入栏的实测高度。
+class _ReportSize extends SingleChildRenderObjectWidget {
+  const _ReportSize({required this.onChanged, required super.child});
+
+  final ValueChanged<double> onChanged;
+
+  @override
+  RenderObject createRenderObject(BuildContext context) =>
+      _RenderReportSize(onChanged);
+}
+
+class _RenderReportSize extends RenderProxyBox {
+  _RenderReportSize(this.onChanged);
+
+  final ValueChanged<double> onChanged;
+  double? _reported;
+
+  @override
+  void performLayout() {
+    super.performLayout();
+    if (_reported == size.height) return;
+    _reported = size.height;
+    final height = size.height;
+    // 布局阶段不能触发 setState，推迟到帧末回调。
+    WidgetsBinding.instance.addPostFrameCallback((_) => onChanged(height));
   }
 }

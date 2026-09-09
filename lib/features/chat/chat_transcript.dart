@@ -13,10 +13,14 @@ class ChatTranscript extends StatefulWidget {
     required this.conversationId,
     required this.messages,
     super.key,
+    this.bottomPadding = 0,
   });
 
   final String conversationId;
   final List<ChatMessage> messages;
+
+  /// 预留给悬浮输入栏的高度，末条消息可滚出遮挡区。
+  final double bottomPadding;
 
   @override
   State<ChatTranscript> createState() => _ChatTranscriptState();
@@ -164,8 +168,9 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                     child: ListView.builder(
                       key: ValueKey('transcript-${widget.conversationId}'),
                       controller: _scrollController,
-                      padding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.m,
+                      padding: EdgeInsets.only(
+                        top: AppSpacing.m,
+                        bottom: AppSpacing.m + widget.bottomPadding,
                       ),
                       itemCount: widget.messages.length,
                       findChildIndexCallback: (key) => indices[key],
@@ -183,7 +188,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
             if (_showReturnToBottom)
               Positioned(
                 right: AppSpacing.l,
-                bottom: AppSpacing.m,
+                bottom: AppSpacing.m + widget.bottomPadding,
                 child: IconButton.filledTonal(
                   key: const ValueKey('chat-scroll-to-bottom'),
                   tooltip: '回到底部',

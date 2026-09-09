@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:phase/core/error/failure.dart';
+import 'package:phase/core/theme/app_spacing.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/theme/frosted_surface.dart';
 import 'package:phase/core/widgets/app_background.dart';
@@ -24,6 +25,7 @@ import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/chat/chat_page.dart';
+import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/model_picker_sheet.dart';
 import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
@@ -657,6 +659,41 @@ void main() {
     );
     expect(find.text('think-model'), findsOneWidget);
     expect(find.byKey(const ValueKey('chat-reasoning-effort')), findsNothing);
+  });
+
+  testWidgets('输入栏悬浮于消息区之上，列表按其实测高度留白', (tester) async {
+    final repository = _MemoryConversations()..seed(1);
+    repository.messages['seed-0'] = [
+      const ChatMessage(
+        id: 'saved',
+        role: ChatRole.assistant,
+        content: '已有的回复',
+      ),
+    ];
+    await pumpChat(tester, repository: repository);
+    await openDrawer(tester);
+    await tester.tap(find.text('旅行灵感'));
+    await tester.pumpAndSettle();
+
+    // 消息区延伸到屏幕底部，发送按钮悬浮在消息区之上（而不是把消息区顶上去）。
+    final transcriptRect = tester.getRect(find.byType(ChatTranscript));
+    final sendCenter = tester.getCenter(find.byTooltip('发送'));
+    expect(transcriptRect.contains(sendCenter), isTrue);
+
+    // 列表底部留白 ≥ 输入栏高度，末条消息可以滚出遮挡区。
+    final listView = tester.widget<ListView>(
+      find.descendant(
+        of: find.byType(ChatTranscript),
+        matching: find.byType(ListView),
+      ),
+    );
+    final composerHeight = tester
+        .getRect(find.byKey(const ValueKey('chat-message-input')))
+        .height;
+    expect(
+      listView.padding!.resolve(TextDirection.ltr).bottom,
+      greaterThan(composerHeight + AppSpacing.m),
+    );
   });
 
   testWidgets('模型下拉入口保留 showModelPickerSheet 接口', (tester) async {

@@ -8,8 +8,12 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 
 /// 可在键盘与短屏下滚动的对话引导，不承诺尚未实现的助手能力。
+///
+/// [bottomPadding] 预留给悬浮输入栏的高度，保证内容能滚出遮挡区。
 class ChatEmptyState extends StatelessWidget {
-  const ChatEmptyState({super.key});
+  const ChatEmptyState({super.key, this.bottomPadding = 0});
+
+  final double bottomPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -18,10 +22,18 @@ class ChatEmptyState extends StatelessWidget {
       builder: (context, constraints) => SingleChildScrollView(
         key: const ValueKey('chat-empty-scroll'),
         primary: false,
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: EdgeInsets.fromLTRB(
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xl,
+          AppSpacing.xl + bottomPadding,
+        ),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            minHeight: math.max(0, constraints.maxHeight - AppSpacing.section),
+            minHeight: math.max(
+              0,
+              constraints.maxHeight - AppSpacing.section - bottomPadding,
+            ),
           ),
           child: Center(
             child: ConstrainedBox(
