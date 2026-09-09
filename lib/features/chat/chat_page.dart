@@ -28,10 +28,18 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  bool _drawerOpen = false;
 
   void _openDrawer() {
-    FocusScope.of(context).unfocus();
     _scaffoldKey.currentState?.openDrawer();
+  }
+
+  void _onDrawerChanged(bool isOpen) {
+    // 侧栏收起时框架会把焦点按历史恢复到输入框（键盘误弹），开关时都主动释放。
+    FocusManager.instance.primaryFocus?.unfocus();
+    if (_drawerOpen != isOpen) {
+      setState(() => _drawerOpen = isOpen);
+    }
   }
 
   @override
@@ -62,14 +70,17 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final profileLabel = selection.value?.profile.name;
 
     return PopScope<void>(
-      // 根路由与侧栏的 LocalHistoryEntry 继续交由 Android 原生返回处理。
-      canPop: true,
+      canPop: !_drawerOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _scaffoldKey.currentState?.closeDrawer();
+      },
       child: AppBackground(
         child: Scaffold(
           key: _scaffoldKey,
           backgroundColor: colors.surface.withValues(alpha: 0),
           drawerEnableOpenDragGesture: true,
           drawerEdgeDragWidth: MediaQuery.sizeOf(context).width,
+          onDrawerChanged: _onDrawerChanged,
           appBar: AppTopBar(
             toolbarHeight: toolbarHeight,
             automaticallyImplyLeading: false,

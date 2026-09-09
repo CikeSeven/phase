@@ -359,6 +359,96 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('侧栏开关不再把焦点恢复到输入框，键盘保持收起', (tester) async {
+    await pumpChat(tester, repository: _MemoryConversations()..seed(3));
+
+    bool inputHasPrimaryFocus() {
+      final editable = tester.widget<EditableText>(
+        find.descendant(
+          of: find.byKey(const ValueKey('chat-message-input')),
+          matching: find.byType(EditableText),
+        ),
+      );
+      return editable.focusNode.hasPrimaryFocus;
+    }
+
+    // 按钮打开 + 关闭按钮关闭
+    await tester.tap(find.byKey(const ValueKey('chat-message-input')));
+    await tester.pumpAndSettle();
+    expect(inputHasPrimaryFocus(), isTrue);
+    await openDrawer(tester);
+    expect(inputHasPrimaryFocus(), isFalse);
+    await tester.tap(find.byTooltip('关闭侧栏'));
+    await tester.pumpAndSettle();
+    expect(inputHasPrimaryFocus(), isFalse);
+    expect(find.byType(Drawer), findsNothing);
+
+    // 聚焦输入框后拖拽打开 + 点遮罩关闭
+    await tester.tap(find.byKey(const ValueKey('chat-message-input')));
+    await tester.pumpAndSettle();
+    final drag = await tester.startGesture(const Offset(100, 300));
+    await drag.moveBy(const Offset(260, 0));
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(find.byType(Drawer), findsOneWidget);
+    expect(inputHasPrimaryFocus(), isFalse);
+    await tester.tapAt(const Offset(350, 300));
+    await tester.pumpAndSettle();
+    expect(find.byType(Drawer), findsNothing);
+    expect(inputHasPrimaryFocus(), isFalse);
+
+    // 搜索框聚焦后关闭再打开，输入框与搜索框都不抢焦点
+    await openDrawer(tester);
+    await tester.tap(find.byKey(const ValueKey('conversation-search')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('关闭侧栏'));
+    await tester.pumpAndSettle();
+    expect(inputHasPrimaryFocus(), isFalse);
+    await openDrawer(tester);
+    expect(inputHasPrimaryFocus(), isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('侧栏打开时系统返回只关闭侧栏，不退出根页面', (tester) async {
+    final harness = await pumpChat(
+      tester,
+      repository: _MemoryConversations()..seed(3),
+    );
+    await openDrawer(tester);
+    expect(find.byType(Drawer), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(Drawer), findsNothing);
+    expect(find.byType(ChatPage), findsOneWidget);
+    expect(
+      harness.router.routerDelegate.currentConfiguration.uri.toString(),
+      '/',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('侧栏进入设置后返回，侧栏保持打开且不抢焦点', (tester) async {
+    await pumpChat(tester, repository: _MemoryConversations()..seed(3));
+    await openDrawer(tester);
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    expect(find.text('设置入口'), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('设置入口'), findsNothing);
+    expect(find.byType(Drawer), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // 侧栏仍处于打开状态，系统返回依然可以关闭它。
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(Drawer), findsNothing);
+    expect(find.byType(ChatPage), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('紧凑会话行保留48触区，更多菜单对齐按钮而非会话左边', (tester) async {
     await pumpChat(tester, repository: _MemoryConversations()..seed(20));
     await openDrawer(tester);
@@ -726,7 +816,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('删除失败保留当前会话并显示错误，设置跳转先关闭侧栏', (tester) async {
+  testWidgets('删除失败保留当前会话并显示错误，设置往返保留侧栏', (tester) async {
     final repository = _MemoryConversations()..seed(1);
     final harness = await pumpChat(tester, repository: repository);
     await openDrawer(tester);
@@ -752,7 +842,7 @@ void main() {
     harness.router.pop();
     await tester.pumpAndSettle();
     final scaffold = tester.state<ScaffoldState>(find.byType(Scaffold).first);
-    expect(scaffold.isDrawerOpen, isFalse);
-    expect(find.byType(TextField), findsOneWidget);
+    expect(scaffold.isDrawerOpen, isTrue);
+    expect(find.byType(TextField), findsNWidgets(2));
   });
 }

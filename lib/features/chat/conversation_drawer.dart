@@ -235,10 +235,9 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                 child: InkWell(
                   borderRadius: AppRadius.mediumAll,
                   onTap: () {
-                    final router = GoRouter.of(context);
+                    // 侧栏保持打开，从设置返回后停留在原状。
                     FocusScope.of(context).unfocus();
-                    Navigator.of(context).pop();
-                    router.push('/settings');
+                    GoRouter.of(context).push('/settings');
                   },
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpacing.s),
