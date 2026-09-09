@@ -5,6 +5,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/features/chat/message_actions_sheet.dart';
 import 'package:phase/features/chat/message_bubble.dart';
 import 'package:phase/features/chat/thinking_panel.dart';
 
@@ -336,7 +337,7 @@ void main() {
     }
   }
 
-  testWidgets('消息菜单只提供真实复制，使用复制图标并复制正文', (tester) async {
+  testWidgets('长按消息从底部展开紧凑操作面板并复制正文', (tester) async {
     final copied = <String>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
@@ -354,16 +355,38 @@ void main() {
       ),
     );
     await pumpBubble(tester, _aiMessage('需要复制的正文', ChatMessageStatus.done));
-    await tester.tap(find.byTooltip('消息操作'));
+
+    await tester.longPress(find.text('需要复制的正文', findRichText: true));
     await tester.pumpAndSettle();
+    expect(find.byType(MessageActionsSheet), findsOneWidget);
+    expect(find.byType(MenuAnchor), findsNothing);
+    expect(find.byType(MenuItemButton), findsNothing);
+    final sheetRect = tester.getRect(find.byType(BottomSheet));
+    expect(sheetRect.left, 0);
+    expect(sheetRect.right, 800);
+    expect(sheetRect.bottom, 600);
+    expect(sheetRect.height, lessThan(240));
     expect(find.byIcon(Symbols.content_copy), findsOneWidget);
     expect(find.byIcon(Symbols.keep), findsNothing);
     expect(find.text('重新生成'), findsNothing);
     expect(find.text('删除'), findsNothing);
-    await tester.tap(find.text('复制'));
+    await tester.tap(find.byKey(const ValueKey('copy-message')));
     await tester.pumpAndSettle();
     expect(copied, ['需要复制的正文']);
     expect(find.text('已复制'), findsOneWidget);
+    expect(find.byType(MessageActionsSheet), findsNothing);
+  });
+
+  testWidgets('AI 消息更多按钮也打开底部操作面板', (tester) async {
+    await pumpBubble(tester, _aiMessage('需要复制的正文', ChatMessageStatus.done));
+    await tester.tap(find.byTooltip('消息操作'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MessageActionsSheet), findsOneWidget);
+    expect(find.byType(MenuItemButton), findsNothing);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(MessageActionsSheet), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('代码块复制仍调用剪贴板并保留原始代码', (tester) async {

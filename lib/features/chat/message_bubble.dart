@@ -9,6 +9,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../data/models/chat_message.dart';
 import 'chat_code_block.dart';
+import 'message_actions_sheet.dart';
 import 'thinking_panel.dart';
 
 /// 用户消息保留右侧色面，AI 正文使用完整的阅读宽度。
@@ -36,179 +37,169 @@ class MessageBubble extends StatelessWidget {
     );
 
     return SizeChangedLayoutNotifier(
-      child: MenuAnchor(
-        menuChildren: [
-          MenuItemButton(
-            leadingIcon: const Icon(Symbols.content_copy),
-            onPressed: message.content.isEmpty ? null : () => _copy(context),
-            child: const Text('复制'),
-          ),
-        ],
-        builder: (context, controller, child) {
-          void toggleMenu() =>
-              controller.isOpen ? controller.close() : controller.open();
-          return Semantics(
-            customSemanticsActions: message.content.isEmpty
-                ? null
-                : {CustomSemanticsAction(label: '复制消息'): () => _copy(context)},
-            child: GestureDetector(
-              onLongPress: toggleMenu,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppSpacing.l,
-                  vertical: AppSpacing.m,
-                ),
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    if (_isUser) {
-                      return Align(
-                        alignment: Alignment.centerRight,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: constraints.maxWidth * 0.88,
-                          ),
-                          child: Material(
-                            color:
-                                (isError
-                                        ? colors.errorContainer
-                                        : colors.primaryContainer)
-                                    .withValues(alpha: 0.82),
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(AppRadius.large),
-                              topRight: Radius.circular(AppRadius.large),
-                              bottomLeft: Radius.circular(AppRadius.large),
-                              bottomRight: Radius.circular(AppRadius.small),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.l,
-                                vertical: AppSpacing.m,
-                              ),
-                              child: Text(message.content, style: textStyle),
-                            ),
-                          ),
+      child: Semantics(
+        customSemanticsActions: message.content.isEmpty
+            ? null
+            : {CustomSemanticsAction(label: '复制消息'): () => _copy(context)},
+        child: GestureDetector(
+          onLongPress: () => _showActions(context),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.l,
+              vertical: AppSpacing.m,
+            ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                if (_isUser) {
+                  return Align(
+                    alignment: Alignment.centerRight,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: constraints.maxWidth * 0.88,
+                      ),
+                      child: Material(
+                        color:
+                            (isError
+                                    ? colors.errorContainer
+                                    : colors.primaryContainer)
+                                .withValues(alpha: 0.82),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(AppRadius.large),
+                          topRight: Radius.circular(AppRadius.large),
+                          bottomLeft: Radius.circular(AppRadius.large),
+                          bottomRight: Radius.circular(AppRadius.small),
                         ),
-                      );
-                    }
-                    return Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.l,
+                            vertical: AppSpacing.m,
+                          ),
+                          child: Text(message.content, style: textStyle),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
                       children: [
-                        Row(
-                          children: [
-                            const AppIconBadge(
-                              icon: Symbols.auto_awesome,
-                              tone: AppTone.teal,
-                              size: 32,
-                              iconSize: 18,
-                            ),
-                            const SizedBox(width: AppSpacing.s),
-                            Expanded(
-                              child: Text(
-                                message.modelName ?? '相月',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colors.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                            IconButton(
-                              tooltip: '消息操作',
-                              onPressed: toggleMenu,
-                              icon: const Icon(Symbols.more_horiz),
-                            ),
-                          ],
+                        const AppIconBadge(
+                          icon: Symbols.auto_awesome,
+                          tone: AppTone.teal,
+                          size: 32,
+                          iconSize: 18,
                         ),
-                        if (message.reasoning?.isNotEmpty == true)
-                          Padding(
-                            key: ValueKey('thinking-${message.id}'),
-                            padding: const EdgeInsets.only(
-                              top: AppSpacing.s,
-                              bottom: AppSpacing.m,
-                            ),
-                            child: ThinkingPanel(
-                              reasoning: message.reasoning!,
-                              streaming: streaming,
+                        const SizedBox(width: AppSpacing.s),
+                        Expanded(
+                          child: Text(
+                            message.modelName ?? '相月',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
                             ),
                           ),
-                        Container(
-                          key: const ValueKey('message-body'),
-                          padding: isError
-                              ? const EdgeInsets.all(AppSpacing.l)
-                              : EdgeInsets.zero,
-                          decoration: isError
-                              ? BoxDecoration(
-                                  color: colors.errorContainer.withValues(
-                                    alpha: 0.72,
-                                  ),
-                                  borderRadius: AppRadius.mediumAll,
-                                  border: Border.all(
-                                    color: colors.error.withValues(alpha: 0.24),
-                                  ),
-                                )
-                              : null,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              if (isError) ...[
-                                Row(
-                                  children: [
-                                    Icon(
-                                      Symbols.error,
-                                      size: 18,
+                        ),
+                        IconButton(
+                          tooltip: '消息操作',
+                          onPressed: () => _showActions(context),
+                          icon: const Icon(Symbols.more_horiz),
+                        ),
+                      ],
+                    ),
+                    if (message.reasoning?.isNotEmpty == true)
+                      Padding(
+                        key: ValueKey('thinking-${message.id}'),
+                        padding: const EdgeInsets.only(
+                          top: AppSpacing.s,
+                          bottom: AppSpacing.m,
+                        ),
+                        child: ThinkingPanel(
+                          reasoning: message.reasoning!,
+                          streaming: streaming,
+                        ),
+                      ),
+                    Container(
+                      key: const ValueKey('message-body'),
+                      padding: isError
+                          ? const EdgeInsets.all(AppSpacing.l)
+                          : EdgeInsets.zero,
+                      decoration: isError
+                          ? BoxDecoration(
+                              color: colors.errorContainer.withValues(
+                                alpha: 0.72,
+                              ),
+                              borderRadius: AppRadius.mediumAll,
+                              border: Border.all(
+                                color: colors.error.withValues(alpha: 0.24),
+                              ),
+                            )
+                          : null,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (isError) ...[
+                            Row(
+                              children: [
+                                Icon(
+                                  Symbols.error,
+                                  size: 18,
+                                  color: colors.onErrorContainer,
+                                ),
+                                const SizedBox(width: AppSpacing.s),
+                                Expanded(
+                                  child: Text(
+                                    '回复未完成',
+                                    style: theme.textTheme.labelLarge?.copyWith(
                                       color: colors.onErrorContainer,
                                     ),
-                                    const SizedBox(width: AppSpacing.s),
-                                    Expanded(
-                                      child: Text(
-                                        '回复未完成',
-                                        style: theme.textTheme.labelLarge
-                                            ?.copyWith(
-                                              color: colors.onErrorContainer,
-                                            ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
-                                const SizedBox(height: AppSpacing.s),
                               ],
-                              GptMarkdown(
-                                message.content,
-                                key: const ValueKey('message-markdown'),
-                                style: textStyle,
-                                isStreaming: streaming,
-                                codeBuilder:
-                                    (context, language, code, closed) =>
-                                        ChatCodeBlock(
-                                          language: language,
-                                          code: code,
-                                        ),
-                              ),
-                            ],
+                            ),
+                            const SizedBox(height: AppSpacing.s),
+                          ],
+                          GptMarkdown(
+                            message.content,
+                            key: const ValueKey('message-markdown'),
+                            style: textStyle,
+                            isStreaming: streaming,
+                            codeBuilder: (context, language, code, closed) =>
+                                ChatCodeBlock(language: language, code: code),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (streaming)
+                      Align(
+                        key: const ValueKey('generation-cursor'),
+                        alignment: Alignment.centerLeft,
+                        child: _GenerationCursor(
+                          style: textStyle?.copyWith(
+                            color: colors.onSurfaceVariant,
                           ),
                         ),
-                        if (streaming)
-                          Align(
-                            key: const ValueKey('generation-cursor'),
-                            alignment: Alignment.centerLeft,
-                            child: _GenerationCursor(
-                              style: textStyle?.copyWith(
-                                color: colors.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                      ],
-                    );
-                  },
-                ),
-              ),
+                      ),
+                  ],
+                );
+              },
             ),
-          );
-        },
+          ),
+        ),
       ),
     );
+  }
+
+  Future<void> _showActions(BuildContext context) async {
+    final copy = await showMessageActionsSheet(
+      context,
+      canCopy: message.content.isNotEmpty,
+    );
+    if (copy == true && context.mounted) await _copy(context);
   }
 
   Future<void> _copy(BuildContext context) async {
