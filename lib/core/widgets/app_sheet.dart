@@ -19,6 +19,7 @@ class AppSheet extends StatelessWidget {
     required this.child,
     super.key,
     this.subtitle,
+    this.titleTrailing,
     this.footer,
     this.showClose = true,
     this.scrollableChild = true,
@@ -26,6 +27,9 @@ class AppSheet extends StatelessWidget {
 
   final String title;
   final String? subtitle;
+
+  /// 标题右侧的紧凑内容（如当前值摘要），空间不足时先于标题省略。
+  final Widget? titleTrailing;
   final Widget child;
   final Widget? footer;
   final bool showClose;
@@ -63,14 +67,24 @@ class AppSheet extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Semantics(
-                  header: true,
-                  child: Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleLarge,
-                  ),
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Semantics(
+                        header: true,
+                        child: Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleLarge,
+                        ),
+                      ),
+                    ),
+                    if (titleTrailing != null) ...[
+                      const SizedBox(width: AppSpacing.m),
+                      Flexible(child: titleTrailing!),
+                    ],
+                  ],
                 ),
               ),
               if (showClose) ...[

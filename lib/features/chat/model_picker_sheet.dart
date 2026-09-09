@@ -37,6 +37,9 @@ class ModelPickerSheet extends ConsumerStatefulWidget {
 
 class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   final _searchController = TextEditingController();
+
+  /// 键盘拉起时 AppSheet 会切换紧凑分支，搜索框靠 GlobalKey 跨分支保住焦点。
+  final _searchFieldKey = GlobalKey();
   ChatModelSelection? _initialSelection;
   String? _draftProfileId;
   String? _draftModel;
@@ -85,6 +88,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       canPop: !_saving,
       child: AppSheet(
         title: '选择模型',
+        titleTrailing: _initialized && draft?.model != null
+            ? _buildDraftTrailing(draft!)
+            : null,
         showClose: !_saving,
         footer: _initialized && !profiles.hasError && entries.isNotEmpty
             ? _buildFooter(draft)
@@ -163,11 +169,38 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
 
   Widget _buildModels(List<_PickerEntry> entries, _PickerEntry? draft) {
     final query = _query.trim().toLowerCase();
-    final matches = entries.where((entry) {
-      return entry.profile.name.toLowerCase().contains(query) ||
-          entry.profile.id.toLowerCase().contains(query) ||
-          (entry.model?.id.toLowerCase().contains(query) ?? false);
-    }).toList();
+    final searching = query.isNotEmpty;
+    final profiles = <ProviderProfile>[
+      ...{for (final entry in entries) entry.profile.id: entry.profile}.values,
+    ];
+    // 未产生草稿（如无可用模型）时，列表回落到第一个服务商。
+    final activeProfileId = _draftProfileId ?? profiles.first.id;
+
+    // 搜索时供应商列表只保留模型命中（或自身名称命中）的服务商。
+    final visibleProfiles = searching
+        ? [
+            for (final profile in profiles)
+              if (entries.any(
+                (entry) =>
+                    entry.profile.id == profile.id &&
+                    entry.model != null &&
+                    _entryMatches(profile, entry.model, query),
+              ))
+                profile,
+          ]
+        : profiles;
+    final visible = searching
+        ? [
+            for (final entry in entries)
+              if (entry.profile.id == activeProfileId &&
+                  entry.model != null &&
+                  _entryMatches(entry.profile, entry.model, query))
+                entry,
+          ]
+        : [
+            for (final entry in entries)
+              if (entry.profile.id == activeProfileId) entry,
+          ];
 
     return Column(
       children: [
@@ -178,31 +211,43 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
             AppSpacing.l,
             AppSpacing.m,
           ),
-          child: TextField(
+          child: KeyedSubtree(
             key: const ValueKey('model-search'),
-            controller: _searchController,
-            enabled: !_saving,
-            textInputAction: TextInputAction.search,
-            onChanged: (value) => setState(() => _query = value),
-            onSubmitted: (_) => FocusScope.of(context).unfocus(),
-            decoration: InputDecoration(
-              hintText: '搜索模型或服务商',
-              prefixIcon: const Icon(Symbols.search),
-              suffixIcon: _query.isEmpty
-                  ? null
-                  : IconButton(
-                      tooltip: '清除搜索',
-                      onPressed: _clearSearch,
-                      icon: const Icon(Symbols.close),
-                    ),
+            child: TextField(
+              key: _searchFieldKey,
+              controller: _searchController,
+              enabled: !_saving,
+              textInputAction: TextInputAction.search,
+              onChanged: _onQueryChanged,
+              onSubmitted: (_) => FocusScope.of(context).unfocus(),
+              decoration: InputDecoration(
+                hintText: '搜索模型或服务商',
+                prefixIcon: const Icon(Symbols.search),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        tooltip: '清除搜索',
+                        onPressed: _clearSearch,
+                        icon: const Icon(Symbols.close),
+                      ),
+              ),
             ),
           ),
         ),
+        if (visibleProfiles.isNotEmpty)
+          _buildProviderTabs(
+            visibleProfiles,
+            entries,
+            activeProfileId,
+            query: searching ? query : null,
+          ),
         Expanded(
-          child: matches.isEmpty
+          child: visible.isEmpty
               ? _buildStatus(
                   icon: Symbols.search_off,
-                  title: '没有找到模型',
+                  title: searching && visibleProfiles.isNotEmpty
+                      ? '该服务商没有匹配的模型'
+                      : '没有找到模型',
                   action: TextButton(
                     onPressed: _clearSearch,
                     child: const Text('清除搜索'),
@@ -218,30 +263,15 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                     AppSpacing.l,
                     AppSpacing.l,
                   ),
-                  itemCount: matches.length + 1,
+                  itemCount: visible.length,
                   itemBuilder: (context, index) {
-                    if (index == 0) {
-                      return _buildCurrentSelection(
-                        draft,
-                        matches.where((entry) => entry.model != null).length,
-                      );
-                    }
-                    final entry = matches[index - 1];
-                    final startsGroup =
-                        index == 1 ||
-                        matches[index - 2].profile.id != entry.profile.id;
+                    final entry = visible[index];
                     return Padding(
                       key: ValueKey((entry.profile.id, entry.model?.id)),
                       padding: const EdgeInsets.only(bottom: AppSpacing.s),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (startsGroup) _buildProviderHeading(entry.profile),
-                          entry.model == null
-                              ? _buildUnconfiguredProfile(entry.profile)
-                              : _buildModelOption(entry),
-                        ],
-                      ),
+                      child: entry.model == null
+                          ? _buildUnconfiguredProfile(entry.profile)
+                          : _buildModelOption(entry),
                     );
                   },
                 ),
@@ -250,84 +280,118 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     );
   }
 
-  Widget _buildCurrentSelection(_PickerEntry? draft, int modelCount) {
+  /// 标题右侧的紧凑摘要：待确认/当前徽标 + 草稿模型 id。
+  Widget _buildDraftTrailing(_PickerEntry draft) {
     final theme = Theme.of(context);
     final changed =
-        draft?.profile.id != _initialSelection?.profile.id ||
-        draft?.model?.id != _initialSelection?.model ||
+        draft.profile.id != _initialSelection?.profile.id ||
+        draft.model?.id != _initialSelection?.model ||
         _draftEffort != _initialSelection?.effort;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.m),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            key: const ValueKey('model-draft-summary'),
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s,
-              vertical: AppSpacing.s,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  changed ? '待确认选择' : '当前选择',
-                  style: theme.textTheme.labelMedium?.copyWith(
-                    color: theme.colorScheme.primary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  draft?.model?.id ?? '未选择模型',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleMedium,
-                ),
-                if (draft != null) ...[
-                  const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    draft.profile.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+    return Row(
+      key: const ValueKey('model-draft-summary'),
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AppBadge(label: changed ? '待确认' : '当前'),
+        const SizedBox(width: AppSpacing.s),
+        Flexible(
+          child: Text(
+            draft.model!.id,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall,
           ),
-          const SizedBox(height: AppSpacing.l),
-          Text(
-            queryIsEmpty ? '可用模型 · $modelCount' : '搜索结果 · $modelCount',
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  bool get queryIsEmpty => _query.trim().isEmpty;
-
-  Widget _buildProviderHeading(ProviderProfile profile) {
+  Widget _buildProviderTabs(
+    List<ProviderProfile> profiles,
+    List<_PickerEntry> entries,
+    String activeProfileId, {
+    String? query,
+  }) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final scaler = MediaQuery.textScalerOf(context);
+    final counts = <String, int>{};
+    for (final entry in entries) {
+      if (entry.model != null &&
+          (query == null || _entryMatches(entry.profile, entry.model, query))) {
+        counts[entry.profile.id] = (counts[entry.profile.id] ?? 0) + 1;
+      }
+    }
+    final tabHeight =
+        AppSpacing.s * 2 + scaler.scale(14) * 1.4 + scaler.scale(12) * 1.45;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.s,
-        AppSpacing.m,
-        AppSpacing.s,
-        AppSpacing.s,
-      ),
-      child: Semantics(
-        key: ValueKey(('model-provider-heading', profile.id)),
-        header: true,
-        child: Text(
-          profile.name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.titleSmall
-              ?.copyWith(color: context.brandColors.teal),
+      padding: const EdgeInsets.only(bottom: AppSpacing.s),
+      child: SizedBox(
+        height: tabHeight,
+        child: ListView.separated(
+          key: const ValueKey('provider-list'),
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.l),
+          itemCount: profiles.length,
+          separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.s),
+          itemBuilder: (context, index) {
+            final profile = profiles[index];
+            final selected = profile.id == activeProfileId;
+            final foreground = selected
+                ? colors.onPrimaryContainer
+                : colors.onSurface;
+            return Semantics(
+              key: ValueKey(('provider-tab', profile.id)),
+              selected: selected,
+              button: true,
+              label: profile.name,
+              child: Material(
+                borderRadius: AppRadius.mediumAll,
+                color: selected
+                    ? colors.primaryContainer.withValues(alpha: 0.72)
+                    : colors.surfaceContainerHigh.withValues(alpha: 0.6),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: _saving ? null : () => _chooseProvider(profile),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(
+                      minWidth: 96,
+                      maxWidth: 220,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.m,
+                        vertical: AppSpacing.s,
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            profile.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: foreground,
+                            ),
+                          ),
+                          Text(
+                            '${counts[profile.id] ?? 0} 个模型',
+                            maxLines: 1,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: selected
+                                  ? foreground
+                                  : colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
         ),
       ),
     );
@@ -564,6 +628,33 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     setState(() => _query = '');
   }
 
+  /// 搜索时若当前服务商没有命中，自动切到第一个有命中的服务商，
+  /// 用户不用先猜关键词属于哪家。
+  void _onQueryChanged(String value) {
+    setState(() {
+      _query = value;
+      final query = value.trim().toLowerCase();
+      if (query.isEmpty) return;
+      final profiles =
+          ref.read(providerProfilesProvider).value ?? const <ProviderProfile>[];
+      final entries = _entriesFor(profiles);
+      final activeHasMatch = entries.any(
+        (entry) =>
+            entry.profile.id == _draftProfileId &&
+            entry.model != null &&
+            _entryMatches(entry.profile, entry.model, query),
+      );
+      if (activeHasMatch) return;
+      for (final entry in entries) {
+        if (entry.model != null &&
+            _entryMatches(entry.profile, entry.model, query)) {
+          _activateProvider(entry.profile);
+          return;
+        }
+      }
+    });
+  }
+
   void _choose(_PickerEntry entry) {
     FocusScope.of(context).unfocus();
     setState(() {
@@ -572,6 +663,28 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       _draftEffort = _effectiveEffort(entry);
       _saveError = null;
     });
+  }
+
+  /// 切换服务商标签：草稿落到该服务商的默认模型（无默认取第一个），
+  /// 没有模型的服务商只切换列表，确认按钮保持禁用。
+  void _chooseProvider(ProviderProfile profile) {
+    FocusScope.of(context).unfocus();
+    setState(() => _activateProvider(profile));
+  }
+
+  void _activateProvider(ProviderProfile profile) {
+    _draftProfileId = profile.id;
+    final models = profile.modelCandidates;
+    String? modelId;
+    if (models.isNotEmpty) {
+      modelId = models.any((model) => model.id == profile.defaultModel)
+          ? profile.defaultModel
+          : models.first.id;
+      final model = models.firstWhere((entry) => entry.id == modelId);
+      _draftEffort = model.nearestAllowedEffort(_draftEffort);
+    }
+    _draftModel = modelId;
+    _saveError = null;
   }
 
   /// 模型未开放当前等级时就近降级（没有更低等级时取最近的更高等级），
@@ -627,3 +740,10 @@ typedef _PickerEntry = ({
   ProfileModel? model,
   bool manual,
 });
+
+/// 关键词命中：服务商名称、服务商 id 或模型 id 其一即可（query 已转小写）。
+bool _entryMatches(ProviderProfile profile, ProfileModel? model, String query) {
+  return profile.name.toLowerCase().contains(query) ||
+      profile.id.toLowerCase().contains(query) ||
+      (model?.id.toLowerCase().contains(query) ?? false);
+}

@@ -51,7 +51,7 @@ void main() {
     expect(find.byType(AppCard), findsNothing);
     expect(find.byIcon(Symbols.radio_button_unchecked), findsNothing);
     expect(
-      find.byKey(const ValueKey(('model-provider-heading', 'daily'))),
+      find.byKey(const ValueKey(('provider-tab', 'daily'))),
       findsOneWidget,
     );
     final selectedSurface = tester.widget<Material>(
@@ -75,7 +75,7 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.descendant(of: summary, matching: find.text('日常')),
+      find.descendant(of: summary, matching: find.text('当前')),
       findsOneWidget,
     );
     final optionHeight = tester.getSize(_option('daily', 'think-model')).height;
@@ -93,7 +93,13 @@ void main() {
   testWidgets('模型与推理仅修改草稿，取消及关闭都不改变原选择', (tester) async {
     final host = await _pumpHost(tester);
     await _openPicker(tester);
-    expect(find.text('当前选择'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('model-draft-summary')),
+        matching: find.text('当前'),
+      ),
+      findsOneWidget,
+    );
     expect(find.byType(ChoiceChip), findsNothing);
 
     await _chooseModel(tester, 'daily', 'think-model');
@@ -202,6 +208,55 @@ void main() {
     await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_model'), 'limited-thinker');
     expect(host.preferences.getString('last_reasoning_effort'), 'high');
+  });
+
+  testWidgets('横向服务商标签切换模型列表，草稿落到该服务商默认模型', (tester) async {
+    final host = await _pumpHost(
+      tester,
+      profiles: const [
+        ProviderProfile(
+          id: 'daily',
+          name: '日常',
+          baseUrl: 'https://example.com/v1',
+          defaultModel: 'daily-flagship',
+          models: [
+            ProfileModel(id: 'daily-flagship'),
+            ProfileModel(id: 'daily-lite'),
+          ],
+        ),
+        ProviderProfile(
+          id: 'workspace',
+          name: '工作空间',
+          baseUrl: 'https://example.com/v1',
+          defaultModel: 'work-pro',
+          models: [
+            ProfileModel(id: 'work-pro'),
+            ProfileModel(id: 'work-lite'),
+          ],
+        ),
+      ],
+      values: const {'last_profile_id': 'daily', 'last_model': 'daily-lite'},
+    );
+    await _openPicker(tester);
+    // 初始展示当前选择所在服务商的模型。
+    expect(_option('daily', 'daily-lite'), findsOneWidget);
+    expect(_option('workspace', 'work-pro'), findsNothing);
+
+    await _tapVisible(tester, _providerTab('workspace'));
+    expect(_option('workspace', 'work-pro'), findsOneWidget);
+    expect(_option('workspace', 'work-lite'), findsOneWidget);
+    expect(_option('daily', 'daily-lite'), findsNothing);
+    // 草稿跟随到该服务商的默认模型。
+    final summary = find.byKey(const ValueKey('model-draft-summary'));
+    expect(
+      find.descendant(of: summary, matching: find.text('work-pro')),
+      findsOneWidget,
+    );
+
+    await _tapVisible(tester, _confirm);
+    expect(host.preferences.getString('last_profile_id'), 'workspace');
+    expect(host.preferences.getString('last_model'), 'work-pro');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('同名服务商与模型以 ID 区分，同面板确认推理并持久化', (tester) async {
@@ -324,6 +379,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('没有找到模型'), findsOneWidget);
     await _tapVisible(tester, find.byTooltip('清除搜索'));
+    // 搜索期间草稿被自动切到有命中的服务商，先切回「模型仓库」标签。
+    await _tapVisible(tester, _providerTab('many'));
     await tester.scrollUntilVisible(
       _option('many', 'model-040'),
       400,
@@ -334,6 +391,54 @@ void main() {
     expect(_option('many', 'model-040'), findsOneWidget);
     expect(_modelOptions.evaluate().length, inInclusiveRange(1, 19));
     expect(_confirm.hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('键盘拉起触发面板紧凑分支切换时搜索框保持焦点可继续输入', (tester) async {
+    await _pumpHost(tester);
+    await _openPicker(tester);
+    await tester.tap(_search);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: _search, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+
+    // 模拟英文键盘拉起：可用高度骤减，面板从固定列表切到紧凑滚动分支。
+    tester.view.viewInsets = const FakeViewPadding(bottom: 480);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: _search, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+    await tester.enterText(_search, 'think');
+    await tester.pumpAndSettle();
+    expect(find.text('think'), findsOneWidget);
+    expect(_option('daily', 'think-model'), findsOneWidget);
+
+    // 键盘收回后面板切回固定分支，焦点与已输入内容仍保留。
+    tester.view.viewInsets = const FakeViewPadding(bottom: 24);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<EditableText>(
+            find.descendant(of: _search, matching: find.byType(EditableText)),
+          )
+          .focusNode
+          .hasFocus,
+      isTrue,
+    );
+    expect(find.text('think'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -531,6 +636,14 @@ Finder get _modelScrollable => find
     .first;
 Finder _option(String profileId, String modelId) =>
     find.byKey(ValueKey(('model-option', profileId, modelId)));
+Finder _providerTab(String profileId) =>
+    find.byKey(ValueKey(('provider-tab', profileId)));
+Finder get _providerScrollable => find
+    .descendant(
+      of: find.byKey(const ValueKey('provider-list')),
+      matching: find.byType(Scrollable),
+    )
+    .first;
 Finder _effort(String name) => find.byKey(ValueKey(('reasoning-effort', name)));
 
 Future<void> _openPicker(WidgetTester tester) async {
@@ -552,6 +665,17 @@ Future<void> _chooseModel(
   String modelId,
 ) async {
   final option = _option(profileId, modelId);
+  if (option.evaluate().isEmpty) {
+    // 模型不在当前列表时先切到对应服务商标签（搜索平铺结果除外）。
+    await tester.scrollUntilVisible(
+      _providerTab(profileId),
+      120,
+      scrollable: _providerScrollable,
+      maxScrolls: 30,
+    );
+    await tester.pumpAndSettle();
+    await _tapVisible(tester, _providerTab(profileId));
+  }
   await tester.scrollUntilVisible(
     option,
     160,
