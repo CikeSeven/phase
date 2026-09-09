@@ -1,0 +1,132 @@
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:phase/core/error/failure.dart';
+import 'package:phase/data/models/ai_model.dart';
+import 'package:phase/data/models/api_protocol.dart';
+import 'package:phase/data/models/openai_compat.dart';
+import 'package:phase/data/models/profile_model.dart';
+
+import 'provider_test_harness.dart';
+
+void main() {
+  late ProviderTestHarness harness;
+
+  setUp(() => harness = ProviderTestHarness());
+  tearDown(() async => harness.dispose());
+
+  testWidgets('编辑时切换预设不覆盖独立协议，显式选择协议后保留兼容项保存', (tester) async {
+    const compat = OpenAiCompat(thinkingFormat: ThinkingFormat.openrouter);
+    await harness.seed(
+      tester,
+      presetId: 'openai',
+      protocol: ApiProtocol.googleGenerativeAi,
+      compatOverrides: compat,
+    );
+    await harness.pump(tester);
+    await tapProviderControl(tester, keyed('provider-p1'));
+    await choosePreset(tester, 'deepseek');
+    expect(
+      tester
+          .widget<DropdownButtonFormField<ApiProtocol>>(
+            find.byType(DropdownButtonFormField<ApiProtocol>),
+          )
+          .initialValue,
+      ApiProtocol.googleGenerativeAi,
+    );
+    await chooseProtocol(tester, ApiProtocol.openaiCompletions);
+    await tapProviderControl(tester, keyed('save-provider'));
+    final saved = (await tester.runAsync(harness.repository.listProfiles))!
+        .single;
+    expect(saved.presetId, 'deepseek');
+    expect(saved.protocol, ApiProtocol.openaiCompletions);
+    expect(saved.compatOverrides!.toJson(), compat.toJson());
+  });
+
+  testWidgets('获取失败可重试，失败和空列表都不抹掉已有模型', (tester) async {
+    await harness.seed(
+      tester,
+      defaultModel: 'manual',
+      models: const [ProfileModel(id: 'manual', supportsReasoning: true)],
+    );
+    harness.provider.listModelsHandler = () async {
+      throw const AuthFailure('fake authentication failure');
+    };
+    await harness.pump(tester);
+    await tapProviderControl(tester, keyed('provider-p1'));
+    await tapProviderControl(tester, keyed('test-provider'));
+    expect(find.text(const AuthFailure('').userMessage), findsOneWidget);
+    expect(
+      tester.widget<FilledButton>(keyed('test-provider')).onPressed,
+      isNotNull,
+    );
+    harness.provider.listModelsHandler = () async => const [];
+    await tapProviderControl(tester, keyed('test-provider'));
+    expect(find.text('已获取 0 个模型，已合并到下方列表。'), findsOneWidget);
+    await searchModels(tester, 'manual');
+    expect(tester.widget<Switch>(keyed('reasoning-manual')).value, isTrue);
+    await tapProviderControl(tester, keyed('save-provider'));
+    final saved = (await tester.runAsync(harness.repository.listProfiles))!
+        .single;
+    expect(saved.defaultModel, 'manual');
+    expect(saved.models.single.id, 'manual');
+    expect(saved.models.single.supportsReasoning, isTrue);
+  });
+
+  testWidgets('添加弹窗期间完成拉取仍做实时重复校验，并保留随后添加的模型', (tester) async {
+    await harness.seed(tester, models: const [ProfileModel(id: 'seeded')]);
+    final request = Completer<List<AiModel>>();
+    harness.provider.listModelsHandler = () => request.future;
+    await harness.pump(tester);
+    await tapProviderControl(tester, keyed('provider-p1'));
+    await tapProviderControl(tester, keyed('test-provider'), settle: false);
+    await tapProviderControl(
+      tester,
+      keyed('add-provider-model'),
+      settle: false,
+    );
+    request.complete(const [AiModel(id: 'race-id')]);
+    await settleProviderUi(tester);
+    await fillProviderField(tester, keyed('new-model-id'), 'race-id');
+    await tapProviderControl(tester, keyed('confirm-add-model'));
+    expect(find.text('该模型 ID 已存在'), findsOneWidget);
+    await fillProviderField(
+      tester,
+      keyed('new-model-id'),
+      'manual-after-fetch',
+    );
+    await tapProviderControl(tester, keyed('new-model-reasoning'));
+    await tapProviderControl(tester, keyed('confirm-add-model'));
+    await tapProviderControl(tester, keyed('save-provider'));
+    final saved = (await tester.runAsync(harness.repository.listProfiles))!
+        .single;
+    expect(
+      saved.models.map((model) => model.id),
+      unorderedEquals(['seeded', 'race-id', 'manual-after-fetch']),
+    );
+    expect(saved.defaultModel, 'manual-after-fetch');
+    expect(
+      saved.models
+          .singleWhere((model) => model.id == 'manual-after-fetch')
+          .supportsReasoning,
+      isTrue,
+    );
+  });
+
+  testWidgets('请求期间保存只写入当时草稿，返回页面后到达的结果不再更新', (tester) async {
+    await harness.seed(tester, models: const [ProfileModel(id: 'manual')]);
+    final request = Completer<List<AiModel>>();
+    harness.provider.listModelsHandler = () => request.future;
+    await harness.pump(tester);
+    await tapProviderControl(tester, keyed('provider-p1'));
+    await tapProviderControl(tester, keyed('test-provider'), settle: false);
+    await tapProviderControl(tester, keyed('save-provider'));
+    request.complete(const [AiModel(id: 'late-model')]);
+    await settleProviderUi(tester);
+    expect(tester.takeException(), isNull);
+    final saved = (await tester.runAsync(harness.repository.listProfiles))!
+        .single;
+    expect(saved.models.single.id, 'manual');
+  });
+}

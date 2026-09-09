@@ -14,10 +14,10 @@ abstract final class AppRadius {
   /// 聊天气泡、磨砂面板。
   static const double large = 28;
 
-  /// 页面级面板、Dialog。
-  static const double extraLarge = 36;
+  /// 侧栏、Dialog 与底部面板。
+  static const double extraLarge = 32;
 
-  /// 输入栏、FAB、发送按钮。
+  /// 短胶囊与紧凑输入栏。
   static const double full = 40;
 
   static const BorderRadius smallAll = BorderRadius.all(Radius.circular(small));

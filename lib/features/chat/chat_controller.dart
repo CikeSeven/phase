@@ -9,6 +9,7 @@ import '../../../data/models/chat_message.dart';
 import '../../../data/models/chat_request.dart';
 import '../../../data/models/conversation.dart';
 import '../../../data/repositories/conversation_repository.dart';
+import '../../../providers/presets/provider_preset.dart';
 import '../../../providers/provider_factory.dart';
 import 'model_selection.dart';
 
@@ -126,12 +127,18 @@ class ChatController extends _$ChatController {
 
     state = state.copyWith(isGenerating: true);
 
-    final apiKey = await ref
-            .read(secureKeyStorageProvider)
-            .readApiKey(selection.profile.id) ??
-        '';
-    final provider = ref
-        .read(aiProviderFactoryProvider)(selection.profile, apiKey);
+    final requiresApiKey = presetById(selection.profile.presetId)
+        .requiresApiKey;
+    final apiKey = requiresApiKey
+        ? await ref
+                  .read(secureKeyStorageProvider)
+                  .readApiKey(selection.profile.id) ??
+              ''
+        : '';
+    final provider = ref.read(aiProviderFactoryProvider)(
+      selection.profile,
+      apiKey,
+    );
 
     _buffer.clear();
     _reasoningBuffer.clear();
@@ -176,9 +183,7 @@ class ChatController extends _$ChatController {
             }
           },
           onError: (Object error) {
-            _streamError = error is Failure
-                ? error
-                : UnknownFailure('$error');
+            _streamError = error is Failure ? error : UnknownFailure('$error');
             completeOnce();
           },
           onDone: completeOnce,
@@ -206,7 +211,9 @@ class ChatController extends _$ChatController {
           reasoning: _currentReasoning,
           status: ChatMessageStatus.error,
         );
-      } else if (!_stoppedManually && _buffer.isEmpty && _reasoningBuffer.isEmpty) {
+      } else if (!_stoppedManually &&
+          _buffer.isEmpty &&
+          _reasoningBuffer.isEmpty) {
         // 网关用非 SSE 错误体（HTTP 200 + JSON）或忽略了推理参数时，
         // 流会空跑结束；与其显示空气泡，不如明确报错。
         await repository.updateMessageContent(
@@ -255,12 +262,14 @@ class ChatController extends _$ChatController {
       return;
     }
     unawaited(
-      ref.read(conversationRepositoryProvider).updateMessageContent(
-        messageId,
-        content: _buffer.toString(),
-        reasoning: _currentReasoning,
-        status: ChatMessageStatus.streaming,
-      ),
+      ref
+          .read(conversationRepositoryProvider)
+          .updateMessageContent(
+            messageId,
+            content: _buffer.toString(),
+            reasoning: _currentReasoning,
+            status: ChatMessageStatus.streaming,
+          ),
     );
   }
 }

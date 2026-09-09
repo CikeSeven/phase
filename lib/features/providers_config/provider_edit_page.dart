@@ -1,46 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_bottom_bar.dart';
+import '../../../core/widgets/app_dialog.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_scaffold.dart';
+import '../../../data/models/api_protocol.dart';
+import '../../../data/models/openai_compat.dart';
 import '../../../data/models/profile_model.dart';
 import '../../../data/models/provider_profile.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
 import '../../../providers/presets/provider_preset.dart';
 import '../../../providers/provider_factory.dart';
+import 'provider_form_sections.dart';
+import 'provider_model_dialog.dart';
+import 'provider_model_editor.dart';
+import 'provider_preset_sheet.dart';
 
-/// 测试连接的行内状态。
-sealed class _TestStatus {
-  const _TestStatus();
-}
-
-class _TestIdle extends _TestStatus {
-  const _TestIdle();
-}
-
-class _TestRunning extends _TestStatus {
-  const _TestRunning();
-}
-
-class _TestSuccess extends _TestStatus {
-  const _TestSuccess(this.modelCount);
-
-  final int modelCount;
-}
-
-class _TestFailure extends _TestStatus {
-  const _TestFailure(this.message);
-
-  final String message;
-}
-
-/// 服务商新增 / 编辑表单（`/settings/providers/new`、`/settings/providers/:id`）。
-///
-/// DESIGN.md §5.4：API Key obscureText + 可见切换，注明密钥仅保存在
-/// 本机安全存储中；保存后立即 SnackBar 反馈；连接性校验行内展示。
+/// 服务商新增 / 编辑草稿，只有保存操作会写入配置与安全存储。
 class ProviderEditPage extends ConsumerStatefulWidget {
   const ProviderEditPage({super.key, this.profileId});
 
@@ -53,48 +34,81 @@ class ProviderEditPage extends ConsumerStatefulWidget {
 
 class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
   final _formKey = GlobalKey<FormState>();
+  final _baseUrlFieldKey = GlobalKey<FormFieldState<String>>();
   final _nameController = TextEditingController();
   final _baseUrlController = TextEditingController();
   final _apiKeyController = TextEditingController();
 
+  String? _profileId;
+  String? _savedApiKey;
+  String? _loadError;
+  String _presetId = 'custom';
+  ApiProtocol _protocol = ApiProtocol.openaiCompletions;
+  OpenAiCompat? _compatOverrides;
+  List<ProfileModel> _models = const [];
+  String? _defaultModel;
   bool _apiKeyVisible = false;
   bool _loading = true;
   bool _saving = false;
+  bool _modalOpen = false;
+  bool _testing = false;
+  int _testRequestId = 0;
+  int? _testedModelCount;
+  String? _testError;
 
-  ProviderPreset _preset = providerPresets.last;
-  _TestStatus _testStatus = const _TestIdle();
-
-  /// 模型管理列表：可手动添加，或经测试连接拉取合并。
-  List<ProfileModel> _models = const [];
-  String? _defaultModel;
+  ProviderPreset get _preset => presetById(_presetId);
+  bool get _busy => _saving || _modalOpen;
 
   @override
   void initState() {
     super.initState();
+    _profileId = widget.profileId;
     _load();
   }
 
   Future<void> _load() async {
-    final profileId = widget.profileId;
-    if (profileId != null) {
-      final repository = ref.read(providerProfileRepositoryProvider);
-      try {
-        final profile = await repository.getProfile(profileId);
-        final apiKey = await repository.readApiKey(profileId);
-        if (profile != null) {
-          _nameController.text = profile.name;
-          _baseUrlController.text = profile.baseUrl;
-          _apiKeyController.text = apiKey ?? '';
-          _preset = presetById(profile.presetId);
-          _models = profile.models;
-          _defaultModel = profile.defaultModel;
-        }
-      } on Failure {
-        // 读取失败按新增空表单处理，保存时报错也会给出 SnackBar。
-      }
-    }
-    if (mounted) {
+    if (widget.profileId == null) {
       setState(() => _loading = false);
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final repository = ref.read(providerProfileRepositoryProvider);
+      final profile = await repository.getProfile(widget.profileId!);
+      if (profile == null) {
+        if (mounted) {
+          setState(() {
+            _loadError = '这条服务商配置已不存在。请返回列表，或重新加载。';
+            _loading = false;
+          });
+        }
+        return;
+      }
+      final apiKey = await repository.readApiKey(profile.id);
+      if (!mounted) return;
+      setState(() {
+        _nameController.text = profile.name;
+        _baseUrlController.text = profile.baseUrl;
+        _apiKeyController.text = apiKey ?? '';
+        _savedApiKey = apiKey;
+        _presetId = profile.presetId;
+        _protocol = profile.protocol;
+        _compatOverrides = profile.compatOverrides;
+        _models = {for (final model in profile.modelCandidates) model.id: model}
+            .values
+            .toList();
+        _defaultModel = profile.defaultModel;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error is Failure ? error.userMessage : '读取配置或安全存储失败，请重试。';
+        _loading = false;
+      });
     }
   }
 
@@ -108,104 +122,117 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isNew = widget.profileId == null;
-    return Scaffold(
-      appBar: AppBar(title: Text(isNew ? '新增服务商' : '编辑服务商')),
+    final theme = Theme.of(context);
+    return AppScaffold(
+      title: widget.profileId == null ? '新增服务商' : '编辑服务商',
+      bottomBar: _loading || _loadError != null
+          ? null
+          : AppBottomBar(
+              child: Center(
+                heightFactor: 1,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 688),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _saving
+                              ? '正在保存配置与凭证…'
+                              : '${_models.length} 个模型 · 保存在本机',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.m),
+                      FilledButton.icon(
+                        key: const ValueKey('save-provider'),
+                        onPressed: _busy ? null : _save,
+                        icon: _saving
+                            ? const SizedBox.square(
+                                dimension: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Symbols.check),
+                        label: Text(_saving ? '保存中…' : '保存'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const AppEmptyState(
+              icon: Symbols.cloud_download,
+              title: '正在读取配置',
+              message: '读取完成后即可编辑，原有配置不会被覆盖。',
+              action: SizedBox(width: 160, child: LinearProgressIndicator()),
+            )
+          : _loadError != null
+          ? AppEmptyState(
+              icon: Symbols.cloud_off,
+              title: '无法读取服务商配置',
+              message: '$_loadError\n为保护原有配置，读取成功前不能编辑或保存。',
+              action: FilledButton.tonalIcon(
+                onPressed: _load,
+                icon: const Icon(Symbols.refresh),
+                label: const Text('重新加载'),
+              ),
+            )
           : Form(
               key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.l),
-                children: [
-                  DropdownButtonFormField<String>(
-                    initialValue: _preset.id,
-                    decoration: const InputDecoration(labelText: '服务商'),
-                    items: [
-                      for (final preset in providerPresets)
-                        DropdownMenuItem(
-                          value: preset.id,
-                          child: Text(preset.name),
-                        ),
-                    ],
-                    onChanged: _onPresetChanged,
-                  ),
-                  if (_preset.note != null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: AppSpacing.s),
-                      child: Text(
-                        _preset.note!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
+              child: CustomScrollView(
+                key: const ValueKey('provider-edit-scroll'),
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                slivers: [
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.all(AppSpacing.l),
+                      child: ProviderFormSections(
+                        preset: _preset,
+                        protocol: _protocol,
+                        nameController: _nameController,
+                        baseUrlController: _baseUrlController,
+                        apiKeyController: _apiKeyController,
+                        baseUrlFieldKey: _baseUrlFieldKey,
+                        apiKeyVisible: _apiKeyVisible,
+                        hasSavedKey: _savedApiKey?.isNotEmpty ?? false,
+                        hasCompatOverrides: _compatOverrides != null,
+                        enabled: !_busy,
+                        testing: _testing,
+                        testedModelCount: _testedModelCount,
+                        testError: _testError,
+                        onChoosePreset: _choosePreset,
+                        onProtocolChanged: (protocol) => setState(() {
+                          _protocol = protocol;
+                          _invalidateTest();
+                        }),
+                        onConnectionChanged: () => setState(_invalidateTest),
+                        onToggleKeyVisibility: () =>
+                            setState(() => _apiKeyVisible = !_apiKeyVisible),
+                        onTest: _testConnection,
                       ),
                     ),
-                  const SizedBox(height: AppSpacing.l),
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: '名称',
-                      hintText: '如：DeepSeek 官方',
-                    ),
-                    textInputAction: TextInputAction.next,
-                    validator: _required,
                   ),
-                  const SizedBox(height: AppSpacing.l),
-                  TextFormField(
-                    controller: _baseUrlController,
-                    decoration: const InputDecoration(
-                      labelText: 'Base URL',
-                      hintText: 'https://api.openai.com/v1',
-                    ),
-                    keyboardType: TextInputType.url,
-                    textInputAction: TextInputAction.next,
-                    validator: _required,
-                  ),
-                  if (_preset.requiresApiKey) ...[
-                    const SizedBox(height: AppSpacing.l),
-                    TextFormField(
-                      controller: _apiKeyController,
-                      obscureText: !_apiKeyVisible,
-                      decoration: InputDecoration(
-                        labelText: 'API Key',
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _apiKeyVisible
-                                ? Symbols.visibility_off
-                                : Symbols.visibility,
-                          ),
-                          tooltip: _apiKeyVisible ? '隐藏密钥' : '显示密钥',
-                          onPressed: () =>
-                              setState(() => _apiKeyVisible = !_apiKeyVisible),
-                        ),
-                      ),
-                      textInputAction: TextInputAction.done,
-                    ),
-                    const SizedBox(height: AppSpacing.s),
-                    Text(
-                      '密钥仅保存在本机安全存储中',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
-                  const SizedBox(height: AppSpacing.xl),
-                  _buildModelSection(),
-                  const SizedBox(height: AppSpacing.xl),
-                  OutlinedButton.icon(
-                    onPressed: _testStatus is _TestRunning
-                        ? null
-                        : _testConnection,
-                    icon: const Icon(Symbols.cloud),
-                    label: const Text('测试连接'),
-                  ),
-                  const SizedBox(height: AppSpacing.s),
-                  _buildTestStatus(),
-                  const SizedBox(height: AppSpacing.xl),
-                  FilledButton.icon(
-                    onPressed: _saving ? null : _save,
-                    icon: const Icon(Symbols.check),
-                    label: const Text('保存'),
+                  ProviderModelEditor(
+                    models: _models,
+                    defaultModel: _defaultModel,
+                    enabled: !_busy,
+                    onAdd: _addModel,
+                    onDefaultChanged: (id) =>
+                        setState(() => _defaultModel = id),
+                    onModelChanged: (model) => setState(() {
+                      _models = [
+                        for (final entry in _models)
+                          if (entry.id == model.id) model else entry,
+                      ];
+                    }),
+                    onRemove: _removeModel,
                   ),
                 ],
               ),
@@ -213,300 +240,206 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
     );
   }
 
-  Widget _buildModelSection() {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          '模型',
-          style: Theme.of(
-            context,
-          ).textTheme.titleSmall?.copyWith(color: colorScheme.primary),
-        ),
-        const SizedBox(height: AppSpacing.s),
-        DropdownButtonFormField<String>(
-          initialValue: _models.any((m) => m.id == _defaultModel)
-              ? _defaultModel
-              : null,
-          decoration: const InputDecoration(
-            labelText: '默认模型',
-            hintText: '从模型列表中选择',
-          ),
-          items: [
-            for (final model in _models)
-              DropdownMenuItem(value: model.id, child: Text(model.id)),
-          ],
-          onChanged: _models.isEmpty
-              ? null
-              : (value) => setState(() => _defaultModel = value),
-        ),
-        const SizedBox(height: AppSpacing.m),
-        for (final model in _models)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.s),
-            child: Dismissible(
-              key: ValueKey(model.id),
-              direction: DismissDirection.endToStart,
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: AppSpacing.l),
-                decoration: BoxDecoration(
-                  color: colorScheme.errorContainer,
-                  borderRadius: AppRadius.mediumAll,
-                ),
-                child: Icon(
-                  Symbols.delete,
-                  color: colorScheme.onErrorContainer,
-                ),
-              ),
-              onDismissed: (_) => setState(() {
-                _models = [for (final m in _models) if (m.id != model.id) m];
-                if (_defaultModel == model.id) {
-                  _defaultModel = null;
-                }
-              }),
-              child: ListTile(
-                title: Text(model.id, maxLines: 1, overflow: TextOverflow.ellipsis),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '支持推理',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    Switch(
-                      value: model.supportsReasoning,
-                      onChanged: (value) => setState(() {
-                        _models = [
-                          for (final m in _models)
-                            if (m.id == model.id)
-                              m.copyWith(supportsReasoning: value)
-                            else
-                              m,
-                        ];
-                      }),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        OutlinedButton.icon(
-          onPressed: _addModel,
-          icon: const Icon(Symbols.add),
-          label: const Text('添加模型'),
-        ),
-      ],
-    );
+  void _invalidateTest() {
+    _testRequestId++;
+    _testing = false;
+    _testedModelCount = null;
+    _testError = null;
   }
 
-  Widget _buildTestStatus() {
-    final colorScheme = Theme.of(context).colorScheme;
-    return switch (_testStatus) {
-      _TestIdle() => const SizedBox.shrink(),
-      _TestRunning() => const Row(
-        children: [
-          SizedBox(
-            width: 20,
-            height: 20,
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-          SizedBox(width: AppSpacing.m),
-          Text('正在测试连接…'),
-        ],
-      ),
-      _TestSuccess(:final modelCount) => Row(
-        children: [
-          Icon(Symbols.check_circle, size: 20, color: colorScheme.primary),
-          const SizedBox(width: AppSpacing.m),
-          Expanded(
-            child: Text(
-              '连接成功，已获取 $modelCount 个模型',
-              style: TextStyle(color: colorScheme.primary),
-            ),
-          ),
-        ],
-      ),
-      _TestFailure(:final message) => Row(
-        children: [
-          Icon(Symbols.error, size: 20, color: colorScheme.error),
-          const SizedBox(width: AppSpacing.m),
-          Expanded(
-            child: Text(message, style: TextStyle(color: colorScheme.error)),
-          ),
-        ],
-      ),
-    };
-  }
-
-  void _onPresetChanged(String? presetId) {
-    if (presetId == null) {
-      return;
+  Future<T?> _showEditorModal<T>(Future<T?> Function() show) async {
+    if (_busy) return null;
+    FocusScope.of(context).unfocus();
+    setState(() => _modalOpen = true);
+    try {
+      return await show();
+    } finally {
+      if (mounted) setState(() => _modalOpen = false);
     }
+  }
+
+  Future<void> _choosePreset() async {
+    final preset = await _showEditorModal(
+      () => showModalBottomSheet<ProviderPreset>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Theme.of(context).colorScheme.surface
+            .withValues(alpha: 0),
+        builder: (_) => ProviderPresetSheet(selectedId: _presetId),
+      ),
+    );
+    if (preset == null || !mounted || preset.id == _presetId) return;
     setState(() {
-      _preset = presetById(presetId);
-      if (_preset.baseUrl.isNotEmpty) {
-        _baseUrlController.text = _preset.baseUrl;
+      _presetId = preset.id;
+      if (widget.profileId == null) _protocol = preset.protocol;
+      if (preset.baseUrl.isNotEmpty) _baseUrlController.text = preset.baseUrl;
+      if (_nameController.text.trim().isEmpty && preset.id != 'custom') {
+        _nameController.text = preset.name;
       }
-      // 名称未填写时跟随预设，已填写的自定义名称不覆盖。
-      if (_nameController.text.trim().isEmpty && _preset.id != 'custom') {
-        _nameController.text = _preset.name;
-      }
-      // 换预设意味着协议变化，之前的测试结论不再有效。
-      _testStatus = const _TestIdle();
+      _invalidateTest();
     });
   }
 
   Future<void> _addModel() async {
-    final idController = TextEditingController();
-    var supportsReasoning = false;
-    var switchTouched = false;
-    final added = await showDialog<ProfileModel>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          icon: Icon(
-            Symbols.add,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          title: const Text('添加模型'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: idController,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: '模型 id',
-                  hintText: '如：deepseek-reasoner',
-                ),
-                onChanged: (value) {
-                  // 用户没碰过开关时跟随 id 启发式预填。
-                  if (!switchTouched) {
-                    setDialogState(
-                      () => supportsReasoning = guessSupportsReasoning(value),
-                    );
-                  }
-                },
-              ),
-              const SizedBox(height: AppSpacing.m),
-              SwitchListTile(
-                title: const Text('支持推理'),
-                value: supportsReasoning,
-                onChanged: (value) => setDialogState(() {
-                  supportsReasoning = value;
-                  switchTouched = true;
-                }),
-              ),
-            ],
-          ),
+    final model = await _showEditorModal(
+      () => showDialog<ProfileModel>(
+        context: context,
+        builder: (_) => ProviderModelDialog(
+          containsId: (id) => _models.any((model) => model.id == id),
+        ),
+      ),
+    );
+    if (model == null || !mounted) return;
+    setState(() {
+      if (_models.every((entry) => entry.id != model.id)) {
+        _models = [..._models, model];
+      }
+      _defaultModel ??= model.id;
+    });
+  }
+
+  Future<void> _removeModel(ProfileModel model) async {
+    var confirmed = false;
+    final remove = await _showEditorModal(
+      () => showDialog<bool>(
+        context: context,
+        builder: (context) => AppDialog(
+          title: '移除模型？',
+          description: '保存后从此配置中移除，不会删除远端模型。',
+          icon: Symbols.delete,
+          content: Text(model.id),
           actions: [
             TextButton(
-              onPressed: () => Navigator.of(context).pop(),
+              onPressed: () => Navigator.of(context).pop(false),
               child: const Text('取消'),
             ),
             FilledButton(
+              key: const ValueKey('confirm-remove-model'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+                foregroundColor: Theme.of(context).colorScheme.onError,
+              ),
               onPressed: () {
-                final id = idController.text.trim();
-                if (id.isEmpty) {
-                  return;
-                }
-                Navigator.of(context).pop(
-                  ProfileModel(id: id, supportsReasoning: supportsReasoning),
-                );
+                if (confirmed) return;
+                confirmed = true;
+                Navigator.of(context).pop(true);
               },
-              child: const Text('添加'),
+              child: const Text('移除'),
             ),
           ],
         ),
       ),
     );
-    if (added == null || !mounted) {
-      return;
-    }
+    if (remove != true || !mounted) return;
     setState(() {
-      if (_models.every((m) => m.id != added.id)) {
-        _models = [..._models, added];
-      }
-      _defaultModel ??= added.id;
+      _models = _models.where((entry) => entry.id != model.id).toList();
+      if (_defaultModel == model.id) _defaultModel = null;
     });
   }
 
-  String? _required(String? value) {
-    return (value == null || value.trim().isEmpty) ? '必填项' : null;
-  }
-
   Future<void> _testConnection() async {
-    setState(() => _testStatus = const _TestRunning());
-    // 用表单当前值构造临时配置，不要求先保存。
+    if (_busy || _testing || _loading || _loadError != null) return;
+    if (!_baseUrlFieldKey.currentState!.validate()) {
+      await Scrollable.ensureVisible(_baseUrlFieldKey.currentContext!);
+      return;
+    }
+    final requestId = ++_testRequestId;
     final profile = ProviderProfile(
-      id: widget.profileId ?? 'unsaved',
+      id: _profileId ?? 'unsaved',
       name: _nameController.text.trim(),
       baseUrl: _baseUrlController.text.trim(),
-      protocol: _preset.protocol,
-      presetId: _preset.id,
+      protocol: _protocol,
+      presetId: _presetId,
+      compatOverrides: _compatOverrides,
     );
-    final provider = ref
-        .read(aiProviderFactoryProvider)(profile, _apiKeyController.text.trim());
+    final enteredKey = _apiKeyController.text.trim();
+    final apiKey = _preset.requiresApiKey
+        ? (enteredKey.isEmpty ? _savedApiKey ?? '' : enteredKey)
+        : '';
+    setState(() {
+      _testing = true;
+      _testedModelCount = null;
+      _testError = null;
+    });
     try {
-      // listModels 一次调用同时覆盖连通性、鉴权校验与候选拉取。
-      final models = await provider.listModels();
-      if (!mounted) {
-        return;
-      }
+      final provider = ref.read(aiProviderFactoryProvider)(profile, apiKey);
+      final fetched = await provider.listModels();
+      if (!mounted || requestId != _testRequestId) return;
+      final ids = fetched
+          .map((model) => model.id)
+          .where((id) => id.trim().isNotEmpty)
+          .toSet();
       setState(() {
-        // 已存在的条目保留用户的推理标记，新 id 按启发式预填。
-        final existing = {for (final m in _models) m.id: m};
-        _models = [
-          for (final model in models)
-            existing[model.id] ??
-                ProfileModel(
-                  id: model.id,
-                  supportsReasoning: guessSupportsReasoning(model.id),
-                ),
-        ];
-        _testStatus = _TestSuccess(models.length);
+        final merged = {for (final model in _models) model.id: model};
+        for (final id in ids) {
+          merged.putIfAbsent(
+            id,
+            () => ProfileModel(
+              id: id,
+              supportsReasoning: guessSupportsReasoning(id),
+            ),
+          );
+        }
+        _models = merged.values.toList();
+        _testing = false;
+        _testedModelCount = ids.length;
       });
-    } on Failure catch (e) {
-      if (mounted) {
-        setState(() => _testStatus = _TestFailure(e.userMessage));
-      }
+    } catch (error) {
+      if (!mounted || requestId != _testRequestId) return;
+      setState(() {
+        _testing = false;
+        _testError = error is Failure ? error.userMessage : '获取模型失败，请检查配置后重试。';
+      });
     }
   }
 
   Future<void> _save() async {
-    if (!_formKey.currentState!.validate()) {
+    if (_busy || _loading || _loadError != null) return;
+    final invalidFields = _formKey.currentState!.validateGranularly();
+    if (invalidFields.isNotEmpty) {
+      await Scrollable.ensureVisible(invalidFields.first.context);
       return;
     }
-    setState(() => _saving = true);
+    FocusScope.of(context).unfocus();
+    final apiKey = _apiKeyController.text.trim();
+    final requiresApiKey = _preset.requiresApiKey;
     final repository = ref.read(providerProfileRepositoryProvider);
-    final messenger = ScaffoldMessenger.of(context);
+    setState(() {
+      _saving = true;
+      _invalidateTest();
+    });
     try {
       final profile = await repository.saveProfile(
-        id: widget.profileId,
+        id: _profileId,
         name: _nameController.text.trim(),
         baseUrl: _baseUrlController.text.trim(),
-        protocol: _preset.protocol,
-        presetId: _preset.id,
+        protocol: _protocol,
+        presetId: _presetId,
         defaultModel: _defaultModel,
-        models: _models,
+        models: List.of(_models),
+        compatOverrides: _compatOverrides,
       );
-      final apiKey = _apiKeyController.text.trim();
-      if (_preset.requiresApiKey && apiKey.isNotEmpty) {
+      _profileId = profile.id;
+      if (requiresApiKey && apiKey.isNotEmpty) {
         await repository.writeApiKey(profile.id, apiKey);
       }
-      if (mounted) {
-        messenger.showSnackBar(const SnackBar(content: Text('已保存')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已保存服务商配置')));
+      if (context.canPop()) {
         context.pop();
+      } else {
+        context.go('/settings/providers');
       }
-    } on Failure catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(e.userMessage)));
-        setState(() => _saving = false);
-      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error is Failure ? error.userMessage : '保存失败，请重试。'),
+        ),
+      );
+      setState(() => _saving = false);
     }
   }
 }

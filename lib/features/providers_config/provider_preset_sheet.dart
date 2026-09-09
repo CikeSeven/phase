@@ -1,0 +1,169 @@
+import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_sheet.dart';
+import '../../../providers/presets/provider_preset.dart';
+import 'provider_ui.dart';
+
+/// 从真实预设注册表中搜索并选择服务商。
+class ProviderPresetSheet extends StatefulWidget {
+  const ProviderPresetSheet({required this.selectedId, super.key});
+
+  final String selectedId;
+
+  @override
+  State<ProviderPresetSheet> createState() => _ProviderPresetSheetState();
+}
+
+class _ProviderPresetSheetState extends State<ProviderPresetSheet> {
+  final _searchController = TextEditingController();
+  bool _closed = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final query = _searchController.text.trim().toLowerCase();
+    final presets = providerPresets.where((preset) {
+      return [
+        preset.name,
+        preset.id,
+        preset.baseUrl,
+        ProviderUi.protocolLabel(preset.protocol),
+      ].any((value) => value.toLowerCase().contains(query));
+    }).toList();
+
+    return AppSheet(
+      title: '选择服务商',
+      subtitle: '预设提供建议地址。编辑已有配置时保留当前协议，可在连接分区单独调整。',
+      child: CustomScrollView(
+        key: const ValueKey('preset-scroll'),
+        slivers: [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.l,
+                0,
+                AppSpacing.l,
+                AppSpacing.l,
+              ),
+              child: TextField(
+                key: const ValueKey('preset-search'),
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: '搜索预设',
+                  hintText: '名称或地址',
+                  prefixIcon: const Icon(Symbols.search),
+                  suffixIcon: query.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: '清除预设搜索',
+                          onPressed: () => setState(_searchController.clear),
+                          icon: const Icon(Symbols.close),
+                        ),
+                ),
+              ),
+            ),
+          ),
+          if (presets.isEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  children: [
+                    const Text('没有匹配的预设'),
+                    const SizedBox(height: AppSpacing.s),
+                    TextButton(
+                      onPressed: () => setState(_searchController.clear),
+                      child: const Text('显示全部预设'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.l,
+              0,
+              AppSpacing.l,
+              AppSpacing.xl,
+            ),
+            sliver: SliverList.separated(
+              itemCount: presets.length,
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.m),
+              itemBuilder: (context, index) {
+                final preset = presets[index];
+                final selected = preset.id == widget.selectedId;
+                return AppCard(
+                  key: ValueKey('preset-${preset.id}'),
+                  onTap: () {
+                    if (_closed) return;
+                    _closed = true;
+                    Navigator.of(context).pop(preset);
+                  },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        children: [
+                          AppIconBadge(
+                            icon: ProviderUi.icon(preset.id),
+                            tone: ProviderUi.tone(preset.id),
+                          ),
+                          const SizedBox(width: AppSpacing.m),
+                          Expanded(
+                            child: Text(
+                              preset.name,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.s),
+                          Icon(
+                            selected
+                                ? Symbols.check_circle
+                                : Symbols.chevron_right,
+                            color: selected
+                                ? theme.colorScheme.primary
+                                : theme.colorScheme.onSurfaceVariant,
+                            semanticLabel: selected ? '当前预设' : null,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      Text(
+                        ProviderUi.protocolLabel(preset.protocol),
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        preset.baseUrl.isEmpty
+                            ? '使用你自己的 API 地址'
+                            : preset.baseUrl,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

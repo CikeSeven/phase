@@ -10,9 +10,7 @@ import '../../../core/theme/frosted_surface.dart';
 import 'chat_controller.dart';
 import 'model_selection.dart';
 
-/// 底部输入栏（DESIGN.md §5.3）。
-///
-/// 结构：附件按钮（占位）+ 多行 TextField（最多 5 行）+ 发送/停止双态按钮。
+/// 文本与动作分层的输入栏；由页面 Scaffold 处理键盘位移。
 class ChatInputBar extends ConsumerStatefulWidget {
   const ChatInputBar({super.key});
 
@@ -23,6 +21,21 @@ class ChatInputBar extends ConsumerStatefulWidget {
 class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final _controller = TextEditingController();
   bool _canSend = false;
+  bool _submitting = false;
+  String? _pendingText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller.addListener(_onDraftChanged);
+  }
+
+  void _onDraftChanged() {
+    final canSend = _controller.text.trim().isNotEmpty;
+    if (canSend != _canSend) {
+      setState(() => _canSend = canSend);
+    }
+  }
 
   @override
   void dispose() {
@@ -33,9 +46,94 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   @override
   Widget build(BuildContext context) {
     final isGenerating = ref.watch(
-      chatControllerProvider.select((s) => s.isGenerating),
+      chatControllerProvider.select((state) => state.isGenerating),
     );
-    final colorScheme = Theme.of(context).colorScheme;
+    ref.listen(chatControllerProvider.select((state) => state.isGenerating), (
+      _,
+      generating,
+    ) {
+      if (!generating || _pendingText == null) return;
+      // 生成状态意味着 controller 已接收并落库，之前的草稿不能提前清掉。
+      if (_controller.text == _pendingText) _controller.clear();
+      _pendingText = null;
+    });
+    final selection = ref.watch(modelSelectionProvider);
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final needsConfiguration =
+        selection.hasError || (!selection.isLoading && selection.value == null);
+    final field = TextField(
+      key: const ValueKey('chat-message-input'),
+      controller: _controller,
+      minLines: 1,
+      maxLines: 5,
+      textInputAction: TextInputAction.newline,
+      style: theme.textTheme.bodyLarge,
+      decoration: const InputDecoration(
+        hintText: '输入消息…',
+        border: InputBorder.none,
+        enabledBorder: InputBorder.none,
+        focusedBorder: InputBorder.none,
+        filled: false,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs,
+          vertical: AppSpacing.m,
+        ),
+      ),
+    );
+    final actions = Row(
+      children: [
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: needsConfiguration
+                ? TextButton.icon(
+                    onPressed: () => context.push('/settings/providers'),
+                    icon: Icon(
+                      selection.hasError ? Symbols.error : Symbols.tune,
+                      size: 18,
+                    ),
+                    label: Text(
+                      selection.hasError ? '检查配置' : '配置模型',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  )
+                : Padding(
+                    padding: const EdgeInsets.only(left: AppSpacing.xs),
+                    child: Text(
+                      isGenerating
+                          ? '正在生成回复'
+                          : _submitting
+                          ? '正在发送…'
+                          : '支持多行输入',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.s),
+        IconButton.filled(
+          icon: Icon(isGenerating ? Symbols.stop : Symbols.arrow_upward),
+          tooltip: isGenerating ? '停止生成' : '发送',
+          style: IconButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            shape: const RoundedRectangleBorder(
+              borderRadius: AppRadius.mediumAll,
+            ),
+          ),
+          onPressed: isGenerating
+              ? () => ref.read(chatControllerProvider.notifier).stop()
+              : _canSend && !_submitting
+              ? _send
+              : null,
+        ),
+      ],
+    );
 
     return SafeArea(
       top: false,
@@ -47,55 +145,42 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           AppSpacing.m,
         ),
         child: FrostedSurface(
-          borderRadius: AppRadius.fullAll,
-          color: colorScheme.surfaceContainerHigh.withValues(alpha: 0.92),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                IconButton(
-                  icon: const Icon(Symbols.add),
-                  tooltip: '附件',
-                  // TODO(multimodal): 接入图片/文件选择前保持禁用，布局位置保留。
-                  onPressed: null,
-                ),
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    minLines: 1,
-                    maxLines: 5,
-                    textInputAction: TextInputAction.newline,
-                    style: Theme.of(context).textTheme.bodyLarge,
-                    decoration: const InputDecoration(
-                      hintText: '输入消息…',
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      filled: false,
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: AppSpacing.m,
-                      ),
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.m,
+            0,
+            AppSpacing.m,
+            AppSpacing.s,
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final scaler = MediaQuery.textScalerOf(context);
+              final actionHeight = needsConfiguration
+                  ? (scaler.scale(14) * 1.25 + AppSpacing.xl).clamp(
+                      48.0,
+                      double.infinity,
+                    )
+                  : 48.0;
+              final minimumHeight =
+                  scaler.scale(16) * 1.5 + AppSpacing.xl + actionHeight;
+              return SingleChildScrollView(
+                primary: false,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: constraints.maxHeight.clamp(
+                      minimumHeight,
+                      double.infinity,
                     ),
-                    onChanged: (value) {
-                      final canSend = value.trim().isNotEmpty;
-                      if (canSend != _canSend) {
-                        setState(() => _canSend = canSend);
-                      }
-                    },
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(child: field),
+                      actions,
+                    ],
                   ),
                 ),
-                IconButton.filled(
-                  icon: Icon(isGenerating ? Symbols.stop : Symbols.send),
-                  tooltip: isGenerating ? '停止生成' : '发送',
-                  onPressed: isGenerating
-                      ? () => ref.read(chatControllerProvider.notifier).stop()
-                      : _canSend
-                      ? _send
-                      : null,
-                ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),
@@ -104,13 +189,16 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   Future<void> _send() async {
     final text = _controller.text;
-    if (text.trim().isEmpty) {
+    if (_submitting ||
+        text.trim().isEmpty ||
+        ref.read(chatControllerProvider).isGenerating) {
       return;
     }
-    // 配置缺失时先引导，不产生任何消息（ChatController.send 内有同样防御）。
-    final selection = await ref.read(modelSelectionProvider.future);
-    if (selection == null) {
-      if (mounted) {
+    setState(() => _submitting = true);
+    try {
+      final selection = await ref.read(modelSelectionProvider.future);
+      if (!mounted) return;
+      if (selection == null) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
@@ -122,19 +210,26 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ),
             ),
           );
+        return;
       }
-      return;
-    }
-    _controller.clear();
-    setState(() => _canSend = false);
-    try {
+      if (ref.read(chatControllerProvider).isGenerating) return;
+      _pendingText = text;
       await ref.read(chatControllerProvider.notifier).send(text);
-    } on Failure catch (e) {
+    } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(SnackBar(content: Text(e.userMessage)));
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                error is Failure ? error.userMessage : '发送失败，请稍后重试',
+              ),
+            ),
+          );
       }
+    } finally {
+      _pendingText = null;
+      if (mounted) setState(() => _submitting = false);
     }
   }
 }

@@ -51,7 +51,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'6b92853f17ef85c556d81eca78ec12191ba6d8c2';
+String _$chatControllerHash() => r'521258b3e10bc4296e81d3d30cdf0705bf453702';
 
 abstract class _$ChatController extends $Notifier<ChatState> {
   ChatState build();

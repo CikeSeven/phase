@@ -6,4 +6,6 @@ abstract final class AppSpacing {
   static const double l = 16;
   static const double xl = 24;
   static const double xxl = 32;
+  static const double xxxl = 40;
+  static const double section = 48;
 }

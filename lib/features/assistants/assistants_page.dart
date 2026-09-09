@@ -1,37 +1,30 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
-import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_scaffold.dart';
 
-/// 助手管理占位页（`/assistants`）。
-///
-/// TODO(assistants): 助手 CRUD 与「助手 = system prompt + 默认模型/参数」
-/// 的绑定逻辑落地后替换本页。
+/// 如实展示助手能力的开发状态，并提供返回对话的入口。
 class AssistantsPage extends StatelessWidget {
   const AssistantsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      appBar: AppBar(title: const Text('助手')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Symbols.smart_toy,
-              size: 48,
-              color: colorScheme.onSurfaceVariant,
-            ),
-            const SizedBox(height: AppSpacing.l),
-            Text(
-              '助手功能即将上线',
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ),
-          ],
+    return AppScaffold(
+      title: '助手',
+      body: AppEmptyState(
+        icon: Symbols.smart_toy,
+        tone: AppTone.lavender,
+        title: '助手功能即将上线',
+        message:
+            '未来可为常用任务保存系统提示词（system prompt）与任务模板。'
+            '\n现在，先与已配置的模型展开对话。',
+        action: FilledButton.icon(
+          onPressed: () => context.go('/'),
+          icon: const Icon(Symbols.chat_bubble),
+          label: const Text('返回对话'),
         ),
       ),
     );

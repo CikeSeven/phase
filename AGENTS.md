@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | SDK | Flutter stable 3.47.2 / Dart 3.13.2 | 始终使用 stable 通道；**平台仅限 Android**（applicationId `app.xiangyue.phase`，桌面/iOS 待架构稳定后再补） |
 | UI | Material 3 | `useMaterial3: true`（默认），UI 细节见 DESIGN.md |
-| 图标 | material_symbols_icons ^4.2960.0 | Material Symbols rounded，见 DESIGN.md 第 6 章 |
+| 图标 | material_symbols_icons ^4.2960.0 | Material Symbols rounded，见 DESIGN.md 第 9 章 |
 | 状态管理 | flutter_riverpod ^3.4.3 + riverpod_annotation ^4.0.7 + riverpod_generator ^4.0.9 + riverpod_lint | 编译期安全、便于按 Provider 拆分、测试友好；Riverpod 3.x 语法 |
 | 网络 | dio ^5.11.1 | 拦截器处理鉴权 / 重试 / SSE 流式响应 |
 | 路由 | go_router ^18.0.1 | 声明式路由 |
@@ -42,8 +42,9 @@ lib/
   app.dart              # MaterialApp / 主题 / 路由装配
   main.dart             # 入口，仅做初始化与 ProviderScope
   core/                 # 跨业务的基础设施
-    theme/              # ThemeData 构建（落地 DESIGN.md 的规范）
-    router/             # go_router 路由表
+    theme/              # ThemeData、品牌色与玻璃表面（落地 DESIGN.md）
+    widgets/            # 跨页面复用的页面壳、卡片、弹层、状态组件
+    router/             # go_router 路由表，显式 MaterialPage 保留转场
     error/              # Failure 类型与错误映射
     utils/              # 纯工具函数
   data/
@@ -52,9 +53,13 @@ lib/
       local/            # drift 数据库、shared_preferences 封装
       remote/           # dio client 封装
     repositories/       # 仓库：对上层屏蔽数据来源
-  providers/            # AI 服务商抽象层（注意：目录名即 Provider，勿混淆 Riverpod provider）
-    ai_provider.dart    # AiProvider 抽象接口
-    openai/ anthropic/ gemini/ ...   # 各厂商实现
+  providers/            # 协议适配层，与 Riverpod provider 区分
+    ai_provider.dart
+    openai_completions/
+    openai_responses/
+    anthropic_messages/
+    google_generative_ai/
+    presets/            # 服务商预设与协议正交
     provider_factory.dart
   features/
     chat/               # 会话列表、聊天页、输入栏、流式状态
@@ -86,8 +91,9 @@ abstract class AiProvider {
 
 约定：
 
-- **OpenAI 兼容协议是默认实现**：DeepSeek、Ollama、自定义网关等一律复用 OpenAI 实现，仅配置不同 Base URL。
-- 非兼容厂商（Anthropic、Gemini 原生协议）各自做协议适配，输出统一的 `ChatChunk` 事件流。
+- **服务商与协议分离**：`ProviderProfile.protocol` 决定报文格式，`presetId` 提供默认地址与协议；编辑配置不得用预设覆盖已保存的独立协议或兼容配置。
+- 当前协议为 OpenAI Completions、OpenAI Responses、Anthropic Messages、Google Generative AI；服务商按预设复用相应协议，输出统一的 `ChatChunk` 事件流。
+- 共享 UI 组件仅管理布局和交互展示；视觉重构不改变协议参数、数据表或凭证存储。新增页面和弹层遵循 DESIGN.md 的“月色玻璃”、键盘避让、对比度与 Android 返回规则。
 - 错误统一映射为 `core/error` 中的 `Failure` 子类型（网络错误 / 鉴权失败 / 限流 / 服务端错误 / 取消），UI 只处理 `Failure`。
 - 取消语义：`streamChat` 必须响应取消（`CancelToken` / stream 订阅取消），保证「停止生成」即时生效。
 
@@ -107,13 +113,25 @@ abstract class AiProvider {
 
 ```bash
 flutter pub get                              # 安装依赖
-dart run build_runner build --delete-conflicting-outputs   # 代码生成
+dart run build_runner build                   # 代码生成
 flutter analyze                              # 静态检查（提交前必须通过）
 flutter test                                 # 运行测试
 flutter run                                  # 调试运行
 ```
 
 提交代码前必须保证 `flutter analyze` 零问题、`flutter test` 全绿。
+
+### UI 验证
+
+- `test/ui/chat_flow_test.dart` 用真实页面操作、内存数据库和测试流验证发送、思考、正文、停止与落库；不连接用户的真实 API。
+- `test/ui/predictive_back_test.dart` 验证系统返回手势通道的拖动、取消和提交；真机外观仍需实际检查。
+- `test/ui/ui_preview_test.dart` 的截图用例默认跳过，按需运行下列命令输出浅/深主题到 `build/ui-preview/`。中文字体只用于本地测试渲染，不加入应用依赖或资源；预览使用测试数据，不读取手机配置。
+
+```bash
+mkdir -p build/ui-preview
+curl --fail --location --output build/ui-preview/NotoSansCJKsc-Regular.otf https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf
+flutter test --dart-define=CAPTURE_UI=true test/ui/ui_preview_test.dart
+```
 
 ### 本机 Android 环境说明
 
