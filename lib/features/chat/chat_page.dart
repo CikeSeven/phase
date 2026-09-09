@@ -10,6 +10,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_background.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_top_bar.dart';
+import '../../../data/models/reasoning_effort.dart';
 import 'chat_controller.dart';
 import 'chat_empty_state.dart';
 import 'chat_input_bar.dart';
@@ -51,14 +52,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final scaler = MediaQuery.textScalerOf(context);
-    final titleStyle = theme.textTheme.titleSmall;
-    final modelStyle = theme.textTheme.bodySmall;
+    final titleStyle = theme.textTheme.titleMedium;
+    final modelStyle = theme.textTheme.bodyMedium;
     final toolbarHeight = math.max(
       64.0,
-      scaler.scale(titleStyle?.fontSize ?? 14) * (titleStyle?.height ?? 1.4) +
-          scaler.scale(modelStyle?.fontSize ?? 12) *
+      // 结尾只加标题列自身之外的垂直余量（padding xs*2）。
+      scaler.scale(titleStyle?.fontSize ?? 16) * (titleStyle?.height ?? 1.4) +
+          scaler.scale(modelStyle?.fontSize ?? 14) *
               (modelStyle?.height ?? 1.45) +
-          AppSpacing.l,
+          AppSpacing.s,
     );
     final modelLabel = selection.hasError
         ? '模型加载失败'
@@ -67,7 +69,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             loading: () => '正在读取模型…',
             error: (_, _) => '模型加载失败',
           );
-    final profileLabel = selection.value?.profile.name;
+    final current = selection.value;
 
     return PopScope<void>(
       canPop: !_drawerOpen,
@@ -108,24 +110,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Row(
-                            children: [
-                              Text('相月', style: titleStyle),
-                              if (profileLabel != null) ...[
-                                const SizedBox(width: AppSpacing.s),
-                                Expanded(
-                                  child: Text(
-                                    profileLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: modelStyle?.copyWith(
-                                      color: colors.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
+                          Row(children: [Text('相月', style: titleStyle)]),
                           const SizedBox(height: AppSpacing.xs),
                           Row(
                             mainAxisSize: MainAxisSize.min,
@@ -142,6 +127,19 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                   ),
                                 ),
                               ),
+                              // 推理开启时跟在模型名右侧，关闭或不支持不显示。
+                              if (current?.supportsReasoning == true &&
+                                  current!.effort != ReasoningEffort.off) ...[
+                                const SizedBox(width: AppSpacing.s),
+                                Text(
+                                  current.effort.label,
+                                  key: const ValueKey('chat-reasoning-effort'),
+                                  maxLines: 1,
+                                  style: modelStyle?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
                               const SizedBox(width: AppSpacing.xs),
                               Icon(
                                 Symbols.expand_more,

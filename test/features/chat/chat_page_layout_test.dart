@@ -18,6 +18,7 @@ import 'package:phase/data/models/chat_chunk.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/conversation.dart';
+import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
@@ -228,13 +229,14 @@ void main() {
     bool configured = true,
     _MemoryConversations? repository,
     Stream<List<ProviderProfile>>? profiles,
+    Map<String, Object> values = const {},
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetViewInsets);
-    SharedPreferences.setMockInitialValues({});
+    SharedPreferences.setMockInitialValues(values);
     final preferences = await SharedPreferences.getInstance();
     final conversations = repository ?? _MemoryConversations();
     final ai = _StreamingAi();
@@ -611,6 +613,51 @@ void main() {
       });
     }
   }
+
+  testWidgets('顶栏在模型名右侧用不同颜色显示当前推理等级', (tester) async {
+    const profile = ProviderProfile(
+      id: 'profile',
+      name: '服务商',
+      baseUrl: 'https://example.com/v1',
+      defaultModel: 'think-model',
+      models: [ProfileModel(id: 'think-model', supportsReasoning: true)],
+    );
+    await pumpChat(
+      tester,
+      values: const {'last_reasoning_effort': 'high'},
+      profiles: Stream.value([profile]),
+    );
+    final effort = find.byKey(const ValueKey('chat-reasoning-effort'));
+    expect(effort, findsOneWidget);
+    expect(tester.widget<Text>(effort).data, '高');
+    // 跟在模型名右侧，颜色与模型名不同。
+    final modelRect = tester.getRect(find.text('think-model'));
+    expect(tester.getRect(effort).left, greaterThan(modelRect.right));
+    final colors = Theme.of(tester.element(effort)).colorScheme;
+    expect(tester.widget<Text>(effort).style?.color, isNot(colors.primary));
+    expect(
+      tester.widget<Text>(find.text('think-model')).style?.color,
+      colors.primary,
+    );
+  });
+
+  testWidgets('顶栏对关闭或不支持推理的模型不显示推理等级', (tester) async {
+    // 支持推理但等级为关。
+    await pumpChat(
+      tester,
+      profiles: Stream.value([
+        const ProviderProfile(
+          id: 'profile',
+          name: '服务商',
+          baseUrl: 'https://example.com/v1',
+          defaultModel: 'think-model',
+          models: [ProfileModel(id: 'think-model', supportsReasoning: true)],
+        ),
+      ]),
+    );
+    expect(find.text('think-model'), findsOneWidget);
+    expect(find.byKey(const ValueKey('chat-reasoning-effort')), findsNothing);
+  });
 
   testWidgets('模型下拉入口保留 showModelPickerSheet 接口', (tester) async {
     await pumpChat(tester);
