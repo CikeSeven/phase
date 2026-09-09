@@ -2,12 +2,18 @@ import 'dart:convert';
 
 import 'package:json_annotation/json_annotation.dart';
 
+import 'reasoning_effort.dart';
+
 part 'profile_model.g.dart';
 
 /// 服务商配置下的一个模型条目。
 @JsonSerializable()
 class ProfileModel {
-  const ProfileModel({required this.id, this.supportsReasoning = false});
+  const ProfileModel({
+    required this.id,
+    this.supportsReasoning = false,
+    this.reasoningEfforts = const [],
+  });
 
   /// 调用 API 时使用的模型 id（如 `deepseek-reasoner`）。
   final String id;
@@ -15,10 +21,29 @@ class ProfileModel {
   /// 是否支持推理（思考）能力；支持时聊天页可选择推理等级。
   final bool supportsReasoning;
 
-  ProfileModel copyWith({bool? supportsReasoning}) {
+  /// 允许下发的推理等级（ReasoningEffort.name，不含 off）；
+  /// 空列表表示不限制，全部等级可选。
+  final List<String> reasoningEfforts;
+
+  /// 实际可选的推理等级（不含 off），按等级从低到高排序。
+  List<ReasoningEffort> get allowedEfforts {
+    if (reasoningEfforts.isEmpty) {
+      return ReasoningEffort.levels;
+    }
+    return [
+      for (final effort in ReasoningEffort.levels)
+        if (reasoningEfforts.contains(effort.name)) effort,
+    ];
+  }
+
+  ProfileModel copyWith({
+    bool? supportsReasoning,
+    List<String>? reasoningEfforts,
+  }) {
     return ProfileModel(
       id: id,
       supportsReasoning: supportsReasoning ?? this.supportsReasoning,
+      reasoningEfforts: reasoningEfforts ?? this.reasoningEfforts,
     );
   }
 
@@ -58,7 +83,10 @@ List<ProfileModel> decodeProfileModels(String modelsJson) {
     return [
       for (final item in decoded)
         if (item is String)
-          ProfileModel(id: item, supportsReasoning: guessSupportsReasoning(item))
+          ProfileModel(
+            id: item,
+            supportsReasoning: guessSupportsReasoning(item),
+          )
         else if (item is Map<String, dynamic>)
           ProfileModel.fromJson(item),
     ];

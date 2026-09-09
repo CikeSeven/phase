@@ -8,6 +8,7 @@ import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/features/providers_config/provider_edit_page.dart';
+import 'package:phase/features/providers_config/provider_ui.dart';
 import 'package:phase/providers/presets/provider_preset.dart';
 
 import 'provider_test_harness.dart';
@@ -135,21 +136,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('11 个真实预设均可搜索选择，新配置跟随默认协议并可保存自定义地址', (tester) async {
+  testWidgets('全部真实预设均可搜索选择，新配置跟随默认协议并可保存自定义地址', (tester) async {
     final harness = ProviderTestHarness();
     addTearDown(harness.dispose);
     await harness.pump(tester);
     await tapProviderControl(tester, keyed('add-provider'));
-    expect(providerPresets, hasLength(11));
+    expect(providerPresets, hasLength(greaterThanOrEqualTo(20)));
+    expect(
+      providerPresets.map((preset) => preset.id).toSet(),
+      hasLength(providerPresets.length),
+    );
     for (final preset in providerPresets) {
       await choosePreset(tester, preset.id);
       expect(
-        tester
-            .widget<DropdownButtonFormField<ApiProtocol>>(
-              find.byType(DropdownButtonFormField<ApiProtocol>),
-            )
-            .initialValue,
-        preset.protocol,
+        currentProtocolLabel(tester),
+        ProviderUi.protocolLabel(preset.protocol),
       );
       if (preset.baseUrl.isNotEmpty) {
         expect(

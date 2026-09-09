@@ -8,7 +8,9 @@ import 'package:phase/data/models/ai_model.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/openai_compat.dart';
 import 'package:phase/data/models/profile_model.dart';
+import 'package:phase/data/models/reasoning_effort.dart';
 import 'package:phase/features/providers_config/provider_preset_sheet.dart';
+import 'package:phase/features/providers_config/provider_ui.dart';
 import 'package:phase/features/providers_config/providers_page.dart';
 import 'package:phase/providers/presets/provider_preset.dart';
 
@@ -133,12 +135,8 @@ void main() {
     await harness.pump(tester);
     await tapProviderControl(tester, keyed('provider-p1'));
     expect(
-      tester
-          .widget<DropdownButtonFormField<ApiProtocol>>(
-            find.byType(DropdownButtonFormField<ApiProtocol>),
-          )
-          .initialValue,
-      ApiProtocol.anthropicMessages,
+      currentProtocolLabel(tester),
+      ProviderUi.protocolLabel(ApiProtocol.anthropicMessages),
     );
     await fillProviderField(tester, keyed('provider-name'), '重命名的连接');
     await fillProviderField(tester, keyed('provider-api-key'), '');
@@ -154,7 +152,10 @@ void main() {
       compat.toJson(),
     );
     await searchModels(tester, 'gpt-5');
-    expect(tester.widget<Switch>(keyed('reasoning-gpt-5')).value, isFalse);
+    expect(
+      tester.widget<FilterChip>(keyed('reasoning-gpt-5')).selected,
+      isFalse,
+    );
     await searchModels(tester, 'legacy');
     expect(keyed('provider-model-legacy/reasoner'), findsOneWidget);
     expect(find.text('默认'), findsOneWidget);
@@ -361,6 +362,52 @@ void main() {
       }
     });
   }
+
+  testWidgets('获取模型位于 Key 下方，模型推理等级范围可编辑并随保存持久化', (tester) async {
+    await harness.seed(
+      tester,
+      presetId: 'openai',
+      apiKey: 'fake-range-key',
+      models: const [ProfileModel(id: 'gpt-5', supportsReasoning: true)],
+    );
+    await harness.pump(tester);
+    await tapProviderControl(tester, keyed('provider-p1'));
+
+    // 获取模型在 API Key 编辑框下方，而不是 Base URL 后面。
+    final keyRect = tester.getRect(keyed('provider-api-key'));
+    final testRect = tester.getRect(keyed('test-provider'));
+    expect(testRect.top, greaterThanOrEqualTo(keyRect.bottom));
+
+    final highChip = keyed('reasoning-level-gpt-5-high');
+    final mediumChip = keyed('reasoning-level-gpt-5-medium');
+    final lowChip = keyed('reasoning-level-gpt-5-low');
+    for (final effort in ReasoningEffort.levels) {
+      expect(
+        tester
+            .widget<FilterChip>(keyed('reasoning-level-gpt-5-${effort.name}'))
+            .selected,
+        isTrue,
+        reason: effort.name,
+      );
+    }
+
+    // 只留「低」后它是最后一个已选等级，不允许再取消。
+    await tapProviderControl(tester, keyed('reasoning-level-gpt-5-max'));
+    await tapProviderControl(tester, keyed('reasoning-level-gpt-5-xhigh'));
+    await tapProviderControl(tester, highChip);
+    await tapProviderControl(tester, mediumChip);
+    expect(tester.widget<FilterChip>(lowChip).selected, isTrue);
+    expect(tester.widget<FilterChip>(lowChip).onSelected, isNull);
+
+    await tapProviderControl(tester, mediumChip);
+    await tapProviderControl(tester, keyed('save-provider'));
+    final saved = (await tester.runAsync(harness.repository.listProfiles))!
+        .single;
+    final model = saved.models.single;
+    expect(model.supportsReasoning, isTrue);
+    expect(model.reasoningEfforts, ['low', 'medium']);
+    expect(model.allowedEfforts, [ReasoningEffort.low, ReasoningEffort.medium]);
+  });
 
   testWidgets('保存中锁定重复操作，安全存储失败后重试不重复创建配置', (tester) async {
     await harness.pump(tester);

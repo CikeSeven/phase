@@ -50,10 +50,13 @@ class ModelSelection extends _$ModelSelection {
 
     // 上次手输的模型未必在候选列表里，仍然尊重。
     String? model;
-    if (profile.id == lastProfileId && lastModel != null && lastModel.isNotEmpty) {
+    if (profile.id == lastProfileId &&
+        lastModel != null &&
+        lastModel.isNotEmpty) {
       model = lastModel;
     } else {
-      model = profile.defaultModel ??
+      model =
+          profile.defaultModel ??
           (profile.modelCandidates.isEmpty
               ? null
               : profile.modelCandidates.first.id);
@@ -63,9 +66,15 @@ class ModelSelection extends _$ModelSelection {
     }
 
     var supportsReasoning = guessSupportsReasoning(model);
+    var effort = ReasoningEffort.fromName(settings.readLastReasoningEffort());
     for (final candidate in profile.modelCandidates) {
       if (candidate.id == model) {
         supportsReasoning = candidate.supportsReasoning;
+        // 模型未开放持久化的等级时按「关」处理，不下发不支持的值。
+        if (effort != ReasoningEffort.off &&
+            !candidate.allowedEfforts.contains(effort)) {
+          effort = ReasoningEffort.off;
+        }
         break;
       }
     }
@@ -74,7 +83,7 @@ class ModelSelection extends _$ModelSelection {
       profile: profile,
       model: model,
       supportsReasoning: supportsReasoning,
-      effort: ReasoningEffort.fromName(settings.readLastReasoningEffort()),
+      effort: effort,
     );
   }
 

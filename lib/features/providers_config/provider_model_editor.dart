@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_section.dart';
 import '../../../data/models/profile_model.dart';
+import '../../../data/models/reasoning_effort.dart';
 
 /// 用于 CustomScrollView 的模型管理分区，筛选后的条目惰性构建。
 class ProviderModelEditor extends StatefulWidget {
@@ -159,57 +161,43 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
           ),
           sliver: SliverList.separated(
             itemCount: models.length,
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.m),
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s),
             itemBuilder: (context, index) {
               final model = models[index];
               final isDefault = widget.defaultModel == model.id;
               return AppCard(
                 key: ValueKey('provider-model-${model.id}'),
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.m,
+                  AppSpacing.xs,
+                  AppSpacing.xs,
+                  AppSpacing.xs,
+                ),
+                borderRadius: AppRadius.mediumAll,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    if (isDefault) ...[
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: AppBadge(label: '默认'),
-                      ),
-                      const SizedBox(height: AppSpacing.s),
-                    ],
-                    Tooltip(
-                      message: model.id,
-                      child: Text(
-                        model.id,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    MergeSemantics(
-                      child: Row(
-                        children: [
-                          const Expanded(child: Text('支持推理')),
-                          Switch(
-                            key: ValueKey('reasoning-${model.id}'),
-                            value: model.supportsReasoning,
-                            onChanged: widget.enabled
-                                ? (value) => widget.onModelChanged(
-                                    model.copyWith(supportsReasoning: value),
-                                  )
-                                : null,
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Divider(),
-                    const SizedBox(height: AppSpacing.xs),
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      spacing: AppSpacing.s,
-                      runSpacing: AppSpacing.s,
+                    Row(
                       children: [
-                        TextButton.icon(
+                        Expanded(
+                          child: Tooltip(
+                            message: model.id,
+                            child: Text(
+                              model.id,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleSmall,
+                            ),
+                          ),
+                        ),
+                        if (isDefault)
+                          const Padding(
+                            padding: EdgeInsets.only(right: AppSpacing.xs),
+                            child: AppBadge(label: '默认'),
+                          ),
+                        IconButton(
                           key: ValueKey('default-${model.id}'),
+                          tooltip: isDefault ? '当前默认模型' : '设为默认模型',
                           onPressed: widget.enabled && !isDefault
                               ? () => widget.onDefaultChanged(model.id)
                               : null,
@@ -218,21 +206,48 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                                 ? Symbols.check_circle
                                 : Symbols.radio_button_unchecked,
                           ),
-                          label: Text(isDefault ? '当前默认' : '设为默认'),
                         ),
-                        TextButton.icon(
+                        IconButton(
                           key: ValueKey('remove-${model.id}'),
+                          tooltip: '移除模型',
                           onPressed: widget.enabled
                               ? () => widget.onRemove(model)
                               : null,
-                          style: TextButton.styleFrom(
-                            foregroundColor: theme.colorScheme.error,
-                          ),
+                          color: theme.colorScheme.error,
                           icon: const Icon(Symbols.delete),
-                          label: const Text('移除'),
                         ),
                       ],
                     ),
+                    Padding(
+                      padding: const EdgeInsets.only(right: AppSpacing.s),
+                      child: Wrap(
+                        spacing: AppSpacing.s,
+                        runSpacing: AppSpacing.xs,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          FilterChip(
+                            key: ValueKey('reasoning-${model.id}'),
+                            label: const Text('推理'),
+                            tooltip: '该模型是否支持推理（思考）',
+                            selected: model.supportsReasoning,
+                            onSelected: widget.enabled
+                                ? (value) => widget.onModelChanged(
+                                    model.copyWith(supportsReasoning: value),
+                                  )
+                                : null,
+                          ),
+                          if (model.supportsReasoning)
+                            for (final effort in ReasoningEffort.levels)
+                              _LevelChip(
+                                model: model,
+                                effort: effort,
+                                enabled: widget.enabled,
+                                onChanged: widget.onModelChanged,
+                              ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
                   ],
                 ),
               );
@@ -240,6 +255,46 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 单个推理等级的开关；最后一个已选等级不允许再取消，避免空集合。
+class _LevelChip extends StatelessWidget {
+  const _LevelChip({
+    required this.model,
+    required this.effort,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final ProfileModel model;
+  final ReasoningEffort effort;
+  final bool enabled;
+  final ValueChanged<ProfileModel> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final allowed = model.allowedEfforts;
+    final selected = allowed.contains(effort);
+    final lastSelected = selected && allowed.length == 1;
+    return FilterChip(
+      key: ValueKey('reasoning-level-${model.id}-${effort.name}'),
+      label: Text(effort.label),
+      tooltip: lastSelected ? '至少保留一个推理等级' : '推理等级：${effort.label}',
+      selected: selected,
+      onSelected: enabled && !lastSelected
+          ? (_) {
+              final next = selected
+                  ? allowed.where((level) => level != effort)
+                  : [...allowed, effort];
+              onChanged(
+                model.copyWith(
+                  reasoningEfforts: ReasoningEffort.normalizeLevels(next),
+                ),
+              );
+            }
+          : null,
     );
   }
 }

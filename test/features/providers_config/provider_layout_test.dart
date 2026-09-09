@@ -49,7 +49,10 @@ void main() {
 
       await searchModels(tester, 'long-model-id');
       await tapProviderControl(tester, keyed('reasoning-$longId'));
-      expect(tester.widget<Switch>(keyed('reasoning-$longId')).value, isFalse);
+      expect(
+        tester.widget<FilterChip>(keyed('reasoning-$longId')).selected,
+        isFalse,
+      );
       expect(tester.getRect(find.byType(AppBottomBar)), barBefore);
       expect(tester.takeException(), isNull);
 

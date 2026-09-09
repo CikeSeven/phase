@@ -35,11 +35,13 @@ void main() {
       expect(payload.containsKey('thinking'), isFalse);
     });
 
-    test('推理等级映射 thinking.budget_tokens（low/medium/high）', () {
+    test('推理等级映射 thinking.budget_tokens（low 到 max）', () {
       for (final (effort, budget) in [
         (ReasoningEffort.low, 1024),
         (ReasoningEffort.medium, 4096),
         (ReasoningEffort.high, 16384),
+        (ReasoningEffort.xhigh, 32768),
+        (ReasoningEffort.max, 65536),
       ]) {
         final payload = buildAnthropicPayload(request(effort: effort));
         expect(payload['thinking'], {
@@ -87,22 +89,23 @@ void main() {
       expect(chunks.single.delta, isEmpty);
     });
 
-    test('message_delta 终态并合成 usage（并入 message_start 的 input_tokens）', () async {
-      final chunks = await decode(
-        'data: {"type":"message_start","message":{"usage":{"input_tokens":42}}}\n\n'
-        'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},'
-        '"usage":{"output_tokens":8}}\n\n',
-      ).toList();
-      expect(chunks.single.done, isTrue);
-      expect(chunks.single.usage?.promptTokens, 42);
-      expect(chunks.single.usage?.completionTokens, 8);
-      expect(chunks.single.usage?.totalTokens, 50);
-    });
+    test(
+      'message_delta 终态并合成 usage（并入 message_start 的 input_tokens）',
+      () async {
+        final chunks = await decode(
+          'data: {"type":"message_start","message":{"usage":{"input_tokens":42}}}\n\n'
+          'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},'
+          '"usage":{"output_tokens":8}}\n\n',
+        ).toList();
+        expect(chunks.single.done, isTrue);
+        expect(chunks.single.usage?.promptTokens, 42);
+        expect(chunks.single.usage?.completionTokens, 8);
+        expect(chunks.single.usage?.totalTokens, 50);
+      },
+    );
 
     test('message_stop 终态', () async {
-      final chunks = await decode(
-        'data: {"type":"message_stop"}\n\n',
-      ).toList();
+      final chunks = await decode('data: {"type":"message_stop"}\n\n').toList();
       expect(chunks.single.done, isTrue);
     });
 

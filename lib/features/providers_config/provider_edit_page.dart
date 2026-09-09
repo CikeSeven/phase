@@ -20,6 +20,7 @@ import 'provider_form_sections.dart';
 import 'provider_model_dialog.dart';
 import 'provider_model_editor.dart';
 import 'provider_preset_sheet.dart';
+import 'provider_protocol_sheet.dart';
 
 /// 服务商新增 / 编辑草稿，只有保存操作会写入配置与安全存储。
 class ProviderEditPage extends ConsumerStatefulWidget {
@@ -203,10 +204,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                         testedModelCount: _testedModelCount,
                         testError: _testError,
                         onChoosePreset: _choosePreset,
-                        onProtocolChanged: (protocol) => setState(() {
-                          _protocol = protocol;
-                          _invalidateTest();
-                        }),
+                        onChooseProtocol: _chooseProtocol,
                         onConnectionChanged: () => setState(_invalidateTest),
                         onToggleKeyVisibility: () =>
                             setState(() => _apiKeyVisible = !_apiKeyVisible),
@@ -272,6 +270,24 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       if (_nameController.text.trim().isEmpty && preset.id != 'custom') {
         _nameController.text = preset.name;
       }
+      _invalidateTest();
+    });
+  }
+
+  Future<void> _chooseProtocol() async {
+    final protocol = await _showEditorModal(
+      () => showModalBottomSheet<ApiProtocol>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        backgroundColor: Theme.of(context).colorScheme.surface
+            .withValues(alpha: 0),
+        builder: (_) => ProviderProtocolSheet(selected: _protocol),
+      ),
+    );
+    if (protocol == null || !mounted || protocol == _protocol) return;
+    setState(() {
+      _protocol = protocol;
       _invalidateTest();
     });
   }

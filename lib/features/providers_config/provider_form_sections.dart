@@ -24,7 +24,7 @@ class ProviderFormSections extends StatelessWidget {
     required this.enabled,
     required this.testing,
     required this.onChoosePreset,
-    required this.onProtocolChanged,
+    required this.onChooseProtocol,
     required this.onConnectionChanged,
     required this.onToggleKeyVisibility,
     required this.onTest,
@@ -47,7 +47,7 @@ class ProviderFormSections extends StatelessWidget {
   final int? testedModelCount;
   final String? testError;
   final VoidCallback onChoosePreset;
-  final ValueChanged<ApiProtocol> onProtocolChanged;
+  final VoidCallback onChooseProtocol;
   final VoidCallback onConnectionChanged;
   final VoidCallback onToggleKeyVisibility;
   final VoidCallback onTest;
@@ -112,28 +112,27 @@ class ProviderFormSections extends StatelessWidget {
                     value == null || value.trim().isEmpty ? '请输入服务商名称' : null,
               ),
               const SizedBox(height: AppSpacing.l),
-              DropdownButtonFormField<ApiProtocol>(
-                key: ValueKey(protocol),
-                initialValue: protocol,
-                isExpanded: true,
-                icon: const Icon(Symbols.expand_more),
-                decoration: const InputDecoration(labelText: 'API 协议'),
-                items: [
-                  for (final value in ApiProtocol.values)
-                    DropdownMenuItem(
-                      value: value,
-                      child: Text(
-                        ProviderUi.protocolLabel(value),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+              // 不裁剪：InputDecorator 的浮动标签会越过圆角边界，裁剪会截断标签。
+              Material(
+                color: theme.colorScheme.surface.withValues(alpha: 0),
+                borderRadius: AppRadius.mediumAll,
+                child: InkWell(
+                  key: const ValueKey('choose-protocol'),
+                  borderRadius: AppRadius.mediumAll,
+                  onTap: enabled ? onChooseProtocol : null,
+                  child: InputDecorator(
+                    decoration: const InputDecoration(
+                      labelText: 'API 协议',
+                      suffixIcon: Icon(Symbols.expand_more),
                     ),
-                ],
-                onChanged: enabled
-                    ? (value) {
-                        if (value != null) onProtocolChanged(value);
-                      }
-                    : null,
+                    child: Text(
+                      ProviderUi.protocolLabel(protocol),
+                      key: const ValueKey('protocol-label'),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: AppSpacing.s),
               Text(ProviderUi.protocolHint(protocol), style: secondaryStyle),
@@ -172,6 +171,48 @@ class ProviderFormSections extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.s),
               Text('API 基础地址，不含生成端点', style: secondaryStyle),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        AppSection(
+          title: '凭证',
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (preset.requiresApiKey) ...[
+                TextFormField(
+                  key: const ValueKey('provider-api-key'),
+                  controller: apiKeyController,
+                  enabled: enabled,
+                  obscureText: !apiKeyVisible,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: InputDecoration(
+                    labelText: 'API Key',
+                    suffixIcon: IconButton(
+                      tooltip: apiKeyVisible ? '隐藏密钥' : '显示密钥',
+                      onPressed: enabled ? onToggleKeyVisibility : null,
+                      icon: Icon(
+                        apiKeyVisible
+                            ? Symbols.visibility_off
+                            : Symbols.visibility,
+                      ),
+                    ),
+                  ),
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) => onConnectionChanged(),
+                ),
+                const SizedBox(height: AppSpacing.s),
+                Text(
+                  hasSavedKey ? '本机安全存储 · 留空保留并使用原密钥' : '仅存于本机安全存储',
+                  style: secondaryStyle,
+                ),
+              ] else
+                Text(
+                  hasSavedKey ? '无需 API Key · 原有密钥保留' : '无需 API Key',
+                  style: theme.textTheme.bodyMedium,
+                ),
               const SizedBox(height: AppSpacing.l),
               Align(
                 alignment: Alignment.centerLeft,
@@ -218,48 +259,6 @@ class ProviderFormSections extends StatelessWidget {
                   ),
                 ),
               ],
-            ],
-          ),
-        ),
-        const SizedBox(height: AppSpacing.xl),
-        AppSection(
-          title: '凭证',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (preset.requiresApiKey) ...[
-                TextFormField(
-                  key: const ValueKey('provider-api-key'),
-                  controller: apiKeyController,
-                  enabled: enabled,
-                  obscureText: !apiKeyVisible,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration: InputDecoration(
-                    labelText: 'API Key',
-                    suffixIcon: IconButton(
-                      tooltip: apiKeyVisible ? '隐藏密钥' : '显示密钥',
-                      onPressed: enabled ? onToggleKeyVisibility : null,
-                      icon: Icon(
-                        apiKeyVisible
-                            ? Symbols.visibility_off
-                            : Symbols.visibility,
-                      ),
-                    ),
-                  ),
-                  textInputAction: TextInputAction.done,
-                  onChanged: (_) => onConnectionChanged(),
-                ),
-                const SizedBox(height: AppSpacing.s),
-                Text(
-                  hasSavedKey ? '本机安全存储 · 留空保留并使用原密钥' : '仅存于本机安全存储',
-                  style: secondaryStyle,
-                ),
-              ] else
-                Text(
-                  hasSavedKey ? '无需 API Key · 原有密钥保留' : '无需 API Key',
-                  style: theme.textTheme.bodyMedium,
-                ),
             ],
           ),
         ),

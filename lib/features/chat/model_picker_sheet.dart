@@ -428,30 +428,34 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   Widget _buildFooter(_PickerEntry? draft) {
     final theme = Theme.of(context);
     final brand = context.brandColors;
+    final model = draft?.model;
+    final efforts = model == null
+        ? const <ReasoningEffort>[]
+        : [ReasoningEffort.off, ...model.allowedEfforts];
     return Column(
       key: const ValueKey('model-picker-footer'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (draft?.model?.supportsReasoning == true) ...[
+        if (model?.supportsReasoning == true) ...[
           Text('推理等级', style: theme.textTheme.labelLarge),
           const SizedBox(height: AppSpacing.xs),
           Wrap(
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.xs,
             children: [
-              for (final effort in ReasoningEffort.values)
+              for (final effort in efforts)
                 ChoiceChip(
                   key: ValueKey(('reasoning-effort', effort.name)),
                   label: Text(effort.label),
                   tooltip: '推理等级：${effort.label}',
-                  selected: _draftEffort == effort,
+                  selected: _effectiveEffort(draft) == effort,
                   side: BorderSide.none,
                   backgroundColor: theme.colorScheme.surfaceContainerHigh,
                   selectedColor: brand.lavenderContainer,
                   checkmarkColor: brand.onLavenderContainer,
                   labelStyle: theme.textTheme.labelLarge?.copyWith(
-                    color: _draftEffort == effort
+                    color: _effectiveEffort(draft) == effort
                         ? brand.onLavenderContainer
                         : theme.colorScheme.onSurface,
                   ),
@@ -565,8 +569,21 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     setState(() {
       _draftProfileId = entry.profile.id;
       _draftModel = entry.model!.id;
+      _draftEffort = _effectiveEffort(entry);
       _saveError = null;
     });
+  }
+
+  /// 模型未开放当前等级时按「关」处理，不下发模型不支持的值。
+  ReasoningEffort _effectiveEffort(_PickerEntry? draft) {
+    final model = draft?.model;
+    final effort = _draftEffort;
+    if (model == null ||
+        effort == ReasoningEffort.off ||
+        model.allowedEfforts.contains(effort)) {
+      return effort;
+    }
+    return ReasoningEffort.off;
   }
 
   void _openConfiguration([String? profileId]) {
@@ -580,7 +597,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   }
 
   Future<void> _confirm(_PickerEntry draft) async {
-    final effort = _draftEffort;
+    final effort = _effectiveEffort(draft);
     FocusScope.of(context).unfocus();
     setState(() {
       _saving = true;

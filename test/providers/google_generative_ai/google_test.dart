@@ -44,6 +44,8 @@ void main() {
         (ReasoningEffort.low, 1024),
         (ReasoningEffort.medium, 8192),
         (ReasoningEffort.high, 24576),
+        (ReasoningEffort.xhigh, 49152),
+        (ReasoningEffort.max, 98304),
       ]) {
         final payload = buildGooglePayload(request(effort: effort));
         expect(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_icon_badge.dart';
@@ -98,60 +99,62 @@ class _ProviderPresetSheetState extends State<ProviderPresetSheet> {
             ),
             sliver: SliverList.separated(
               itemCount: presets.length,
-              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.m),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s),
               itemBuilder: (context, index) {
                 final preset = presets[index];
                 final selected = preset.id == widget.selectedId;
                 return AppCard(
                   key: ValueKey('preset-${preset.id}'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.m,
+                    vertical: AppSpacing.s,
+                  ),
+                  borderRadius: AppRadius.mediumAll,
                   onTap: () {
                     if (_closed) return;
                     _closed = true;
                     Navigator.of(context).pop(preset);
                   },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  child: Row(
                     children: [
-                      Row(
-                        children: [
-                          AppIconBadge(
-                            icon: ProviderUi.icon(preset.id),
-                            tone: ProviderUi.tone(preset.id),
-                          ),
-                          const SizedBox(width: AppSpacing.m),
-                          Expanded(
-                            child: Text(
+                      AppIconBadge(
+                        icon: ProviderUi.icon(preset.id),
+                        tone: ProviderUi.tone(preset.id),
+                        size: 32,
+                        iconSize: 18,
+                      ),
+                      const SizedBox(width: AppSpacing.m),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
                               preset.name,
-                              maxLines: 2,
+                              maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleMedium,
+                              style: theme.textTheme.titleSmall,
                             ),
-                          ),
-                          const SizedBox(width: AppSpacing.s),
-                          Icon(
-                            selected
-                                ? Symbols.check_circle
-                                : Symbols.chevron_right,
-                            color: selected
-                                ? theme.colorScheme.primary
-                                : theme.colorScheme.onSurfaceVariant,
-                            semanticLabel: selected ? '当前预设' : null,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.m),
-                      Text(
-                        ProviderUi.protocolLabel(preset.protocol),
-                        style: theme.textTheme.bodyMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        preset.baseUrl.isEmpty ? '自定义 API 地址' : preset.baseUrl,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
+                            Text(
+                              // 自定义预设的协议可随意修改，不展示默认协议标签。
+                              preset.baseUrl.isEmpty
+                                  ? '自定义 API 地址'
+                                  : '${ProviderUi.protocolLabel(preset.protocol)} · ${preset.baseUrl}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
                         ),
+                      ),
+                      const SizedBox(width: AppSpacing.s),
+                      Icon(
+                        selected ? Symbols.check_circle : Symbols.chevron_right,
+                        color: selected
+                            ? theme.colorScheme.primary
+                            : theme.colorScheme.onSurfaceVariant,
+                        semanticLabel: selected ? '当前预设' : null,
                       ),
                     ],
                   ),

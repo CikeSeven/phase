@@ -5,6 +5,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../data/models/profile_model.dart';
+import '../../../data/models/reasoning_effort.dart';
 
 /// 添加模型草稿；重复校验读取当前列表，兼容弹窗期间完成的模型拉取。
 class ProviderModelDialog extends StatefulWidget {
@@ -22,6 +23,7 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
   bool _supportsReasoning = false;
   bool _switchTouched = false;
   bool _submitted = false;
+  final Set<ReasoningEffort> _levels = ReasoningEffort.levels.toSet();
 
   @override
   void dispose() {
@@ -36,6 +38,9 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
       ProfileModel(
         id: _idController.text.trim(),
         supportsReasoning: _supportsReasoning,
+        reasoningEfforts: _supportsReasoning
+            ? ReasoningEffort.normalizeLevels(_levels)
+            : const [],
       ),
     );
   }
@@ -94,6 +99,30 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                 ],
               ),
             ),
+            if (_supportsReasoning) ...[
+              const SizedBox(height: AppSpacing.s),
+              Wrap(
+                spacing: AppSpacing.s,
+                runSpacing: AppSpacing.xs,
+                children: [
+                  for (final effort in ReasoningEffort.levels)
+                    FilterChip(
+                      key: ValueKey('new-model-level-${effort.name}'),
+                      label: Text(effort.label),
+                      tooltip: '推理等级：${effort.label}',
+                      selected: _levels.contains(effort),
+                      onSelected: (_) => setState(() {
+                        if (_levels.contains(effort)) {
+                          // 空集合在存储语义里是「全部」，这里禁止清空以免歧义。
+                          if (_levels.length > 1) _levels.remove(effort);
+                        } else {
+                          _levels.add(effort);
+                        }
+                      }),
+                    ),
+                ],
+              ),
+            ],
           ],
         ),
       ),

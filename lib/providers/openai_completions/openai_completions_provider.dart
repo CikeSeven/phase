@@ -35,7 +35,11 @@ Map<String, dynamic> buildCompletionsPayload({
   if (maxTokens != null) {
     payload[compat.maxTokensField] = maxTokens;
   }
-  _applyReasoningEffort(payload, request.reasoningEffort, compat.thinkingFormat);
+  _applyReasoningEffort(
+    payload,
+    request.reasoningEffort,
+    compat.thinkingFormat,
+  );
   return payload;
 }
 
@@ -69,8 +73,9 @@ void _applyReasoningEffort(
         'type': effort == ReasoningEffort.off ? 'disabled' : 'enabled',
       };
     case ThinkingFormat.qwen:
+      // qwen 只有开关语义：低等级视为关，中及以上才开启思考。
       payload['enable_thinking'] =
-          effort == ReasoningEffort.medium || effort == ReasoningEffort.high;
+          effort != ReasoningEffort.off && effort != ReasoningEffort.low;
   }
 }
 
@@ -107,9 +112,7 @@ class OpenAiCompletionsProvider implements AiProvider {
   ProviderCapabilities get capabilities =>
       const ProviderCapabilities(supportsStreaming: true);
 
-  Map<String, String> get _authHeaders => {
-    'Authorization': 'Bearer $_apiKey',
-  };
+  Map<String, String> get _authHeaders => {'Authorization': 'Bearer $_apiKey'};
 
   /// baseUrl 以 / 结尾与否都能正确拼接子路径。
   Uri _resolve(String path) {

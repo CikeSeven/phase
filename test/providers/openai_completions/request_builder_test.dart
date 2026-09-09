@@ -63,11 +63,7 @@ void main() {
   group('buildCompletionsPayload 推理等级映射', () {
     test('openai 格式：顶层 reasoning_effort，off 不下发', () {
       const compat = OpenAiCompat(thinkingFormat: ThinkingFormat.openai);
-      for (final effort in [
-        ReasoningEffort.low,
-        ReasoningEffort.medium,
-        ReasoningEffort.high,
-      ]) {
+      for (final effort in ReasoningEffort.levels) {
         final payload = buildCompletionsPayload(
           request: request(effort: effort),
           compat: compat,
@@ -116,6 +112,8 @@ void main() {
         (ReasoningEffort.low, false),
         (ReasoningEffort.medium, true),
         (ReasoningEffort.high, true),
+        (ReasoningEffort.xhigh, true),
+        (ReasoningEffort.max, true),
       ]) {
         final payload = buildCompletionsPayload(
           request: request(effort: effort),

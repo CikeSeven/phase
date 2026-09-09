@@ -10,6 +10,8 @@ import 'package:phase/data/models/profile_model.dart';
 
 import 'provider_test_harness.dart';
 
+import 'package:phase/features/providers_config/provider_ui.dart';
+
 void main() {
   late ProviderTestHarness harness;
 
@@ -28,12 +30,8 @@ void main() {
     await tapProviderControl(tester, keyed('provider-p1'));
     await choosePreset(tester, 'deepseek');
     expect(
-      tester
-          .widget<DropdownButtonFormField<ApiProtocol>>(
-            find.byType(DropdownButtonFormField<ApiProtocol>),
-          )
-          .initialValue,
-      ApiProtocol.googleGenerativeAi,
+      currentProtocolLabel(tester),
+      ProviderUi.protocolLabel(ApiProtocol.googleGenerativeAi),
     );
     await chooseProtocol(tester, ApiProtocol.openaiCompletions);
     await tapProviderControl(tester, keyed('save-provider'));
@@ -65,7 +63,10 @@ void main() {
     await tapProviderControl(tester, keyed('test-provider'));
     expect(find.text('已获取 0 个模型'), findsOneWidget);
     await searchModels(tester, 'manual');
-    expect(tester.widget<Switch>(keyed('reasoning-manual')).value, isTrue);
+    expect(
+      tester.widget<FilterChip>(keyed('reasoning-manual')).selected,
+      isTrue,
+    );
     await tapProviderControl(tester, keyed('save-provider'));
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;

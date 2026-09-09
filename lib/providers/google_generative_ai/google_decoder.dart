@@ -38,6 +38,8 @@ Map<String, dynamic> buildGooglePayload(ChatRequest request) {
             ReasoningEffort.low => 1024,
             ReasoningEffort.medium => 8192,
             ReasoningEffort.high => 24576,
+            ReasoningEffort.xhigh => 49152,
+            ReasoningEffort.max => 98304,
           },
         },
       if (request.temperature != null) 'temperature': request.temperature,

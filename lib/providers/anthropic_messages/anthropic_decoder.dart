@@ -23,6 +23,8 @@ Map<String, dynamic> buildAnthropicPayload(ChatRequest request) {
         ReasoningEffort.low => 1024,
         ReasoningEffort.medium => 4096,
         ReasoningEffort.high => 16384,
+        ReasoningEffort.xhigh => 32768,
+        ReasoningEffort.max => 65536,
         ReasoningEffort.off => 0,
       };
       if (budget + 1024 > maxTokens) {

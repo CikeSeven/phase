@@ -265,15 +265,6 @@ class _ProfileRow extends StatelessWidget {
                           Text('$count 个模型', style: secondaryStyle),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.m),
-                      Text('默认模型', style: secondaryStyle),
-                      Text(
-                        profile.defaultModel ??
-                            (count == 0 ? '未设置' : '自动使用首个模型'),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyMedium,
-                      ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
                         profile.baseUrl,

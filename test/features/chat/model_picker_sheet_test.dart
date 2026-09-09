@@ -121,6 +121,52 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('模型限定推理等级时面板只给可选项，持久化的越界等级按关处理', (tester) async {
+    final host = await _pumpHost(
+      tester,
+      profiles: const [
+        ProviderProfile(
+          id: 'daily',
+          name: '日常',
+          baseUrl: 'https://example.com/v1',
+          models: [
+            ProfileModel(
+              id: 'limited-thinker',
+              supportsReasoning: true,
+              reasoningEfforts: ['low'],
+            ),
+          ],
+        ),
+      ],
+      values: const {
+        'last_profile_id': 'daily',
+        'last_model': 'limited-thinker',
+        'last_reasoning_effort': 'high',
+      },
+    );
+
+    // 持久化的「高」不在模型开放范围内，派生选择先收敛为「关」。
+    expect(
+      host.container.read(modelSelectionProvider).value!.effort,
+      ReasoningEffort.off,
+    );
+
+    await _openPicker(tester);
+    expect(_effort('off'), findsOneWidget);
+    expect(_effort('low'), findsOneWidget);
+    expect(_effort('medium'), findsNothing);
+    expect(_effort('high'), findsNothing);
+    expect(tester.widget<ChoiceChip>(_effort('off')).selected, isTrue);
+
+    await _tapVisible(tester, _effort('low'));
+    await _tapVisible(tester, _confirm);
+    expect(host.preferences.getString('last_reasoning_effort'), 'low');
+    expect(
+      host.container.read(modelSelectionProvider).value!.effort,
+      ReasoningEffort.low,
+    );
+  });
+
   testWidgets('同名服务商与模型以 ID 区分，同面板确认推理并持久化', (tester) async {
     final host = await _pumpHost(
       tester,
