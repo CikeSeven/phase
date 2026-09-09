@@ -57,12 +57,14 @@ Stream<ChatChunk> splitThinkTags(Stream<ChatChunk> source) async* {
     if (content.isNotEmpty ||
         reasoning.isNotEmpty ||
         chunk.done ||
-        chunk.usage != null) {
+        chunk.usage != null ||
+        chunk.errorMessage != null) {
       yield ChatChunk(
         delta: content,
         reasoningDelta: reasoning.isEmpty ? null : reasoning,
         done: chunk.done,
         usage: chunk.usage,
+        errorMessage: chunk.errorMessage,
       );
     }
   }

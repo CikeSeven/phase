@@ -233,4 +233,20 @@ void main() {
       expect(chunk?.reasoningDelta, 'A');
     });
   });
+
+  // 带内错误事件（HTTP 200 的 SSE 里夹 {"error": ...}）必须解析出来，不能吞掉。
+  group('带内错误事件', () {
+    test('error 对象为 message 字符串', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data: {"error":{"message":"reasoning_effort is not supported"}}',
+      );
+      expect(chunk?.errorMessage, 'reasoning_effort is not supported');
+      expect(chunk?.done, isTrue);
+    });
+
+    test('error 为纯字符串', () {
+      final chunk = OpenAiSseDecoder.parseLine('data: {"error":"boom"}');
+      expect(chunk?.errorMessage, 'boom');
+    });
+  });
 }

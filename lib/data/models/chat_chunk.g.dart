@@ -13,6 +13,7 @@ ChatChunk _$ChatChunkFromJson(Map<String, dynamic> json) => ChatChunk(
   usage: json['usage'] == null
       ? null
       : TokenUsage.fromJson(json['usage'] as Map<String, dynamic>),
+  errorMessage: json['errorMessage'] as String?,
 );
 
 Map<String, dynamic> _$ChatChunkToJson(ChatChunk instance) => <String, dynamic>{
@@ -20,6 +21,7 @@ Map<String, dynamic> _$ChatChunkToJson(ChatChunk instance) => <String, dynamic>{
   'reasoningDelta': instance.reasoningDelta,
   'done': instance.done,
   'usage': instance.usage,
+  'errorMessage': instance.errorMessage,
 };
 
 TokenUsage _$TokenUsageFromJson(Map<String, dynamic> json) => TokenUsage(

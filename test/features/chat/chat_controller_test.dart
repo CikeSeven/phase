@@ -116,7 +116,7 @@ void main() {
   ChatState state() => container.read(chatControllerProvider);
 
   test('支持推理的模型把推理等级传入 ChatRequest，不支持则不传', () async {
-    // 推理模型：默认 medium 档应随请求下发。
+    // 推理模型：默认 off 档（不夹带网关可能不认识的参数）。
     await db.upsertProviderProfile(
       ProviderProfilesCompanion.insert(
         id: 'p-r',
@@ -132,6 +132,14 @@ void main() {
     fakeProvider.streamFactory =
         () => Stream.fromIterable([const ChatChunk(delta: '好')]);
     await controller().send('你好');
+    expect(fakeProvider.lastRequest!.reasoningEffort, ReasoningEffort.off);
+
+    // 显式选择 medium 后随请求下发。
+    await container
+        .read(modelSelectionProvider.notifier)
+        .selectEffort(ReasoningEffort.medium);
+    await container.read(modelSelectionProvider.future);
+    await controller().send('再来一次');
     expect(
       fakeProvider.lastRequest!.reasoningEffort,
       ReasoningEffort.medium,

@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 
+import '../../core/error/failure.dart';
 import '../../data/datasources/remote/dio_client.dart';
 import '../../data/models/ai_model.dart';
 import '../../data/models/chat_chunk.dart';
@@ -125,8 +126,17 @@ class OpenAiCompletionsProvider implements AiProvider {
       uri: _resolve('chat/completions'),
       payload: buildCompletionsPayload(request: request, compat: _compat),
       headers: _authHeaders,
-      // think 标签拆分放在解码之后，保持 SSE 解析器纯粹。
-      decode: (body) => splitThinkTags(OpenAiSseDecoder.decode(body)),
+      // think 标签拆分放在解码之后，保持 SSE 解析器纯粹；
+      // 带内错误事件在进入状态机前抛出为 Failure。
+      decode: (body) => splitThinkTags(
+        OpenAiSseDecoder.decode(body).map((chunk) {
+          final error = chunk.errorMessage;
+          if (error != null) {
+            throw ServerFailure(error);
+          }
+          return chunk;
+        }),
+      ),
     );
   }
 

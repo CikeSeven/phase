@@ -10,6 +10,7 @@ class ChatChunk {
     this.reasoningDelta,
     this.done = false,
     this.usage,
+    this.errorMessage,
   });
 
   /// 本次新增的文本片段（追加到气泡内容末尾）。
@@ -23,6 +24,9 @@ class ChatChunk {
 
   /// token 用量，通常在最后一个事件中出现。
   final TokenUsage? usage;
+
+  /// 带内错误（HTTP 200 的 SSE 流里夹带的 `{"error": ...}` 事件）。
+  final String? errorMessage;
 
   factory ChatChunk.fromJson(Map<String, dynamic> json) =>
       _$ChatChunkFromJson(json);

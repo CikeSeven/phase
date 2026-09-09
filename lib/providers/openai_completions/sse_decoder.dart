@@ -35,6 +35,17 @@ abstract final class OpenAiSseDecoder {
   }
 
   static ChatChunk? _parseEvent(Map<String, dynamic> event) {
+    // 网关在 SSE 流内返回的带内错误（HTTP 200 + {"error": ...}），
+    // 必须显形，不能当无事件行吞掉。
+    final error = event['error'];
+    if (error != null) {
+      final message = switch (error) {
+        {'message': final String m} => m,
+        String() => error,
+        _ => jsonEncode(error),
+      };
+      return ChatChunk(delta: '', done: true, errorMessage: message);
+    }
     final usage = _parseUsage(event['usage']);
     final choices = event['choices'];
     if (choices is! List || choices.isEmpty) {
