@@ -88,6 +88,42 @@ void main() {
         ['low', 'high'],
       );
     });
+
+    test('nearestAllowedEffort 就近降级，没有更低等级时取最近的更高等级', () {
+      const limited = ProfileModel(
+        id: 'a',
+        supportsReasoning: true,
+        reasoningEfforts: ['low', 'high', 'max'],
+      );
+      // 已允许与 off 原样返回。
+      expect(
+        limited.nearestAllowedEffort(ReasoningEffort.high),
+        ReasoningEffort.high,
+      );
+      expect(
+        limited.nearestAllowedEffort(ReasoningEffort.off),
+        ReasoningEffort.off,
+      );
+      // 超高 → 降级为高，中 → 降级为低。
+      expect(
+        limited.nearestAllowedEffort(ReasoningEffort.xhigh),
+        ReasoningEffort.high,
+      );
+      expect(
+        limited.nearestAllowedEffort(ReasoningEffort.medium),
+        ReasoningEffort.low,
+      );
+      // 没有更低等级时取最近的更高等级。
+      const onlyHigh = ProfileModel(
+        id: 'b',
+        supportsReasoning: true,
+        reasoningEfforts: ['high'],
+      );
+      expect(
+        onlyHigh.nearestAllowedEffort(ReasoningEffort.low),
+        ReasoningEffort.high,
+      );
+    });
   });
 
   group('guessSupportsReasoning', () {

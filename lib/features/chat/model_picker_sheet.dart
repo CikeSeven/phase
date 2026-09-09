@@ -574,16 +574,14 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     });
   }
 
-  /// 模型未开放当前等级时按「关」处理，不下发模型不支持的值。
+  /// 模型未开放当前等级时就近降级（没有更低等级时取最近的更高等级），
+  /// 不把推理静默关掉。
   ReasoningEffort _effectiveEffort(_PickerEntry? draft) {
     final model = draft?.model;
-    final effort = _draftEffort;
-    if (model == null ||
-        effort == ReasoningEffort.off ||
-        model.allowedEfforts.contains(effort)) {
-      return effort;
+    if (model == null) {
+      return _draftEffort;
     }
-    return ReasoningEffort.off;
+    return model.nearestAllowedEffort(_draftEffort);
   }
 
   void _openConfiguration([String? profileId]) {

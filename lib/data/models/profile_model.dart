@@ -30,10 +30,28 @@ class ProfileModel {
     if (reasoningEfforts.isEmpty) {
       return ReasoningEffort.levels;
     }
-    return [
+    final allowed = [
       for (final effort in ReasoningEffort.levels)
         if (reasoningEfforts.contains(effort.name)) effort,
     ];
+    // 全是未知名（脏数据）时按不限制处理。
+    return allowed.isEmpty ? ReasoningEffort.levels : allowed;
+  }
+
+  /// 把 effort 收敛到允许集合：优先不高于当前等级的最大等级（降级），
+  /// 没有更低的才取最近的更高等级；off 与已允许的等级原样返回。
+  ReasoningEffort nearestAllowedEffort(ReasoningEffort effort) {
+    final allowed = allowedEfforts;
+    if (effort == ReasoningEffort.off || allowed.contains(effort)) {
+      return effort;
+    }
+    for (var i = ReasoningEffort.levels.length - 1; i >= 0; i--) {
+      final level = ReasoningEffort.levels[i];
+      if (level.index < effort.index && allowed.contains(level)) {
+        return level;
+      }
+    }
+    return allowed.first;
   }
 
   ProfileModel copyWith({

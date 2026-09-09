@@ -70,11 +70,8 @@ class ModelSelection extends _$ModelSelection {
     for (final candidate in profile.modelCandidates) {
       if (candidate.id == model) {
         supportsReasoning = candidate.supportsReasoning;
-        // 模型未开放持久化的等级时按「关」处理，不下发不支持的值。
-        if (effort != ReasoningEffort.off &&
-            !candidate.allowedEfforts.contains(effort)) {
-          effort = ReasoningEffort.off;
-        }
+        // 模型未开放持久化的等级时就近降级，不静默关闭推理。
+        effort = candidate.nearestAllowedEffort(effort);
         break;
       }
     }

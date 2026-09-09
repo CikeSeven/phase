@@ -121,7 +121,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('模型限定推理等级时面板只给可选项，持久化的越界等级按关处理', (tester) async {
+  testWidgets('模型限定推理等级时面板只给可选项，持久化的越界等级就近降级', (tester) async {
     final host = await _pumpHost(
       tester,
       profiles: const [
@@ -145,10 +145,10 @@ void main() {
       },
     );
 
-    // 持久化的「高」不在模型开放范围内，派生选择先收敛为「关」。
+    // 持久化的「高」不在模型开放范围内，派生选择就近降级为「低」而不是关闭。
     expect(
       host.container.read(modelSelectionProvider).value!.effort,
-      ReasoningEffort.off,
+      ReasoningEffort.low,
     );
 
     await _openPicker(tester);
@@ -156,15 +156,52 @@ void main() {
     expect(_effort('low'), findsOneWidget);
     expect(_effort('medium'), findsNothing);
     expect(_effort('high'), findsNothing);
-    expect(tester.widget<ChoiceChip>(_effort('off')).selected, isTrue);
+    expect(tester.widget<ChoiceChip>(_effort('low')).selected, isTrue);
 
-    await _tapVisible(tester, _effort('low'));
     await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_reasoning_effort'), 'low');
     expect(
       host.container.read(modelSelectionProvider).value!.effort,
       ReasoningEffort.low,
     );
+  });
+
+  testWidgets('面板内切换到开放范围更窄的模型时，已选等级就近降级而非关闭', (tester) async {
+    final host = await _pumpHost(
+      tester,
+      profiles: const [
+        ProviderProfile(
+          id: 'daily',
+          name: '日常',
+          baseUrl: 'https://example.com/v1',
+          models: [
+            ProfileModel(id: 'open-thinker', supportsReasoning: true),
+            ProfileModel(
+              id: 'limited-thinker',
+              supportsReasoning: true,
+              reasoningEfforts: ['low', 'high', 'max'],
+            ),
+          ],
+        ),
+      ],
+      values: const {
+        'last_profile_id': 'daily',
+        'last_model': 'open-thinker',
+        'last_reasoning_effort': 'off',
+      },
+    );
+
+    await _openPicker(tester);
+    await _chooseModel(tester, 'daily', 'open-thinker');
+    await _tapVisible(tester, _effort('xhigh'));
+    await _chooseModel(tester, 'daily', 'limited-thinker');
+    // 超高不在开放范围（低/高/最高）内，降级为高而不是关。
+    expect(_effort('xhigh'), findsNothing);
+    expect(tester.widget<ChoiceChip>(_effort('high')).selected, isTrue);
+
+    await _tapVisible(tester, _confirm);
+    expect(host.preferences.getString('last_model'), 'limited-thinker');
+    expect(host.preferences.getString('last_reasoning_effort'), 'high');
   });
 
   testWidgets('同名服务商与模型以 ID 区分，同面板确认推理并持久化', (tester) async {
