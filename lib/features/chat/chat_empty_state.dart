@@ -37,13 +37,9 @@ class ChatEmptyState extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xl),
                   Semantics(
                     header: true,
-                    child: Text('此刻，想聊些什么？', style: theme.textTheme.titleLarge),
-                  ),
-                  const SizedBox(height: AppSpacing.m),
-                  Text(
-                    '向相月提问，或选择一个助手',
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+                    child: Text(
+                      '向相月提问，或选择一个助手',
+                      style: theme.textTheme.titleMedium,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xl),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phase/core/theme/app_theme.dart';
+import 'package:phase/core/widgets/app_card.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/features/settings/settings_page.dart';
@@ -11,6 +12,33 @@ import 'package:phase/features/settings/theme_mode_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('设置与主题不显示冗余口号，品牌卡紧凑且预览仍可应用', (tester) async {
+    final host = await _pumpSettings(tester);
+    final brandCard = find.ancestor(
+      of: find.text('相月'),
+      matching: find.byType(AppCard),
+    );
+    expect(tester.getSize(brandCard).height, lessThanOrEqualTo(80));
+    expect(find.text('你的多模型 AI 对话助手'), findsNothing);
+    expect(find.text('管理连接地址、API Key 与模型'), findsNothing);
+    await _openTheme(tester);
+    expect(
+      tester.widget<AppDialog>(find.byType(AppDialog)).description,
+      isNull,
+    );
+    for (final phrase in ['随系统变化', '自动适应设备外观', '清透月白', '柔和墨蓝']) {
+      expect(find.textContaining(phrase), findsNothing);
+    }
+    for (final mode in ThemeMode.values) {
+      expect(_option(mode), findsOneWidget);
+    }
+    expect(find.byKey(const ValueKey('theme-swatch-light')), findsOneWidget);
+    expect(find.byKey(const ValueKey('theme-swatch-dark')), findsOneWidget);
+    await _chooseTheme(tester, ThemeMode.dark);
+    await _tapVisible(tester, find.byKey(const ValueKey('apply-theme')));
+    expect(host.preferences.getString('theme_mode'), 'dark');
+  });
+
   testWidgets('系统、浅色和深色主题均通过预览确认真实切换并持久化', (tester) async {
     final host = await _pumpSettings(tester);
     tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
@@ -118,7 +146,8 @@ void main() {
   testWidgets('品牌和版本信息如实显示，服务商入口跳转现有路径', (tester) async {
     final host = await _pumpSettings(tester);
     expect(find.text('相月'), findsOneWidget);
-    expect(find.text('你的多模型 AI 对话助手'), findsOneWidget);
+    expect(find.text('你的多模型 AI 对话助手'), findsNothing);
+    expect(find.text('主题模式').hitTestable(), findsOneWidget);
     await tester.ensureVisible(find.text('版本 1.0.0+1'));
     await tester.pumpAndSettle();
     expect(find.text('开发预览版'), findsOneWidget);

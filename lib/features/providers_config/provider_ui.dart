@@ -34,9 +34,10 @@ abstract final class ProviderUi {
   };
 
   static String protocolHint(ApiProtocol protocol) => switch (protocol) {
-    ApiProtocol.openaiCompletions => '使用 Chat Completions，可接入 OpenAI 兼容网关。',
-    ApiProtocol.openaiResponses => '使用 Responses API，需要服务端支持该协议。',
-    ApiProtocol.anthropicMessages => '使用 Anthropic Messages 原生协议。',
-    ApiProtocol.googleGenerativeAi => '使用 Google Generative AI 原生协议。',
+    ApiProtocol.openaiCompletions => 'POST /chat/completions',
+    ApiProtocol.openaiResponses => 'POST /responses',
+    ApiProtocol.anthropicMessages => 'POST /v1/messages',
+    ApiProtocol.googleGenerativeAi =>
+      'POST /v1beta/models/{model}:streamGenerateContent',
   };
 }

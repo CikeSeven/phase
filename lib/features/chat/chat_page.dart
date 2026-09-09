@@ -28,33 +28,10 @@ class ChatPage extends ConsumerStatefulWidget {
 
 class _ChatPageState extends ConsumerState<ChatPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
-  double _horizontalDragDistance = 0;
 
   void _openDrawer() {
     FocusScope.of(context).unfocus();
     _scaffoldKey.currentState?.openDrawer();
-  }
-
-  void _onHorizontalDragStart(DragStartDetails details) {
-    _horizontalDragDistance = 0;
-  }
-
-  void _onHorizontalDragUpdate(DragUpdateDetails details) {
-    _horizontalDragDistance = math.max(
-      0,
-      _horizontalDragDistance + (details.primaryDelta ?? 0),
-    );
-  }
-
-  void _onHorizontalDragEnd(DragEndDetails details) {
-    final velocity = details.primaryVelocity ?? 0;
-    final shouldOpen =
-        _horizontalDragDistance >= 56 ||
-        (_horizontalDragDistance >= 24 && velocity >= 450);
-    if (shouldOpen && !(_scaffoldKey.currentState?.isDrawerOpen ?? false)) {
-      _openDrawer();
-    }
-    _horizontalDragDistance = 0;
   }
 
   @override
@@ -87,142 +64,136 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     return PopScope<void>(
       // 根路由与侧栏的 LocalHistoryEntry 继续交由 Android 原生返回处理。
       canPop: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragStart: _onHorizontalDragStart,
-        onHorizontalDragUpdate: _onHorizontalDragUpdate,
-        onHorizontalDragEnd: _onHorizontalDragEnd,
-        onHorizontalDragCancel: () => _horizontalDragDistance = 0,
-        child: AppBackground(
-          child: Scaffold(
-            key: _scaffoldKey,
-            backgroundColor: colors.surface.withValues(alpha: 0),
-            drawerEnableOpenDragGesture: false,
-            appBar: AppTopBar(
-              toolbarHeight: toolbarHeight,
-              automaticallyImplyLeading: false,
-              leading: IconButton(
-                tooltip: '打开会话列表',
-                onPressed: _openDrawer,
-                icon: const Icon(Symbols.menu),
-              ),
-              title: Tooltip(
-                message: '选择模型',
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: InkWell(
-                    key: const ValueKey('chat-model-picker'),
-                    borderRadius: AppRadius.smallAll,
-                    onTap: () => showModelPickerSheet(context),
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(minHeight: 48),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          vertical: AppSpacing.xs,
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Row(
-                              children: [
-                                Text('相月', style: titleStyle),
-                                if (profileLabel != null) ...[
-                                  const SizedBox(width: AppSpacing.s),
-                                  Expanded(
-                                    child: Text(
-                                      profileLabel,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: modelStyle?.copyWith(
-                                        color: colors.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            Row(
-                              children: [
+      child: AppBackground(
+        child: Scaffold(
+          key: _scaffoldKey,
+          backgroundColor: colors.surface.withValues(alpha: 0),
+          drawerEnableOpenDragGesture: true,
+          drawerEdgeDragWidth: MediaQuery.sizeOf(context).width,
+          appBar: AppTopBar(
+            toolbarHeight: toolbarHeight,
+            automaticallyImplyLeading: false,
+            leading: IconButton(
+              tooltip: '打开会话列表',
+              onPressed: _openDrawer,
+              icon: const Icon(Symbols.menu),
+            ),
+            title: Tooltip(
+              message: '选择模型',
+              child: Material(
+                type: MaterialType.transparency,
+                child: InkWell(
+                  key: const ValueKey('chat-model-picker'),
+                  borderRadius: AppRadius.smallAll,
+                  onTap: () => showModelPickerSheet(context),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: AppSpacing.xs,
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            children: [
+                              Text('相月', style: titleStyle),
+                              if (profileLabel != null) ...[
+                                const SizedBox(width: AppSpacing.s),
                                 Expanded(
                                   child: Text(
-                                    modelLabel,
+                                    profileLabel,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: modelStyle?.copyWith(
-                                      color: selection.hasError
-                                          ? colors.error
-                                          : colors.primary,
+                                      color: colors.onSurfaceVariant,
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: AppSpacing.xs),
-                                Icon(
-                                  Symbols.expand_more,
-                                  size: 20,
-                                  color: colors.primary,
-                                ),
                               ],
-                            ),
-                          ],
-                        ),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  modelLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: modelStyle?.copyWith(
+                                    color: selection.hasError
+                                        ? colors.error
+                                        : colors.primary,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              Icon(
+                                Symbols.expand_more,
+                                size: 20,
+                                color: colors.primary,
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
                     ),
                   ),
                 ),
               ),
-              actions: [
-                IconButton(
-                  tooltip: '新会话',
-                  onPressed: () => ref
-                      .read(chatControllerProvider.notifier)
-                      .startNewConversation(),
-                  icon: const Icon(Symbols.edit_square),
-                ),
-              ],
             ),
-            drawer: ConversationDrawer(
-              width: math.min(MediaQuery.sizeOf(context).width * 0.88, 400),
-            ),
-            body: SafeArea(
-              top: false,
-              bottom: false,
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final composerHeight = math.min(
-                    constraints.maxHeight,
-                    math.max(
-                      scaler.scale(16) * 1.5 +
-                          96 +
-                          MediaQuery.paddingOf(context).bottom,
-                      constraints.maxHeight * 0.5,
-                    ),
-                  );
-                  return Column(
-                    children: [
-                      Expanded(
-                        child: conversationId == null
-                            ? const ChatEmptyState()
-                            : _ConversationMessages(
-                                key: ValueKey(conversationId),
-                                conversationId: conversationId,
-                              ),
-                      ),
-                      Center(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: 840,
-                            maxHeight: composerHeight,
-                          ),
-                          child: const ChatInputBar(),
-                        ),
-                      ),
-                    ],
-                  );
-                },
+            actions: [
+              IconButton(
+                tooltip: '新会话',
+                onPressed: () => ref
+                    .read(chatControllerProvider.notifier)
+                    .startNewConversation(),
+                icon: const Icon(Symbols.edit_square),
               ),
+            ],
+          ),
+          drawer: ConversationDrawer(
+            width: math.min(MediaQuery.sizeOf(context).width * 0.88, 400),
+          ),
+          body: SafeArea(
+            top: false,
+            bottom: false,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final composerHeight = math.min(
+                  constraints.maxHeight,
+                  math.max(
+                    scaler.scale(16) * 1.5 +
+                        96 +
+                        MediaQuery.paddingOf(context).bottom,
+                    constraints.maxHeight * 0.5,
+                  ),
+                );
+                return Column(
+                  children: [
+                    Expanded(
+                      child: conversationId == null
+                          ? const ChatEmptyState()
+                          : _ConversationMessages(
+                              key: ValueKey(conversationId),
+                              conversationId: conversationId,
+                            ),
+                    ),
+                    Center(
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: 840,
+                          maxHeight: composerHeight,
+                        ),
+                        child: const ChatInputBar(),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ),
@@ -248,10 +219,8 @@ class _ConversationMessages extends ConsumerWidget {
                   conversationId: conversationId,
                   messages: messages,
                 ),
-          loading: () => const AppEmptyState(
-            icon: Symbols.forum,
-            title: '正在读取会话',
-            message: '你的消息会显示在这里',
+          loading: () => const Center(
+            child: CircularProgressIndicator(semanticsLabel: '正在读取会话'),
           ),
           error: (error, _) => AppEmptyState(
             icon: Symbols.error,

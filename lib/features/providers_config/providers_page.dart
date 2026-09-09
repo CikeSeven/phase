@@ -40,7 +40,6 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
     final profilesAsync = ref.watch(providerProfilesProvider);
     return AppScaffold(
       title: '服务商',
-      subtitle: '管理连接与模型',
       actions: [
         IconButton(
           tooltip: '新增服务商',
@@ -68,24 +67,19 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
       body: profilesAsync.when(
         skipLoadingOnReload: true,
         data: (profiles) => profiles.isEmpty
-            ? AppEmptyState(
+            ? _buildStatus(
                 icon: Symbols.hub,
-                tone: AppTone.teal,
-                title: '连接你的第一个服务商',
-                message: '选择预设或填入自己的 API 地址，让喜欢的模型在这里汇合。',
+                title: '暂无服务商',
                 action: OutlinedButton.icon(
                   onPressed: _addProvider,
                   icon: const Icon(Symbols.add),
-                  label: const Text('添加第一个服务商'),
+                  label: const Text('添加服务商'),
                 ),
               )
             : _buildProfiles(profiles),
-        loading: () => const AppEmptyState(
-          icon: Symbols.cloud_download,
-          tone: AppTone.teal,
+        loading: () => _buildStatus(
           title: '正在读取配置',
-          message: '正在加载本机服务商与模型列表，也可以先添加新的服务商。',
-          action: SizedBox(width: 160, child: LinearProgressIndicator()),
+          action: const SizedBox(width: 160, child: LinearProgressIndicator()),
         ),
         error: (error, _) => AppEmptyState(
           icon: Symbols.cloud_off,
@@ -96,6 +90,34 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
             icon: const Icon(Symbols.refresh),
             label: const Text('重新加载'),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatus({
+    required String title,
+    required Widget action,
+    IconData? icon,
+  }) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              AppIconBadge(icon: icon, tone: AppTone.teal),
+              const SizedBox(height: AppSpacing.l),
+            ],
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: AppSpacing.l),
+            action,
+          ],
         ),
       ),
     );
@@ -130,26 +152,12 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
               children: [
                 AppCard(
                   tint: context.brandColors.teal,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                  child: Wrap(
+                    spacing: AppSpacing.xxl,
+                    runSpacing: AppSpacing.l,
                     children: [
-                      Text('你的模型入口', style: theme.textTheme.titleMedium),
-                      const SizedBox(height: AppSpacing.l),
-                      Wrap(
-                        spacing: AppSpacing.xxl,
-                        runSpacing: AppSpacing.l,
-                        children: [
-                          _OverviewCount(value: profiles.length, label: '服务商'),
-                          _OverviewCount(value: modelCount, label: '已配置模型'),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.l),
-                      Text(
-                        '这里记录你的本机配置，连接状态以实际请求为准。',
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant,
-                        ),
-                      ),
+                      _OverviewCount(value: profiles.length, label: '服务商'),
+                      _OverviewCount(value: modelCount, label: '已配置模型'),
                     ],
                   ),
                 ),
@@ -182,10 +190,9 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
         ),
         if (filtered.isEmpty)
           SliverToBoxAdapter(
-            child: AppEmptyState(
+            child: _buildStatus(
               icon: Symbols.search_off,
               title: '没有匹配的服务商',
-              message: '换一个关键词，或添加新的服务商。',
               action: TextButton(
                 onPressed: () => setState(_searchController.clear),
                 child: const Text('显示全部服务商'),
@@ -309,7 +316,7 @@ class _ProfileCard extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           Text(
-            profile.defaultModel ?? (count == 0 ? '暂未设置' : '未指定，将使用列表首项'),
+            profile.defaultModel ?? (count == 0 ? '未设置' : '自动使用首个模型'),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodyMedium,

@@ -91,14 +91,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: AppSpacing.s),
-                            Text(
-                              '留住灵感，继续每一次对话',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colors.onSurfaceVariant,
-                              ),
-                            ),
-                            const SizedBox(height: AppSpacing.xl),
+                            const SizedBox(height: AppSpacing.m),
                             FilledButton.icon(
                               onPressed: () {
                                 FocusScope.of(context).unfocus();
@@ -155,9 +148,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                             child: Padding(
                               padding: const EdgeInsets.all(AppSpacing.xl),
                               child: Text(
-                                _query.isEmpty
-                                    ? '还没有会话。发送第一条消息后，就能在这里继续。'
-                                    : '没有匹配的会话，试试其他关键词。',
+                                _query.isEmpty ? '暂无会话' : '没有匹配的会话',
                                 style: theme.textTheme.bodyMedium?.copyWith(
                                   color: colors.onSurfaceVariant,
                                 ),
@@ -276,7 +267,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
   }
 }
 
-class _ConversationTile extends ConsumerWidget {
+class _ConversationTile extends ConsumerStatefulWidget {
   const _ConversationTile({
     required this.conversation,
     required this.onDeleted,
@@ -286,7 +277,19 @@ class _ConversationTile extends ConsumerWidget {
   final VoidCallback onDeleted;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_ConversationTile> createState() => _ConversationTileState();
+}
+
+class _ConversationTileState extends ConsumerState<_ConversationTile> {
+  final _menuController = MenuController();
+
+  Conversation get conversation => widget.conversation;
+
+  void _toggleMenu() =>
+      _menuController.isOpen ? _menuController.close() : _menuController.open();
+
+  @override
+  Widget build(BuildContext context) {
     final selected = ref.watch(
       chatControllerProvider.select(
         (state) => state.conversationId == conversation.id,
@@ -294,113 +297,133 @@ class _ConversationTile extends ConsumerWidget {
     );
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    return MenuAnchor(
-      menuChildren: [
-        MenuItemButton(
-          leadingIcon: const Icon(Symbols.edit),
-          onPressed: () => _rename(context, ref),
-          child: const Text('重命名'),
-        ),
-        MenuItemButton(
-          leadingIcon: const Icon(Symbols.push_pin),
-          onPressed: () => _runGuarded(
-            context,
-            () => ref
-                .read(conversationRepositoryProvider)
-                .setPinned(conversation.id, pinned: !conversation.pinned),
-          ),
-          child: Text(conversation.pinned ? '取消置顶' : '置顶'),
-        ),
-        MenuItemButton(
-          leadingIcon: Icon(Symbols.delete, color: colors.error),
-          onPressed: () => _confirmDelete(context, ref),
-          child: Text('删除', style: TextStyle(color: colors.error)),
-        ),
-      ],
-      builder: (context, controller, child) {
-        void toggleMenu() =>
-            controller.isOpen ? controller.close() : controller.open();
-        return Semantics(
-          selected: selected,
-          child: Material(
-            color: selected
-                ? colors.primaryContainer.withValues(alpha: 0.82)
-                : colors.surface.withValues(alpha: 0),
-            borderRadius: AppRadius.mediumAll,
-            child: InkWell(
-              borderRadius: AppRadius.mediumAll,
-              onLongPress: toggleMenu,
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                ref
-                    .read(chatControllerProvider.notifier)
-                    .openConversation(conversation.id);
-                Navigator.of(context).pop();
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.l,
-                  AppSpacing.m,
-                  AppSpacing.xs,
-                  AppSpacing.m,
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+    final label = TextPainter(
+      text: TextSpan(text: '取消置顶', style: theme.textTheme.bodyMedium),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final menuWidth = (label.width + 96)
+        .clamp(176.0, MediaQuery.sizeOf(context).width - 32)
+        .toDouble();
+    label.dispose();
+    return Semantics(
+      selected: selected,
+      child: Material(
+        key: ValueKey('conversation-row-${conversation.id}'),
+        color: selected
+            ? colors.primaryContainer.withValues(alpha: 0.82)
+            : colors.surface.withValues(alpha: 0),
+        borderRadius: AppRadius.smallAll,
+        child: InkWell(
+          borderRadius: AppRadius.smallAll,
+          onLongPress: _toggleMenu,
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            ref
+                .read(chatControllerProvider.notifier)
+                .openConversation(conversation.id);
+            Navigator.of(context).pop();
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.m,
+              AppSpacing.xs,
+              AppSpacing.xs,
+              AppSpacing.xs,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        conversation.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          color: selected
+                              ? colors.onPrimaryContainer
+                              : colors.onSurface,
+                        ),
+                      ),
+                      Row(
                         children: [
-                          Text(
-                            conversation.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: selected
-                                  ? colors.onPrimaryContainer
-                                  : colors.onSurface,
+                          if (conversation.pinned) ...[
+                            Icon(
+                              Symbols.push_pin,
+                              size: 14,
+                              color: context.brandColors.gold,
+                              semanticLabel: '已置顶',
                             ),
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Row(
-                            children: [
-                              if (conversation.pinned) ...[
-                                Icon(
-                                  Symbols.push_pin,
-                                  size: 16,
-                                  color: context.brandColors.gold,
-                                  semanticLabel: '已置顶',
-                                ),
-                                const SizedBox(width: AppSpacing.xs),
-                              ],
-                              Expanded(
-                                child: Text(
-                                  _relativeTime(conversation.updatedAt),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    color: selected
-                                        ? colors.onPrimaryContainer
-                                        : colors.onSurfaceVariant,
-                                  ),
-                                ),
+                            const SizedBox(width: AppSpacing.xs),
+                          ],
+                          Expanded(
+                            child: Text(
+                              _relativeTime(conversation.updatedAt),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: selected
+                                    ? colors.onPrimaryContainer
+                                    : colors.onSurfaceVariant,
                               ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
+                    ],
+                  ),
+                ),
+                MenuAnchor(
+                  controller: _menuController,
+                  consumeOutsideTap: true,
+                  alignmentOffset: Offset(-menuWidth, AppSpacing.xs),
+                  style: MenuStyle(
+                    alignment: AlignmentDirectional.bottomEnd,
+                    minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
+                    maximumSize: WidgetStatePropertyAll(
+                      Size(menuWidth, double.infinity),
                     ),
-                    IconButton(
-                      tooltip: '会话菜单',
-                      onPressed: toggleMenu,
-                      icon: const Icon(Symbols.more_horiz),
+                  ),
+                  menuChildren: [
+                    MenuItemButton(
+                      leadingIcon: const Icon(Symbols.edit),
+                      onPressed: () => _rename(context, ref),
+                      child: const Text('重命名'),
+                    ),
+                    MenuItemButton(
+                      leadingIcon: const Icon(Symbols.push_pin),
+                      onPressed: () => _runGuarded(
+                        context,
+                        () => ref
+                            .read(conversationRepositoryProvider)
+                            .setPinned(
+                              conversation.id,
+                              pinned: !conversation.pinned,
+                            ),
+                      ),
+                      child: Text(conversation.pinned ? '取消置顶' : '置顶'),
+                    ),
+                    MenuItemButton(
+                      leadingIcon: Icon(Symbols.delete, color: colors.error),
+                      onPressed: () => _confirmDelete(context, ref),
+                      child: Text('删除', style: TextStyle(color: colors.error)),
                     ),
                   ],
+                  builder: (context, controller, child) => IconButton(
+                    key: ValueKey('conversation-menu-${conversation.id}'),
+                    tooltip: '会话菜单',
+                    onPressed: _toggleMenu,
+                    icon: const Icon(Symbols.more_horiz),
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -459,7 +482,7 @@ class _ConversationTile extends ConsumerWidget {
           .read(conversationRepositoryProvider)
           .deleteConversation(conversation.id),
     );
-    if (deleted) onDeleted();
+    if (deleted) widget.onDeleted();
   }
 
   Future<bool> _runGuarded(
@@ -535,7 +558,6 @@ class _RenameConversationDialogState extends State<_RenameConversationDialog> {
   Widget build(BuildContext context) {
     return AppDialog(
       title: '重命名会话',
-      description: '起一个容易找到的名字。',
       icon: Symbols.edit,
       content: TextField(
         key: const ValueKey('conversation-name-input'),

@@ -63,43 +63,26 @@ class ProviderFormSections extends StatelessWidget {
       children: [
         AppSection(
           title: '服务商',
-          subtitle: '从预设开始，也可以接入自己的网关。',
           child: AppCard(
             key: const ValueKey('choose-provider-preset'),
             onTap: enabled ? onChoosePreset : null,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    AppIconBadge(
-                      icon: ProviderUi.icon(preset.id),
-                      tone: ProviderUi.tone(preset.id),
-                    ),
-                    const SizedBox(width: AppSpacing.m),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            preset.name,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text('选择服务商预设', style: secondaryStyle),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.s),
-                    const Icon(Symbols.expand_more),
-                  ],
+                AppIconBadge(
+                  icon: ProviderUi.icon(preset.id),
+                  tone: ProviderUi.tone(preset.id),
                 ),
-                if (preset.note != null) ...[
-                  const SizedBox(height: AppSpacing.m),
-                  Text(preset.note!, style: secondaryStyle),
-                ],
+                const SizedBox(width: AppSpacing.m),
+                Expanded(
+                  child: Text(
+                    preset.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s),
+                const Icon(Symbols.expand_more),
               ],
             ),
           ),
@@ -107,7 +90,6 @@ class ProviderFormSections extends StatelessWidget {
         const SizedBox(height: AppSpacing.xl),
         AppSection(
           title: '连接',
-          subtitle: '协议与服务商独立，按实际接口配置。',
           child: AppCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -116,10 +98,7 @@ class ProviderFormSections extends StatelessWidget {
                   key: const ValueKey('provider-name'),
                   controller: nameController,
                   enabled: enabled,
-                  decoration: const InputDecoration(
-                    labelText: '名称',
-                    hintText: '给这个连接起个名字',
-                  ),
+                  decoration: const InputDecoration(labelText: '名称'),
                   textInputAction: TextInputAction.next,
                   onChanged: (_) => onConnectionChanged(),
                   validator: (value) =>
@@ -185,7 +164,7 @@ class ProviderFormSections extends StatelessWidget {
                   },
                 ),
                 const SizedBox(height: AppSpacing.s),
-                Text('填写 API 基础地址，不包含具体的生成端点。', style: secondaryStyle),
+                Text('API 基础地址，不含生成端点', style: secondaryStyle),
                 const SizedBox(height: AppSpacing.l),
                 Align(
                   alignment: Alignment.centerLeft,
@@ -201,8 +180,6 @@ class ProviderFormSections extends StatelessWidget {
                     label: Text(testing ? '获取中…' : '获取模型'),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.s),
-                Text('同时测试模型列表接口，不代表对话生成已验证。', style: secondaryStyle),
                 if (testError != null || testedModelCount != null) ...[
                   const SizedBox(height: AppSpacing.m),
                   Semantics(
@@ -222,7 +199,7 @@ class ProviderFormSections extends StatelessWidget {
                         const SizedBox(width: AppSpacing.s),
                         Expanded(
                           child: Text(
-                            testError ?? '已获取 $testedModelCount 个模型，已合并到下方列表。',
+                            testError ?? '已获取 $testedModelCount 个模型',
                             style: theme.textTheme.bodyMedium?.copyWith(
                               color: testError == null
                                   ? theme.colorScheme.primary
@@ -241,7 +218,6 @@ class ProviderFormSections extends StatelessWidget {
         const SizedBox(height: AppSpacing.xl),
         AppSection(
           title: '凭证',
-          subtitle: '仅保存在本机安全存储中。',
           child: AppCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -269,16 +245,14 @@ class ProviderFormSections extends StatelessWidget {
                     textInputAction: TextInputAction.done,
                     onChanged: (_) => onConnectionChanged(),
                   ),
-                  const SizedBox(height: AppSpacing.m),
+                  const SizedBox(height: AppSpacing.s),
                   Text(
-                    hasSavedKey
-                        ? '留空会保留已存密钥，获取模型时也使用该密钥；填写新值则替换。'
-                        : '留空不会写入密钥；需要鉴权的服务请填写 API Key。',
+                    hasSavedKey ? '本机安全存储 · 留空保留并使用原密钥' : '仅存于本机安全存储',
                     style: secondaryStyle,
                   ),
                 ] else
                   Text(
-                    '此预设不使用 API Key，获取模型时不会发送密钥。已有密钥仍保留在安全存储中。',
+                    hasSavedKey ? '无需 API Key · 原有密钥保留' : '无需 API Key',
                     style: theme.textTheme.bodyMedium,
                   ),
               ],

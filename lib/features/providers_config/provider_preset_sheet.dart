@@ -43,7 +43,6 @@ class _ProviderPresetSheetState extends State<ProviderPresetSheet> {
 
     return AppSheet(
       title: '选择服务商',
-      subtitle: '预设提供建议地址。编辑已有配置时保留当前协议，可在连接分区单独调整。',
       child: CustomScrollView(
         key: const ValueKey('preset-scroll'),
         slivers: [
@@ -147,9 +146,7 @@ class _ProviderPresetSheetState extends State<ProviderPresetSheet> {
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        preset.baseUrl.isEmpty
-                            ? '使用你自己的 API 地址'
-                            : preset.baseUrl,
+                        preset.baseUrl.isEmpty ? '自定义 API 地址' : preset.baseUrl,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: theme.textTheme.bodySmall?.copyWith(

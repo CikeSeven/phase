@@ -10,15 +10,15 @@ class SettingsEntry extends StatelessWidget {
   const SettingsEntry({
     required this.icon,
     required this.title,
-    required this.subtitle,
     super.key,
+    this.subtitle,
     this.tone = AppTone.primary,
     this.onTap,
   });
 
   final IconData icon;
   final String title;
-  final String subtitle;
+  final String? subtitle;
   final AppTone tone;
   final VoidCallback? onTap;
 
@@ -28,7 +28,7 @@ class SettingsEntry extends StatelessWidget {
     return AppCard(
       onTap: onTap,
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           AppIconBadge(icon: icon, tone: tone),
           const SizedBox(width: AppSpacing.m),
@@ -37,13 +37,15 @@ class SettingsEntry extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(title, style: theme.textTheme.titleMedium),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  subtitle,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                if (subtitle != null) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    subtitle!,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
+                ],
               ],
             ),
           ),

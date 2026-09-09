@@ -26,25 +26,14 @@ class SettingsPage extends ConsumerWidget {
         padding: const EdgeInsets.all(AppSpacing.l),
         children: [
           AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    const AppIconBadge(
-                      icon: Symbols.nightlight,
-                      tone: AppTone.gold,
-                      size: 56,
-                      iconSize: 28,
-                    ),
-                    const SizedBox(width: AppSpacing.l),
-                    Expanded(
-                      child: Text('相月', style: theme.textTheme.headlineMedium),
-                    ),
-                  ],
+                const AppIconBadge(
+                  icon: Symbols.nightlight,
+                  tone: AppTone.gold,
                 ),
-                const SizedBox(height: AppSpacing.l),
-                Text('你的多模型 AI 对话助手', style: theme.textTheme.bodyLarge),
+                const SizedBox(width: AppSpacing.l),
+                Expanded(child: Text('相月', style: theme.textTheme.titleLarge)),
               ],
             ),
           ),
@@ -69,7 +58,6 @@ class SettingsPage extends ConsumerWidget {
               icon: Symbols.cloud,
               tone: AppTone.teal,
               title: '服务商配置',
-              subtitle: '管理连接地址、API Key 与模型',
               onTap: () => context.push('/settings/providers'),
             ),
           ),

@@ -7,16 +7,53 @@ import '../core/error/failure.dart';
 import '../data/models/chat_chunk.dart';
 import 'dio_failure_mapper.dart';
 
-/// 从 SSE 字节流提取 `data:` 载荷行。
+/// 从 SSE 字节流提取事件载荷，多行 `data:` 以换行连接。
 ///
-/// utf8 解码 + 按行切分天然处理了跨 chunk 的半截行；
-/// 空行、注释与 `event:` 等字段行被忽略。
+/// 完整 JSON 行即时交付，兼容省略事件间空行的接口；网络分片不作为边界。
 Stream<String> decodeSseDataLines(Stream<List<int>> byteStream) async* {
   final lines = utf8.decoder.bind(byteStream).transform(const LineSplitter());
+  var pending = <String>[];
   await for (final line in lines) {
-    if (line.startsWith('data:')) {
-      yield line.substring(5).trim();
+    if (line.isEmpty) {
+      if (pending.isNotEmpty) {
+        yield pending.join('\n');
+        pending = [];
+      }
+      continue;
     }
+    if (!line.startsWith('data:')) continue;
+    var data = line.substring(5);
+    if (data.startsWith(' ')) data = data.substring(1);
+    if (pending.isNotEmpty &&
+        _ssePayloadState(data) == _SsePayloadState.complete) {
+      final previous = pending.join('\n');
+      if (data.trim() == '[DONE]' ||
+          _ssePayloadState(previous) == _SsePayloadState.invalid) {
+        yield previous;
+        pending = [];
+      }
+    }
+    pending.add(data);
+    final payload = pending.join('\n');
+    if (_ssePayloadState(payload) == _SsePayloadState.complete) {
+      yield payload;
+      pending = [];
+    }
+  }
+  if (pending.isNotEmpty) yield pending.join('\n');
+}
+
+enum _SsePayloadState { complete, incomplete, invalid }
+
+_SsePayloadState _ssePayloadState(String data) {
+  if (data.trim() == '[DONE]') return _SsePayloadState.complete;
+  try {
+    jsonDecode(data);
+    return _SsePayloadState.complete;
+  } on FormatException catch (error) {
+    return error.offset == data.length
+        ? _SsePayloadState.incomplete
+        : _SsePayloadState.invalid;
   }
 }
 

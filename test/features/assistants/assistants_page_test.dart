@@ -2,19 +2,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phase/core/theme/app_theme.dart';
-import 'package:phase/core/widgets/app_empty_state.dart';
+import 'package:phase/core/widgets/app_icon_badge.dart';
 import 'package:phase/core/widgets/app_scaffold.dart';
 import 'package:phase/features/assistants/assistants_page.dart';
 
 void main() {
-  testWidgets('助手准确显示即将上线说明，返回对话是真实路由操作', (tester) async {
+  testWidgets('助手无冗余未来说明，保留即将上线状态与真实返回', (tester) async {
     final router = await _pumpHost(tester);
     await tester.tap(find.text('打开助手'));
     await tester.pumpAndSettle();
     expect(find.byType(AppScaffold), findsOneWidget);
-    expect(find.byType(AppEmptyState), findsOneWidget);
+    expect(find.byType(AppIconBadge), findsOneWidget);
     expect(find.text('助手功能即将上线'), findsOneWidget);
-    expect(find.textContaining('系统提示词（system prompt）与任务模板'), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    expect(find.textContaining('系统提示词（system prompt）与任务模板'), findsNothing);
+    expect(find.textContaining('现在，先与已配置的模型'), findsNothing);
     expect(find.byType(FilledButton), findsOneWidget);
     expect(find.text('创建助手'), findsNothing);
     expect(find.byType(Switch), findsNothing);

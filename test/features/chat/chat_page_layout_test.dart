@@ -313,6 +313,104 @@ void main() {
     await tester.pump();
   }
 
+  testWidgets('侧栏在手指松开前连续跟随位移，反向拖动与取消均可回到关闭状态', (tester) async {
+    await pumpChat(tester, repository: _MemoryConversations()..seed(12));
+    final scaffold = tester.state<ScaffoldState>(find.byType(Scaffold).first);
+    final drag = await tester.startGesture(const Offset(100, 300));
+    await drag.moveBy(const Offset(24, 0));
+    await tester.pump();
+    await drag.moveBy(const Offset(64, 0));
+    await tester.pump();
+    final drawer = find.byType(Drawer);
+    final firstRight = tester.getRect(drawer).right;
+    expect(firstRight, greaterThan(20));
+    expect(firstRight, lessThan(tester.getSize(drawer).width));
+    await drag.moveBy(const Offset(55, 0));
+    await tester.pump();
+    expect(tester.getRect(drawer).right - firstRight, closeTo(55, 2));
+    await drag.moveBy(const Offset(-90, 0));
+    await tester.pump();
+    expect(tester.getRect(drawer).right, lessThan(firstRight));
+    await tester.pump(const Duration(milliseconds: 300));
+    await drag.up();
+    await tester.pumpAndSettle();
+    expect(scaffold.isDrawerOpen, isFalse);
+
+    final cancelled = await tester.startGesture(const Offset(100, 300));
+    await cancelled.moveBy(const Offset(24, 0));
+    await tester.pump();
+    await cancelled.moveBy(const Offset(45, 0));
+    await tester.pump();
+    expect(tester.getRect(drawer).right, greaterThan(0));
+    await cancelled.cancel();
+    await tester.pumpAndSettle();
+    expect(scaffold.isDrawerOpen, isFalse);
+
+    await openDrawer(tester);
+    final closing = await tester.startGesture(const Offset(240, 650));
+    await closing.moveBy(const Offset(-25, 0));
+    await tester.pump();
+    await closing.moveBy(const Offset(-200, 0));
+    await tester.pump();
+    expect(tester.getRect(drawer).right, lessThan(250));
+    await closing.up();
+    await tester.pumpAndSettle();
+    expect(scaffold.isDrawerOpen, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('紧凑会话行保留48触区，更多菜单对齐按钮而非会话左边', (tester) async {
+    await pumpChat(tester, repository: _MemoryConversations()..seed(20));
+    await openDrawer(tester);
+    final row = find.byKey(const ValueKey('conversation-row-seed-0'));
+    final button = find.byKey(const ValueKey('conversation-menu-seed-0'));
+    expect(tester.getSize(row).height, inInclusiveRange(48, 60));
+    expect(tester.getSize(button).shortestSide, greaterThanOrEqualTo(48));
+    final buttonRect = tester.getRect(button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    final item = find.widgetWithText(MenuItemButton, '重命名');
+    final menuItemRect = tester.getRect(item);
+    expect(menuItemRect.left, greaterThan(tester.getRect(row).left + 80));
+    expect(menuItemRect.right, lessThanOrEqualTo(buttonRect.right + 8));
+    expect(menuItemRect.top, greaterThanOrEqualTo(buttonRect.bottom - 1));
+    await tester.tapAt(const Offset(355, 680));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('旅行灵感'));
+    await tester.pumpAndSettle();
+    expect(tester.getRect(item).left, closeTo(menuItemRect.left, 1));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('靠近侧栏底部的菜单向上避让，不偏到左侧或超出屏幕', (tester) async {
+    await pumpChat(tester, repository: _MemoryConversations()..seed(30));
+    await openDrawer(tester);
+    final button = find.byKey(const ValueKey('conversation-menu-seed-6'));
+    await Scrollable.ensureVisible(tester.element(button), alignment: 1);
+    await tester.pumpAndSettle();
+    final buttonRect = tester.getRect(button);
+    expect(buttonRect.top, greaterThan(580));
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    final first = tester.getRect(find.widgetWithText(MenuItemButton, '重命名'));
+    final last = tester.getRect(find.widgetWithText(MenuItemButton, '删除'));
+    expect(first.left, greaterThan(80));
+    expect(first.right, lessThanOrEqualTo(buttonRect.right + 8));
+    expect(first.top, greaterThanOrEqualTo(0));
+    expect(last.bottom, lessThanOrEqualTo(780));
+    expect(first.top, lessThan(buttonRect.top));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('输入栏和侧栏不再展示重复教程或标语', (tester) async {
+    await pumpChat(tester);
+    expect(find.text('支持多行输入'), findsNothing);
+    expect(find.text('正在生成回复'), findsNothing);
+    await openDrawer(tester);
+    expect(find.text('留住灵感，继续每一次对话'), findsNothing);
+    expect(find.text('暂无会话'), findsOneWidget);
+  });
+
   for (final size in [const Size(320, 720), const Size(360, 780)]) {
     for (final scale in [1.3, 2.0]) {
       testWidgets('空态/长模型名 ${size.width}dp ${scale}x 与键盘布局', (tester) async {
@@ -482,7 +580,7 @@ void main() {
     expect(reply.content, '答案');
     expect(reply.reasoning, '推演过程');
     expect(find.text('已思考'), findsOneWidget);
-    expect(find.text('推演过程'), findsNothing);
+    expect(find.text('推演过程'), findsOneWidget);
     expect(
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       '下一条草稿',

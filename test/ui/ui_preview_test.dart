@@ -152,9 +152,11 @@ void main() {
       await _settleDatabase(tester);
       await _save(tester, '$mode-chat-message');
       await tester.ensureVisible(find.text('已思考'));
-      await tester.tap(find.text('已思考'));
       await tester.pumpAndSettle();
       await _save(tester, '$mode-reasoning');
+      await tester.tap(find.text('已思考'));
+      await tester.pumpAndSettle();
+      await _save(tester, '$mode-reasoning-collapsed');
 
       final context = tester.element(find.byType(Scaffold).first);
       final sheetFuture = showModelPickerSheet(context);

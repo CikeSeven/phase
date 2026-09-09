@@ -76,15 +76,18 @@ void main() {
       );
     }
 
-    testWidgets('有 reasoning 时渲染思考区块，完成后默认收起', (tester) async {
+    testWidgets('完成的历史消息有 reasoning 时默认展示全文，可手动收起和展开', (tester) async {
       await tester.pumpWidget(buildBubble(reasoningMessage()));
 
       expect(find.byIcon(Symbols.psychology), findsOneWidget);
       expect(find.text('已思考'), findsOneWidget);
-      // 完成后默认收起，思考全文不可见。
-      expect(find.text('推演过程'), findsNothing);
+      expect(find.text('推演过程'), findsOneWidget);
+      expect(find.text('答案', findRichText: true), findsOneWidget);
 
-      // 手动展开后可见。
+      await tester.tap(find.text('已思考'));
+      await tester.pumpAndSettle();
+      expect(find.text('推演过程'), findsNothing);
+      expect(find.text('答案', findRichText: true), findsOneWidget);
       await tester.tap(find.text('已思考'));
       await tester.pumpAndSettle();
       expect(find.text('推演过程'), findsOneWidget);
@@ -101,34 +104,49 @@ void main() {
       expect(find.text('推演过程'), findsOneWidget);
     });
 
-    testWidgets('无 reasoning 时不渲染思考区块', (tester) async {
-      await tester.pumpWidget(buildBubble(reasoningMessage(reasoning: null)));
-
-      expect(find.byIcon(Symbols.psychology), findsNothing);
-      expect(find.text('已思考'), findsNothing);
-      expect(find.text('思考中…'), findsNothing);
+    testWidgets('无 reasoning 不因推理模型名或生成状态渲染思考区块', (tester) async {
+      for (final status in ChatMessageStatus.values) {
+        await tester.pumpWidget(
+          buildBubble(
+            reasoningMessage(
+              reasoning: null,
+              status: status,
+            ).copyWith(modelName: 'reasoning-thinking-model'),
+          ),
+        );
+        expect(find.byIcon(Symbols.psychology), findsNothing);
+        expect(find.byType(ThinkingPanel), findsNothing);
+        expect(find.text('已思考'), findsNothing);
+        expect(find.text('思考中…'), findsNothing);
+      }
     });
 
-    testWidgets('空串 reasoning 同样不渲染思考区块', (tester) async {
-      await tester.pumpWidget(buildBubble(reasoningMessage(reasoning: '')));
-
-      expect(find.byIcon(Symbols.psychology), findsNothing);
+    testWidgets('空串 reasoning 在流式与完成时都不渲染思考区块', (tester) async {
+      for (final status in ChatMessageStatus.values) {
+        await tester.pumpWidget(
+          buildBubble(reasoningMessage(reasoning: '', status: status)),
+        );
+        expect(find.byIcon(Symbols.psychology), findsNothing);
+        expect(find.byType(ThinkingPanel), findsNothing);
+        expect(find.text('答案', findRichText: true), findsOneWidget);
+      }
     });
 
-    testWidgets('同一消息 streaming 到 done 保持父结构并默认收起', (tester) async {
+    testWidgets('同一消息 streaming 到 done 保持父结构与思考全文', (tester) async {
       final streaming = reasoningMessage(status: ChatMessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
       final panelState = tester.state(find.byType(ThinkingPanel));
       expect(find.text('答案', findRichText: true), findsOneWidget);
       expect(find.text('思考中…'), findsOneWidget);
       expect(find.byIcon(Symbols.psychology), findsOneWidget);
+      expect(find.text('推演过程'), findsOneWidget);
 
       await tester.pumpWidget(
         buildBubble(streaming.copyWith(status: ChatMessageStatus.done)),
       );
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(ThinkingPanel)), same(panelState));
-      expect(find.text('推演过程'), findsNothing);
+      expect(find.text('推演过程'), findsOneWidget);
       expect(find.text('已思考'), findsOneWidget);
       expect(find.text('答案', findRichText: true), findsOneWidget);
       final header = find.descendant(
@@ -136,6 +154,36 @@ void main() {
         matching: find.byType(InkWell),
       );
       expect(tester.getSize(header).height, greaterThanOrEqualTo(48));
+    });
+
+    testWidgets('100ms 内完成且首次带 reasoning 的 done 快照直接显示全文', (tester) async {
+      final message = ValueNotifier(
+        _aiMessage('', ChatMessageStatus.streaming),
+      );
+      addTearDown(message.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: ValueListenableBuilder<ChatMessage>(
+              valueListenable: message,
+              builder: (context, value, child) => MessageBubble(message: value),
+            ),
+          ),
+        ),
+      );
+      expect(find.byIcon(Symbols.psychology), findsNothing);
+      await tester.pump(const Duration(milliseconds: 80));
+      message.value = message.value.copyWith(
+        content: '快速回复正文',
+        reasoning: '完整推演第一行\n完整推演第二行',
+        status: ChatMessageStatus.done,
+      );
+      await tester.pump(const Duration(milliseconds: 16));
+      expect(find.text('完整推演第一行\n完整推演第二行'), findsOneWidget);
+      expect(find.text('快速回复正文', findRichText: true), findsOneWidget);
+      expect(find.text('已思考'), findsOneWidget);
+      expect(find.byIcon(Symbols.psychology), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('手动收起后正文和思考增量及状态切换都不覆盖偏好', (tester) async {

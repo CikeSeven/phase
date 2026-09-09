@@ -234,6 +234,100 @@ void main() {
     });
   });
 
+  group('公开 reasoning_details 后备', () {
+    test('details-only 接收 reasoning.text.text 与 reasoning.summary.summary', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data:{"choices":[{"delta":{"reasoning_details":['
+        '{"type":"reasoning.text","text":"先检查"},'
+        '{"type":"reasoning.summary","summary":"输入。"}'
+        '],"content":"正文"}}]}',
+      );
+      expect(chunk?.reasoningDelta, '先检查输入。');
+      expect(chunk?.delta, '正文');
+    });
+
+    test('首非空别名优先，不能与同帧 details 重复追加', () {
+      for (final alias in [
+        'reasoning_content',
+        'reasoning',
+        'reasoning_text',
+      ]) {
+        final chunk = OpenAiSseDecoder.parseLine(
+          'data:${jsonEncode({
+            'choices': [
+              {
+                'delta': {
+                  'reasoning_content': '',
+                  'reasoning': '',
+                  'reasoning_text': '',
+                  alias: '摘要',
+                  'reasoning_details': [
+                    {'type': 'reasoning.summary', 'summary': '摘要'},
+                  ],
+                },
+              },
+            ],
+          })}',
+        );
+        expect(chunk?.reasoningDelta, '摘要', reason: alias);
+      }
+    });
+
+    test('encrypted、signature、usage 与畸形 details 不能生成思考', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data:${jsonEncode({
+          'choices': [
+            {
+              'delta': {
+                'reasoning_details': [
+                  null,
+                  42,
+                  {'type': 'reasoning.encrypted', 'data': 'cipher', 'text': 'hidden'},
+                  {'type': 'signature', 'text': 'hidden'},
+                  {'type': 'reasoning.text', 'text': 42},
+                  {'type': 'reasoning.summary', 'summary': null},
+                ],
+              },
+            },
+          ],
+          'usage': {'completion_tokens': 10, 'reasoning_tokens': 8},
+        })}',
+      );
+      expect(chunk?.reasoningDelta, isNull);
+      expect(chunk?.delta, isEmpty);
+      expect(chunk?.usage?.completionTokens, 10);
+    });
+
+    test('空别名允许公开 details 后备，非 List details 忽略', () {
+      final chunk = OpenAiSseDecoder.parseLine(
+        'data: {"choices":[{"delta":{"reasoning_content":"",'
+        '"reasoning_details":[{"type":"reasoning.text","text":"摘要"}]}}]}',
+      );
+      expect(chunk?.reasoningDelta, '摘要');
+      expect(
+        OpenAiSseDecoder.parseLine(
+          'data: {"choices":[{"delta":{"reasoning_details":{"text":"不接受"}}}]}',
+        )?.reasoningDelta,
+        isNull,
+      );
+    });
+
+    test('多行 data 的 details 与带内错误经过共享 framing', () async {
+      const text =
+          'data:{broken}\n\n'
+          'data:{"choices":[{"delta":{\r\n'
+          'data:"reasoning_details":[{"type":"reasoning.summary","summary":"中文摘要"}]}}]}\r\n\r\n'
+          'data:{"error":\n'
+          'data:{"message":"overloaded"}}\n\n';
+      final chunks = await OpenAiSseDecoder.decode(
+        Stream.fromIterable(utf8.encode(text).map((byte) => [byte])),
+      ).toList();
+      expect(chunks.first.reasoningDelta, '中文摘要');
+      expect(chunks.last.errorMessage, 'overloaded');
+      expect(chunks.last.done, isTrue);
+    });
+  });
+
   // 带内错误事件（HTTP 200 的 SSE 里夹 {"error": ...}）必须解析出来，不能吞掉。
   group('带内错误事件', () {
     test('error 对象为 message 字符串', () {

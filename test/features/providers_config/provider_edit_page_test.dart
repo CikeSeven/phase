@@ -27,7 +27,8 @@ void main() {
       AiModel(id: 'Remote-Chat'),
     ];
     await harness.pump(tester);
-    expect(find.text('连接你的第一个服务商'), findsOneWidget);
+    expect(find.text('暂无服务商'), findsOneWidget);
+    expect(keyed('add-provider').hitTestable(), findsOneWidget);
     await tapProviderControl(tester, keyed('add-provider'));
     await choosePreset(tester, 'deepseek');
     await fillProviderField(tester, keyed('provider-name'), '我的 DeepSeek');
@@ -61,7 +62,7 @@ void main() {
     expect(keyed('provider-model-temporary-model'), findsNothing);
 
     await tapProviderControl(tester, keyed('test-provider'));
-    expect(find.text('已获取 2 个模型，已合并到下方列表。'), findsOneWidget);
+    expect(find.text('已获取 2 个模型'), findsOneWidget);
     expect(find.textContaining('连接成功'), findsNothing);
     expect(harness.provider.listModelsCount, 1);
     expect(harness.requests.single.apiKey, 'fake-new-key');
@@ -141,7 +142,7 @@ void main() {
     );
     await fillProviderField(tester, keyed('provider-name'), '重命名的连接');
     await fillProviderField(tester, keyed('provider-api-key'), '');
-    expect(find.textContaining('留空会保留已存密钥'), findsOneWidget);
+    expect(find.textContaining('留空保留并使用原密钥'), findsOneWidget);
     await tapProviderControl(tester, keyed('test-provider'));
     expect(harness.requests.single.apiKey, 'fake-old-key');
     expect(
@@ -262,7 +263,7 @@ void main() {
     await tapProviderControl(tester, keyed('provider-p1'));
     await choosePreset(tester, 'ollama');
     expect(keyed('provider-api-key'), findsNothing);
-    expect(find.textContaining('获取模型时不会发送密钥'), findsOneWidget);
+    expect(find.text('无需 API Key · 原有密钥保留'), findsOneWidget);
     await tapProviderControl(tester, keyed('test-provider'));
     expect(harness.requests.single.apiKey, isEmpty);
     expect(
@@ -337,7 +338,7 @@ void main() {
       );
       newRequest.complete(const [AiModel(id: 'fresh-remote')]);
       await settleProviderUi(tester);
-      expect(find.text('已获取 1 个模型，已合并到下方列表。'), findsOneWidget);
+      expect(find.text('已获取 1 个模型'), findsOneWidget);
       await fillProviderField(tester, keyed('provider-name'), '最新草稿');
       expect(find.textContaining('已获取'), findsNothing);
       await tapProviderControl(tester, keyed('save-provider'));

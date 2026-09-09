@@ -60,7 +60,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
             ),
             child: AppSection(
               title: '模型管理',
-              subtitle: '${widget.models.length} 个模型 · 支持手动维护',
+              subtitle: '${widget.models.length} 个模型',
               action: TextButton.icon(
                 key: const ValueKey('add-provider-model'),
                 onPressed: widget.enabled ? widget.onAdd : null,
@@ -81,9 +81,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                         const SizedBox(height: AppSpacing.s),
                         Text(
                           widget.defaultModel ??
-                              (widget.models.isEmpty
-                                  ? '添加第一个模型后自动设为默认'
-                                  : '未指定，将使用列表中的首个模型'),
+                              (widget.models.isEmpty ? '未设置' : '自动使用首个模型'),
                           key: const ValueKey('default-model-summary'),
                           maxLines: 3,
                           overflow: TextOverflow.ellipsis,
@@ -100,7 +98,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                     onChanged: (_) => setState(() {}),
                     decoration: InputDecoration(
                       labelText: '搜索模型',
-                      hintText: '按模型 ID 筛选',
+                      hintText: '模型 ID',
                       prefixIcon: const Icon(Symbols.search),
                       suffixIcon: query.isEmpty
                           ? null
@@ -111,13 +109,6 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                                   : null,
                               icon: const Icon(Symbols.close),
                             ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.s),
-                  Text(
-                    '推理开关用于显示对话中的推理等级选项。修改在保存后生效。',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
                     ),
                   ),
                 ],
@@ -139,19 +130,11 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      widget.models.isEmpty ? '还没有模型' : '没有匹配的模型',
+                      widget.models.isEmpty ? '暂无模型' : '没有匹配的模型',
                       style: theme.textTheme.titleMedium,
                     ),
-                    const SizedBox(height: AppSpacing.s),
-                    Text(
-                      widget.models.isEmpty
-                          ? '可在连接分区获取模型，或手动添加模型 ID。'
-                          : '换一个关键词，或清除搜索查看全部模型。',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (query.isNotEmpty)
+                    if (query.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.s),
                       Align(
                         alignment: Alignment.centerLeft,
                         child: TextButton(
@@ -161,6 +144,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                           child: const Text('显示全部模型'),
                         ),
                       ),
+                    ],
                   ],
                 ),
               ),

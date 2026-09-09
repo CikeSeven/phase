@@ -59,7 +59,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     });
     final selection = ref.watch(modelSelectionProvider);
     final theme = Theme.of(context);
-    final colors = theme.colorScheme;
     final needsConfiguration =
         selection.hasError || (!selection.isLoading && selection.value == null);
     final field = TextField(
@@ -83,39 +82,26 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
     final actions = Row(
       children: [
-        Expanded(
-          child: Align(
-            alignment: Alignment.centerLeft,
-            child: needsConfiguration
-                ? TextButton.icon(
-                    onPressed: () => context.push('/settings/providers'),
-                    icon: Icon(
-                      selection.hasError ? Symbols.error : Symbols.tune,
-                      size: 18,
-                    ),
-                    label: Text(
-                      selection.hasError ? '检查配置' : '配置模型',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  )
-                : Padding(
-                    padding: const EdgeInsets.only(left: AppSpacing.xs),
-                    child: Text(
-                      isGenerating
-                          ? '正在生成回复'
-                          : _submitting
-                          ? '正在发送…'
-                          : '支持多行输入',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: colors.onSurfaceVariant,
-                      ),
-                    ),
-                  ),
-          ),
-        ),
+        if (needsConfiguration)
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => context.push('/settings/providers'),
+                icon: Icon(
+                  selection.hasError ? Symbols.error : Symbols.tune,
+                  size: 18,
+                ),
+                label: Text(
+                  selection.hasError ? '检查配置' : '配置模型',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          )
+        else
+          const Spacer(),
         const SizedBox(width: AppSpacing.s),
         IconButton.filled(
           icon: Icon(isGenerating ? Symbols.stop : Symbols.arrow_upward),

@@ -93,6 +93,7 @@ abstract class AiProvider {
 
 - **服务商与协议分离**：`ProviderProfile.protocol` 决定报文格式，`presetId` 提供默认地址与协议；编辑配置不得用预设覆盖已保存的独立协议或兼容配置。
 - 当前协议为 OpenAI Completions、OpenAI Responses、Anthropic Messages、Google Generative AI；服务商按预设复用相应协议，输出统一的 `ChatChunk` 事件流。
+- 思考内容只来自实际响应中的公开文本/摘要；Completions 字段别名与 `reasoning_details` 后备、Responses 增量和完成快照须避免重复。补接收兼容不改变请求的推理等级，必须用原始 SSE fixture 经过真实协议适配器到落库/显示的回归验证。
 - 共享 UI 组件仅管理布局和交互展示；视觉重构不改变协议参数、数据表或凭证存储。新增页面和弹层遵循 DESIGN.md 的“月色玻璃”、键盘避让、对比度与 Android 返回规则。
 - 错误统一映射为 `core/error` 中的 `Failure` 子类型（网络错误 / 鉴权失败 / 限流 / 服务端错误 / 取消），UI 只处理 `Failure`。
 - 取消语义：`streamChat` 必须响应取消（`CancelToken` / stream 订阅取消），保证「停止生成」即时生效。

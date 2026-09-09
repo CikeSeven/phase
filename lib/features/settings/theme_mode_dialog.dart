@@ -41,7 +41,6 @@ class _ThemeModeDialogState extends ConsumerState<ThemeModeDialog> {
       canPop: !_saving,
       child: AppDialog(
         title: '选择外观',
-        description: '随系统变化，或始终使用喜欢的明暗。',
         icon: Symbols.palette,
         tone: AppTone.lavender,
         content: Column(
@@ -159,17 +158,6 @@ class _ThemePreviewCard extends StatelessWidget {
                   fill: selected ? 1 : 0,
                 ),
               ],
-            ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              switch (mode) {
-                ThemeMode.system => '自动适应设备外观',
-                ThemeMode.light => '清透月白，明亮舒展',
-                ThemeMode.dark => '柔和墨蓝，静心阅读',
-              },
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
             ),
             const SizedBox(height: AppSpacing.m),
             ExcludeSemantics(

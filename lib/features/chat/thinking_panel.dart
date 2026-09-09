@@ -6,7 +6,14 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/theme/frosted_surface.dart';
 
-/// 思考双通道的可折叠阅读区，手动选择优先于流式默认状态。
+/// 用户主动切换思考区时，由阅读区保留标题位置。
+class ThinkingPanelToggleNotification extends Notification {
+  const ThinkingPanelToggleNotification({required this.anchor});
+
+  final BuildContext anchor;
+}
+
+/// 真实思考内容默认展开，手动选择跨增量与完成状态保留。
 class ThinkingPanel extends StatefulWidget {
   const ThinkingPanel({
     required this.reasoning,
@@ -23,21 +30,16 @@ class ThinkingPanel extends StatefulWidget {
 
 class _ThinkingPanelState extends State<ThinkingPanel>
     with AutomaticKeepAliveClientMixin {
-  late bool _expanded = widget.streaming;
+  final _headerKey = GlobalKey();
+  bool _expanded = true;
   bool _userToggled = false;
 
   @override
   bool get wantKeepAlive => _userToggled;
 
-  @override
-  void didUpdateWidget(covariant ThinkingPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!_userToggled && oldWidget.streaming != widget.streaming) {
-      _expanded = widget.streaming;
-    }
-  }
-
   void _toggle() {
+    ThinkingPanelToggleNotification(anchor: _headerKey.currentContext!)
+        .dispatch(context);
     setState(() {
       _expanded = !_expanded;
       _userToggled = true;
@@ -62,6 +64,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Semantics(
+            key: _headerKey,
             button: true,
             expanded: _expanded,
             child: InkWell(

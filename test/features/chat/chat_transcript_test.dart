@@ -139,7 +139,7 @@ void main() {
     expect(position(tester).extentAfter, lessThan(1));
   });
 
-  testWidgets('流式思考完成自动折叠后没有越界，仍停在末端', (tester) async {
+  testWidgets('流式思考完成仍展示全文且无越界，未回看时保持末端', (tester) async {
     tester.view.physicalSize = const Size(320, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -153,21 +153,23 @@ void main() {
       status: ChatMessageStatus.streaming,
     );
     await pumpTranscript(tester, [...history, reply], scale: 1.3);
-    final expandedBottom = position(tester).pixels;
+    final reasoningHeight = tester.getSize(find.text(reply.reasoning!)).height;
+    final panelState = tester.state(find.byType(ThinkingPanel));
 
     await pumpTranscript(tester, [
       ...history,
       reply.copyWith(status: ChatMessageStatus.done),
     ], scale: 1.3);
     expect(find.text('已思考'), findsOneWidget);
-    expect(find.text(reply.reasoning!), findsNothing);
-    expect(position(tester).pixels, lessThan(expandedBottom));
+    expect(find.text(reply.reasoning!), findsOneWidget);
+    expect(tester.state(find.byType(ThinkingPanel)), same(panelState));
+    expect(tester.getSize(find.text(reply.reasoning!)).height, reasoningHeight);
     expect(position(tester).outOfRange, isFalse);
     expect(position(tester).extentAfter, lessThan(1));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('回看时下方思考自动折叠不强拉到底部', (tester) async {
+  testWidgets('回看时下方思考完成不收起也不强拉到底部', (tester) async {
     final history = _history(count: 50);
     final reply = ChatMessage(
       id: 'reasoning',
@@ -194,43 +196,126 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('手动展开的思考经过滚动回收与流式状态切换仍保留', (tester) async {
-    tester.view.physicalSize = const Size(360, 640);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    final history = _history();
-    const reply = ChatMessage(
-      id: 'manual',
-      role: ChatRole.assistant,
-      content: '正文答案',
-      reasoning: '手动展开后应保留的思考原文',
-    );
-    await pumpTranscript(tester, [...history, reply]);
-    await tester.tap(find.text('已思考'));
-    await tester.pumpAndSettle();
-    final thinkingState = tester.state(find.byType(ThinkingPanel));
-    expect(find.text(reply.reasoning!), findsOneWidget);
+  for (final expanded in [false, true]) {
+    testWidgets('手动${expanded ? '展开' : '折叠'}思考跨消息更新、滚动回收与完成仍保留', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final history = _history();
+      const reply = ChatMessage(
+        id: 'manual',
+        role: ChatRole.assistant,
+        content: '正文答案',
+        reasoning: '手动状态应保留的思考原文',
+        status: ChatMessageStatus.streaming,
+      );
+      await pumpTranscript(tester, [...history, reply]);
+      await tester.tap(find.text('思考中…'));
+      await tester.pumpAndSettle();
+      if (expanded) {
+        await tester.tap(find.text('思考中…'));
+        await tester.pumpAndSettle();
+      }
+      final thinkingState = tester.state(find.byType(ThinkingPanel));
+      expect(
+        find.text(reply.reasoning!),
+        expanded ? findsOneWidget : findsNothing,
+      );
 
-    await tester.drag(
-      find.byKey(const ValueKey('transcript-first')),
-      const Offset(0, 1800),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('回到底部'), findsOneWidget);
-    await tester.tap(find.text('回到底部'));
-    await tester.pumpAndSettle();
-    expect(tester.state(find.byType(ThinkingPanel)), same(thinkingState));
-    expect(find.text(reply.reasoning!), findsOneWidget);
+      await tester.drag(
+        find.byKey(const ValueKey('transcript-first')),
+        const Offset(0, 1800),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('回到底部'), findsOneWidget);
+      final updated = reply.copyWith(
+        content: '完整正文答案',
+        reasoning: '第一步分析\n第二步验证\n完整推演结论',
+        status: ChatMessageStatus.done,
+      );
+      await pumpTranscript(tester, [...history, updated]);
+      await tester.tap(find.text('回到底部'));
+      await tester.pumpAndSettle();
+      expect(tester.state(find.byType(ThinkingPanel)), same(thinkingState));
+      expect(
+        find.text(updated.reasoning!),
+        expanded ? findsOneWidget : findsNothing,
+      );
+      expect(find.text('已思考'), findsOneWidget);
+      expect(find.text('完整正文答案', findRichText: true), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
-    await pumpTranscript(tester, [
-      ...history,
-      reply.copyWith(status: ChatMessageStatus.streaming, content: '正文增量'),
-    ]);
-    await pumpTranscript(tester, [...history, reply]);
-    expect(tester.state(find.byType(ThinkingPanel)), same(thinkingState));
-    expect(find.text(reply.reasoning!), findsOneWidget);
-  });
+  for (final width in [320.0, 360.0]) {
+    testWidgets('${width}dp 已贴底短答展开 300 行思考保留标题与内容起点', (tester) async {
+      tester.view.physicalSize = Size(width, 680);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final history = _history();
+      const reply = ChatMessage(
+        id: 'long-reasoning',
+        role: ChatRole.assistant,
+        content: '短答',
+        reasoning: '简短思考',
+        status: ChatMessageStatus.streaming,
+      );
+      final longReasoning = List.generate(
+        300,
+        (index) => '推演第 $index 行',
+      ).join('\n');
+      await pumpTranscript(tester, [...history, reply], scale: 1.3);
+      await tester.tap(find.text('思考中…'));
+      await tester.pumpAndSettle();
+      final updated = reply.copyWith(
+        reasoning: longReasoning,
+        status: ChatMessageStatus.done,
+      );
+      await pumpTranscript(tester, [...history, updated], scale: 1.3);
+      expect(position(tester).extentAfter, lessThan(1));
+      expect(find.text(longReasoning), findsNothing);
+      final header = find.text('已思考');
+      final before = tester.getTopLeft(header).dy;
+      final oldOffset = position(tester).pixels;
+      final viewport = tester.getRect(
+        find.byKey(const ValueKey('transcript-first')),
+      );
+
+      await tester.tap(header);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(header).dy, closeTo(before, 0.5));
+      expect(tester.getTopLeft(header).dy, greaterThanOrEqualTo(viewport.top));
+      expect(tester.getBottomRight(header).dy, lessThan(viewport.bottom));
+      expect(
+        tester.getTopLeft(find.text(longReasoning)).dy,
+        lessThan(viewport.bottom),
+      );
+      expect(position(tester).pixels, closeTo(oldOffset, 0.5));
+      expect(position(tester).extentAfter, greaterThan(1000));
+      expect(find.text('回到底部'), findsOneWidget);
+
+      await pumpTranscript(tester, [
+        ...history,
+        updated.copyWith(content: '新的正文增量\n不应打断阅读'),
+      ], scale: 1.3);
+      expect(tester.getTopLeft(header).dy, closeTo(before, 0.5));
+      await tester.tap(header);
+      await tester.pumpAndSettle();
+      expect(find.text(longReasoning), findsNothing);
+      expect(tester.getRect(header).overlaps(viewport), isTrue);
+      expect(position(tester).outOfRange, isFalse);
+      await tester.tap(header);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('回到底部'));
+      await tester.pumpAndSettle();
+      expect(position(tester).extentAfter, lessThan(1));
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('键盘缩小视口时底部跟随，回看时不跳转', (tester) async {
     tester.view.physicalSize = const Size(360, 760);

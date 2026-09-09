@@ -81,7 +81,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       if (profile == null) {
         if (mounted) {
           setState(() {
-            _loadError = '这条服务商配置已不存在。请返回列表，或重新加载。';
+            _loadError = '服务商配置已不存在。';
             _loading = false;
           });
         }
@@ -136,9 +136,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          _saving
-                              ? '正在保存配置与凭证…'
-                              : '${_models.length} 个模型 · 保存在本机',
+                          '${_models.length} 个模型',
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.bodySmall?.copyWith(
@@ -166,17 +164,14 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
               ),
             ),
       body: _loading
-          ? const AppEmptyState(
-              icon: Symbols.cloud_download,
-              title: '正在读取配置',
-              message: '读取完成后即可编辑，原有配置不会被覆盖。',
-              action: SizedBox(width: 160, child: LinearProgressIndicator()),
+          ? const Center(
+              child: CircularProgressIndicator(semanticsLabel: '正在读取配置'),
             )
           : _loadError != null
           ? AppEmptyState(
               icon: Symbols.cloud_off,
               title: '无法读取服务商配置',
-              message: '$_loadError\n为保护原有配置，读取成功前不能编辑或保存。',
+              message: '$_loadError\n读取成功前不可编辑或保存。',
               action: FilledButton.tonalIcon(
                 onPressed: _load,
                 icon: const Icon(Symbols.refresh),

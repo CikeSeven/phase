@@ -63,7 +63,7 @@ void main() {
     );
     harness.provider.listModelsHandler = () async => const [];
     await tapProviderControl(tester, keyed('test-provider'));
-    expect(find.text('已获取 0 个模型，已合并到下方列表。'), findsOneWidget);
+    expect(find.text('已获取 0 个模型'), findsOneWidget);
     await searchModels(tester, 'manual');
     expect(tester.widget<Switch>(keyed('reasoning-manual')).value, isTrue);
     await tapProviderControl(tester, keyed('save-provider'));

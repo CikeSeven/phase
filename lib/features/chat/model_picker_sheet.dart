@@ -86,7 +86,6 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       canPop: !_saving,
       child: AppSheet(
         title: '选择模型',
-        subtitle: '选择模型与推理等级，确认后用于对话',
         showClose: !_saving,
         footer: _initialized && !profiles.hasError && entries.isNotEmpty
             ? _buildFooter(draft)
@@ -94,11 +93,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         child: profiles.when(
           data: (profiles) {
             if (profiles.isEmpty) {
-              return AppEmptyState(
+              return _buildStatus(
                 icon: Symbols.cloud,
-                tone: AppTone.teal,
-                title: '还没有配置服务商',
-                message: '连接一个 AI 服务商，就能在这里选择对话模型。',
+                title: '暂无服务商',
                 action: FilledButton.tonalIcon(
                   onPressed: () => _openConfiguration(),
                   icon: const Icon(Symbols.add),
@@ -204,10 +201,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         ),
         Expanded(
           child: matches.isEmpty
-              ? AppEmptyState(
+              ? _buildStatus(
                   icon: Symbols.search_off,
                   title: '没有找到模型',
-                  message: '试试其他模型 ID 或服务商名称。',
                   action: TextButton(
                     onPressed: _clearSearch,
                     child: const Text('清除搜索'),
@@ -264,18 +260,14 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  draft == null
-                      ? '先选择一个模型'
-                      : changed
-                      ? '待确认选择'
-                      : '当前选择',
+                  changed ? '待确认选择' : '当前选择',
                   style: theme.textTheme.labelMedium?.copyWith(
                     color: theme.colorScheme.primary,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xs),
                 Text(
-                  draft?.model?.id ?? '确认前不会更改正在使用的设置',
+                  draft?.model?.id ?? '未选择模型',
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleMedium,
@@ -386,14 +378,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         children: [
           AppBadge(label: profile.name, tone: AppTone.teal),
           const SizedBox(height: AppSpacing.m),
-          Text('还没有可用模型', style: theme.textTheme.titleMedium),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            '到服务商编辑页获取模型列表，或手动添加模型 ID。',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
+          Text('暂无模型', style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.s),
           TextButton.icon(
             onPressed: _saving ? null : () => _openConfiguration(profile.id),
@@ -485,6 +470,32 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildStatus({
+    required IconData icon,
+    required String title,
+    required Widget action,
+  }) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AppIconBadge(icon: icon, tone: AppTone.teal),
+            const SizedBox(height: AppSpacing.l),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.l),
+            action,
+          ],
+        ),
+      ),
     );
   }
 

@@ -43,6 +43,29 @@ const _initialValues = <String, Object>{
 };
 
 void main() {
+  testWidgets('模型面板无常驻教学，保留当前选择和确认推理交互', (tester) async {
+    final host = await _pumpHost(tester);
+    await _openPicker(tester);
+    expect(tester.widget<AppSheet>(find.byType(AppSheet)).subtitle, isNull);
+    for (final phrase in ['确认后用于对话', '确认前不会更改', '先选择一个模型']) {
+      expect(find.textContaining(phrase), findsNothing);
+    }
+    final summary = find.byKey(const ValueKey('model-draft-summary'));
+    expect(
+      find.descendant(of: summary, matching: find.text('chat-basic')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: summary, matching: find.text('日常')),
+      findsOneWidget,
+    );
+    await _chooseModel(tester, 'daily', 'think-model');
+    await _tapVisible(tester, _effort('high'));
+    await _tapVisible(tester, _confirm);
+    expect(host.preferences.getString('last_model'), 'think-model');
+    expect(host.preferences.getString('last_reasoning_effort'), 'high');
+  });
+
   testWidgets('模型与推理仅修改草稿，取消及关闭都不改变原选择', (tester) async {
     final host = await _pumpHost(tester);
     await _openPicker(tester);
@@ -140,7 +163,7 @@ void main() {
     await _openPicker(tester);
     await _chooseModel(tester, 'manual', manualId);
     expect(find.text('当前手动模型'), findsOneWidget);
-    expect(find.text('还没有可用模型'), findsNothing);
+    expect(find.text('暂无模型'), findsNothing);
     expect(tester.widget<ChoiceChip>(_effort('off')).selected, isTrue);
     await _tapVisible(tester, _effort('medium'));
     await _tapVisible(tester, _confirm);
@@ -210,7 +233,7 @@ void main() {
   testWidgets('无服务商时引导至真实配置路径', (tester) async {
     final host = await _pumpHost(tester, profiles: const [], values: const {});
     await _openPicker(tester);
-    expect(find.text('还没有配置服务商'), findsOneWidget);
+    expect(find.text('暂无服务商'), findsOneWidget);
     expect(_confirm, findsNothing);
     await _tapVisible(tester, find.text('去配置服务商'));
     expect(find.text('服务商配置目的页'), findsOneWidget);

@@ -33,7 +33,9 @@ void main() {
       models: const [ProfileModel(id: 'beta-chat')],
     );
     await harness.pump(tester);
-    expect(find.text('你的模型入口'), findsOneWidget);
+    expect(keyed('provider-search'), findsOneWidget);
+    expect(keyed('add-provider').hitTestable(), findsOneWidget);
+    expect(find.text('已配置模型'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
     expect(find.text('3'), findsOneWidget);
     expect(find.textContaining('连接成功'), findsNothing);

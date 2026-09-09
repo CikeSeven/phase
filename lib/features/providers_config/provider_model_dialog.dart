@@ -44,7 +44,6 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
   Widget build(BuildContext context) {
     return AppDialog(
       title: '添加模型',
-      description: '填写服务端使用的模型 ID。保存服务商后生效。',
       icon: Symbols.add,
       tone: AppTone.teal,
       content: Form(
@@ -93,13 +92,6 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                     }),
                   ),
                 ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.s),
-            Text(
-              '开启后可在对话中选择推理等级；预填值可以手动调整。',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
           ],

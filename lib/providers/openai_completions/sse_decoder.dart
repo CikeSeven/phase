@@ -1,12 +1,13 @@
 import 'dart:convert';
 
 import '../../data/models/chat_chunk.dart';
+import '../sse_transport.dart';
 
 /// OpenAI 兼容协议的 SSE 解析。
 ///
 /// 设计为纯函数，便于脱离网络独立单测。
 abstract final class OpenAiSseDecoder {
-  static const _dataPrefix = 'data: ';
+  static const _dataPrefix = 'data:';
   static const _doneMarker = '[DONE]';
 
   /// 解析单行 SSE 文本；不产生事件的行（空行、注释、字段行）返回 null。
@@ -14,7 +15,11 @@ abstract final class OpenAiSseDecoder {
     if (!line.startsWith(_dataPrefix)) {
       return null;
     }
-    final data = line.substring(_dataPrefix.length).trim();
+    return _parseData(line.substring(_dataPrefix.length));
+  }
+
+  static ChatChunk? _parseData(String payload) {
+    final data = payload.trim();
     if (data.isEmpty) {
       return null;
     }
@@ -25,7 +30,7 @@ abstract final class OpenAiSseDecoder {
     try {
       decoded = jsonDecode(data);
     } on FormatException {
-      // 容错：忽略格式异常的增量行，不中断整条流。
+      // 容错：忽略格式异常的事件，不中断整条流。
       return null;
     }
     if (decoded is! Map<String, dynamic>) {
@@ -50,7 +55,9 @@ abstract final class OpenAiSseDecoder {
     final choices = event['choices'];
     if (choices is! List || choices.isEmpty) {
       // usage 可能单独出现在最后一个 chunk（choices 为空）。
-      return usage == null ? null : ChatChunk(delta: '', done: true, usage: usage);
+      return usage == null
+          ? null
+          : ChatChunk(delta: '', done: true, usage: usage);
     }
     final choice = choices.first;
     if (choice is! Map<String, dynamic>) {
@@ -58,25 +65,35 @@ abstract final class OpenAiSseDecoder {
     }
     final delta = choice['delta'];
     final content = delta is Map<String, dynamic> ? delta['content'] : null;
-    // 推理模型的思考内容字段名各家不统一：
-    // reasoning_content（DeepSeek/通义）、reasoning（OpenRouter/xAI）、
-    // reasoning_text（部分网关）。按优先级取第一个非空字符串。
-    final reasoning = delta is Map<String, dynamic>
-        ? [
-            delta['reasoning_content'],
-            delta['reasoning'],
-            delta['reasoning_text'],
-          ].whereType<String>().firstWhere((s) => s.isNotEmpty, orElse: () => '')
-        : null;
+    final reasoning = _parseReasoning(delta);
     final finished = choice['finish_reason'] != null;
     return ChatChunk(
       delta: content is String ? content : '',
-      reasoningDelta: reasoning is String && reasoning.isNotEmpty
-          ? reasoning
-          : null,
+      reasoningDelta: reasoning,
       done: finished,
       usage: usage,
     );
+  }
+
+  static String? _parseReasoning(Object? delta) {
+    if (delta is! Map<String, dynamic>) return null;
+    for (final field in ['reasoning_content', 'reasoning', 'reasoning_text']) {
+      final text = delta[field];
+      if (text is String && text.isNotEmpty) return text;
+    }
+    final details = delta['reasoning_details'];
+    if (details is! List) return null;
+    final reasoning = StringBuffer();
+    for (final detail in details) {
+      final text = switch (detail) {
+        {'type': 'reasoning.text', 'text': final String text} => text,
+        {'type': 'reasoning.summary', 'summary': final String summary} =>
+          summary,
+        _ => null,
+      };
+      if (text != null) reasoning.write(text);
+    }
+    return reasoning.isEmpty ? null : reasoning.toString();
   }
 
   static TokenUsage? _parseUsage(Object? usage) {
@@ -91,15 +108,10 @@ abstract final class OpenAiSseDecoder {
     );
   }
 
-  /// 把 HTTP 响应字节流解码为 [ChatChunk] 事件流。
-  ///
-  /// utf8 解码 + 按行切分天然处理了跨 chunk 的半截行。
+  /// 把 HTTP 响应字节流按 SSE 事件解码为 [ChatChunk] 事件流。
   static Stream<ChatChunk> decode(Stream<List<int>> byteStream) async* {
-    final lines = utf8.decoder
-        .bind(byteStream)
-        .transform(const LineSplitter());
-    await for (final line in lines) {
-      final chunk = parseLine(line);
+    await for (final data in decodeSseDataLines(byteStream)) {
+      final chunk = _parseData(data);
       if (chunk != null) {
         yield chunk;
       }
