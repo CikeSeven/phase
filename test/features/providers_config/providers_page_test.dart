@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
+import 'package:phase/core/widgets/app_card.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
@@ -35,9 +36,12 @@ void main() {
     await harness.pump(tester);
     expect(keyed('provider-search'), findsOneWidget);
     expect(keyed('add-provider').hitTestable(), findsOneWidget);
-    expect(find.text('已配置模型'), findsOneWidget);
-    expect(find.text('2'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
+    expect(find.text('2 个服务商 · 3 个模型'), findsOneWidget);
+    expect(find.byType(AppCard), findsNothing);
+    expect(
+      tester.getTopLeft(keyed('provider-search')).dy,
+      lessThan(tester.getTopLeft(keyed('provider-counts')).dy),
+    );
     expect(find.textContaining('连接成功'), findsNothing);
     await fillProviderField(tester, keyed('provider-search'), 'legacy-default');
     expect(keyed('provider-alpha-id'), findsOneWidget);

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/features/chat/chat_transcript.dart';
@@ -24,10 +25,11 @@ void main() {
     List<ChatMessage> messages, {
     String conversationId = 'first',
     double scale = 1,
+    bool dark = false,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
-        theme: AppTheme.light(),
+        theme: dark ? AppTheme.dark() : AppTheme.light(),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(context).copyWith(
             disableAnimations: true,
@@ -63,7 +65,7 @@ void main() {
     expect(position(tester).extentAfter, lessThan(1));
     expect(find.byKey(const ValueKey('a-239')), findsOneWidget);
     expect(find.byType(MessageBubble).evaluate().length, lessThan(24));
-    expect(find.text('回到底部'), findsNothing);
+    expect(find.byTooltip('回到底部'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -100,17 +102,17 @@ void main() {
     await tester.pumpAndSettle();
     final readingOffset = position(tester).pixels;
     expect(position(tester).extentAfter, greaterThan(96));
-    expect(find.text('回到底部'), findsOneWidget);
+    expect(find.byTooltip('回到底部'), findsOneWidget);
 
     final muchLonger = reply.copyWith(content: '${'不应打断历史阅读。\n' * 30}末尾');
     await pumpTranscript(tester, [...history, muchLonger]);
     expect(position(tester).pixels, closeTo(readingOffset, 0.5));
-    expect(find.text('回到底部'), findsOneWidget);
+    expect(find.byTooltip('回到底部'), findsOneWidget);
 
-    await tester.tap(find.text('回到底部'));
+    await tester.tap(find.byTooltip('回到底部'));
     await tester.pumpAndSettle();
     expect(position(tester).extentAfter, lessThan(1));
-    expect(find.text('回到底部'), findsNothing);
+    expect(find.byTooltip('回到底部'), findsNothing);
 
     await pumpTranscript(tester, [
       ...history,
@@ -192,7 +194,7 @@ void main() {
     ]);
     expect(position(tester).pixels, closeTo(readingOffset, 0.5));
     expect(position(tester).extentAfter, greaterThan(96));
-    expect(find.text('回到底部'), findsOneWidget);
+    expect(find.byTooltip('回到底部'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -230,14 +232,14 @@ void main() {
         const Offset(0, 1800),
       );
       await tester.pumpAndSettle();
-      expect(find.text('回到底部'), findsOneWidget);
+      expect(find.byTooltip('回到底部'), findsOneWidget);
       final updated = reply.copyWith(
         content: '完整正文答案',
         reasoning: '第一步分析\n第二步验证\n完整推演结论',
         status: ChatMessageStatus.done,
       );
       await pumpTranscript(tester, [...history, updated]);
-      await tester.tap(find.text('回到底部'));
+      await tester.tap(find.byTooltip('回到底部'));
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(ThinkingPanel)), same(thinkingState));
       expect(
@@ -296,7 +298,7 @@ void main() {
       );
       expect(position(tester).pixels, closeTo(oldOffset, 0.5));
       expect(position(tester).extentAfter, greaterThan(1000));
-      expect(find.text('回到底部'), findsOneWidget);
+      expect(find.byTooltip('回到底部'), findsOneWidget);
 
       await pumpTranscript(tester, [
         ...history,
@@ -310,7 +312,7 @@ void main() {
       expect(position(tester).outOfRange, isFalse);
       await tester.tap(header);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('回到底部'));
+      await tester.tap(find.byTooltip('回到底部'));
       await tester.pumpAndSettle();
       expect(position(tester).extentAfter, lessThan(1));
       expect(tester.takeException(), isNull);
@@ -347,7 +349,7 @@ void main() {
       const Offset(0, 500),
     );
     await tester.pumpAndSettle();
-    expect(find.text('回到底部'), findsOneWidget);
+    expect(find.byTooltip('回到底部'), findsOneWidget);
 
     await pumpTranscript(
       tester,
@@ -356,7 +358,68 @@ void main() {
     );
     expect(position(tester, id: 'second').extentAfter, lessThan(1));
     expect(find.byKey(const ValueKey('b-21')), findsOneWidget);
-    expect(find.text('回到底部'), findsNothing);
+    expect(find.byTooltip('回到底部'), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  for (final dark in [false, true]) {
+    for (final size in [
+      const Size(320, 640),
+      const Size(360, 760),
+      const Size(800, 360),
+      const Size(1000, 700),
+    ]) {
+      testWidgets('$dark $size 大字回到底部仅有图标，触区、语义与对比度完整', (tester) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = size;
+        addTearDown(tester.view.reset);
+        await pumpTranscript(tester, _history(), scale: 2, dark: dark);
+        final transcript = find.byKey(const ValueKey('transcript-first'));
+        await tester.drag(transcript, const Offset(0, 450));
+        await tester.pumpAndSettle();
+
+        final button = find.byKey(const ValueKey('chat-scroll-to-bottom'));
+        expect(find.text('回到底部'), findsNothing);
+        expect(find.byTooltip('回到底部'), findsOneWidget);
+        expect(
+          find.descendant(of: button, matching: find.byType(Text)),
+          findsNothing,
+        );
+        expect(find.byIcon(Symbols.arrow_downward), findsOneWidget);
+        expect(tester.getSize(button), const Size.square(48));
+        final viewport = tester.getRect(transcript);
+        final bounds = tester.getRect(button);
+        expect(bounds.right, closeTo(viewport.right - 16, 0.01));
+        expect(bounds.bottom, closeTo(viewport.bottom - 12, 0.01));
+        expect(
+          tester.getSemantics(button),
+          matchesSemantics(
+            tooltip: '回到底部',
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: true,
+            isFocusable: true,
+            hasTapAction: true,
+            hasFocusAction: true,
+          ),
+        );
+        final style = tester.widget<IconButton>(button).style!;
+        final background = style.backgroundColor!.resolve({})!;
+        final foreground = style.foregroundColor!.resolve({})!;
+        final luminances = [
+          background.computeLuminance(),
+          Color.alphaBlend(foreground, background).computeLuminance(),
+        ]..sort();
+        expect(
+          (luminances.last + 0.05) / (luminances.first + 0.05),
+          greaterThanOrEqualTo(4.5),
+        );
+        await tester.tap(button);
+        await tester.pumpAndSettle();
+        expect(position(tester).extentAfter, lessThan(1));
+        expect(find.byTooltip('回到底部'), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
 }

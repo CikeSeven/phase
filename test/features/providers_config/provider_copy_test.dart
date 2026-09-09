@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phase/core/widgets/app_card.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/core/widgets/app_scaffold.dart';
 import 'package:phase/core/widgets/app_sheet.dart';
@@ -6,6 +7,7 @@ import 'package:phase/data/models/ai_model.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/openai_compat.dart';
 import 'package:phase/data/models/profile_model.dart';
+import 'package:phase/features/providers_config/provider_form_sections.dart';
 
 import 'provider_test_harness.dart';
 
@@ -31,8 +33,15 @@ void main() {
       isNull,
     );
     _expectNoTutorials();
-    expect(find.text('已配置模型'), findsOneWidget);
+    expect(find.text('1 个服务商 · 1 个模型'), findsOneWidget);
     await tapProviderControl(tester, keyed('provider-p1'));
+    expect(
+      find.descendant(
+        of: find.byType(ProviderFormSections),
+        matching: find.byType(AppCard),
+      ),
+      findsNothing,
+    );
     _expectNoTutorials();
     expect(find.text('POST /chat/completions'), findsOneWidget);
     expect(find.text('保留自定义兼容设置'), findsOneWidget);

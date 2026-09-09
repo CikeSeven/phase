@@ -19,6 +19,7 @@ import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
+import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/model_picker_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,13 +56,18 @@ void main() {
     }
   });
 
-  for (final mode in ['light', 'dark']) {
+  for (final mode in ['light', 'dark', 'light-compact', 'dark-compact']) {
     testWidgets('$mode 关键页面真实渲染预览', (tester) async {
+      final compact = mode.endsWith('compact');
       tester.view.devicePixelRatio = 1;
-      tester.view.physicalSize = const Size(390, 844);
+      tester.view.physicalSize = compact
+          ? const Size(320, 760)
+          : const Size(390, 844);
+      tester.platformDispatcher.textScaleFactorTestValue = compact ? 2 : 1;
       tester.view.padding = const FakeViewPadding(top: 28, bottom: 20);
       tester.view.viewPadding = const FakeViewPadding(top: 28, bottom: 20);
       addTearDown(tester.view.reset);
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
       final db = AppDatabase(NativeDatabase.memory());
       final keys = _PreviewKeyStorage();
@@ -95,6 +101,17 @@ void main() {
         await conversations.appendMessage(
           conversationId: conversation.id,
           role: ChatRole.user,
+          content: '今天想完成三件事：整理读书笔记、推进小工具原型、写一份周末出行计划。',
+        );
+        await conversations.appendMessage(
+          conversationId: conversation.id,
+          role: ChatRole.assistant,
+          content: '可以先确定优先顺序，再为每件事留一个明确的时间段。先从最需要专注的小工具原型开始。',
+          modelName: 'gpt-5.6-sol',
+        );
+        await conversations.appendMessage(
+          conversationId: conversation.id,
+          role: ChatRole.user,
           content: '我有一些零散的想法，帮我整理成今天的行动计划。',
         );
         final reply = await conversations.appendMessage(
@@ -122,7 +139,7 @@ void main() {
       });
 
       SharedPreferences.setMockInitialValues({
-        'theme_mode': mode,
+        'theme_mode': mode.startsWith('dark') ? 'dark' : 'light',
         'last_profile_id': 'preview-gateway',
         'last_model': 'gpt-5.6-sol',
         'last_reasoning_effort': 'medium',
@@ -151,9 +168,19 @@ void main() {
       await tester.tap(find.text('把今天的想法整理成计划'));
       await _settleDatabase(tester);
       await _save(tester, '$mode-chat-message');
+      await tester.drag(find.byType(ChatTranscript), const Offset(0, 400));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('回到底部'), findsOneWidget);
+      await _save(tester, '$mode-chat-history');
+      await tester.tap(find.byTooltip('回到底部'));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('回到底部'), findsNothing);
+      await tester.drag(find.byType(ChatTranscript), const Offset(0, 400));
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.text('已思考'));
       await tester.pumpAndSettle();
       await _save(tester, '$mode-reasoning');
+      expect(find.text('已思考').hitTestable(), findsOneWidget);
       await tester.tap(find.text('已思考'));
       await tester.pumpAndSettle();
       await _save(tester, '$mode-reasoning-collapsed');

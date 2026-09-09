@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/theme/frosted_surface.dart';
@@ -47,6 +48,24 @@ void main() {
     final host = await _pumpHost(tester);
     await _openPicker(tester);
     expect(tester.widget<AppSheet>(find.byType(AppSheet)).subtitle, isNull);
+    expect(find.byType(AppCard), findsNothing);
+    expect(find.byIcon(Symbols.radio_button_unchecked), findsNothing);
+    expect(
+      find.byKey(const ValueKey(('model-provider-heading', 'daily'))),
+      findsOneWidget,
+    );
+    final selectedSurface = tester.widget<Material>(
+      find.descendant(
+        of: _option('daily', 'chat-basic'),
+        matching: find.byType(Material),
+      ),
+    );
+    final colors = Theme.of(tester.element(_option('daily', 'chat-basic')))
+        .colorScheme;
+    expect(
+      selectedSurface.color,
+      colors.primaryContainer.withValues(alpha: 0.72),
+    );
     for (final phrase in ['确认后用于对话', '确认前不会更改', '先选择一个模型']) {
       expect(find.textContaining(phrase), findsNothing);
     }
@@ -59,7 +78,12 @@ void main() {
       find.descendant(of: summary, matching: find.text('日常')),
       findsOneWidget,
     );
+    final optionHeight = tester.getSize(_option('daily', 'think-model')).height;
     await _chooseModel(tester, 'daily', 'think-model');
+    expect(
+      tester.getSize(_option('daily', 'think-model')).height,
+      optionHeight,
+    );
     await _tapVisible(tester, _effort('high'));
     await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_model'), 'think-model');
@@ -162,7 +186,7 @@ void main() {
     );
     await _openPicker(tester);
     await _chooseModel(tester, 'manual', manualId);
-    expect(find.text('当前手动模型'), findsOneWidget);
+    expect(find.textContaining('当前手动模型'), findsOneWidget);
     expect(find.text('暂无模型'), findsNothing);
     expect(tester.widget<ChoiceChip>(_effort('off')).selected, isTrue);
     await _tapVisible(tester, _effort('medium'));
@@ -197,7 +221,7 @@ void main() {
     );
     await _openPicker(tester);
     expect(_option('many', 'model-599'), findsNothing);
-    expect(find.byType(AppCard).evaluate().length, lessThan(20));
+    expect(_modelOptions.evaluate().length, inInclusiveRange(1, 19));
 
     await tester.enterText(_search, 'MODEL-599');
     await tester.pumpAndSettle();
@@ -225,7 +249,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(_option('many', 'model-040'), findsOneWidget);
-    expect(find.byType(AppCard).evaluate().length, lessThan(20));
+    expect(_modelOptions.evaluate().length, inInclusiveRange(1, 19));
     expect(_confirm.hitTestable(), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -411,6 +435,10 @@ void main() {
 }
 
 Finder get _search => find.byKey(const ValueKey('model-search'));
+Finder get _modelOptions => find.descendant(
+  of: find.byKey(const ValueKey('model-list')),
+  matching: find.byType(InkWell),
+);
 Finder get _confirm => find.byKey(const ValueKey('confirm-model-selection'));
 Finder get _modelScrollable => find
     .descendant(

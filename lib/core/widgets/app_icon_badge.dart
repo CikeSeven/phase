@@ -33,7 +33,6 @@ class AppIconBadge extends StatelessWidget {
         decoration: BoxDecoration(
           color: colors.container,
           borderRadius: AppRadius.smallAll,
-          border: Border.all(color: colors.foreground.withValues(alpha: 0.12)),
         ),
         alignment: Alignment.center,
         child: Icon(icon, size: iconSize, color: colors.onContainer),
@@ -56,7 +55,6 @@ class AppBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: colors.container,
         borderRadius: AppRadius.smallAll,
-        border: Border.all(color: colors.foreground.withValues(alpha: 0.12)),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(
@@ -75,7 +73,7 @@ class AppBadge extends StatelessWidget {
   }
 }
 
-({Color foreground, Color container, Color onContainer}) _colorsFor(
+({Color container, Color onContainer}) _colorsFor(
   BuildContext context,
   AppTone tone,
 ) {
@@ -83,22 +81,18 @@ class AppBadge extends StatelessWidget {
   final brand = context.brandColors;
   return switch (tone) {
     AppTone.primary => (
-      foreground: colors.primary,
       container: colors.primaryContainer,
       onContainer: colors.onPrimaryContainer,
     ),
     AppTone.teal => (
-      foreground: brand.teal,
       container: brand.tealContainer,
       onContainer: brand.onTealContainer,
     ),
     AppTone.lavender => (
-      foreground: brand.lavender,
       container: brand.lavenderContainer,
       onContainer: brand.onLavenderContainer,
     ),
     AppTone.gold => (
-      foreground: brand.gold,
       container: brand.goldContainer,
       onContainer: brand.onGoldContainer,
     ),

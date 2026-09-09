@@ -136,6 +136,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final indices = {
       for (var index = 0; index < widget.messages.length; index++)
         ValueKey(widget.messages[index].id ?? 'message-$index'): index,
@@ -183,11 +184,21 @@ class _ChatTranscriptState extends State<ChatTranscript> {
               Positioned(
                 right: AppSpacing.l,
                 bottom: AppSpacing.m,
-                child: FilledButton.tonalIcon(
+                child: IconButton.filledTonal(
                   key: const ValueKey('chat-scroll-to-bottom'),
+                  tooltip: '回到底部',
                   onPressed: _returnToBottom,
                   icon: const Icon(Symbols.arrow_downward),
-                  label: const Text('回到底部'),
+                  style: IconButton.styleFrom(
+                    fixedSize: const Size.square(48),
+                    backgroundColor: colors.surfaceContainerHigh,
+                    foregroundColor: colors.onSurface,
+                    shape: CircleBorder(
+                      side: BorderSide(
+                        color: colors.outlineVariant.withValues(alpha: 0.56),
+                      ),
+                    ),
+                  ),
                 ),
               ),
           ],

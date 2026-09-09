@@ -4,10 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
+import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
-import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_scaffold.dart';
@@ -67,15 +66,7 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
       body: profilesAsync.when(
         skipLoadingOnReload: true,
         data: (profiles) => profiles.isEmpty
-            ? _buildStatus(
-                icon: Symbols.hub,
-                title: '暂无服务商',
-                action: OutlinedButton.icon(
-                  onPressed: _addProvider,
-                  icon: const Icon(Symbols.add),
-                  label: const Text('添加服务商'),
-                ),
-              )
+            ? _buildStatus(icon: Symbols.hub, title: '暂无服务商')
             : _buildProfiles(profiles),
         loading: () => _buildStatus(
           title: '正在读取配置',
@@ -95,11 +86,7 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
     );
   }
 
-  Widget _buildStatus({
-    required String title,
-    required Widget action,
-    IconData? icon,
-  }) {
+  Widget _buildStatus({required String title, Widget? action, IconData? icon}) {
     return Center(
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.xl),
@@ -115,8 +102,10 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleLarge,
             ),
-            const SizedBox(height: AppSpacing.l),
-            action,
+            if (action != null) ...[
+              const SizedBox(height: AppSpacing.l),
+              action,
+            ],
           ],
         ),
       ),
@@ -150,18 +139,6 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                AppCard(
-                  tint: context.brandColors.teal,
-                  child: Wrap(
-                    spacing: AppSpacing.xxl,
-                    runSpacing: AppSpacing.l,
-                    children: [
-                      _OverviewCount(value: profiles.length, label: '服务商'),
-                      _OverviewCount(value: modelCount, label: '已配置模型'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.xl),
                 TextField(
                   key: const ValueKey('provider-search'),
                   controller: _searchController,
@@ -181,8 +158,13 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 Text(
-                  query.isEmpty ? '已添加' : '搜索结果 · ${filtered.length}',
-                  style: theme.textTheme.titleMedium,
+                  query.isEmpty
+                      ? '${profiles.length} 个服务商 · $modelCount 个模型'
+                      : '搜索结果 · ${filtered.length} 个服务商',
+                  key: const ValueKey('provider-counts'),
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ],
             ),
@@ -208,8 +190,8 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
           ),
           sliver: SliverList.separated(
             itemCount: filtered.length,
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.m),
-            itemBuilder: (context, index) => _ProfileCard(
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s),
+            itemBuilder: (context, index) => _ProfileRow(
               profile: filtered[index],
               onTap: () =>
                   context.push('/settings/providers/${filtered[index].id}'),
@@ -221,33 +203,8 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
   }
 }
 
-class _OverviewCount extends StatelessWidget {
-  const _OverviewCount({required this.value, required this.label});
-
-  final int value;
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('$value', style: theme.textTheme.headlineMedium),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          label,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProfileCard extends StatelessWidget {
-  const _ProfileCard({required this.profile, required this.onTap});
+class _ProfileRow extends StatelessWidget {
+  const _ProfileRow({required this.profile, required this.onTap});
 
   final ProviderProfile profile;
   final VoidCallback onTap;
@@ -259,78 +216,85 @@ class _ProfileCard extends StatelessWidget {
         .map((model) => model.id)
         .toSet()
         .length;
-    return AppCard(
-      key: ValueKey('provider-${profile.id}'),
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              AppIconBadge(
-                icon: ProviderUi.icon(profile.presetId),
-                tone: ProviderUi.tone(profile.presetId),
-              ),
-              const SizedBox(width: AppSpacing.m),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      profile.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Text(
-                      presetById(profile.presetId).name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                  ],
+    final secondaryStyle = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return Semantics(
+      button: true,
+      child: Material(
+        color: theme.colorScheme.surface.withValues(alpha: 0),
+        borderRadius: AppRadius.mediumAll,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: ValueKey('provider-${profile.id}'),
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.s,
+              vertical: AppSpacing.l,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AppIconBadge(
+                  icon: ProviderUi.icon(profile.presetId),
+                  tone: AppTone.teal,
+                  size: 40,
+                  iconSize: 22,
                 ),
-              ),
-              const SizedBox(width: AppSpacing.s),
-              const Icon(Symbols.chevron_right),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.l),
-          Wrap(
-            spacing: AppSpacing.s,
-            runSpacing: AppSpacing.s,
-            children: [
-              AppBadge(label: ProviderUi.protocolLabel(profile.protocol)),
-              AppBadge(label: '$count 个模型', tone: AppTone.teal),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.l),
-          Text(
-            '默认模型',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
+                const SizedBox(width: AppSpacing.m),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        profile.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Wrap(
+                        spacing: AppSpacing.s,
+                        runSpacing: AppSpacing.xs,
+                        children: [
+                          Text(
+                            ProviderUi.protocolLabel(profile.protocol),
+                            style: secondaryStyle,
+                          ),
+                          Text('$count 个模型', style: secondaryStyle),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      Text('默认模型', style: secondaryStyle),
+                      Text(
+                        profile.defaultModel ??
+                            (count == 0 ? '未设置' : '自动使用首个模型'),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        profile.baseUrl,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: secondaryStyle,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s),
+                ExcludeSemantics(
+                  child: Icon(
+                    Symbols.chevron_right,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xs),
-          Text(
-            profile.defaultModel ?? (count == 0 ? '未设置' : '自动使用首个模型'),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyMedium,
-          ),
-          const SizedBox(height: AppSpacing.m),
-          Text(
-            profile.baseUrl,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

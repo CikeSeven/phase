@@ -7,7 +7,6 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
-import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_sheet.dart';
@@ -228,11 +227,21 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                       );
                     }
                     final entry = matches[index - 1];
+                    final startsGroup =
+                        index == 1 ||
+                        matches[index - 2].profile.id != entry.profile.id;
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.m),
-                      child: entry.model == null
-                          ? _buildUnconfiguredProfile(entry.profile)
-                          : _buildModelOption(entry),
+                      key: ValueKey((entry.profile.id, entry.model?.id)),
+                      padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (startsGroup) _buildProviderHeading(entry.profile),
+                          entry.model == null
+                              ? _buildUnconfiguredProfile(entry.profile)
+                              : _buildModelOption(entry),
+                        ],
+                      ),
                     );
                   },
                 ),
@@ -252,10 +261,12 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          AppCard(
+          Padding(
             key: const ValueKey('model-draft-summary'),
-            tint: theme.colorScheme.primary,
-            borderRadius: AppRadius.mediumAll,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.s,
+              vertical: AppSpacing.s,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -289,7 +300,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           const SizedBox(height: AppSpacing.l),
           Text(
             queryIsEmpty ? '可用模型 · $modelCount' : '搜索结果 · $modelCount',
-            style: theme.textTheme.labelLarge,
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ],
       ),
@@ -298,71 +311,95 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
 
   bool get queryIsEmpty => _query.trim().isEmpty;
 
+  Widget _buildProviderHeading(ProviderProfile profile) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.s,
+        AppSpacing.m,
+        AppSpacing.s,
+        AppSpacing.s,
+      ),
+      child: Semantics(
+        key: ValueKey(('model-provider-heading', profile.id)),
+        header: true,
+        child: Text(
+          profile.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleSmall
+              ?.copyWith(color: context.brandColors.teal),
+        ),
+      ),
+    );
+  }
+
   Widget _buildModelOption(_PickerEntry entry) {
     final theme = Theme.of(context);
+    final colors = theme.colorScheme;
     final model = entry.model!;
     final selected =
         entry.profile.id == _draftProfileId && model.id == _draftModel;
+    final foreground = selected ? colors.onPrimaryContainer : colors.onSurface;
+    final metadata = [
+      if (model.supportsReasoning) '支持推理',
+      if (entry.manual) '当前手动模型',
+    ];
     return Semantics(
       key: ValueKey(('model-option', entry.profile.id, model.id)),
       selected: selected,
       button: true,
-      child: AppCard(
+      label: entry.profile.name,
+      child: Material(
         borderRadius: AppRadius.mediumAll,
-        tint: selected ? theme.colorScheme.primary : null,
-        onTap: _saving ? null : () => _choose(entry),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        color: selected
+            ? colors.primaryContainer.withValues(alpha: 0.72)
+            : colors.surface.withValues(alpha: 0),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: _saving ? null : () => _choose(entry),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 56),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.m),
+              child: Row(
                 children: [
-                  Text(
-                    model.id,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.s),
-                  Wrap(
-                    spacing: AppSpacing.s,
-                    runSpacing: AppSpacing.s,
-                    children: [
-                      AppBadge(
-                        key: ValueKey((
-                          'model-provider',
-                          entry.profile.id,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
                           model.id,
-                        )),
-                        label: entry.profile.name,
-                        tone: AppTone.teal,
-                      ),
-                      if (model.supportsReasoning)
-                        AppBadge(
-                          key: ValueKey((
-                            'model-reasoning',
-                            entry.profile.id,
-                            model.id,
-                          )),
-                          label: '支持推理',
-                          tone: AppTone.lavender,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: foreground,
+                          ),
                         ),
-                      if (entry.manual) const AppBadge(label: '当前手动模型'),
-                    ],
+                        if (metadata.isNotEmpty) ...[
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            metadata.join(' · '),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: selected
+                                  ? foreground
+                                  : colors.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.m),
+                  SizedBox.square(
+                    dimension: 24,
+                    child: selected
+                        ? Icon(Symbols.check_circle, color: foreground, fill: 1)
+                        : null,
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: AppSpacing.m),
-            Icon(
-              selected ? Symbols.check_circle : Symbols.radio_button_unchecked,
-              color: selected
-                  ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurfaceVariant,
-              fill: selected ? 1 : 0,
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -370,14 +407,12 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
 
   Widget _buildUnconfiguredProfile(ProviderProfile profile) {
     final theme = Theme.of(context);
-    return AppCard(
+    return Padding(
       key: ValueKey(('empty-profile', profile.id)),
-      borderRadius: AppRadius.mediumAll,
+      padding: const EdgeInsets.all(AppSpacing.m),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AppBadge(label: profile.name, tone: AppTone.teal),
-          const SizedBox(height: AppSpacing.m),
           Text('暂无模型', style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.s),
           TextButton.icon(
@@ -411,6 +446,8 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                   label: Text(effort.label),
                   tooltip: '推理等级：${effort.label}',
                   selected: _draftEffort == effort,
+                  side: BorderSide.none,
+                  backgroundColor: theme.colorScheme.surfaceContainerHigh,
                   selectedColor: brand.lavenderContainer,
                   checkmarkColor: brand.onLavenderContainer,
                   labelStyle: theme.textTheme.labelLarge?.copyWith(

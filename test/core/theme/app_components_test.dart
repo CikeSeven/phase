@@ -12,6 +12,60 @@ import 'package:phase/core/widgets/app_scaffold.dart';
 import 'package:phase/core/widgets/app_section.dart';
 
 void main() {
+  for (final theme in [AppTheme.light(), AppTheme.dark()]) {
+    testWidgets('${theme.brightness} 装饰图标与标签无重复描边，保持成对语义色', (tester) async {
+      await _pumpPage(
+        tester,
+        size: const Size(360, 760),
+        theme: theme,
+        home: Scaffold(
+          body: Column(
+            children: [
+              for (final tone in AppTone.values) ...[
+                AppIconBadge(icon: Symbols.hub, tone: tone),
+                AppBadge(label: tone.name, tone: tone),
+              ],
+            ],
+          ),
+        ),
+      );
+      for (final badge in find.byType(AppBadge).evaluate()) {
+        final finder = find.byWidget(badge.widget);
+        final decoration =
+            tester
+                    .widget<DecoratedBox>(
+                      find.descendant(
+                        of: finder,
+                        matching: find.byType(DecoratedBox),
+                      ),
+                    )
+                    .decoration
+                as BoxDecoration;
+        final label = tester.widget<Text>(
+          find.descendant(of: finder, matching: find.byType(Text)),
+        );
+        expect(decoration.border, isNull);
+        final luminances = [
+          decoration.color!.computeLuminance(),
+          label.style!.color!.computeLuminance(),
+        ]..sort();
+        expect(
+          (luminances.last + 0.05) / (luminances.first + 0.05),
+          greaterThanOrEqualTo(4.5),
+        );
+      }
+      for (final badge in find.byType(AppIconBadge).evaluate()) {
+        final finder = find.byWidget(badge.widget);
+        final container = tester.widget<Container>(
+          find.descendant(of: finder, matching: find.byType(Container)),
+        );
+        expect((container.decoration! as BoxDecoration).border, isNull);
+        expect(tester.getSize(finder), const Size.square(48));
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final (name, theme) in [
     ('light', AppTheme.light()),
     ('dark', AppTheme.dark()),
