@@ -1,154 +1,83 @@
-# AGENTS.md — 项目规范
+# AGENTS.md — 工程规范
 
-> 本文件是项目的工程规范，所有代码贡献（人类或 AI）都必须遵守。
-> UI / 视觉规范见 [DESIGN.md](./DESIGN.md)，两份文件术语保持一致。
+本文件规定项目边界与开发流程；视觉、交互和 UI 验收统一见 [DESIGN.md](./DESIGN.md)。规范是改动要求，不代表所有场景已经验证。
 
-## 1. 项目概述
+## 1. 项目范围
 
-**相月**（工程代号 `phase`，取「月相」双关；名称出自《尔雅》对农历七月的雅称）是一个基于 Flutter 的 AI 全能助手 App：以对话为核心，可接入多家 AI 服务商（Provider），并在此之上扩展翻译、总结、写作等助手能力。
+- 产品「相月」，取自《尔雅》中农历七月的雅称；工程名 `phase`，仅支持 Android，应用 ID 为 `app.xiangyue.phase`。
+- 当前核心是文本流式对话、公开思考展示、多会话、服务商/模型配置和主题设置；助手页仍是开发中入口，不将规划能力描述为已实现。
+- 保持用户数据与应用身份稳定；未经要求不扩展平台、不改协议参数、不顺带重构无关模块。
 
-核心能力：
+## 2. 技术与依赖
 
-- 多 AI 服务商接入：OpenAI、Anthropic、Gemini、DeepSeek、Ollama，以及任意 OpenAI 兼容接口（自定义 Base URL）。
-- 流式对话：SSE 流式输出，可随时停止。
-- 多会话管理：会话创建、重命名、置顶、删除，消息本地持久化。
-- 助手能力扩展：以「助手（Assistant）」为单位封装 system prompt、默认模型与参数。
+- 使用 Flutter stable；SDK 约束与依赖声明见 `pubspec.yaml`，解析版本见 `pubspec.lock`，实际工具链用 `flutter --version` 确认，不维护第二份版本表。
+- UI 使用 Material 3、`material_symbols_icons`、`gpt_markdown`；业务状态用 Riverpod 3 注解生成，路由用 go_router，网络用 Dio，存储用 Drift / shared_preferences / flutter_secure_storage。
+- 优先复用 SDK、标准库和已有依赖；新增或升级依赖先说明必要性与影响，同步 manifest 和 lockfile。分析器规则以 `analysis_options.yaml` 为准，不为通过检查关闭 lint。
 
-## 2. 技术栈
+## 3. 结构与依赖边界
 
-| 领域 | 选型（当前版本） | 说明 |
-| --- | --- | --- |
-| SDK | Flutter stable 3.47.2 / Dart 3.13.2 | 始终使用 stable 通道；**平台仅限 Android**（applicationId `app.xiangyue.phase`，桌面/iOS 待架构稳定后再补） |
-| UI | Material 3 | `useMaterial3: true`（默认），UI 细节见 DESIGN.md |
-| 图标 | material_symbols_icons ^4.2960.0 | Material Symbols rounded，见 DESIGN.md 第 9 章 |
-| 状态管理 | flutter_riverpod ^3.4.3 + riverpod_annotation ^4.0.7 + riverpod_generator ^4.0.9 + riverpod_lint | 编译期安全、便于按 Provider 拆分、测试友好；Riverpod 3.x 语法 |
-| 网络 | dio ^5.11.1 | 拦截器处理鉴权 / 重试 / SSE 流式响应 |
-| 路由 | go_router ^18.0.1 | 声明式路由 |
-| 本地持久化 | drift ^2.34.4 + drift_flutter ^0.3.1（会话与消息）+ shared_preferences ^2.5.5（设置项） | drift 提供类型安全 SQL 与流式查询，适合消息列表这种大数据量、需实时刷新的场景；drift_flutter 封装了各平台 sqlite 初始化 |
-| 密钥存取 | flutter_secure_storage ^11.0.0 | API Key 只允许存这里 |
-| 序列化 | json_annotation ^4.12.0 + json_serializable ^6.14.1 | |
-| Markdown 渲染 | gpt_markdown ^1.2.1 | AI 消息的 Markdown 渲染、流式输出与代码块高亮/复制 |
-| 代码生成 | build_runner ^2.16.1 | 驱动 riverpod_generator / json_serializable / drift_dev |
-| Lint | flutter_lints ^6.0.0 | 如需更严格可升级 very_good_analysis，需团队确认 |
+- `lib/features/` 按业务组织页面、局部组件和状态；仅真正跨业务复用的能力进入 `lib/core/`。
+- `lib/data/models/` 定义共享数据契约，不机械增加 entity 层。消息角色沿用 `ChatRole.user/assistant/system`，持久化取值不得随意更名。
+- `lib/data/repositories/` 封装业务数据访问；`lib/data/datasources/` 封装数据库、偏好、密钥与网络设施。
+- `lib/providers/` 是 AI 协议适配层，不是 Riverpod 状态目录；Riverpod 定义随所属职责放置。
+- feature 通过注入的 notifier、repository、设置/密钥封装和 AI 工厂组织业务，不在页面直接操作 Dio、Drift 或存储插件；数据与协议层不反向依赖页面。
+- `lib/main.dart`、`lib/app.dart`、`lib/core/router/app_router.dart` 是初始化与装配点；路由引用页面是装配职责，不推广为共享组件依赖 feature 的理由。
 
-**依赖纪律**：不引入本文件未列出的第三方依赖。确需新增时，先在本表登记用途与理由，再修改 `pubspec.yaml`。能用 Flutter SDK / Dart 标准库解决的，不加依赖。
+## 4. AI 协议、流式与错误
 
-## 3. 架构
+- 对上使用 `AiProvider`、`ChatRequest`、`ChatChunk`；OpenAI Completions / Responses、Anthropic Messages、Google Generative AI 的差异留在协议适配层。
+- `ProviderProfile.protocol` 决定协议，`presetId` 提供预设信息；编辑、切换预设、获取模型不得意外覆盖已保存的协议、兼容配置和手动模型。模型按 ID 合并并保留显式能力，空结果或请求失败不清空已有列表。
+- 请求尊重模型能力与用户推理等级；不支持推理时不下发推理字段，`off` 按各协议的关闭语义映射。补响应解析不能暗改请求参数。
+- 正文与思考分通道累积；思考只取实际公开文本/摘要，不由模型名、token 数、签名或加密字段伪造。SSE 须处理分片、多行事件、完成快照及带内错误，避免重复追加。
+- 流式更新合并、节流写库；正常完成、停止、空回复和错误必须有明确结果。停止保留已收内容，丢弃迟到增量；取消应传递到底层请求，修改此路径须验证等待响应、空闲流和最终落库。
+- 网络与存储边界将异常映射为 `lib/core/error/failure.dart` 中的 `Failure`；界面展示安全文案，不吞异常伪装成功。异步写入失败和资源销毁也要收尾。
+- 兼容问题依据脱敏请求/响应和回归定位，不凭模型名称或猜测归咎网关；获取模型成功不等于该模型聊天、推理均已验证。
 
-采用 feature-first 分层，`lib/` 目录结构：
+## 5. 编码、状态与数据安全
 
-```
-lib/
-  app.dart              # MaterialApp / 主题 / 路由装配
-  main.dart             # 入口，仅做初始化与 ProviderScope
-  core/                 # 跨业务的基础设施
-    theme/              # ThemeData、品牌色与玻璃表面（落地 DESIGN.md）
-    widgets/            # 跨页面复用的页面壳、卡片、弹层、状态组件
-    router/             # go_router 路由表，显式 MaterialPage 保留转场
-    error/              # Failure 类型与错误映射
-    utils/              # 纯工具函数
-  data/
-    models/             # 数据模型（json_serializable / drift table）
-    datasources/
-      local/            # drift 数据库、shared_preferences 封装
-      remote/           # dio client 封装
-    repositories/       # 仓库：对上层屏蔽数据来源
-  providers/            # 协议适配层，与 Riverpod provider 区分
-    ai_provider.dart
-    openai_completions/
-    openai_responses/
-    anthropic_messages/
-    google_generative_ai/
-    presets/            # 服务商预设与协议正交
-    provider_factory.dart
-  features/
-    chat/               # 会话列表、聊天页、输入栏、流式状态
-    settings/           # 设置页
-    providers_config/   # 服务商配置（Base URL、Key、模型列表）
-    assistants/         # 助手管理
-test/                   # 目录结构镜像 lib/
-```
+- 文件 `snake_case`，类型 `PascalCase`，成员/常量 `camelCase`；按主职责拆文件。注释只解释必要原因与契约，修改行为时清理过期注释。
+- 共享业务状态使用 Riverpod 3 注解 API；可变业务状态用 `Notifier` / `AsyncNotifier`，禁止 legacy API。草稿、搜索、焦点、展开和动画可用局部 widget 状态，确认前不提前覆盖持久化选择。
+- `build()` 无网络/存储副作用；优先 `async/await`。异步操作处理防重复、过期结果、`mounted` 与异常；释放 controller、监听器、订阅等资源。
+- `*.g.dart` 等生成文件不手改；修改注解、模型、表结构后重新生成并随源码维护。
+- 会话/消息/非敏感配置用 Drift，偏好用 `SettingsStorage`；存储变更同步 schema、迁移和生成物，验证旧 schema/JSON 升级，不以清库或新建数据库测试代替迁移验证。
+- API Key 只经 `SecureKeyStorage` 按配置 ID 存取，不进入模型序列化或普通存储；空 Key 编辑保留原值，免 Key 调用不使用旧凭据，也不因隐藏字段删除它。删除配置需处理对应凭据及部分失败的重试。
+- 日志使用 `AppLogger`，禁止直接 `print`；不得记录密钥、鉴权头、用户对话或原始请求/响应正文。URL 查询参数、userinfo 和异常对象也可能泄密，不假设日志设施会自动脱敏。
+- UI 行为遵循 DESIGN，不能为解决布局问题改动协议、存储或用户选择。
 
-分层规则：
+## 6. 工程命令与 Android
 
-- 依赖方向单向：`features → repositories → datasources`，禁止反向依赖。
-- UI 层只读 Riverpod provider 状态、调用 notifier 方法，不直接触碰 dio / drift。
-- `data/models` 与 UI 之间允许直接传递模型，不强制再封装一层 entity。
-
-## 4. AI 服务商抽象层
-
-所有厂商差异收敛在 `lib/providers/` 内，上层只面对统一接口：
-
-```dart
-abstract class AiProvider {
-  String get id;                    // 'openai' | 'anthropic' | ...
-  ProviderCapabilities get capabilities;  // 是否支持流式 / 视觉 / 工具调用
-  Stream<ChatChunk> streamChat(ChatRequest request);  // 流式对话
-  Future<List<AiModel>> listModels();     // 拉取可用模型
-  Future<void> validateKey();             // 校验配置可用性
-}
-```
-
-约定：
-
-- **服务商与协议分离**：`ProviderProfile.protocol` 决定报文格式，`presetId` 提供默认地址与协议；编辑配置不得用预设覆盖已保存的独立协议或兼容配置。
-- 当前协议为 OpenAI Completions、OpenAI Responses、Anthropic Messages、Google Generative AI；服务商按预设复用相应协议，输出统一的 `ChatChunk` 事件流。
-- 思考内容只来自实际响应中的公开文本/摘要；Completions 字段别名与 `reasoning_details` 后备、Responses 增量和完成快照须避免重复。补接收兼容不改变请求的推理等级，必须用原始 SSE fixture 经过真实协议适配器到落库/显示的回归验证。
-- 共享 UI 组件仅管理布局和交互展示；视觉重构不改变协议参数、数据表或凭证存储。新增页面和弹层遵循 DESIGN.md 的“月色玻璃”、键盘避让、对比度与 Android 返回规则。
-- 错误统一映射为 `core/error` 中的 `Failure` 子类型（网络错误 / 鉴权失败 / 限流 / 服务端错误 / 取消），UI 只处理 `Failure`。
-- 取消语义：`streamChat` 必须响应取消（`CancelToken` / stream 订阅取消），保证「停止生成」即时生效。
-
-## 5. 编码规范
-
-- 命名：文件 / 目录用 `snake_case`；类用 `PascalCase`；变量、方法用 `camelCase`；私有成员加 `_` 前缀；常量用 `camelCase` 而非 SCREAMING_CAPS。
-- **Riverpod 3.x 语法纪律**：只允许 3.x 新 API——状态一律用 `@riverpod` 代码生成 + `Notifier` / `AsyncNotifier`；**禁止 import `package:riverpod/legacy.dart`**（`StateProvider`、`ChangeNotifierProvider` 等旧 API 一律不得使用）。`riverpod_lint` 已通过 `analysis_options.yaml` 的新版分析器插件系统（顶层 `plugins:`）启用，其诊断必须全部处理，不得无视。
-- 一个文件一个主类，文件名与类名对应。
-- 注释只写「为什么」，不复述代码做什么；公共 API 写 dartdoc。
-- 禁止 `print`，调试用 `debugPrint`，需要分级日志时用 `core` 内统一的 logger 封装。
-- 异步：一律 `async/await`；不在 widget `build()` 中触发副作用（用 provider / `ref.listen` / 生命周期回调）。
-- 错误处理：repository 层捕获异常并转为 `Failure`；UI 层根据 `Failure` 类型展示对应文案，禁止向上抛裸异常。
-- 密钥安全：API Key 只经 flutter_secure_storage 读写；严禁硬编码、严禁写入普通持久化、严禁进日志。
-- 代码生成文件（`*.g.dart`、`*.gr.dart`、drift 生成物）不手改，随源码一起提交。
-
-## 6. 工程命令
+Dart 变更检查；仅依赖变化时运行 `flutter pub get`，生成输入变化时运行 `dart run build_runner build`：
 
 ```bash
-flutter pub get                              # 安装依赖
-dart run build_runner build                   # 代码生成
-flutter analyze                              # 静态检查（提交前必须通过）
-flutter test                                 # 运行测试
-flutter run                                  # 调试运行
+dart format --output=none --set-exit-if-changed lib test
+flutter analyze
+flutter test
+git diff --check
 ```
 
-提交代码前必须保证 `flutter analyze` 零问题、`flutter test` 全绿。
-
-### UI 验证
-
-- `test/ui/chat_flow_test.dart` 用真实页面操作、内存数据库和测试流验证发送、思考、正文、停止与落库；不连接用户的真实 API。
-- `test/ui/predictive_back_test.dart` 验证系统返回手势通道的拖动、取消和提交，并覆盖真实侧栏进入设置后返回仍保留侧栏的路径；真机外观仍需实际检查。
-- `test/ui/ui_preview_test.dart` 的截图用例默认跳过，按需运行下列命令输出浅/深主题到 `build/ui-preview/`。中文字体只用于本地测试渲染，不加入应用依赖或资源；预览使用测试数据，不读取手机配置。
+真机 UI/性能验收使用 Profile；先用 `adb devices -l` 确认授权设备，将 `DEVICE` 设为其 ID：
 
 ```bash
-mkdir -p build/ui-preview
-curl --fail --location --output build/ui-preview/NotoSansCJKsc-Regular.otf https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf
-flutter test --dart-define=CAPTURE_UI=true test/ui/ui_preview_test.dart
+flutter build apk --profile
+adb -s "$DEVICE" install -r build/app/outputs/flutter-apk/app-profile.apk
+adb -s "$DEVICE" shell am start -W -n app.xiangyue.phase/.MainActivity
 ```
 
-### 本机 Android 环境说明
+- **更新已有安装只用 `adb install -r`；禁止 `flutter install`、卸载重装和清数据。** 不改应用 ID、签名或用破坏性操作绕过安装错误；设备操作须在任务授权范围内。
+- 调试可用 `flutter build apk --debug`；Debug 不作帧率基准。Release 当前仍使用 debug 签名，发布前单独验证签名、合并 Manifest 权限、联网与升级路径，不能将 Profile 当生产包。
+- 保留 `android/app/build.gradle.kts` 显式的 `compileSdk = 37`（安全存储依赖要求）；SDK/依赖升级需检查兼容性，不无依据改回默认值。
+- 本机 SDK 使用 `~/android-sdk` 覆盖目录，系统 `/opt/android-sdk` 只读；环境故障先用 `flutter doctor -v` 核对，不擅自提权或改写系统 SDK。
 
-- Flutter 已配置 `--android-sdk ~/android-sdk`：系统 SDK（`/opt/android-sdk`，root 所有只读）的用户级覆盖目录，大组件以符号链接共享，NDK 28.2.13676358 与 build-tools 36.0.0 安装于该目录（系统 SDK 缺这两个组件且无写权限）。
-- 系统自带的 `sdkmanager`（新版 android CLI）在只读 SDK 上会崩溃；如需安装 SDK 组件，用 `~/android-sdk/cmdline-tools-classic/latest/bin/sdkmanager --sdk_root=$HOME/android-sdk "<组件>"`。
-- `android/app/build.gradle.kts` 中 `compileSdk = 37` 是显式覆盖（flutter_secure_storage 11.x 要求 ≥37），不要改回 `flutter.compileSdkVersion`。
-- **装机更新禁止使用 `flutter install`**：它默认先卸载旧版本（`uninstall = true`），会清空应用全部数据（数据库、shared_preferences、安全存储的 API Key）。更新已安装的 App 一律用覆盖安装：`$HOME/android-sdk/platform-tools/adb -s <设备id> install -r build/app/outputs/flutter-apk/app-debug.apk`。
+## 7. Git 与改动范围
 
-## 7. Git 规范
+- 保留已有未提交修改；不顺带格式化或修改任务外文件。新增分支用 `feat/…`、`fix/…`，`main` 保持可验证状态。
+- Commit 遵循 Conventional Commits；仅在用户要求时提交、推送，不把一次授权视为后续自动授权。
+- 改动涉及规范时同步本文件或 DESIGN；临时日志、截图和探针放在忽略的 `build/`，不提交凭据与测试产物。
 
-- Commit message 遵循 Conventional Commits：`feat:` / `fix:` / `refactor:` / `docs:` / `test:` / `chore:`，例如 `feat(chat): 支持流式输出停止`。
-- 分支：`main` 保持稳定；功能开发用 `feat/<名称>`，修复用 `fix/<名称>`。
+## 8. 测试与交付
 
-## 8. 测试规范
-
-- `test/` 目录结构镜像 `lib/`。
-- 单元测试：repository、AiProvider 实现（用 mock 的 dio 适配器）、状态 notifier。
-- Widget 测试：聊天页、输入栏、设置页等关键页面覆盖主要交互路径。
-- 不测 getter/setter 之类的平凡代码，优先保证业务逻辑与协议适配的覆盖。
+- 使用现有 `test/` 体系，优先回归用户的真实操作和边界，而非平凡 getter；测试用内存数据库、假凭据、可控网络，不读取手机配置或调用付费 API。
+- 协议修复用脱敏原始 SSE 经真实适配器到显示/落库验证，参考 `test/ui/reasoning_response_flow_test.dart`；发送与停止参考 `test/ui/chat_flow_test.dart`，不能用假流证明空闲连接即时取消。
+- 配置改动覆盖往返保存、模型合并、免 Key、失败重试和异步结果过期；数据结构改动另加升级回归。
+- UI 验收按 DESIGN 第 9 节；保留显式 `MaterialPage` 与 Android 预测返回，验证打开、取消、提交及页面状态恢复。
+- 交付只陈述实际执行的检查和未验证范围；构建、截图生成、模拟响应分别不是视觉、性能或真实网关验收。纯文档改动核对事实、引用、命令及 diff，无需为此装机。
