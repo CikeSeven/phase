@@ -5,12 +5,10 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/theme/app_theme.dart';
-import '../../../core/theme/brand_colors.dart';
-import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import 'theme_mode_controller.dart';
+import 'theme_preview.dart';
 
 /// 主题模式的用户可见名称。
 String themeModeLabel(ThemeMode mode) => switch (mode) {
@@ -41,7 +39,7 @@ class _ThemeModeDialogState extends ConsumerState<ThemeModeDialog> {
       canPop: !_saving,
       child: AppDialog(
         title: '选择外观',
-        icon: Symbols.palette,
+        icon: null,
         tone: AppTone.lavender,
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -50,7 +48,7 @@ class _ThemeModeDialogState extends ConsumerState<ThemeModeDialog> {
             for (final mode in ThemeMode.values) ...[
               if (mode != ThemeMode.values.first)
                 const SizedBox(height: AppSpacing.m),
-              _ThemePreviewCard(
+              _ThemeModeOption(
                 mode: mode,
                 selected: mode == _draft,
                 onTap: _saving
@@ -112,8 +110,8 @@ class _ThemeModeDialogState extends ConsumerState<ThemeModeDialog> {
   }
 }
 
-class _ThemePreviewCard extends StatelessWidget {
-  const _ThemePreviewCard({
+class _ThemeModeOption extends StatelessWidget {
+  const _ThemeModeOption({
     required this.mode,
     required this.selected,
     required this.onTap,
@@ -130,124 +128,49 @@ class _ThemePreviewCard extends StatelessWidget {
       key: ValueKey('theme-option-${mode.name}'),
       selected: selected,
       button: true,
-      child: AppCard(
-        onTap: onTap,
-        padding: const EdgeInsets.all(AppSpacing.m),
+      child: Material(
+        color: selected
+            ? theme.colorScheme.primaryContainer.withValues(alpha: 0.72)
+            : theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.4),
         borderRadius: AppRadius.mediumAll,
-        tint: selected ? theme.colorScheme.primary : null,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.m),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Text(
-                    themeModeLabel(mode),
-                    style: theme.textTheme.titleMedium,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        themeModeLabel(mode),
+                        style: theme.textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.s),
+                      ExcludeSemantics(
+                        child: ThemePreview(
+                          key: ValueKey('theme-swatch-${mode.name}'),
+                          mode: mode,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: AppSpacing.s),
-                Icon(
-                  selected
-                      ? Symbols.check_circle
-                      : Symbols.radio_button_unchecked,
-                  color: selected
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant,
-                  fill: selected ? 1 : 0,
-                ),
+                if (selected)
+                  Icon(
+                    Symbols.check_circle,
+                    color: theme.colorScheme.primary,
+                    fill: 1,
+                  ),
               ],
             ),
-            const SizedBox(height: AppSpacing.m),
-            ExcludeSemantics(
-              child: ClipRRect(
-                borderRadius: AppRadius.smallAll,
-                child: SizedBox(
-                  height: 72,
-                  child: mode == ThemeMode.system
-                      ? Row(
-                          children: [
-                            Expanded(
-                              child: Theme(
-                                data: AppTheme.light(),
-                                child: const _ThemeMiniature(),
-                              ),
-                            ),
-                            Expanded(
-                              child: Theme(
-                                data: AppTheme.dark(),
-                                child: const _ThemeMiniature(),
-                              ),
-                            ),
-                          ],
-                        )
-                      : Theme(
-                          data: mode == ThemeMode.light
-                              ? AppTheme.light()
-                              : AppTheme.dark(),
-                          child: _ThemeMiniature(
-                            key: ValueKey('theme-swatch-${mode.name}'),
-                          ),
-                        ),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
-}
-
-class _ThemeMiniature extends StatelessWidget {
-  const _ThemeMiniature({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
-    return ColoredBox(
-      color: colors.surface,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.s),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  Symbols.nightlight,
-                  size: 12,
-                  color: context.brandColors.gold,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Expanded(child: _line(colors.onSurfaceVariant, AppSpacing.xs)),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.s),
-            Align(
-              alignment: Alignment.centerRight,
-              child: FractionallySizedBox(
-                widthFactor: 0.56,
-                child: _line(colors.primaryContainer, AppSpacing.m),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.s),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: 0.8,
-                child: _line(colors.surfaceContainerHighest, AppSpacing.s),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _line(Color color, double height) => Container(
-    height: height,
-    decoration: BoxDecoration(color: color, borderRadius: AppRadius.smallAll),
-  );
 }

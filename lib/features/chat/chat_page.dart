@@ -128,8 +128,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           ),
                           const SizedBox(height: AppSpacing.xs),
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Expanded(
+                              Flexible(
                                 child: Text(
                                   modelLabel,
                                   maxLines: 1,

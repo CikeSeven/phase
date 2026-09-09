@@ -125,7 +125,7 @@ flutter run                                  # 调试运行
 ### UI 验证
 
 - `test/ui/chat_flow_test.dart` 用真实页面操作、内存数据库和测试流验证发送、思考、正文、停止与落库；不连接用户的真实 API。
-- `test/ui/predictive_back_test.dart` 验证系统返回手势通道的拖动、取消和提交；真机外观仍需实际检查。
+- `test/ui/predictive_back_test.dart` 验证系统返回手势通道的拖动、取消和提交，并覆盖真实侧栏进入设置后返回仍保留侧栏的路径；真机外观仍需实际检查。
 - `test/ui/ui_preview_test.dart` 的截图用例默认跳过，按需运行下列命令输出浅/深主题到 `build/ui-preview/`。中文字体只用于本地测试渲染，不加入应用依赖或资源；预览使用测试数据，不读取手机配置。
 
 ```bash

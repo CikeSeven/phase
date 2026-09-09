@@ -176,6 +176,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('顶栏分隔线默认保留，页面可显式关闭', (tester) async {
+    const defaultBar = AppTopBar(title: Text('默认'));
+    const defaultScaffold = AppScaffold(title: '默认', body: SizedBox.shrink());
+    expect(defaultBar.showDivider, isTrue);
+    expect(defaultScaffold.showAppBarDivider, isTrue);
+
+    await _pumpPage(
+      tester,
+      size: const Size(360, 640),
+      home: const AppScaffold(
+        title: '无分隔线',
+        showAppBarDivider: false,
+        body: SizedBox.shrink(),
+      ),
+    );
+    final bar = tester.widget<AppTopBar>(find.byType(AppTopBar));
+    expect(bar.showDivider, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('普通 MaterialApp 中顶栏返回与背景后的操作均可点击', (tester) async {
     await _pumpPage(
       tester,

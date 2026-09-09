@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/core/theme/app_theme.dart';
+import 'package:phase/core/theme/frosted_surface.dart';
 import 'package:phase/core/widgets/app_background.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
@@ -516,6 +518,20 @@ void main() {
         );
         expect(modelText.overflow, TextOverflow.ellipsis);
         expect(modelText.maxLines, 1);
+        final modelParagraph = tester.renderObject<RenderParagraph>(
+          find.text(_profile.defaultModel!),
+        );
+        expect(modelParagraph.didExceedMaxLines, isTrue);
+        final iconRect = tester.getRect(find.byIcon(Symbols.expand_more));
+        expect(
+          iconRect.left -
+              tester.getRect(find.text(_profile.defaultModel!)).right,
+          closeTo(4, 0.5),
+        );
+        expect(
+          iconRect.right,
+          lessThanOrEqualTo(tester.getRect(find.byTooltip('新会话')).left),
+        );
         expect(
           tester.getSize(find.byTooltip('打开会话列表')).shortestSide,
           greaterThanOrEqualTo(48),
@@ -556,6 +572,46 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final width in [320.0, 680.0]) {
+    for (final scale in [1.0, 2.0]) {
+      testWidgets('短模型名下拉图标紧邻文字 ${width}dp ${scale}x', (tester) async {
+        const model = 'gpt-5';
+        await pumpChat(
+          tester,
+          size: Size(width, 780),
+          scale: scale,
+          profiles: Stream.value([_profile.copyWith(defaultModel: model)]),
+        );
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.text(model),
+        );
+        final textBox = paragraph
+            .getBoxesForSelection(
+              const TextSelection(baseOffset: 0, extentOffset: model.length),
+            )
+            .single;
+        final textRight = paragraph.localToGlobal(Offset(textBox.right, 0)).dx;
+        final icon = find.byIcon(Symbols.expand_more);
+        final iconRect = tester.getRect(icon);
+        expect(iconRect.left - textRight, closeTo(4, 0.5));
+        expect(
+          iconRect.right,
+          lessThanOrEqualTo(tester.getRect(find.byTooltip('新会话')).left),
+        );
+        expect(
+          tester
+              .getSize(find.byKey(const ValueKey('chat-model-picker')))
+              .height,
+          greaterThanOrEqualTo(48),
+        );
+        await tester.tap(icon);
+        await tester.pumpAndSettle();
+        expect(find.byType(ModelPickerSheet), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
+  }
+
   testWidgets('模型下拉入口保留 showModelPickerSheet 接口', (tester) async {
     await pumpChat(tester);
     await tester.tap(find.byKey(const ValueKey('chat-model-picker')));
@@ -565,6 +621,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TextField), findsOneWidget);
   });
+
+  for (final dark in [false, true]) {
+    testWidgets('输入框聚焦时外边框变为主色，失焦后恢复 ${dark ? '深色' : '浅色'}', (tester) async {
+      await pumpChat(tester, dark: dark);
+      final input = find.byKey(const ValueKey('chat-message-input'));
+      final surface = find.ancestor(
+        of: input,
+        matching: find.byType(FrostedSurface),
+      );
+      final colors = Theme.of(tester.element(input)).colorScheme;
+      final size = tester.getSize(surface);
+      Color borderColor() {
+        final material = tester.widget<Material>(
+          find.descendant(of: surface, matching: find.byType(Material)).first,
+        );
+        return (material.shape! as RoundedRectangleBorder).side.color;
+      }
+
+      final idleColor = borderColor();
+      expect(idleColor, isNot(colors.primary));
+      await tester.tap(input);
+      await tester.pumpAndSettle();
+      expect(borderColor(), colors.primary);
+      expect(tester.getSize(surface), size);
+      await tester.enterText(input, '保留草稿');
+      tester.testTextInput.hide();
+      await tester.pumpAndSettle();
+      expect(borderColor(), colors.primary);
+
+      await openDrawer(tester);
+      expect(borderColor(), idleColor);
+      await tester.tap(find.byTooltip('关闭侧栏'));
+      await tester.pumpAndSettle();
+      expect(borderColor(), idleColor);
+      expect(tester.widget<TextField>(input).controller!.text, '保留草稿');
+      expect(tester.testTextInput.isVisible, isFalse);
+      await tester.tap(input);
+      await tester.pumpAndSettle();
+      expect(borderColor(), colors.primary);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('输入栏在短视口与键盘切换时保留编辑状态和焦点', (tester) async {
     await pumpChat(tester, scale: 2);

@@ -24,6 +24,7 @@ class AppScaffold extends StatelessWidget {
     this.leading,
     this.automaticallyImplyLeading = true,
     this.maxBodyWidth = 720,
+    this.showAppBarDivider = true,
   }) : assert(maxBodyWidth > 0);
 
   final String title;
@@ -35,6 +36,7 @@ class AppScaffold extends StatelessWidget {
   final Widget? leading;
   final bool automaticallyImplyLeading;
   final double maxBodyWidth;
+  final bool showAppBarDivider;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +64,7 @@ class AppScaffold extends StatelessWidget {
           ),
           leading: leading,
           automaticallyImplyLeading: automaticallyImplyLeading,
+          showDivider: showAppBarDivider,
           actions: actions,
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

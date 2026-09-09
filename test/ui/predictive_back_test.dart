@@ -66,6 +66,58 @@ void main() {
     expect(find.byType(SettingsPage), findsNothing);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('真实侧栏进入设置后预测返回不丢失侧栏状态', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          sharedPreferencesProvider.overrideWith((ref) => preferences),
+          conversationsProvider.overrideWith(
+            (ref) => Stream.value(const <Conversation>[]),
+          ),
+          providerProfilesProvider.overrideWith(
+            (ref) => Stream.value(const <ProviderProfile>[]),
+          ),
+        ],
+        child: const PhaseApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('打开会话列表'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('设置'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsPage), findsOneWidget);
+    final route =
+        ModalRoute.of(tester.element(find.byType(SettingsPage)))!
+            as PageRoute<void>;
+    expect(route.popGestureEnabled, isTrue);
+
+    expect(await _backEvent(tester, 'startBackGesture', progress: 0), isTrue);
+    await _backEvent(tester, 'updateBackGestureProgress', progress: 0.55);
+    await tester.pump();
+    expect(route.popGestureInProgress, isTrue);
+    await _backEvent(tester, 'cancelBackGesture');
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsPage), findsOneWidget);
+
+    expect(await _backEvent(tester, 'startBackGesture', progress: 0), isTrue);
+    await _backEvent(tester, 'updateBackGestureProgress', progress: 0.7);
+    await tester.pump();
+    await _backEvent(tester, 'commitBackGesture');
+    await tester.pumpAndSettle();
+    expect(find.byType(SettingsPage), findsNothing);
+    expect(find.byType(Drawer), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(Drawer), findsNothing);
+    expect(find.text('向相月提问，或选择一个助手'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 Future<Object?> _backEvent(

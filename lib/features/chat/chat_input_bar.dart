@@ -20,6 +20,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
 
 class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final _controller = TextEditingController();
+  final _focusNode = FocusNode();
   bool _canSend = false;
   bool _submitting = false;
   String? _pendingText;
@@ -28,7 +29,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   void initState() {
     super.initState();
     _controller.addListener(_onDraftChanged);
+    _focusNode.addListener(_onFocusChanged);
   }
+
+  void _onFocusChanged() => setState(() {});
 
   void _onDraftChanged() {
     final canSend = _controller.text.trim().isNotEmpty;
@@ -39,6 +43,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   @override
   void dispose() {
+    _focusNode.dispose();
     _controller.dispose();
     super.dispose();
   }
@@ -64,6 +69,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final field = TextField(
       key: const ValueKey('chat-message-input'),
       controller: _controller,
+      focusNode: _focusNode,
       minLines: 1,
       maxLines: 5,
       textInputAction: TextInputAction.newline,
@@ -131,6 +137,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           AppSpacing.m,
         ),
         child: FrostedSurface(
+          borderColor: _focusNode.hasFocus ? theme.colorScheme.primary : null,
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.m,
             0,

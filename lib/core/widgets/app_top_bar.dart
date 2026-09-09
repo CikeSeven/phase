@@ -13,6 +13,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.actions = const [],
     this.automaticallyImplyLeading = true,
     this.toolbarHeight = 64,
+    this.showDivider = true,
   });
 
   final Widget title;
@@ -20,6 +21,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final List<Widget> actions;
   final bool automaticallyImplyLeading;
   final double toolbarHeight;
+  final bool showDivider;
 
   @override
   Size get preferredSize => Size.fromHeight(toolbarHeight);
@@ -47,11 +49,13 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
         borderColor: clear,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: colors.outlineVariant.withValues(alpha: 0.48),
-              ),
-            ),
+            border: showDivider
+                ? Border(
+                    bottom: BorderSide(
+                      color: colors.outlineVariant.withValues(alpha: 0.48),
+                    ),
+                  )
+                : null,
           ),
           child: const SizedBox.expand(),
         ),

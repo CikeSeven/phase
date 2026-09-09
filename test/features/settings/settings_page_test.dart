@@ -2,25 +2,55 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/widgets/app_card.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
+import 'package:phase/core/widgets/app_top_bar.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/features/settings/settings_page.dart';
 import 'package:phase/features/settings/theme_mode_controller.dart';
 import 'package:phase/features/settings/theme_mode_dialog.dart';
+import 'package:phase/features/settings/theme_preview.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('设置与主题不显示冗余口号，品牌卡紧凑且预览仍可应用', (tester) async {
+  testWidgets('设置首页以单块外观预览为主，服务商轻量入口，品牌只读紧凑', (tester) async {
     final host = await _pumpSettings(tester);
-    final brandCard = find.ancestor(
-      of: find.text('相月'),
-      matching: find.byType(AppCard),
+    expect(find.byType(AppCard), findsNothing);
+    expect(find.text('外观'), findsNothing);
+    expect(find.text('关于'), findsNothing);
+    expect(find.byType(AppTopBar).evaluate().single, isNotNull);
+    final topBar = tester.widget<AppTopBar>(find.byType(AppTopBar));
+    expect(topBar.showDivider, isFalse);
+    final appearance = find.ancestor(
+      of: find.text('主题模式'),
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Material && widget.borderRadius != null,
+      ),
     );
-    expect(tester.getSize(brandCard).height, lessThanOrEqualTo(80));
+    expect(appearance, findsOneWidget);
+    final surface = tester.widget<Material>(appearance);
+    expect(surface.shape, isNull);
+    final text = tester.widget<Text>(find.text('主题模式'));
+    expect(text.style?.fontSize, greaterThanOrEqualTo(16));
+    expect(find.text('跟随系统'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(SettingsPage),
+        matching: find.byType(ThemePreview),
+      ),
+      findsOneWidget,
+    );
+    final provider = find.text('服务商配置');
+    expect(provider, findsOneWidget);
+    expect(find.byIcon(Symbols.chevron_right), findsNWidgets(2));
+    expect(find.text('开发预览版'), findsOneWidget);
+    expect(find.text('版本 1.0.0+1'), findsOneWidget);
     expect(find.text('你的多模型 AI 对话助手'), findsNothing);
     expect(find.text('管理连接地址、API Key 与模型'), findsNothing);
+    final footer = tester.getRect(find.text('版本 1.0.0+1'));
+    expect(footer.bottom, lessThanOrEqualTo(844 - 24));
     await _openTheme(tester);
     expect(
       tester.widget<AppDialog>(find.byType(AppDialog)).description,
@@ -32,8 +62,6 @@ void main() {
     for (final mode in ThemeMode.values) {
       expect(_option(mode), findsOneWidget);
     }
-    expect(find.byKey(const ValueKey('theme-swatch-light')), findsOneWidget);
-    expect(find.byKey(const ValueKey('theme-swatch-dark')), findsOneWidget);
     await _chooseTheme(tester, ThemeMode.dark);
     await _tapVisible(tester, find.byKey(const ValueKey('apply-theme')));
     expect(host.preferences.getString('theme_mode'), 'dark');
@@ -100,10 +128,19 @@ void main() {
   testWidgets('明暗预览使用 AppTheme 的真实语义色，选项独立排列且间距至少 8dp', (tester) async {
     await _pumpSettings(tester, size: const Size(720, 1100));
     await _openTheme(tester);
-    final lightSwatch = find.byKey(const ValueKey('theme-swatch-light'));
-    final darkSwatch = find.byKey(const ValueKey('theme-swatch-dark'));
-    final light = Theme.of(tester.element(lightSwatch));
-    final dark = Theme.of(tester.element(darkSwatch));
+    ThemeData swatchTheme(String name) {
+      final finder = find.descendant(
+        of: find.byType(ThemeModeDialog),
+        matching: find.byKey(ValueKey('theme-swatch-$name')),
+      );
+      final element = tester.element(
+        find.descendant(of: finder, matching: find.byType(ColoredBox)).first,
+      );
+      return Theme.of(element);
+    }
+
+    final light = swatchTheme('light');
+    final dark = swatchTheme('dark');
     expect(light.colorScheme.surface, AppTheme.light().colorScheme.surface);
     expect(dark.colorScheme.surface, AppTheme.dark().colorScheme.surface);
     expect(light.colorScheme.surface, isNot(dark.colorScheme.surface));
