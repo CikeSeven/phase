@@ -34,7 +34,7 @@ class _FakePicker implements AttachmentPicker {
   @override
   Future<List<ChatAttachment>> pickImages() async {
     imageCalls++;
-    return [if (next case final attachment?) attachment];
+    return [?next];
   }
 
   @override
@@ -46,7 +46,7 @@ class _FakePicker implements AttachmentPicker {
   @override
   Future<List<ChatAttachment>> pickFiles() async {
     fileCalls++;
-    return [if (next case final attachment?) attachment];
+    return [?next];
   }
 }
 
@@ -124,6 +124,7 @@ class _MemoryConversations implements ConversationRepository {
     required String content,
     required String? reasoning,
     required ChatMessageStatus status,
+    Duration? thinkingDuration,
   }) async {
     for (final entries in messages.values) {
       final index = entries.indexWhere((message) => message.id == id);
@@ -136,6 +137,7 @@ class _MemoryConversations implements ConversationRepository {
         reasoning: reasoning,
         modelName: old.modelName,
         attachments: old.attachments,
+        thinkingDuration: thinkingDuration ?? old.thinkingDuration,
         status: status,
       );
     }

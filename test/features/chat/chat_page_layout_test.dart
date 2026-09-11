@@ -147,6 +147,7 @@ class _MemoryConversations implements ConversationRepository {
     required String content,
     required String? reasoning,
     required ChatMessageStatus status,
+    Duration? thinkingDuration,
   }) async {
     for (final entries in messages.values) {
       final index = entries.indexWhere((message) => message.id == id);
@@ -158,6 +159,8 @@ class _MemoryConversations implements ConversationRepository {
         content: content,
         reasoning: reasoning,
         modelName: old.modelName,
+        attachments: old.attachments,
+        thinkingDuration: thinkingDuration ?? old.thinkingDuration,
         status: status,
       );
     }
@@ -855,7 +858,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 120));
     await tester.pumpAndSettle();
     expect(find.text('答案', findRichText: true), findsOneWidget);
-    expect(find.text('思考中…'), findsOneWidget);
+    expect(find.textContaining('思考中…'), findsOneWidget);
     expect(find.text('推演过程'), findsOneWidget);
 
     await tester.tap(find.byTooltip('停止生成'));
@@ -864,7 +867,12 @@ void main() {
     expect(reply.status, ChatMessageStatus.done);
     expect(reply.content, '答案');
     expect(reply.reasoning, '推演过程');
-    expect(find.text('已思考'), findsOneWidget);
+    expect(find.textContaining('已思考'), findsOneWidget);
+    // 停止=思考结束：自动收起，思考耗时已随消息落库。
+    expect(find.text('推演过程'), findsNothing);
+    expect(reply.thinkingDuration, isNotNull);
+    await tester.tap(find.textContaining('已思考'));
+    await tester.pumpAndSettle();
     expect(find.text('推演过程'), findsOneWidget);
     expect(
       tester.widget<TextField>(find.byType(TextField)).controller!.text,

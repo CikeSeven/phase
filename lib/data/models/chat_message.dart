@@ -24,6 +24,7 @@ class ChatMessage {
     this.modelName,
     this.reasoning,
     this.attachments = const [],
+    this.thinkingDuration,
     this.createdAt,
   });
 
@@ -41,6 +42,9 @@ class ChatMessage {
   /// 用户消息的附件（图片/文本文件）；仅元数据，本体在私有目录。
   final List<ChatAttachment> attachments;
 
+  /// 思考耗时；非推理消息为 null。
+  final Duration? thinkingDuration;
+
   final DateTime? createdAt;
 
   ChatMessage copyWith({
@@ -51,6 +55,7 @@ class ChatMessage {
     String? modelName,
     String? reasoning,
     List<ChatAttachment>? attachments,
+    Duration? thinkingDuration,
     DateTime? createdAt,
   }) {
     return ChatMessage(
@@ -61,6 +66,7 @@ class ChatMessage {
       modelName: modelName ?? this.modelName,
       reasoning: reasoning ?? this.reasoning,
       attachments: attachments ?? this.attachments,
+      thinkingDuration: thinkingDuration ?? this.thinkingDuration,
       createdAt: createdAt ?? this.createdAt,
     );
   }

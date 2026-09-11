@@ -73,6 +73,11 @@ void main() {
     Widget buildBubble(ChatMessage message) {
       return MaterialApp(
         theme: AppTheme.light(),
+        // 与 DESIGN 一致：降级模式下光标/计时静止，测试不悬挂周期计时器。
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context).copyWith(disableAnimations: true),
+          child: child!,
+        ),
         home: Scaffold(body: MessageBubble(message: message)),
       );
     }
@@ -101,7 +106,7 @@ void main() {
       // 有持续的光标动画，不能 pumpAndSettle。
       await tester.pump();
 
-      expect(find.text('思考中…'), findsOneWidget);
+      expect(find.textContaining('思考中…'), findsOneWidget);
       expect(find.text('推演过程'), findsOneWidget);
     });
 
@@ -118,7 +123,7 @@ void main() {
         expect(find.byIcon(Symbols.psychology), findsNothing);
         expect(find.byType(ThinkingPanel), findsNothing);
         expect(find.text('已思考'), findsNothing);
-        expect(find.text('思考中…'), findsNothing);
+        expect(find.textContaining('思考中…'), findsNothing);
       }
     });
 
@@ -138,7 +143,7 @@ void main() {
       await tester.pumpWidget(buildBubble(streaming));
       final panelState = tester.state(find.byType(ThinkingPanel));
       expect(find.text('答案', findRichText: true), findsOneWidget);
-      expect(find.text('思考中…'), findsOneWidget);
+      expect(find.textContaining('思考中…'), findsOneWidget);
       expect(find.byIcon(Symbols.psychology), findsOneWidget);
       expect(find.text('推演过程'), findsOneWidget);
 
@@ -147,14 +152,78 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(ThinkingPanel)), same(panelState));
-      expect(find.text('推演过程'), findsOneWidget);
+      // 思考结束自动收起，正文不受影响；手动展开恢复全文。
+      expect(find.text('推演过程'), findsNothing);
       expect(find.text('已思考'), findsOneWidget);
       expect(find.text('答案', findRichText: true), findsOneWidget);
+      await tester.tap(find.text('已思考'));
+      await tester.pumpAndSettle();
+      expect(find.text('推演过程'), findsOneWidget);
       final header = find.descendant(
         of: find.byType(ThinkingPanel),
         matching: find.byType(InkWell),
       );
       expect(tester.getSize(header).height, greaterThanOrEqualTo(48));
+    });
+
+    testWidgets('思考限高内容在流式期间跟随最新底部，上翻暂停、回底恢复', (tester) async {
+      String lines(int from, int to) =>
+          [for (var i = from; i < to; i++) '推演第 $i 行'].join('\n');
+      final message = ValueNotifier(
+        _aiMessage(
+          '',
+          ChatMessageStatus.streaming,
+        ).copyWith(reasoning: lines(0, 120)),
+      );
+      addTearDown(message.dispose);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(disableAnimations: true),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: ValueListenableBuilder<ChatMessage>(
+              valueListenable: message,
+              builder: (context, value, child) => MessageBubble(message: value),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final inner = find.descendant(
+        of: find.byType(ThinkingPanel),
+        matching: find.byType(SingleChildScrollView),
+      );
+      ScrollPosition position() =>
+          tester.widget<SingleChildScrollView>(inner).controller!.position;
+
+      // 初始定位在最新内容底部。
+      await tester.pumpAndSettle();
+      expect(position().pixels, position().maxScrollExtent);
+
+      // 流式增量跟随到底部。
+      message.value = message.value.copyWith(reasoning: lines(0, 220));
+      await tester.pumpAndSettle();
+      expect(position().pixels, position().maxScrollExtent);
+      expect(position().maxScrollExtent, greaterThan(0));
+
+      // 用户下拉回看旧内容（offset 减小）暂停跟随，增量不再抢滚动。
+      await tester.drag(inner, const Offset(0, 120));
+      await tester.pumpAndSettle();
+      final readingOffset = position().pixels;
+      message.value = message.value.copyWith(reasoning: lines(0, 300));
+      await tester.pumpAndSettle();
+      expect(position().pixels, closeTo(readingOffset, 1));
+
+      // 手动上滑回到底部后恢复跟随。
+      await tester.drag(inner, const Offset(0, -4000));
+      await tester.pumpAndSettle();
+      message.value = message.value.copyWith(reasoning: lines(0, 360));
+      await tester.pumpAndSettle();
+      expect(position().pixels, position().maxScrollExtent);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('100ms 内完成且首次带 reasoning 的 done 快照直接显示全文', (tester) async {
@@ -190,7 +259,7 @@ void main() {
     testWidgets('手动收起后正文和思考增量及状态切换都不覆盖偏好', (tester) async {
       final streaming = reasoningMessage(status: ChatMessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
-      await tester.tap(find.text('思考中…'));
+      await tester.tap(find.textContaining('思考中…'));
       await tester.pump();
       expect(find.text('推演过程'), findsNothing);
       final updated = streaming.copyWith(reasoning: '完整思考：先分析，再校验。');
@@ -209,9 +278,9 @@ void main() {
     testWidgets('手动重新展开后完成时不自动折叠，错误正文仍显示', (tester) async {
       final streaming = reasoningMessage(status: ChatMessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
-      await tester.tap(find.text('思考中…'));
+      await tester.tap(find.textContaining('思考中…'));
       await tester.pump();
-      await tester.tap(find.text('思考中…'));
+      await tester.tap(find.textContaining('思考中…'));
       await tester.pump();
       await tester.pumpWidget(
         buildBubble(streaming.copyWith(status: ChatMessageStatus.done)),

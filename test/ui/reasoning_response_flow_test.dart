@@ -161,7 +161,7 @@ void main() {
             tester,
             () => find.text(reasoning).evaluate().isNotEmpty,
           );
-          expect(find.text('思考中…'), findsOneWidget);
+          expect(find.textContaining('思考中…'), findsOneWidget);
           expect(find.text(reasoning), findsOneWidget);
           expect(_assistant(tester).reasoning, reasoning);
           expect(_assistant(tester).status, ChatMessageStatus.streaming);
@@ -173,7 +173,11 @@ void main() {
             () => !container.read(chatControllerProvider).isGenerating,
           );
           await tester.pumpAndSettle();
-          expect(find.text('已思考'), findsOneWidget);
+          expect(find.textContaining('已思考'), findsOneWidget);
+          // 思考结束自动收起；点开展开后全文可见。
+          expect(find.text(reasoning), findsNothing);
+          await tester.tap(find.textContaining('已思考'));
+          await tester.pumpAndSettle();
           expect(find.text(reasoning), findsOneWidget);
           expect(find.text('正文答案', findRichText: true), findsOneWidget);
           final conversationId = container

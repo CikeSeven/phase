@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
@@ -13,16 +16,28 @@ class ThinkingPanelToggleNotification extends Notification {
   final BuildContext anchor;
 }
 
-/// 真实思考内容默认展开，手动选择跨增量与完成状态保留。
+/// 思考结束自动收起时通知阅读区：保留标题位置，但不像手动切换那样
+/// 解除底部跟随。
+class ThinkingPanelAutoCollapseNotification extends Notification {
+  const ThinkingPanelAutoCollapseNotification({required this.anchor});
+
+  final BuildContext anchor;
+}
+
+/// 真实思考内容默认展开，思考结束自动收起，手动选择优先保留。
 class ThinkingPanel extends StatefulWidget {
   const ThinkingPanel({
     required this.reasoning,
     required this.streaming,
     super.key,
+    this.duration,
   });
 
   final String reasoning;
   final bool streaming;
+
+  /// 思考耗时（持久化在消息上）；未知时为 null，只显示「已思考」。
+  final Duration? duration;
 
   @override
   State<ThinkingPanel> createState() => _ThinkingPanelState();
@@ -30,12 +45,98 @@ class ThinkingPanel extends StatefulWidget {
 
 class _ThinkingPanelState extends State<ThinkingPanel>
     with AutomaticKeepAliveClientMixin {
+  /// 展开内容的最大高度，超出部分内部滚动，不再无限撑开。
+  static const _maxContentHeight = 260.0;
+
   final _headerKey = GlobalKey();
+  final _innerController = ScrollController();
+  late final DateTime _startedAt = DateTime.now();
   bool _expanded = true;
   bool _userToggled = false;
 
+  /// 内部滚动跟随尾部：流式增量时停在最新内容；用户上翻则暂停跟随，
+  /// 手动回到底部恢复。
+  bool _followInner = true;
+  Timer? _ticker;
+
   @override
   bool get wantKeepAlive => _userToggled;
+
+  @override
+  void initState() {
+    super.initState();
+    // 打开一条正在流式中的消息时，直接定位到最新内容底部。
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollInnerToEnd());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // initState 里不能读 MediaQuery，计时器在这里按依赖启停。
+    _syncTicker();
+  }
+
+  @override
+  void didUpdateWidget(covariant ThinkingPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.streaming && !widget.streaming) {
+      _ticker?.cancel();
+      _ticker = null;
+      // 思考结束自动收起；用户手动操作过则以用户选择为准。
+      if (!_userToggled) {
+        final anchor = _headerKey.currentContext;
+        if (anchor != null) {
+          ThinkingPanelAutoCollapseNotification(anchor: anchor)
+              .dispatch(context);
+        }
+        setState(() => _expanded = false);
+      }
+    }
+    // 流式增量时跟随到最新思考内容底部。
+    if (widget.streaming &&
+        _followInner &&
+        widget.reasoning != oldWidget.reasoning) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollInnerToEnd());
+    }
+    _syncTicker();
+  }
+
+  void _scrollInnerToEnd() {
+    if (!mounted || !_innerController.hasClients) return;
+    _innerController.jumpTo(_innerController.position.maxScrollExtent);
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _innerController.dispose();
+    super.dispose();
+  }
+
+  bool _onInnerScroll(ScrollNotification notification) {
+    if (notification is UserScrollNotification) {
+      if (notification.direction == ScrollDirection.reverse) {
+        _followInner = false;
+      }
+    } else if (notification is ScrollEndNotification) {
+      _followInner = notification.metrics.extentAfter <= 1;
+    }
+    return false;
+  }
+
+  /// 流式期间每秒刷新计时；disableAnimations 下保持静止（也避免
+  /// pumpAndSettle 类等待永不稳定）。
+  void _syncTicker() {
+    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
+    if (widget.streaming && !reduce && _ticker == null) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else if ((!widget.streaming || reduce) && _ticker != null) {
+      _ticker?.cancel();
+      _ticker = null;
+    }
+  }
 
   void _toggle() {
     ThinkingPanelToggleNotification(anchor: _headerKey.currentContext!)
@@ -45,6 +146,22 @@ class _ThinkingPanelState extends State<ThinkingPanel>
       _userToggled = true;
     });
     updateKeepAlive();
+  }
+
+  String get _headerLabel {
+    if (widget.streaming) {
+      final elapsed = DateTime.now().difference(_startedAt);
+      return '思考中… ${_formatDuration(elapsed)}';
+    }
+    final duration = widget.duration;
+    return duration == null ? '已思考' : '已思考 ${_formatDuration(duration)}';
+  }
+
+  static String _formatDuration(Duration duration) {
+    if (duration.inSeconds < 10) {
+      return '${(duration.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
+    }
+    return '${duration.inSeconds} 秒';
   }
 
   @override
@@ -84,7 +201,9 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                       const SizedBox(width: AppSpacing.s),
                       Expanded(
                         child: Text(
-                          widget.streaming ? '思考中…' : '已思考',
+                          _headerLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: theme.textTheme.labelLarge?.copyWith(
                             color: brand.onLavenderContainer,
                           ),
@@ -110,11 +229,21 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                 AppSpacing.m,
                 AppSpacing.m,
               ),
-              child: Text(
-                widget.reasoning,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: brand.onLavenderContainer,
-                  height: 1.5,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: _maxContentHeight),
+                child: NotificationListener<ScrollNotification>(
+                  onNotification: _onInnerScroll,
+                  child: SingleChildScrollView(
+                    controller: _innerController,
+                    primary: false,
+                    child: Text(
+                      widget.reasoning,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: brand.onLavenderContainer,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
                 ),
               ),
             ),

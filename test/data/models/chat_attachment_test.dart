@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:drift/drift.dart';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
@@ -8,7 +7,7 @@ import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/models/chat_attachment.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
-import 'package:sqlite3/sqlite3.dart' as sqlite3;
+import 'package:sqlite3/sqlite3.dart';
 
 void main() {
   group('附件持久化（drift v5）', () {
@@ -18,7 +17,7 @@ void main() {
       );
       addTearDown(() => file.existsSync() ? file.deleteSync() : null);
       // 手工构造 v4 老库：没有 attachments_json 列。
-      final old = sqlite3.sqlite3.open(file.path);
+      final old = sqlite3.open(file.path);
       old.execute('''
         CREATE TABLE conversations (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL, pinned INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
         CREATE TABLE messages (id TEXT NOT NULL PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, role TEXT NOT NULL, content TEXT NOT NULL, status TEXT NOT NULL, model_name TEXT, reasoning TEXT, created_at INTEGER NOT NULL);
@@ -32,7 +31,7 @@ void main() {
       old.execute(
         "INSERT INTO messages VALUES ('m1', 'c1', 'user', '老消息', 'done', NULL, NULL, $now)",
       );
-      old.dispose();
+      old.close();
 
       final db = AppDatabase(NativeDatabase(File(file.path)));
       addTearDown(db.close);

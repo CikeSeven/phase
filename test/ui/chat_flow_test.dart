@@ -103,7 +103,10 @@ void main() {
     provider.response!.add(
       const ChatChunk(delta: '', reasoningDelta: '先区分重要事项与次要事项。'),
     );
-    await _until(tester, () => find.text('思考中…').evaluate().isNotEmpty);
+    await _until(
+      tester,
+      () => find.textContaining('思考中…').evaluate().isNotEmpty,
+    );
     expect(tester.takeException(), isNull);
 
     provider.response!.add(const ChatChunk(delta: '## 今日任务\n\n先完成最重要的一件事。'));
@@ -116,7 +119,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(GptMarkdown), findsWidgets);
-    expect(find.text('已思考'), findsOneWidget);
+    expect(find.textContaining('已思考'), findsOneWidget);
     expect(find.byTooltip('发送'), findsOneWidget);
     final conversationId = container
         .read(chatControllerProvider)

@@ -135,6 +135,7 @@ class MessageBubble extends StatelessWidget {
                         child: ThinkingPanel(
                           reasoning: message.reasoning!,
                           streaming: streaming,
+                          duration: message.thinkingDuration,
                         ),
                       ),
                     Container(

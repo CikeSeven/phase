@@ -458,6 +458,16 @@ class $MessagesTable extends Messages
     requiredDuringInsert: false,
     defaultValue: const Constant('[]'),
   );
+  static const VerificationMeta _thinkingDurationMsMeta =
+      const VerificationMeta('thinkingDurationMs');
+  @override
+  late final GeneratedColumn<int> thinkingDurationMs = GeneratedColumn<int>(
+    'thinking_duration_ms',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -479,6 +489,7 @@ class $MessagesTable extends Messages
     modelName,
     reasoning,
     attachmentsJson,
+    thinkingDurationMs,
     createdAt,
   ];
   @override
@@ -538,6 +549,15 @@ class $MessagesTable extends Messages
         ),
       );
     }
+    if (data.containsKey('thinking_duration_ms')) {
+      context.handle(
+        _thinkingDurationMsMeta,
+        thinkingDurationMs.isAcceptableOrUnknown(
+          data['thinking_duration_ms']!,
+          _thinkingDurationMsMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -591,6 +611,10 @@ class $MessagesTable extends Messages
         DriftSqlType.string,
         data['${effectivePrefix}attachments_json'],
       )!,
+      thinkingDurationMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}thinking_duration_ms'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -624,6 +648,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
 
   /// 附件列表的 JSON 编码（`List<ChatAttachment>`，v5 起；老数据默认空）。
   final String attachmentsJson;
+
+  /// 思考耗时（毫秒，v6 起；非推理或老数据为 null）。
+  final int? thinkingDurationMs;
   final DateTime createdAt;
   const MessageRow({
     required this.id,
@@ -634,6 +661,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     this.modelName,
     this.reasoning,
     required this.attachmentsJson,
+    this.thinkingDurationMs,
     required this.createdAt,
   });
   @override
@@ -657,6 +685,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       map['reasoning'] = Variable<String>(reasoning);
     }
     map['attachments_json'] = Variable<String>(attachmentsJson);
+    if (!nullToAbsent || thinkingDurationMs != null) {
+      map['thinking_duration_ms'] = Variable<int>(thinkingDurationMs);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -675,6 +706,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           ? const Value.absent()
           : Value(reasoning),
       attachmentsJson: Value(attachmentsJson),
+      thinkingDurationMs: thinkingDurationMs == null && nullToAbsent
+          ? const Value.absent()
+          : Value(thinkingDurationMs),
       createdAt: Value(createdAt),
     );
   }
@@ -697,6 +731,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       modelName: serializer.fromJson<String?>(json['modelName']),
       reasoning: serializer.fromJson<String?>(json['reasoning']),
       attachmentsJson: serializer.fromJson<String>(json['attachmentsJson']),
+      thinkingDurationMs: serializer.fromJson<int?>(json['thinkingDurationMs']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -716,6 +751,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       'modelName': serializer.toJson<String?>(modelName),
       'reasoning': serializer.toJson<String?>(reasoning),
       'attachmentsJson': serializer.toJson<String>(attachmentsJson),
+      'thinkingDurationMs': serializer.toJson<int?>(thinkingDurationMs),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -729,6 +765,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     Value<String?> modelName = const Value.absent(),
     Value<String?> reasoning = const Value.absent(),
     String? attachmentsJson,
+    Value<int?> thinkingDurationMs = const Value.absent(),
     DateTime? createdAt,
   }) => MessageRow(
     id: id ?? this.id,
@@ -739,6 +776,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     modelName: modelName.present ? modelName.value : this.modelName,
     reasoning: reasoning.present ? reasoning.value : this.reasoning,
     attachmentsJson: attachmentsJson ?? this.attachmentsJson,
+    thinkingDurationMs: thinkingDurationMs.present
+        ? thinkingDurationMs.value
+        : this.thinkingDurationMs,
     createdAt: createdAt ?? this.createdAt,
   );
   MessageRow copyWithCompanion(MessagesCompanion data) {
@@ -755,6 +795,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       attachmentsJson: data.attachmentsJson.present
           ? data.attachmentsJson.value
           : this.attachmentsJson,
+      thinkingDurationMs: data.thinkingDurationMs.present
+          ? data.thinkingDurationMs.value
+          : this.thinkingDurationMs,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -770,6 +813,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           ..write('modelName: $modelName, ')
           ..write('reasoning: $reasoning, ')
           ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('thinkingDurationMs: $thinkingDurationMs, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -785,6 +829,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     modelName,
     reasoning,
     attachmentsJson,
+    thinkingDurationMs,
     createdAt,
   );
   @override
@@ -799,6 +844,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           other.modelName == this.modelName &&
           other.reasoning == this.reasoning &&
           other.attachmentsJson == this.attachmentsJson &&
+          other.thinkingDurationMs == this.thinkingDurationMs &&
           other.createdAt == this.createdAt);
 }
 
@@ -811,6 +857,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
   final Value<String?> modelName;
   final Value<String?> reasoning;
   final Value<String> attachmentsJson;
+  final Value<int?> thinkingDurationMs;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const MessagesCompanion({
@@ -822,6 +869,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     this.modelName = const Value.absent(),
     this.reasoning = const Value.absent(),
     this.attachmentsJson = const Value.absent(),
+    this.thinkingDurationMs = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -834,6 +882,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     this.modelName = const Value.absent(),
     this.reasoning = const Value.absent(),
     this.attachmentsJson = const Value.absent(),
+    this.thinkingDurationMs = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -851,6 +900,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Expression<String>? modelName,
     Expression<String>? reasoning,
     Expression<String>? attachmentsJson,
+    Expression<int>? thinkingDurationMs,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -863,6 +913,8 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       if (modelName != null) 'model_name': modelName,
       if (reasoning != null) 'reasoning': reasoning,
       if (attachmentsJson != null) 'attachments_json': attachmentsJson,
+      if (thinkingDurationMs != null)
+        'thinking_duration_ms': thinkingDurationMs,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -877,6 +929,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Value<String?>? modelName,
     Value<String?>? reasoning,
     Value<String>? attachmentsJson,
+    Value<int?>? thinkingDurationMs,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -889,6 +942,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       modelName: modelName ?? this.modelName,
       reasoning: reasoning ?? this.reasoning,
       attachmentsJson: attachmentsJson ?? this.attachmentsJson,
+      thinkingDurationMs: thinkingDurationMs ?? this.thinkingDurationMs,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -925,6 +979,9 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     if (attachmentsJson.present) {
       map['attachments_json'] = Variable<String>(attachmentsJson.value);
     }
+    if (thinkingDurationMs.present) {
+      map['thinking_duration_ms'] = Variable<int>(thinkingDurationMs.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -945,6 +1002,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
           ..write('modelName: $modelName, ')
           ..write('reasoning: $reasoning, ')
           ..write('attachmentsJson: $attachmentsJson, ')
+          ..write('thinkingDurationMs: $thinkingDurationMs, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1876,6 +1934,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   Value<String?> modelName,
   Value<String?> reasoning,
   Value<String> attachmentsJson,
+  Value<int?> thinkingDurationMs,
   required DateTime createdAt,
   Value<int> rowid,
 });
@@ -1888,6 +1947,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<String?> modelName,
   Value<String?> reasoning,
   Value<String> attachmentsJson,
+  Value<int?> thinkingDurationMs,
   Value<DateTime> createdAt,
   Value<int> rowid,
 });
@@ -1958,6 +2018,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get attachmentsJson => $composableBuilder(
     column: $table.attachmentsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get thinkingDurationMs => $composableBuilder(
+    column: $table.thinkingDurationMs,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2034,6 +2099,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<int> get thinkingDurationMs => $composableBuilder(
+    column: $table.thinkingDurationMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2092,6 +2162,11 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<String> get attachmentsJson => $composableBuilder(
     column: $table.attachmentsJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get thinkingDurationMs => $composableBuilder(
+    column: $table.thinkingDurationMs,
     builder: (column) => column,
   );
 
@@ -2158,6 +2233,7 @@ class $$MessagesTableTableManager
                 Value<String?> modelName = const Value.absent(),
                 Value<String?> reasoning = const Value.absent(),
                 Value<String> attachmentsJson = const Value.absent(),
+                Value<int?> thinkingDurationMs = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
@@ -2169,6 +2245,7 @@ class $$MessagesTableTableManager
                 modelName: modelName,
                 reasoning: reasoning,
                 attachmentsJson: attachmentsJson,
+                thinkingDurationMs: thinkingDurationMs,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -2182,6 +2259,7 @@ class $$MessagesTableTableManager
                 Value<String?> modelName = const Value.absent(),
                 Value<String?> reasoning = const Value.absent(),
                 Value<String> attachmentsJson = const Value.absent(),
+                Value<int?> thinkingDurationMs = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
@@ -2193,6 +2271,7 @@ class $$MessagesTableTableManager
                 modelName: modelName,
                 reasoning: reasoning,
                 attachmentsJson: attachmentsJson,
+                thinkingDurationMs: thinkingDurationMs,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

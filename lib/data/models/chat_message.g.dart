@@ -20,6 +20,9 @@ ChatMessage _$ChatMessageFromJson(Map<String, dynamic> json) => ChatMessage(
           ?.map((e) => ChatAttachment.fromJson(e as Map<String, dynamic>))
           .toList() ??
       const [],
+  thinkingDuration: json['thinkingDuration'] == null
+      ? null
+      : Duration(microseconds: (json['thinkingDuration'] as num).toInt()),
   createdAt: json['createdAt'] == null
       ? null
       : DateTime.parse(json['createdAt'] as String),
@@ -34,6 +37,7 @@ Map<String, dynamic> _$ChatMessageToJson(ChatMessage instance) =>
       'modelName': instance.modelName,
       'reasoning': instance.reasoning,
       'attachments': instance.attachments.map((e) => e.toJson()).toList(),
+      'thinkingDuration': instance.thinkingDuration?.inMicroseconds,
       'createdAt': instance.createdAt?.toIso8601String(),
     };
 

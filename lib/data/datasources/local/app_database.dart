@@ -35,6 +35,9 @@ class Messages extends Table {
 
   /// 附件列表的 JSON 编码（`List<ChatAttachment>`，v5 起；老数据默认空）。
   TextColumn get attachmentsJson => text().withDefault(const Constant('[]'))();
+
+  /// 思考耗时（毫秒，v6 起；非推理或老数据为 null）。
+  IntColumn get thinkingDurationMs => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -76,7 +79,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'phase'));
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -97,6 +100,9 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 5) {
         await migrator.addColumn(messages, messages.attachmentsJson);
+      }
+      if (from < 6) {
+        await migrator.addColumn(messages, messages.thinkingDurationMs);
       }
     },
   );
@@ -156,12 +162,16 @@ class AppDatabase extends _$AppDatabase {
     required String content,
     required String? reasoning,
     required ChatMessageStatus status,
+    Duration? thinkingDuration,
   }) {
     return (update(messages)..where((t) => t.id.equals(id))).write(
       MessagesCompanion(
         content: Value(content),
         reasoning: Value(reasoning),
         status: Value(status),
+        thinkingDurationMs: thinkingDuration == null
+            ? const Value.absent()
+            : Value(thinkingDuration.inMilliseconds),
       ),
     );
   }

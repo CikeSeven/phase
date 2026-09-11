@@ -150,12 +150,13 @@ class ConversationRepository {
     }
   }
 
-  /// 流式输出时增量更新内容与思考，结束时更新状态。
+  /// 流式输出时增量更新内容与思考，结束时更新状态；thinkingDuration 仅在有值时写入。
   Future<void> updateMessageContent(
     String id, {
     required String content,
     required String? reasoning,
     required ChatMessageStatus status,
+    Duration? thinkingDuration,
   }) async {
     try {
       await _db.updateMessageContent(
@@ -163,6 +164,7 @@ class ConversationRepository {
         content: content,
         reasoning: reasoning,
         status: status,
+        thinkingDuration: thinkingDuration,
       );
     } on Exception catch (e, st) {
       AppLogger.error('更新消息失败', e, st);
@@ -189,6 +191,9 @@ class ConversationRepository {
       modelName: row.modelName,
       reasoning: row.reasoning,
       attachments: decodeChatAttachments(row.attachmentsJson),
+      thinkingDuration: row.thinkingDurationMs == null
+          ? null
+          : Duration(milliseconds: row.thinkingDurationMs!),
       createdAt: row.createdAt,
     );
   }

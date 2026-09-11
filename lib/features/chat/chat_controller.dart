@@ -58,6 +58,10 @@ class ChatController extends _$ChatController {
   String? _streamingMessageId;
   Failure? _streamError;
 
+  /// 思考计时：首段推理增量开始，首段正文增量（或流结束）为止。
+  DateTime? _thinkingStartedAt;
+  DateTime? _firstContentAt;
+
   /// 区分「用户主动停止」与「流空跑结束」：前者空缓冲标记 done，后者是异常。
   bool _stoppedManually = false;
 
@@ -153,6 +157,8 @@ class ChatController extends _$ChatController {
     _streamingMessageId = aiMessage.id;
     _streamError = null;
     _stoppedManually = false;
+    _thinkingStartedAt = null;
+    _firstContentAt = null;
 
     // 不能用 StreamSubscription.asFuture 等待流结束：它会覆盖已注册的
     // onError，且取消后永不完成（stop 路径会挂死）。改用 Completer。
@@ -179,10 +185,14 @@ class ChatController extends _$ChatController {
             final reasoning = chunk.reasoningDelta;
             var dirty = false;
             if (reasoning != null && reasoning.isNotEmpty) {
+              _thinkingStartedAt ??= DateTime.now();
               _reasoningBuffer.write(reasoning);
               dirty = true;
             }
             if (chunk.delta.isNotEmpty) {
+              if (_thinkingStartedAt != null) {
+                _firstContentAt ??= DateTime.now();
+              }
               _buffer.write(chunk.delta);
               dirty = true;
             }
@@ -218,6 +228,7 @@ class ChatController extends _$ChatController {
           content: failure.userMessage,
           reasoning: _currentReasoning,
           status: ChatMessageStatus.error,
+          thinkingDuration: _currentThinkingDuration,
         );
       } else if (!_stoppedManually &&
           _buffer.isEmpty &&
@@ -236,6 +247,7 @@ class ChatController extends _$ChatController {
           content: _buffer.toString(),
           reasoning: _currentReasoning,
           status: ChatMessageStatus.done,
+          thinkingDuration: _currentThinkingDuration,
         );
       }
     }
@@ -259,6 +271,16 @@ class ChatController extends _$ChatController {
   String? get _currentReasoning =>
       _reasoningBuffer.isEmpty ? null : _reasoningBuffer.toString();
 
+  /// 思考耗时：首段推理到首段正文（无正文则到当前/流结束）；
+  /// 完全没收到推理时为 null。
+  Duration? get _currentThinkingDuration {
+    final started = _thinkingStartedAt;
+    if (started == null) {
+      return null;
+    }
+    return (_firstContentAt ?? DateTime.now()).difference(started);
+  }
+
   void _scheduleFlush() {
     _flushTimer ??= Timer(_flushInterval, _flushNow);
   }
@@ -277,6 +299,7 @@ class ChatController extends _$ChatController {
             content: _buffer.toString(),
             reasoning: _currentReasoning,
             status: ChatMessageStatus.streaming,
+            thinkingDuration: _currentThinkingDuration,
           ),
     );
   }
