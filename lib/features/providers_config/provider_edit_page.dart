@@ -383,14 +383,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
         for (final id in ids) {
           // 新拉到的模型默认不启用，由用户勾选后进入聊天模型列表；
           // 已有模型的勾选与能力标记不受影响。
-          merged.putIfAbsent(
-            id,
-            () => ProfileModel(
-              id: id,
-              enabled: false,
-              supportsReasoning: guessSupportsReasoning(id),
-            ),
-          );
+          merged.putIfAbsent(id, () => ProfileModel(id: id, enabled: false));
         }
         _models = merged.values.toList();
         _testing = false;

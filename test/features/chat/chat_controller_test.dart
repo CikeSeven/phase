@@ -91,7 +91,8 @@ void main() {
         appDatabaseProvider.overrideWith((ref) => db),
         secureKeyStorageProvider.overrideWith((ref) => _MemoryKeyStorage()),
         aiProviderFactoryProvider.overrideWith(
-          (ref) => (profile, apiKey) => fakeProvider,
+          (ref) =>
+              (profile, apiKey) => fakeProvider,
         ),
       ],
     );
@@ -111,7 +112,8 @@ void main() {
     await db.close();
   });
 
-  ChatController controller() => container.read(chatControllerProvider.notifier);
+  ChatController controller() =>
+      container.read(chatControllerProvider.notifier);
 
   ChatState state() => container.read(chatControllerProvider);
 
@@ -122,15 +124,13 @@ void main() {
         id: 'p-r',
         name: '推理服务商',
         baseUrl: 'https://example.com/v1',
-        modelsJson: const Value(
-          '[{"id":"model-r","supportsReasoning":true}]',
-        ),
+        modelsJson: const Value('[{"id":"model-r","supportsReasoning":true}]'),
         defaultModel: const Value('model-r'),
         createdAt: DateTime.now(),
       ),
     );
-    fakeProvider.streamFactory =
-        () => Stream.fromIterable([const ChatChunk(delta: '好')]);
+    fakeProvider.streamFactory = () =>
+        Stream.fromIterable([const ChatChunk(delta: '好')]);
     await controller().send('你好');
     expect(fakeProvider.lastRequest!.reasoningEffort, ReasoningEffort.off);
 
@@ -140,19 +140,22 @@ void main() {
         .selectEffort(ReasoningEffort.medium);
     await container.read(modelSelectionProvider.future);
     await controller().send('再来一次');
-    expect(
-      fakeProvider.lastRequest!.reasoningEffort,
-      ReasoningEffort.medium,
-    );
+    expect(fakeProvider.lastRequest!.reasoningEffort, ReasoningEffort.medium);
 
-    // 非推理模型（老格式字符串列表，启发式不命中）：不下发。
-    await insertProfile(id: 'p-n');
+    // 显式标记不支持推理的模型：不下发推理字段。
+    await db.upsertProviderProfile(
+      ProviderProfilesCompanion.insert(
+        id: 'p-n',
+        name: '普通服务商',
+        baseUrl: 'https://example.com/v1',
+        modelsJson: const Value('[{"id":"model-a","supportsReasoning":false}]'),
+        defaultModel: const Value('model-a'),
+        createdAt: DateTime.now(),
+      ),
+    );
     // 新插入的 profile 要成为「最近使用」才会被选中。
     final settings = container.read(settingsStorageProvider);
-    await settings.writeLastModelSelection(
-      profileId: 'p-n',
-      model: 'model-a',
-    );
+    await settings.writeLastModelSelection(profileId: 'p-n', model: 'model-a');
     // refresh 立即重建并等待新值，避免读到失效前的旧选择。
     container.refresh(modelSelectionProvider);
     await container.read(modelSelectionProvider.future);
@@ -253,8 +256,8 @@ void main() {
 
   test('流式 Failure 时 AI 消息标记 error 并展示用户文案', () async {
     await insertProfile();
-    fakeProvider.streamFactory =
-        () => Stream<ChatChunk>.error(const ServerFailure('boom'));
+    fakeProvider.streamFactory = () =>
+        Stream<ChatChunk>.error(const ServerFailure('boom'));
 
     await controller().send('你好');
     final conversationId = state().conversationId!;
@@ -298,10 +301,7 @@ void main() {
   });
 
   test('未配置服务商时 send 抛 Failure，不创建会话与消息', () async {
-    expect(
-      () => controller().send('你好'),
-      throwsA(isA<UnknownFailure>()),
-    );
+    expect(() => controller().send('你好'), throwsA(isA<UnknownFailure>()));
     await pumpEventQueue();
 
     expect(await db.select(db.conversations).get(), isEmpty);

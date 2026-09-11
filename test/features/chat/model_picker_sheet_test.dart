@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:phase/core/error/failure.dart';
+import 'package:phase/core/theme/app_spacing.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/theme/frosted_surface.dart';
 import 'package:phase/core/widgets/app_card.dart';
@@ -25,7 +27,7 @@ const _profiles = [
     name: '日常',
     baseUrl: 'https://example.com/v1',
     models: [
-      ProfileModel(id: 'chat-basic'),
+      ProfileModel(id: 'chat-basic', supportsReasoning: false),
       ProfileModel(id: 'think-model', supportsReasoning: true),
     ],
   ),
@@ -84,7 +86,7 @@ void main() {
       tester.getSize(_option('daily', 'think-model')).height,
       optionHeight,
     );
-    await _tapVisible(tester, _effort('high'));
+    await _setEffort(tester, ReasoningEffort.high);
     await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_model'), 'think-model');
     expect(host.preferences.getString('last_reasoning_effort'), 'high');
@@ -100,12 +102,12 @@ void main() {
       ),
       findsOneWidget,
     );
-    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.byType(Slider), findsNothing);
 
     await _chooseModel(tester, 'daily', 'think-model');
     expect(find.byType(ModelPickerSheet), findsOneWidget);
-    expect(tester.widget<ChoiceChip>(_effort('low')).selected, isTrue);
-    await _tapVisible(tester, _effort('high'));
+    expect(_sliderValue(tester), ReasoningEffort.low.index.toDouble());
+    await _setEffort(tester, ReasoningEffort.high);
     expect(host.preferences.getString('last_model'), 'chat-basic');
     expect(host.preferences.getString('last_reasoning_effort'), 'low');
     expect(
@@ -152,15 +154,48 @@ void main() {
     );
 
     await _openPicker(tester);
-    for (final effort in ReasoningEffort.values) {
-      expect(_effort(effort.name), findsOneWidget, reason: effort.name);
-    }
-    expect(tester.widget<ChoiceChip>(_effort('high')).selected, isTrue);
+    // 滑杆统一提供 关+五个等级：最左关、最右最高。
+    expect(_sliderValue(tester), ReasoningEffort.high.index.toDouble());
+    expect(tester.widget<Text>(_effortLabel).data, ReasoningEffort.high.label);
+    final slider = tester.widget<Slider>(_effortSlider);
+    expect(slider.min, 0);
+    expect(slider.max, (ReasoningEffort.values.length - 1).toDouble());
+    expect(slider.divisions, ReasoningEffort.values.length - 1);
 
-    // 切换模型不影响已选等级，即使新模型「理论上」不支持该等级。
-    await _tapVisible(tester, _effort('max'));
+    await _setEffort(tester, ReasoningEffort.max);
+    expect(_sliderValue(tester), ReasoningEffort.max.index.toDouble());
+    expect(tester.widget<Text>(_effortLabel).data, ReasoningEffort.max.label);
     await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_reasoning_effort'), 'max');
+  });
+
+  testWidgets('标题右侧的当前模型名在空间足够时不提前截断', (tester) async {
+    await _pumpHost(
+      tester,
+      profiles: const [
+        ProviderProfile(
+          id: 'daily',
+          name: '日常',
+          baseUrl: 'https://example.com/v1',
+          models: [ProfileModel(id: 'gpt-5-mini')],
+        ),
+      ],
+      values: const {'last_profile_id': 'daily', 'last_model': 'gpt-5-mini'},
+    );
+    await _openPicker(tester);
+    final summary = find.byKey(const ValueKey('model-draft-summary'));
+    final idText = find.descendant(
+      of: summary,
+      matching: find.text('gpt-5-mini'),
+    );
+    expect(idText, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(idText);
+    expect(paragraph.didExceedMaxLines, isFalse);
+    // 摘要占满标题与关闭按钮之间的全部剩余宽度，不再对半分。
+    expect(
+      tester.getRect(summary).right,
+      closeTo(tester.getRect(find.byTooltip('关闭')).left - AppSpacing.s, 0.1),
+    );
   });
 
   testWidgets('未勾选启用的模型不出现在选择列表，标签计数同步', (tester) async {
@@ -183,7 +218,10 @@ void main() {
     await _openPicker(tester);
     expect(_option('daily', 'enabled-model'), findsOneWidget);
     expect(_option('daily', 'disabled-model'), findsNothing);
-    expect(find.text('1 个模型'), findsOneWidget);
+    expect(
+      find.descendant(of: _providerTab('daily'), matching: find.text('1')),
+      findsOneWidget,
+    );
 
     // 搜索也搜不到未启用的模型。
     await tester.enterText(_search, 'disabled');
@@ -191,7 +229,6 @@ void main() {
     expect(find.text('没有找到模型'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-
   testWidgets('默认模型被停用时，派生选择回退到第一个启用的模型', (tester) async {
     final host = await _pumpHost(
       tester,
@@ -215,49 +252,47 @@ void main() {
     );
   });
 
-  testWidgets('横向服务商标签切换模型列表，草稿落到该服务商默认模型', (tester) async {
+  testWidgets('点击服务商标签滚动定位到对应分组，不改变草稿', (tester) async {
     final host = await _pumpHost(
       tester,
-      profiles: const [
+      profiles: [
         ProviderProfile(
           id: 'daily',
           name: '日常',
           baseUrl: 'https://example.com/v1',
-          defaultModel: 'daily-flagship',
+          defaultModel: 'daily-000',
           models: [
-            ProfileModel(id: 'daily-flagship'),
-            ProfileModel(id: 'daily-lite'),
+            for (var i = 0; i < 40; i++)
+              ProfileModel(id: 'daily-${i.toString().padLeft(3, '0')}'),
           ],
         ),
-        ProviderProfile(
+        const ProviderProfile(
           id: 'workspace',
           name: '工作空间',
           baseUrl: 'https://example.com/v1',
-          defaultModel: 'work-pro',
-          models: [
-            ProfileModel(id: 'work-pro'),
-            ProfileModel(id: 'work-lite'),
-          ],
+          models: [ProfileModel(id: 'work-pro')],
         ),
       ],
-      values: const {'last_profile_id': 'daily', 'last_model': 'daily-lite'},
+      values: const {'last_profile_id': 'daily', 'last_model': 'daily-000'},
     );
     await _openPicker(tester);
-    // 初始展示当前选择所在服务商的模型。
-    expect(_option('daily', 'daily-lite'), findsOneWidget);
-    expect(_option('workspace', 'work-pro'), findsNothing);
+    // 所有模型在同一个列表里，分组标题隔开；工作空间的模型默认在屏幕外。
+    expect(_option('daily', 'daily-000'), findsOneWidget);
+    expect(_option('workspace', 'work-pro').hitTestable(), findsNothing);
 
     await _tapVisible(tester, _providerTab('workspace'));
-    expect(_option('workspace', 'work-pro'), findsOneWidget);
-    expect(_option('workspace', 'work-lite'), findsOneWidget);
-    expect(_option('daily', 'daily-lite'), findsNothing);
-    // 草稿跟随到该服务商的默认模型。
+    await tester.pumpAndSettle();
+    // 列表滚动到工作空间分组，草稿仍是原模型。
+    expect(_option('workspace', 'work-pro').hitTestable(), findsOneWidget);
     final summary = find.byKey(const ValueKey('model-draft-summary'));
     expect(
-      find.descendant(of: summary, matching: find.text('work-pro')),
+      find.descendant(of: summary, matching: find.text('daily-000')),
       findsOneWidget,
     );
+    expect(host.preferences.getString('last_model'), 'daily-000');
 
+    // 直接点模型才改草稿。
+    await _chooseModel(tester, 'workspace', 'work-pro');
     await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_profile_id'), 'workspace');
     expect(host.preferences.getString('last_model'), 'work-pro');
@@ -277,7 +312,7 @@ void main() {
       _option('workspace', 'think-model'),
     );
     expect(selected.properties.selected, isTrue);
-    await _tapVisible(tester, _effort('high'));
+    await _setEffort(tester, ReasoningEffort.high);
     expect(find.byType(ModelPickerSheet), findsOneWidget);
     expect(host.preferences.getString('last_profile_id'), 'daily');
 
@@ -300,10 +335,10 @@ void main() {
     );
     await _openPicker(tester);
     await _chooseModel(tester, 'daily', 'think-model');
-    expect(tester.widget<ChoiceChip>(_effort('off')).selected, isTrue);
-    await _tapVisible(tester, _effort('medium'));
+    expect(_sliderValue(tester), ReasoningEffort.off.index.toDouble());
+    await _setEffort(tester, ReasoningEffort.medium);
     await _chooseModel(tester, 'daily', 'chat-basic');
-    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.byType(Slider), findsNothing);
     await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_model'), 'chat-basic');
     expect(host.preferences.getString('last_reasoning_effort'), 'medium');
@@ -331,8 +366,8 @@ void main() {
     await _chooseModel(tester, 'manual', manualId);
     expect(find.textContaining('当前手动模型'), findsOneWidget);
     expect(find.text('暂无模型'), findsNothing);
-    expect(tester.widget<ChoiceChip>(_effort('off')).selected, isTrue);
-    await _tapVisible(tester, _effort('medium'));
+    expect(_sliderValue(tester), ReasoningEffort.off.index.toDouble());
+    await _setEffort(tester, ReasoningEffort.medium);
     await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_model'), manualId);
     expect(host.preferences.getString('last_reasoning_effort'), 'medium');
@@ -384,8 +419,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('没有找到模型'), findsOneWidget);
     await _tapVisible(tester, find.byTooltip('清除搜索'));
-    // 搜索期间草稿被自动切到有命中的服务商，先切回「模型仓库」标签。
-    await _tapVisible(tester, _providerTab('many'));
     await tester.scrollUntilVisible(
       _option('many', 'model-040'),
       400,
@@ -521,7 +554,7 @@ void main() {
       );
       await _openPicker(tester);
       await _chooseModel(tester, 'workspace', 'think-model');
-      await _tapVisible(tester, _effort('high'));
+      await _setEffort(tester, ReasoningEffort.high);
       await _tapVisible(tester, _confirm);
       expect(find.byType(ModelPickerSheet), findsOneWidget);
       expect(find.text('未能完整保存选择，请重试。'), findsOneWidget);
@@ -617,7 +650,7 @@ void main() {
       );
       expect(modelText.maxLines, 2);
       expect(modelText.overflow, TextOverflow.ellipsis);
-      await _tapVisible(tester, _effort('high'));
+      await _setEffort(tester, ReasoningEffort.high);
       await _tapVisible(tester, _confirm);
       expect(find.byType(ModelPickerSheet), findsNothing);
       expect(host.preferences.getString('last_model'), longId);
@@ -643,13 +676,27 @@ Finder _option(String profileId, String modelId) =>
     find.byKey(ValueKey(('model-option', profileId, modelId)));
 Finder _providerTab(String profileId) =>
     find.byKey(ValueKey(('provider-tab', profileId)));
-Finder get _providerScrollable => find
-    .descendant(
-      of: find.byKey(const ValueKey('provider-list')),
-      matching: find.byType(Scrollable),
-    )
-    .first;
-Finder _effort(String name) => find.byKey(ValueKey(('reasoning-effort', name)));
+Finder get _effortSlider =>
+    find.byKey(const ValueKey('reasoning-effort-slider'));
+Finder get _effortLabel => find.byKey(const ValueKey('reasoning-effort-label'));
+
+double _sliderValue(WidgetTester tester) =>
+    tester.widget<Slider>(_effortSlider).value;
+
+/// 点滑杆轨道对应档位（档位 0..5，两端留出圆角余量）。
+Future<void> _setEffort(WidgetTester tester, ReasoningEffort effort) async {
+  await tester.ensureVisible(_effortSlider);
+  await tester.pumpAndSettle();
+  final rect = tester.getRect(_effortSlider);
+  final last = ReasoningEffort.values.length - 1;
+  final fraction = effort.index / last;
+  final dx = (rect.left + fraction * rect.width).clamp(
+    rect.left + 12,
+    rect.right - 12,
+  );
+  await tester.tapAt(Offset(dx, rect.center.dy));
+  await tester.pumpAndSettle();
+}
 
 Future<void> _openPicker(WidgetTester tester) async {
   await tester.tap(find.text('打开模型'));
@@ -670,17 +717,6 @@ Future<void> _chooseModel(
   String modelId,
 ) async {
   final option = _option(profileId, modelId);
-  if (option.evaluate().isEmpty) {
-    // 模型不在当前列表时先切到对应服务商标签（搜索平铺结果除外）。
-    await tester.scrollUntilVisible(
-      _providerTab(profileId),
-      120,
-      scrollable: _providerScrollable,
-      maxScrolls: 30,
-    );
-    await tester.pumpAndSettle();
-    await _tapVisible(tester, _providerTab(profileId));
-  }
   await tester.scrollUntilVisible(
     option,
     160,

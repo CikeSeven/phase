@@ -42,6 +42,34 @@ class AppSheet extends StatelessWidget {
     final media = MediaQuery.maybeOf(context);
     final keyboard = media?.viewInsets.bottom ?? 0;
     final scale = math.max(1.0, (media?.textScaler.scale(14) ?? 14) / 14);
+    final titleText = Semantics(
+      header: true,
+      child: Text(
+        title,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: theme.textTheme.titleLarge,
+      ),
+    );
+    final trailing = titleTrailing;
+    final titleRow = trailing == null
+        ? titleText
+        : LayoutBuilder(
+            // RenderFlex 不会把宽松子节点的余量转给兄弟节点，标题用
+            // 显式宽度上限（45%）收敛，剩余空间全部留给尾随摘要。
+            builder: (context, constraints) => Row(
+              children: [
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: constraints.maxWidth * 0.45,
+                  ),
+                  child: titleText,
+                ),
+                const SizedBox(width: AppSpacing.m),
+                Expanded(child: trailing),
+              ],
+            ),
+          );
     final header = Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.xl,
@@ -66,27 +94,7 @@ class AppSheet extends StatelessWidget {
           const SizedBox(height: AppSpacing.m),
           Row(
             children: [
-              Expanded(
-                child: Row(
-                  children: [
-                    Flexible(
-                      child: Semantics(
-                        header: true,
-                        child: Text(
-                          title,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleLarge,
-                        ),
-                      ),
-                    ),
-                    if (titleTrailing != null) ...[
-                      const SizedBox(width: AppSpacing.m),
-                      Flexible(child: titleTrailing!),
-                    ],
-                  ],
-                ),
-              ),
+              Expanded(child: titleRow),
               if (showClose) ...[
                 const SizedBox(width: AppSpacing.s),
                 IconButton(

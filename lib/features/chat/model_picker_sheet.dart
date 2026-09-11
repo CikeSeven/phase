@@ -40,6 +40,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
 
   /// 键盘拉起时 AppSheet 会切换紧凑分支，搜索框靠 GlobalKey 跨分支保住焦点。
   final _searchFieldKey = GlobalKey();
+  final _listController = ScrollController();
+  final _headerKeys = <String, GlobalKey>{};
+  final _estimatedOffsets = <String, double>{};
   ChatModelSelection? _initialSelection;
   String? _draftProfileId;
   String? _draftModel;
@@ -74,6 +77,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   @override
   void dispose() {
     _searchController.dispose();
+    _listController.dispose();
     super.dispose();
   }
 
@@ -174,34 +178,38 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final profiles = <ProviderProfile>[
       ...{for (final entry in entries) entry.profile.id: entry.profile}.values,
     ];
-    // 未产生草稿（如无可用模型）时，列表回落到第一个服务商。
-    final activeProfileId = _draftProfileId ?? profiles.first.id;
-
-    // 搜索时供应商列表只保留模型命中（或自身名称命中）的服务商。
-    final visibleProfiles = searching
-        ? [
-            for (final profile in profiles)
-              if (entries.any(
-                (entry) =>
-                    entry.profile.id == profile.id &&
-                    entry.model != null &&
-                    _entryMatches(profile, entry.model, query),
-              ))
-                profile,
-          ]
-        : profiles;
+    // 搜索时列表与标签都只保留命中的服务商与模型。
     final visible = searching
         ? [
             for (final entry in entries)
-              if (entry.profile.id == activeProfileId &&
-                  entry.model != null &&
+              if (entry.model != null &&
                   _entryMatches(entry.profile, entry.model, query))
                 entry,
           ]
-        : [
-            for (final entry in entries)
-              if (entry.profile.id == activeProfileId) entry,
-          ];
+        : entries;
+    final visibleProfiles = [
+      for (final profile in profiles)
+        if (visible.any((entry) => entry.profile.id == profile.id)) profile,
+    ];
+
+    // 单一平铺列表：服务商名称作分组标题，标题位置记入估算偏移供标签跳转。
+    final items = <Object>[];
+    final counts = <String, int>{};
+    _estimatedOffsets.clear();
+    var offset = 0.0;
+    for (final profile in visibleProfiles) {
+      _estimatedOffsets[profile.id] = offset;
+      items.add(profile);
+      offset += _estimatedHeaderExtent;
+      for (final entry in visible) {
+        if (entry.profile.id != profile.id) continue;
+        items.add(entry);
+        if (entry.model != null) {
+          counts[profile.id] = (counts[profile.id] ?? 0) + 1;
+        }
+        offset += _estimatedOptionExtent;
+      }
+    }
 
     return Column(
       children: [
@@ -219,7 +227,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               controller: _searchController,
               enabled: !_saving,
               textInputAction: TextInputAction.search,
-              onChanged: _onQueryChanged,
+              onChanged: (value) => setState(() => _query = value),
               onSubmitted: (_) => FocusScope.of(context).unfocus(),
               decoration: InputDecoration(
                 hintText: '搜索模型或服务商',
@@ -236,19 +244,12 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           ),
         ),
         if (visibleProfiles.isNotEmpty)
-          _buildProviderTabs(
-            visibleProfiles,
-            entries,
-            activeProfileId,
-            query: searching ? query : null,
-          ),
+          _buildProviderTabs(visibleProfiles, counts, _draftProfileId),
         Expanded(
           child: visible.isEmpty
               ? _buildStatus(
                   icon: Symbols.search_off,
-                  title: searching && visibleProfiles.isNotEmpty
-                      ? '该服务商没有匹配的模型'
-                      : '没有找到模型',
+                  title: '没有找到模型',
                   action: TextButton(
                     onPressed: _clearSearch,
                     child: const Text('清除搜索'),
@@ -256,6 +257,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                 )
               : ListView.builder(
                   key: const ValueKey('model-list'),
+                  controller: _listController,
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.fromLTRB(
@@ -264,9 +266,13 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                     AppSpacing.l,
                     AppSpacing.l,
                   ),
-                  itemCount: visible.length,
+                  itemCount: items.length,
                   itemBuilder: (context, index) {
-                    final entry = visible[index];
+                    final item = items[index];
+                    if (item is ProviderProfile) {
+                      return _buildProviderHeading(item);
+                    }
+                    final entry = item as _PickerEntry;
                     return Padding(
                       key: ValueKey((entry.profile.id, entry.model?.id)),
                       padding: const EdgeInsets.only(bottom: AppSpacing.s),
@@ -281,6 +287,56 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     );
   }
 
+  static const _estimatedHeaderExtent = 40.0;
+  static const _estimatedOptionExtent = 64.0;
+
+  Widget _buildProviderHeading(ProviderProfile profile) {
+    return Padding(
+      key: _headerKeys.putIfAbsent(profile.id, GlobalKey.new),
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.s,
+        AppSpacing.m,
+        AppSpacing.s,
+        AppSpacing.s,
+      ),
+      child: Semantics(
+        header: true,
+        child: Text(
+          profile.name,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.titleSmall
+              ?.copyWith(color: context.brandColors.teal),
+        ),
+      ),
+    );
+  }
+
+  /// 标签点击只滚动定位到对应分组，不改草稿。
+  void _scrollToProvider(String profileId) {
+    FocusScope.of(context).unfocus();
+    final offset = _estimatedOffsets[profileId];
+    if (offset == null || !_listController.hasClients) return;
+    final position = _listController.position;
+    final maxExtent = position.hasContentDimensions
+        ? position.maxScrollExtent
+        : offset;
+    // 条目高度不固定：先跳到估算位置，再对标题做精确对齐。
+    _listController.jumpTo(offset.clamp(0.0, maxExtent));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final context = _headerKeys[profileId]?.currentContext;
+      if (context != null) {
+        Scrollable.ensureVisible(
+          context,
+          alignment: 0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    });
+  }
+
   /// 标题右侧的紧凑摘要：待确认/当前徽标 + 草稿模型 id。
   Widget _buildDraftTrailing(_PickerEntry draft) {
     final theme = Theme.of(context);
@@ -290,16 +346,16 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         _draftEffort != _initialSelection?.effort;
     return Row(
       key: const ValueKey('model-draft-summary'),
-      mainAxisSize: MainAxisSize.min,
       children: [
         AppBadge(label: changed ? '待确认' : '当前'),
         const SizedBox(width: AppSpacing.s),
-        Flexible(
+        // 占满剩余宽度，在真实边界截断，不与标题五五分。
+        Expanded(
           child: Text(
             draft.model!.id,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.titleSmall,
+            style: theme.textTheme.bodySmall,
           ),
         ),
       ],
@@ -308,22 +364,13 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
 
   Widget _buildProviderTabs(
     List<ProviderProfile> profiles,
-    List<_PickerEntry> entries,
-    String activeProfileId, {
-    String? query,
-  }) {
+    Map<String, int> counts,
+    String? selectedProfileId,
+  ) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final scaler = MediaQuery.textScalerOf(context);
-    final counts = <String, int>{};
-    for (final entry in entries) {
-      if (entry.model != null &&
-          (query == null || _entryMatches(entry.profile, entry.model, query))) {
-        counts[entry.profile.id] = (counts[entry.profile.id] ?? 0) + 1;
-      }
-    }
-    final tabHeight =
-        AppSpacing.s * 2 + scaler.scale(14) * 1.4 + scaler.scale(12) * 1.45;
+    final tabHeight = AppSpacing.s * 2 + scaler.scale(14) * 1.35;
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.s),
       child: SizedBox(
@@ -336,7 +383,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.s),
           itemBuilder: (context, index) {
             final profile = profiles[index];
-            final selected = profile.id == activeProfileId;
+            final selected = profile.id == selectedProfileId;
             final foreground = selected
                 ? colors.onPrimaryContainer
                 : colors.onSurface;
@@ -352,34 +399,36 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                     : colors.surfaceContainerHigh.withValues(alpha: 0.6),
                 clipBehavior: Clip.antiAlias,
                 child: InkWell(
-                  onTap: _saving ? null : () => _chooseProvider(profile),
+                  onTap: _saving ? null : () => _scrollToProvider(profile.id),
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(
-                      minWidth: 96,
-                      maxWidth: 220,
+                      minWidth: 64,
+                      maxWidth: 200,
                     ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.m,
                         vertical: AppSpacing.s,
                       ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            profile.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              color: foreground,
+                          Flexible(
+                            child: Text(
+                              profile.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelLarge?.copyWith(
+                                color: foreground,
+                              ),
                             ),
                           ),
+                          const SizedBox(width: AppSpacing.xs),
                           Text(
-                            '${counts[profile.id] ?? 0} 个模型',
+                            '${counts[profile.id] ?? 0}',
                             maxLines: 1,
-                            style: theme.textTheme.bodySmall?.copyWith(
+                            style: theme.textTheme.labelMedium?.copyWith(
                               color: selected
                                   ? foreground
                                   : colors.onSurfaceVariant,
@@ -502,35 +551,40 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       mainAxisSize: MainAxisSize.min,
       children: [
         if (model?.supportsReasoning == true) ...[
-          Text('推理等级', style: theme.textTheme.labelLarge),
-          const SizedBox(height: AppSpacing.xs),
-          // 统一提供全部五个等级；模型是否合规由服务商服务器判断。
-          Wrap(
-            spacing: AppSpacing.s,
-            runSpacing: AppSpacing.xs,
+          Row(
             children: [
-              for (final effort in ReasoningEffort.values)
-                ChoiceChip(
-                  key: ValueKey(('reasoning-effort', effort.name)),
-                  label: Text(effort.label),
-                  tooltip: '推理等级：${effort.label}',
-                  selected: _draftEffort == effort,
-                  side: BorderSide.none,
-                  backgroundColor: theme.colorScheme.surfaceContainerHigh,
-                  selectedColor: brand.lavenderContainer,
-                  checkmarkColor: brand.onLavenderContainer,
-                  labelStyle: theme.textTheme.labelLarge?.copyWith(
-                    color: _draftEffort == effort
-                        ? brand.onLavenderContainer
-                        : theme.colorScheme.onSurface,
-                  ),
-                  onSelected: _saving
+              Text('推理等级', style: theme.textTheme.labelLarge),
+              const Spacer(),
+              Text(
+                _draftEffort.label,
+                key: const ValueKey('reasoning-effort-label'),
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: brand.onLavenderContainer,
+                ),
+              ),
+            ],
+          ),
+          // 统一提供全部等级：最左关闭，最右最高，是否合规由服务商服务器判断。
+          Row(
+            children: [
+              Text('关', style: theme.textTheme.bodySmall),
+              Expanded(
+                child: Slider(
+                  key: const ValueKey('reasoning-effort-slider'),
+                  value: _draftEffort.index.toDouble(),
+                  max: (ReasoningEffort.values.length - 1).toDouble(),
+                  divisions: ReasoningEffort.values.length - 1,
+                  label: _draftEffort.label,
+                  activeColor: brand.lavender,
+                  onChanged: _saving
                       ? null
-                      : (_) => setState(() {
-                          _draftEffort = effort;
+                      : (value) => setState(() {
+                          _draftEffort = ReasoningEffort.values[value.round()];
                           _saveError = null;
                         }),
                 ),
+              ),
+              Text('最高', style: theme.textTheme.bodySmall),
             ],
           ),
           const SizedBox(height: AppSpacing.s),
@@ -629,33 +683,6 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     setState(() => _query = '');
   }
 
-  /// 搜索时若当前服务商没有命中，自动切到第一个有命中的服务商，
-  /// 用户不用先猜关键词属于哪家。
-  void _onQueryChanged(String value) {
-    setState(() {
-      _query = value;
-      final query = value.trim().toLowerCase();
-      if (query.isEmpty) return;
-      final profiles =
-          ref.read(providerProfilesProvider).value ?? const <ProviderProfile>[];
-      final entries = _entriesFor(profiles);
-      final activeHasMatch = entries.any(
-        (entry) =>
-            entry.profile.id == _draftProfileId &&
-            entry.model != null &&
-            _entryMatches(entry.profile, entry.model, query),
-      );
-      if (activeHasMatch) return;
-      for (final entry in entries) {
-        if (entry.model != null &&
-            _entryMatches(entry.profile, entry.model, query)) {
-          _activateProvider(entry.profile);
-          return;
-        }
-      }
-    });
-  }
-
   void _choose(_PickerEntry entry) {
     FocusScope.of(context).unfocus();
     setState(() {
@@ -663,28 +690,6 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       _draftModel = entry.model!.id;
       _saveError = null;
     });
-  }
-
-  /// 切换服务商标签：草稿落到该服务商的默认模型（无默认取第一个），
-  /// 没有模型的服务商只切换列表，确认按钮保持禁用。
-  void _chooseProvider(ProviderProfile profile) {
-    FocusScope.of(context).unfocus();
-    setState(() => _activateProvider(profile));
-  }
-
-  void _activateProvider(ProviderProfile profile) {
-    _draftProfileId = profile.id;
-    final models = profile.modelCandidates
-        .where((model) => model.enabled)
-        .toList();
-    String? modelId;
-    if (models.isNotEmpty) {
-      modelId = models.any((model) => model.id == profile.defaultModel)
-          ? profile.defaultModel
-          : models.first.id;
-    }
-    _draftModel = modelId;
-    _saveError = null;
   }
 
   void _openConfiguration([String? profileId]) {

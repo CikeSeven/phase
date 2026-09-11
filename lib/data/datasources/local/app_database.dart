@@ -23,11 +23,8 @@ class Conversations extends Table {
 @DataClassName('MessageRow')
 class Messages extends Table {
   TextColumn get id => text()();
-  TextColumn get conversationId => text().references(
-    Conversations,
-    #id,
-    onDelete: KeyAction.cascade,
-  )();
+  TextColumn get conversationId =>
+      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
   TextColumn get role => textEnum<ChatRole>()();
   TextColumn get content => text()();
   TextColumn get status => textEnum<ChatMessageStatus>()();
@@ -35,6 +32,9 @@ class Messages extends Table {
 
   /// 推理模型的思考内容；非推理模型为 null。
   TextColumn get reasoning => text().nullable()();
+
+  /// 附件列表的 JSON 编码（`List<ChatAttachment>`，v5 起；老数据默认空）。
+  TextColumn get attachmentsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -76,7 +76,7 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'phase'));
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -94,6 +94,9 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(providerProfiles, providerProfiles.protocol);
         await migrator.addColumn(providerProfiles, providerProfiles.presetId);
         await migrator.addColumn(providerProfiles, providerProfiles.compatJson);
+      }
+      if (from < 5) {
+        await migrator.addColumn(messages, messages.attachmentsJson);
       }
     },
   );
@@ -166,20 +169,21 @@ class AppDatabase extends _$AppDatabase {
   // --- 服务商配置 ---
 
   Stream<List<ProviderProfileRow>> watchProviderProfileRows() {
-    return (select(providerProfiles)
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-        .watch();
+    return (select(
+      providerProfiles,
+    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).watch();
   }
 
   Future<List<ProviderProfileRow>> getProviderProfileRows() {
-    return (select(providerProfiles)
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-        .get();
+    return (select(
+      providerProfiles,
+    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
   }
 
   Future<ProviderProfileRow?> getProviderProfileRow(String id) {
-    return (select(providerProfiles)..where((t) => t.id.equals(id)))
-        .getSingleOrNull();
+    return (select(
+      providerProfiles,
+    )..where((t) => t.id.equals(id))).getSingleOrNull();
   }
 
   Future<void> upsertProviderProfile(ProviderProfilesCompanion companion) {

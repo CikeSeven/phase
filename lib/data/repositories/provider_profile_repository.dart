@@ -8,6 +8,7 @@ import '../../core/utils/id.dart';
 import '../../core/utils/logger.dart';
 import '../datasources/local/app_database.dart';
 import '../datasources/local/secure_key_storage.dart';
+import '../datasources/local/settings_storage.dart';
 import '../models/api_protocol.dart';
 import '../models/openai_compat.dart';
 import '../models/profile_model.dart';
@@ -64,7 +65,9 @@ class ProviderProfileRepository {
           modelsJson: Value(encodeProfileModels(models)),
           defaultModel: Value(normalizedDefault),
           compatJson: Value(
-            compatOverrides == null ? null : jsonEncode(compatOverrides.toJson()),
+            compatOverrides == null
+                ? null
+                : jsonEncode(compatOverrides.toJson()),
           ),
           createdAt: DateTime.now(),
         ),
@@ -115,6 +118,42 @@ class ProviderProfileRepository {
     return _keyStorage.writeApiKey(profileId, apiKey);
   }
 
+  /// 一次性迁移：旧版按模型名启发式把部分模型写成 supportsReasoning=false，
+  /// 现统一翻回 true（所有模型默认支持推理）。返回改动的配置数。
+  Future<int> enableReasoningForStoredModels() async {
+    try {
+      final rows = await _db.getProviderProfileRows();
+      var changed = 0;
+      for (final row in rows) {
+        final models = decodeProfileModels(row.modelsJson);
+        if (models.every((model) => model.supportsReasoning)) continue;
+        await _db.upsertProviderProfile(
+          ProviderProfilesCompanion(
+            id: Value(row.id),
+            name: Value(row.name),
+            baseUrl: Value(row.baseUrl),
+            protocol: Value(row.protocol),
+            presetId: Value(row.presetId),
+            modelsJson: Value(
+              encodeProfileModels([
+                for (final model in models)
+                  model.copyWith(supportsReasoning: true),
+              ]),
+            ),
+            defaultModel: Value(row.defaultModel),
+            compatJson: Value(row.compatJson),
+            createdAt: Value(row.createdAt),
+          ),
+        );
+        changed++;
+      }
+      return changed;
+    } on Exception catch (e, st) {
+      AppLogger.error('迁移存量模型推理标记失败', e, st);
+      throw UnknownFailure('迁移存量模型推理标记失败', cause: e);
+    }
+  }
+
   ProviderProfile _toProfile(ProviderProfileRow row) {
     return ProviderProfile(
       id: row.id,
@@ -152,8 +191,28 @@ ProviderProfileRepository providerProfileRepository(Ref ref) {
   );
 }
 
-/// 服务商配置列表流。
-@riverpod
-Stream<List<ProviderProfile>> providerProfiles(Ref ref) {
-  return ref.watch(providerProfileRepositoryProvider).watchProfiles();
+/// 一次性迁移：存量模型的 supportsReasoning 统一翻为 true。
+/// 失败不阻断读取（下次启动重试）。
+@Riverpod(
+  keepAlive: true,
+  dependencies: [settingsStorage, providerProfileRepository],
+)
+Future<void> reasoningSupportMigration(Ref ref) async {
+  final settings = ref.watch(settingsStorageProvider);
+  if (settings.readReasoningSupportMigrated()) return;
+  try {
+    await ref
+        .read(providerProfileRepositoryProvider)
+        .enableReasoningForStoredModels();
+    await settings.writeReasoningSupportMigrated();
+  } on Failure catch (e, st) {
+    AppLogger.error('推理默认支持迁移未完成', e, st);
+  }
+}
+
+/// 服务商配置列表流；先等一次性迁移完成再发出，避免读到迁移前的旧标记。
+@Riverpod(dependencies: [reasoningSupportMigration, providerProfileRepository])
+Stream<List<ProviderProfile>> providerProfiles(Ref ref) async* {
+  await ref.watch(reasoningSupportMigrationProvider.future);
+  yield* ref.watch(providerProfileRepositoryProvider).watchProfiles();
 }

@@ -27,16 +27,27 @@ final class ModelSelectionProvider
         retry: null,
         name: r'modelSelectionProvider',
         isAutoDispose: true,
-        dependencies: <ProviderOrFamily>[settingsStorageProvider],
-        $allTransitiveDependencies: <ProviderOrFamily>[
+        dependencies: <ProviderOrFamily>[
+          settingsStorageProvider,
+          providerProfilesProvider,
+        ],
+        $allTransitiveDependencies: <ProviderOrFamily>{
           ModelSelectionProvider.$allTransitiveDependencies0,
           ModelSelectionProvider.$allTransitiveDependencies1,
-        ],
+          ModelSelectionProvider.$allTransitiveDependencies2,
+          ModelSelectionProvider.$allTransitiveDependencies3,
+          ModelSelectionProvider.$allTransitiveDependencies4,
+        },
       );
 
   static final $allTransitiveDependencies0 = settingsStorageProvider;
   static final $allTransitiveDependencies1 =
       SettingsStorageProvider.$allTransitiveDependencies0;
+  static final $allTransitiveDependencies2 = providerProfilesProvider;
+  static final $allTransitiveDependencies3 =
+      ProviderProfilesProvider.$allTransitiveDependencies0;
+  static final $allTransitiveDependencies4 =
+      ProviderProfilesProvider.$allTransitiveDependencies3;
 
   @override
   String debugGetCreateSourceHash() => _$modelSelectionHash();
@@ -46,7 +57,7 @@ final class ModelSelectionProvider
   ModelSelection create() => ModelSelection();
 }
 
-String _$modelSelectionHash() => r'd7fca973283a3c59cf1b0b7bf83f41f7ca43c7df';
+String _$modelSelectionHash() => r'0cbaad52032dad33fe4d86ddf7fbc9fed8a98d61';
 
 /// 模型选择：优先「最近使用」（shared_preferences），
 /// 否则回退到第一个服务商的默认模型 / 候选模型第一个。

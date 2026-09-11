@@ -7,6 +7,7 @@ import '../../data/models/chat_request.dart';
 import '../../data/models/provider_profile.dart';
 import '../ai_provider.dart';
 import '../dio_failure_mapper.dart';
+import '../attachment_encoder.dart';
 import '../sse_transport.dart';
 import 'responses_decoder.dart';
 
@@ -37,9 +38,7 @@ class OpenAiResponsesProvider implements AiProvider {
   ProviderCapabilities get capabilities =>
       const ProviderCapabilities(supportsStreaming: true);
 
-  Map<String, String> get _authHeaders => {
-    'Authorization': 'Bearer $_apiKey',
-  };
+  Map<String, String> get _authHeaders => {'Authorization': 'Bearer $_apiKey'};
 
   Uri _resolve(String path) {
     final base = _profile.baseUrl.endsWith('/')
@@ -49,11 +48,15 @@ class OpenAiResponsesProvider implements AiProvider {
   }
 
   @override
-  Stream<ChatChunk> streamChat(ChatRequest request) {
-    return postSseStream(
+  Stream<ChatChunk> streamChat(ChatRequest request) async* {
+    final attachments = await encodeRequestAttachments(
+      request,
+      supportsImages: modelSupportsImages(_profile, request.model),
+    );
+    yield* postSseStream(
       dio: _dio,
       uri: _resolve('responses'),
-      payload: buildResponsesPayload(request),
+      payload: buildResponsesPayload(request, attachments: attachments),
       headers: _authHeaders,
       decode: ResponsesSseDecoder.decode,
     );

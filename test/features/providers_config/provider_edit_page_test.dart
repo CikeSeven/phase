@@ -39,7 +39,7 @@ void main() {
     await tapProviderControl(tester, keyed('confirm-add-model'));
     expect(find.text('请输入模型 ID'), findsOneWidget);
     await fillProviderField(tester, keyed('new-model-id'), 'manual-private');
-    await tapProviderControl(tester, keyed('new-model-reasoning'));
+    // 推理默认开启，直接确认。
     await tapProviderControl(tester, keyed('confirm-add-model'));
     expect(
       tester.widget<Checkbox>(keyed('enabled-manual-private')).value,
@@ -191,11 +191,12 @@ void main() {
         'remote-r1',
       ]),
     );
+    // 存量数据经一次性迁移统一翻为支持推理。
     expect(
       saved.models
           .singleWhere((model) => model.id == 'gpt-5')
           .supportsReasoning,
-      isFalse,
+      isTrue,
     );
     expect(
       saved.models

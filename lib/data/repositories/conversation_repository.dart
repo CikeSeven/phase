@@ -5,6 +5,8 @@ import '../../core/error/failure.dart';
 import '../../core/utils/id.dart';
 import '../../core/utils/logger.dart';
 import '../datasources/local/app_database.dart';
+import '../datasources/local/attachment_storage.dart';
+import '../models/chat_attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 
@@ -12,9 +14,12 @@ part 'conversation_repository.g.dart';
 
 /// 会话与消息的仓库：对上层屏蔽 drift，异常统一转 [Failure]。
 class ConversationRepository {
-  ConversationRepository(this._db);
+  ConversationRepository(this._db, {this.attachments});
 
   final AppDatabase _db;
+
+  /// 删除会话时清理附件文件；测试可为 null（不清理）。
+  final AttachmentStorage? attachments;
 
   Stream<List<Conversation>> watchConversations() {
     return _db.watchConversationRows().map(
@@ -23,9 +28,9 @@ class ConversationRepository {
   }
 
   Stream<List<ChatMessage>> watchMessages(String conversationId) {
-    return _db.watchMessageRows(conversationId).map(
-      (rows) => rows.map(_toChatMessage).toList(),
-    );
+    return _db
+        .watchMessageRows(conversationId)
+        .map((rows) => rows.map(_toChatMessage).toList());
   }
 
   /// 一次性读取某会话的全部消息（构造请求上下文用）。
@@ -91,7 +96,13 @@ class ConversationRepository {
 
   Future<void> deleteConversation(String id) async {
     try {
+      // 先收集附件路径，库删除成功后再尽力清理文件。
+      final attachmentPaths = [
+        for (final message in await getMessages(id))
+          ...message.attachments.map((attachment) => attachment.path),
+      ];
       await _db.deleteConversationCascade(id);
+      await attachments?.deletePaths(attachmentPaths);
     } on Exception catch (e, st) {
       AppLogger.error('删除会话失败', e, st);
       throw UnknownFailure('删除会话失败', cause: e);
@@ -105,6 +116,7 @@ class ConversationRepository {
     required String content,
     ChatMessageStatus status = ChatMessageStatus.done,
     String? modelName,
+    List<ChatAttachment> attachments = const [],
   }) async {
     try {
       final now = DateTime.now();
@@ -115,6 +127,7 @@ class ConversationRepository {
         content: content,
         status: status,
         modelName: Value(modelName),
+        attachmentsJson: Value(encodeChatAttachments(attachments)),
         createdAt: now,
       );
       await _db.insertMessage(companion);
@@ -128,6 +141,7 @@ class ConversationRepository {
         content: content,
         status: status,
         modelName: modelName,
+        attachments: attachments,
         createdAt: now,
       );
     } on Exception catch (e, st) {
@@ -174,6 +188,7 @@ class ConversationRepository {
       status: row.status,
       modelName: row.modelName,
       reasoning: row.reasoning,
+      attachments: decodeChatAttachments(row.attachmentsJson),
       createdAt: row.createdAt,
     );
   }
@@ -181,5 +196,8 @@ class ConversationRepository {
 
 @Riverpod(keepAlive: true)
 ConversationRepository conversationRepository(Ref ref) {
-  return ConversationRepository(ref.watch(appDatabaseProvider));
+  return ConversationRepository(
+    ref.watch(appDatabaseProvider),
+    attachments: ref.watch(attachmentStorageProvider).value,
+  );
 }

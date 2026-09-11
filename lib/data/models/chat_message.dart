@@ -1,5 +1,7 @@
 import 'package:json_annotation/json_annotation.dart';
 
+import 'chat_attachment.dart';
+
 part 'chat_message.g.dart';
 
 /// 消息角色（AGENTS.md §3 约定取值）。
@@ -12,7 +14,7 @@ enum ChatMessageStatus { streaming, done, error }
 ///
 /// 本地持久化时由 drift 表映射（见 app_database.dart）；
 /// 发起请求时 role/content 会被映射为服务商协议的消息格式。
-@JsonSerializable()
+@JsonSerializable(explicitToJson: true)
 class ChatMessage {
   const ChatMessage({
     this.id,
@@ -21,6 +23,7 @@ class ChatMessage {
     this.status = ChatMessageStatus.done,
     this.modelName,
     this.reasoning,
+    this.attachments = const [],
     this.createdAt,
   });
 
@@ -35,6 +38,9 @@ class ChatMessage {
   /// 推理模型的思考内容；非推理模型为 null。
   final String? reasoning;
 
+  /// 用户消息的附件（图片/文本文件）；仅元数据，本体在私有目录。
+  final List<ChatAttachment> attachments;
+
   final DateTime? createdAt;
 
   ChatMessage copyWith({
@@ -44,6 +50,7 @@ class ChatMessage {
     ChatMessageStatus? status,
     String? modelName,
     String? reasoning,
+    List<ChatAttachment>? attachments,
     DateTime? createdAt,
   }) {
     return ChatMessage(
@@ -53,6 +60,7 @@ class ChatMessage {
       status: status ?? this.status,
       modelName: modelName ?? this.modelName,
       reasoning: reasoning ?? this.reasoning,
+      attachments: attachments ?? this.attachments,
       createdAt: createdAt ?? this.createdAt,
     );
   }

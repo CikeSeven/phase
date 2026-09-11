@@ -56,13 +56,7 @@ class ProviderProfile {
     final result = [...models];
     final fallback = defaultModel;
     if (fallback != null && result.every((m) => m.id != fallback)) {
-      result.insert(
-        0,
-        ProfileModel(
-          id: fallback,
-          supportsReasoning: guessSupportsReasoning(fallback),
-        ),
-      );
+      result.insert(0, ProfileModel(id: fallback));
     }
     return result;
   }

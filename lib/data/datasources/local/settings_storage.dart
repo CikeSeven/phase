@@ -48,6 +48,16 @@ class SettingsStorage {
   Future<void> writeLastReasoningEffort(String effortName) {
     return _prefs.setString(_lastReasoningEffortKey, effortName);
   }
+
+  /// 「存量模型统一默认支持推理」迁移是否已完成。
+  static const _reasoningSupportMigratedKey = 'reasoning_support_migrated_v1';
+
+  bool readReasoningSupportMigrated() =>
+      _prefs.getBool(_reasoningSupportMigratedKey) ?? false;
+
+  Future<void> writeReasoningSupportMigrated() {
+    return _prefs.setBool(_reasoningSupportMigratedKey, true);
+  }
 }
 
 /// 在 main() 中用真实实例 override。

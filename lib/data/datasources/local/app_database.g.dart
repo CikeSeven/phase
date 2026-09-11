@@ -446,6 +446,18 @@ class $MessagesTable extends Messages
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _attachmentsJsonMeta = const VerificationMeta(
+    'attachmentsJson',
+  );
+  @override
+  late final GeneratedColumn<String> attachmentsJson = GeneratedColumn<String>(
+    'attachments_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -466,6 +478,7 @@ class $MessagesTable extends Messages
     status,
     modelName,
     reasoning,
+    attachmentsJson,
     createdAt,
   ];
   @override
@@ -514,6 +527,15 @@ class $MessagesTable extends Messages
       context.handle(
         _reasoningMeta,
         reasoning.isAcceptableOrUnknown(data['reasoning']!, _reasoningMeta),
+      );
+    }
+    if (data.containsKey('attachments_json')) {
+      context.handle(
+        _attachmentsJsonMeta,
+        attachmentsJson.isAcceptableOrUnknown(
+          data['attachments_json']!,
+          _attachmentsJsonMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -565,6 +587,10 @@ class $MessagesTable extends Messages
         DriftSqlType.string,
         data['${effectivePrefix}reasoning'],
       ),
+      attachmentsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}attachments_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -595,6 +621,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
 
   /// 推理模型的思考内容；非推理模型为 null。
   final String? reasoning;
+
+  /// 附件列表的 JSON 编码（`List<ChatAttachment>`，v5 起；老数据默认空）。
+  final String attachmentsJson;
   final DateTime createdAt;
   const MessageRow({
     required this.id,
@@ -604,6 +633,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     required this.status,
     this.modelName,
     this.reasoning,
+    required this.attachmentsJson,
     required this.createdAt,
   });
   @override
@@ -626,6 +656,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     if (!nullToAbsent || reasoning != null) {
       map['reasoning'] = Variable<String>(reasoning);
     }
+    map['attachments_json'] = Variable<String>(attachmentsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -643,6 +674,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       reasoning: reasoning == null && nullToAbsent
           ? const Value.absent()
           : Value(reasoning),
+      attachmentsJson: Value(attachmentsJson),
       createdAt: Value(createdAt),
     );
   }
@@ -664,6 +696,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       ),
       modelName: serializer.fromJson<String?>(json['modelName']),
       reasoning: serializer.fromJson<String?>(json['reasoning']),
+      attachmentsJson: serializer.fromJson<String>(json['attachmentsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -682,6 +715,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       ),
       'modelName': serializer.toJson<String?>(modelName),
       'reasoning': serializer.toJson<String?>(reasoning),
+      'attachmentsJson': serializer.toJson<String>(attachmentsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -694,6 +728,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     ChatMessageStatus? status,
     Value<String?> modelName = const Value.absent(),
     Value<String?> reasoning = const Value.absent(),
+    String? attachmentsJson,
     DateTime? createdAt,
   }) => MessageRow(
     id: id ?? this.id,
@@ -703,6 +738,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     status: status ?? this.status,
     modelName: modelName.present ? modelName.value : this.modelName,
     reasoning: reasoning.present ? reasoning.value : this.reasoning,
+    attachmentsJson: attachmentsJson ?? this.attachmentsJson,
     createdAt: createdAt ?? this.createdAt,
   );
   MessageRow copyWithCompanion(MessagesCompanion data) {
@@ -716,6 +752,9 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       status: data.status.present ? data.status.value : this.status,
       modelName: data.modelName.present ? data.modelName.value : this.modelName,
       reasoning: data.reasoning.present ? data.reasoning.value : this.reasoning,
+      attachmentsJson: data.attachmentsJson.present
+          ? data.attachmentsJson.value
+          : this.attachmentsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -730,6 +769,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           ..write('status: $status, ')
           ..write('modelName: $modelName, ')
           ..write('reasoning: $reasoning, ')
+          ..write('attachmentsJson: $attachmentsJson, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -744,6 +784,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     status,
     modelName,
     reasoning,
+    attachmentsJson,
     createdAt,
   );
   @override
@@ -757,6 +798,7 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           other.status == this.status &&
           other.modelName == this.modelName &&
           other.reasoning == this.reasoning &&
+          other.attachmentsJson == this.attachmentsJson &&
           other.createdAt == this.createdAt);
 }
 
@@ -768,6 +810,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
   final Value<ChatMessageStatus> status;
   final Value<String?> modelName;
   final Value<String?> reasoning;
+  final Value<String> attachmentsJson;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const MessagesCompanion({
@@ -778,6 +821,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     this.status = const Value.absent(),
     this.modelName = const Value.absent(),
     this.reasoning = const Value.absent(),
+    this.attachmentsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -789,6 +833,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     required ChatMessageStatus status,
     this.modelName = const Value.absent(),
     this.reasoning = const Value.absent(),
+    this.attachmentsJson = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -805,6 +850,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Expression<String>? status,
     Expression<String>? modelName,
     Expression<String>? reasoning,
+    Expression<String>? attachmentsJson,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -816,6 +862,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       if (status != null) 'status': status,
       if (modelName != null) 'model_name': modelName,
       if (reasoning != null) 'reasoning': reasoning,
+      if (attachmentsJson != null) 'attachments_json': attachmentsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -829,6 +876,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Value<ChatMessageStatus>? status,
     Value<String?>? modelName,
     Value<String?>? reasoning,
+    Value<String>? attachmentsJson,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -840,6 +888,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       status: status ?? this.status,
       modelName: modelName ?? this.modelName,
       reasoning: reasoning ?? this.reasoning,
+      attachmentsJson: attachmentsJson ?? this.attachmentsJson,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -873,6 +922,9 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     if (reasoning.present) {
       map['reasoning'] = Variable<String>(reasoning.value);
     }
+    if (attachmentsJson.present) {
+      map['attachments_json'] = Variable<String>(attachmentsJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -892,6 +944,7 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
           ..write('status: $status, ')
           ..write('modelName: $modelName, ')
           ..write('reasoning: $reasoning, ')
+          ..write('attachmentsJson: $attachmentsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -1822,6 +1875,7 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   required ChatMessageStatus status,
   Value<String?> modelName,
   Value<String?> reasoning,
+  Value<String> attachmentsJson,
   required DateTime createdAt,
   Value<int> rowid,
 });
@@ -1833,6 +1887,7 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<ChatMessageStatus> status,
   Value<String?> modelName,
   Value<String?> reasoning,
+  Value<String> attachmentsJson,
   Value<DateTime> createdAt,
   Value<int> rowid,
 });
@@ -1898,6 +1953,11 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get reasoning => $composableBuilder(
     column: $table.reasoning,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get attachmentsJson => $composableBuilder(
+    column: $table.attachmentsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -1969,6 +2029,11 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get attachmentsJson => $composableBuilder(
+    column: $table.attachmentsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -2024,6 +2089,11 @@ class $$MessagesTableAnnotationComposer
 
   GeneratedColumn<String> get reasoning =>
       $composableBuilder(column: $table.reasoning, builder: (column) => column);
+
+  GeneratedColumn<String> get attachmentsJson => $composableBuilder(
+    column: $table.attachmentsJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -2087,6 +2157,7 @@ class $$MessagesTableTableManager
                 Value<ChatMessageStatus> status = const Value.absent(),
                 Value<String?> modelName = const Value.absent(),
                 Value<String?> reasoning = const Value.absent(),
+                Value<String> attachmentsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion(
@@ -2097,6 +2168,7 @@ class $$MessagesTableTableManager
                 status: status,
                 modelName: modelName,
                 reasoning: reasoning,
+                attachmentsJson: attachmentsJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -2109,6 +2181,7 @@ class $$MessagesTableTableManager
                 required ChatMessageStatus status,
                 Value<String?> modelName = const Value.absent(),
                 Value<String?> reasoning = const Value.absent(),
+                Value<String> attachmentsJson = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => MessagesCompanion.insert(
@@ -2119,6 +2192,7 @@ class $$MessagesTableTableManager
                 status: status,
                 modelName: modelName,
                 reasoning: reasoning,
+                attachmentsJson: attachmentsJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),

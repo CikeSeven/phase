@@ -3,15 +3,15 @@ import 'package:phase/data/models/profile_model.dart';
 
 void main() {
   group('decodeProfileModels 兼容读取', () {
-    test('老格式纯字符串列表自动转换并启发式预填推理标记', () {
+    test('老格式纯字符串列表自动转换，推理默认支持', () {
       final models = decodeProfileModels(
         '["deepseek-chat","deepseek-reasoner","gpt-5"]',
       );
       expect(models, hasLength(3));
       expect(models[0].id, 'deepseek-chat');
-      expect(models[0].supportsReasoning, isFalse);
-      expect(models[1].supportsReasoning, isTrue);
-      expect(models[2].supportsReasoning, isTrue);
+      for (final model in models) {
+        expect(model.supportsReasoning, isTrue, reason: model.id);
+      }
     });
 
     test('新格式对象列表完整还原', () {
@@ -30,7 +30,7 @@ void main() {
     test('encode/decode 往返', () {
       const original = [
         ProfileModel(id: 'x', supportsReasoning: true),
-        ProfileModel(id: 'y'),
+        ProfileModel(id: 'y', supportsReasoning: false),
         ProfileModel(
           id: 'z',
           enabled: false,
@@ -54,31 +54,8 @@ void main() {
       expect(legacy[0].enabled, isTrue);
       expect(legacy[0].supportsTools, isTrue);
       expect(legacy[0].supportsImages, isTrue);
-    });
-  });
-
-  group('guessSupportsReasoning', () {
-    test('推理模型命名命中', () {
-      for (final id in [
-        'deepseek-reasoner',
-        'r1-distill',
-        'o1-mini',
-        'o3',
-        'gpt-5-pro',
-        'qwq-32b',
-        'claude-sonnet-4',
-        'gemini-2.5-pro',
-        'gemini-3-pro',
-        'kimi-thinking-preview',
-      ]) {
-        expect(guessSupportsReasoning(id), isTrue, reason: id);
-      }
-    });
-
-    test('普通模型不命中', () {
-      for (final id in ['gpt-4o', 'deepseek-chat', 'llama3.1', 'qwen2.5']) {
-        expect(guessSupportsReasoning(id), isFalse, reason: id);
-      }
+      // 缺推理标记同样按支持处理。
+      expect(decodeProfileModels('[{"id":"b"}]')[0].supportsReasoning, isTrue);
     });
   });
 }

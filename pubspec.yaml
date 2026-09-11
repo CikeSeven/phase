@@ -45,6 +45,14 @@ dependencies:
   gpt_markdown: ^1.2.1
   material_symbols_icons: ^4.2960.0
 
+  # 附件：相册/拍照/文件选择、图片压缩转码（纯 Dart）、MIME 推断、落盘路径
+  image_picker: ^1.2.3
+  file_picker: ^12.3.0
+  image: ^4.9.2
+  path_provider: ^2.1.6
+  mime: ^2.1.0
+  path: ^1.9.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

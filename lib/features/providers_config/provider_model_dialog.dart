@@ -20,10 +20,9 @@ class ProviderModelDialog extends StatefulWidget {
 class _ProviderModelDialogState extends State<ProviderModelDialog> {
   final _formKey = GlobalKey<FormState>();
   final _idController = TextEditingController();
-  bool _supportsReasoning = false;
+  bool _supportsReasoning = true;
   bool _supportsTools = true;
   bool _supportsImages = true;
-  bool _capabilitiesTouched = false;
   bool _submitted = false;
 
   @override
@@ -75,13 +74,6 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                 if (widget.containsId(id)) return '该模型 ID 已存在';
                 return null;
               },
-              onChanged: (value) {
-                if (!_capabilitiesTouched) {
-                  setState(() {
-                    _supportsReasoning = guessSupportsReasoning(value);
-                  });
-                }
-              },
             ),
             const SizedBox(height: AppSpacing.l),
             Wrap(
@@ -96,7 +88,6 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                   selected: _supportsReasoning,
                   onSelected: (value) => setState(() {
                     _supportsReasoning = value;
-                    _capabilitiesTouched = true;
                   }),
                 ),
                 CapabilityChip(
@@ -107,7 +98,6 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                   selected: _supportsTools,
                   onSelected: (value) => setState(() {
                     _supportsTools = value;
-                    _capabilitiesTouched = true;
                   }),
                 ),
                 CapabilityChip(
@@ -118,7 +108,6 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                   selected: _supportsImages,
                   onSelected: (value) => setState(() {
                     _supportsImages = value;
-                    _capabilitiesTouched = true;
                   }),
                 ),
               ],

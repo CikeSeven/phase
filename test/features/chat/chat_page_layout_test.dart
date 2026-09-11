@@ -12,10 +12,12 @@ import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/theme/frosted_surface.dart';
 import 'package:phase/core/widgets/app_background.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
+import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/ai_model.dart';
 import 'package:phase/data/models/chat_chunk.dart';
+import 'package:phase/data/models/chat_attachment.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/conversation.dart';
@@ -51,6 +53,9 @@ class _MemoryConversations implements ConversationRepository {
   int pinCalls = 0;
   int deleteCalls = 0;
   int _messageSequence = 0;
+
+  @override
+  AttachmentStorage? get attachments => null;
 
   void seed(int count) {
     for (var index = 0; index < count; index++) {
@@ -121,6 +126,7 @@ class _MemoryConversations implements ConversationRepository {
     required String content,
     ChatMessageStatus status = ChatMessageStatus.done,
     String? modelName,
+    List<ChatAttachment> attachments = const [],
   }) async {
     final message = ChatMessage(
       id: 'message-${_messageSequence++}',
@@ -128,6 +134,7 @@ class _MemoryConversations implements ConversationRepository {
       content: content,
       status: status,
       modelName: modelName,
+      attachments: attachments,
     );
     messages.putIfAbsent(conversationId, () => []).add(message);
     _notify();
@@ -515,7 +522,13 @@ void main() {
         expect(find.byType(TextField), findsOneWidget);
         expect(find.text('向相月提问，或选择一个助手'), findsOneWidget);
         expect(find.text('选择助手'), findsOneWidget);
-        expect(find.byTooltip('附件'), findsNothing);
+        final attach = find.byTooltip('附件');
+        expect(attach, findsOneWidget);
+        // 附件按钮在输入栏内，不挤压发送触区。
+        expect(
+          tester.getRect(attach).right,
+          lessThanOrEqualTo(tester.getRect(find.byTooltip('发送')).left),
+        );
         expect(find.byIcon(Symbols.expand_more), findsOneWidget);
         final modelText = tester.widget<Text>(
           find.text(_profile.defaultModel!),

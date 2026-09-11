@@ -94,7 +94,7 @@ void main() {
       keyed('new-model-id'),
       'manual-after-fetch',
     );
-    await tapProviderControl(tester, keyed('new-model-reasoning'));
+    // 推理默认开启，直接确认。
     await tapProviderControl(tester, keyed('confirm-add-model'));
     await tapProviderControl(tester, keyed('save-provider'));
     final saved = (await tester.runAsync(harness.repository.listProfiles))!

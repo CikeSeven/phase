@@ -4,6 +4,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../data/datasources/local/secure_key_storage.dart';
+import '../../../data/models/chat_attachment.dart';
 import '../../../data/models/chat_chunk.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/chat_request.dart';
@@ -82,9 +83,12 @@ class ChatController extends _$ChatController {
   ///
   /// 前置失败（未配置模型、落库失败）向上抛 [Failure]，由 UI 转 SnackBar；
   /// 流式期间的 [Failure] 不抛出，而是写入 AI 消息（status error）。
-  Future<void> send(String text) async {
+  Future<void> send(
+    String text, {
+    List<ChatAttachment> attachments = const [],
+  }) async {
     final trimmed = text.trim();
-    if (trimmed.isEmpty || state.isGenerating) {
+    if ((trimmed.isEmpty && attachments.isEmpty) || state.isGenerating) {
       return;
     }
 
@@ -97,9 +101,12 @@ class ChatController extends _$ChatController {
 
     var conversationId = state.conversationId;
     if (conversationId == null) {
-      final title = trimmed.length <= 20
-          ? trimmed
-          : '${trimmed.substring(0, 20)}…';
+      final titleSource = trimmed.isEmpty
+          ? '附件：${attachments.first.name}'
+          : trimmed;
+      final title = titleSource.length <= 20
+          ? titleSource
+          : '${titleSource.substring(0, 20)}…';
       final conversation = await repository.createConversation(title: title);
       conversationId = conversation.id;
       state = state.copyWith(conversationId: conversationId);
@@ -109,6 +116,7 @@ class ChatController extends _$ChatController {
       conversationId: conversationId,
       role: ChatRole.user,
       content: trimmed,
+      attachments: attachments,
     );
 
     final aiMessage = await repository.appendMessage(

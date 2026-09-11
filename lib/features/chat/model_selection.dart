@@ -1,7 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../data/datasources/local/settings_storage.dart';
-import '../../../data/models/profile_model.dart';
 import '../../../data/models/provider_profile.dart';
 import '../../../data/models/reasoning_effort.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
@@ -14,6 +13,7 @@ class ChatModelSelection {
     required this.profile,
     required this.model,
     required this.supportsReasoning,
+    required this.supportsImages,
     required this.effort,
   });
 
@@ -23,12 +23,15 @@ class ChatModelSelection {
   /// 当前模型是否声明支持推理；false 时 effort 不下发。
   final bool supportsReasoning;
 
+  /// 当前模型是否声明支持图片输入；false 时附件入口拦截图片。
+  final bool supportsImages;
+
   final ReasoningEffort effort;
 }
 
 /// 模型选择：优先「最近使用」（shared_preferences），
 /// 否则回退到第一个服务商的默认模型 / 候选模型第一个。
-@Riverpod(dependencies: [settingsStorage])
+@Riverpod(dependencies: [settingsStorage, providerProfiles])
 class ModelSelection extends _$ModelSelection {
   @override
   Future<ChatModelSelection?> build() async {
@@ -68,10 +71,13 @@ class ModelSelection extends _$ModelSelection {
       return null;
     }
 
-    var supportsReasoning = guessSupportsReasoning(model);
+    // 未登记能力的模型默认支持推理/图片，是否合规交给服务商服务器判断。
+    var supportsReasoning = true;
+    var supportsImages = true;
     for (final candidate in profile.modelCandidates) {
       if (candidate.id == model) {
         supportsReasoning = candidate.supportsReasoning;
+        supportsImages = candidate.supportsImages;
         break;
       }
     }
@@ -80,6 +86,7 @@ class ModelSelection extends _$ModelSelection {
       profile: profile,
       model: model,
       supportsReasoning: supportsReasoning,
+      supportsImages: supportsImages,
       effort: ReasoningEffort.fromName(settings.readLastReasoningEffort()),
     );
   }

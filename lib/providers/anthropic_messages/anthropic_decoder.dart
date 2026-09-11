@@ -5,6 +5,7 @@ import '../../data/models/chat_chunk.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
 import '../../data/models/reasoning_effort.dart';
+import '../attachment_encoder.dart';
 import '../sse_transport.dart';
 
 /// 构造 Anthropic Messages（POST /v1/messages）请求体。
@@ -12,7 +13,10 @@ import '../sse_transport.dart';
 /// 纯函数便于单测。system 提取为独立字段；
 /// 推理等级映射 `thinking: {type: enabled, budget_tokens}`，
 /// 并保证 budget + 1024 ≤ max_tokens（不够就抬 max_tokens）。
-Map<String, dynamic> buildAnthropicPayload(ChatRequest request) {
+Map<String, dynamic> buildAnthropicPayload(
+  ChatRequest request, {
+  List<List<AttachmentPayload>>? attachments,
+}) {
   var maxTokens = request.maxTokens ?? 8192;
   Map<String, dynamic>? thinking;
   if (request.reasoningEffort case final effort?) {
@@ -34,13 +38,40 @@ Map<String, dynamic> buildAnthropicPayload(ChatRequest request) {
     }
   }
 
+  Object contentFor(ChatMessage message, int index) {
+    final parts = attachments == null || index >= attachments.length
+        ? const <AttachmentPayload>[]
+        : attachments[index];
+    if (parts.isEmpty) {
+      return message.content;
+    }
+    return [
+      if (message.content.isNotEmpty) {'type': 'text', 'text': message.content},
+      for (final part in parts)
+        if (part.isImage)
+          {
+            'type': 'image',
+            'source': {
+              'type': 'base64',
+              'media_type': part.mimeType,
+              'data': part.base64Data,
+            },
+          }
+        else
+          {'type': 'text', 'text': part.text},
+    ];
+  }
+
   return {
     'model': request.model,
     'max_tokens': maxTokens,
     'messages': [
-      for (final message in request.messages)
-        if (message.role != ChatRole.system)
-          {'role': message.role.name, 'content': message.content},
+      for (var index = 0; index < request.messages.length; index++)
+        if (request.messages[index].role != ChatRole.system)
+          {
+            'role': request.messages[index].role.name,
+            'content': contentFor(request.messages[index], index),
+          },
     ],
     'system': ?_systemText(request.messages),
     'stream': true,

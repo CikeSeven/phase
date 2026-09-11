@@ -5,9 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
+import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/ai_model.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_chunk.dart';
@@ -22,23 +24,8 @@ import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
 
 class ProviderTestHarness {
-  ProviderTestHarness({
-    Stream<List<ProviderProfile>> Function()? profileStream,
-  }) {
+  ProviderTestHarness({this.profileStream}) {
     repository = ProviderProfileRepository(database, keyStorage);
-    container = ProviderContainer(
-      overrides: [
-        providerProfileRepositoryProvider.overrideWith((ref) => repository),
-        aiProviderFactoryProvider.overrideWith(
-          (ref) => (profile, apiKey) {
-            requests.add((profile: profile, apiKey: apiKey));
-            return provider;
-          },
-        ),
-        if (profileStream != null)
-          providerProfilesProvider.overrideWith((ref) => profileStream()),
-      ],
-    );
     router = GoRouter(
       initialLocation: '/settings/providers',
       routes: [
@@ -69,6 +56,7 @@ class ProviderTestHarness {
     );
   }
 
+  final Stream<List<ProviderProfile>> Function()? profileStream;
   final database = AppDatabase(NativeDatabase.memory());
   final keyStorage = MemoryKeyStorage();
   final provider = FakeAiProvider();
@@ -117,12 +105,30 @@ class ProviderTestHarness {
     double scale = 1,
     double keyboard = 0,
     bool settle = true,
+    Map<String, Object> preferences = const {},
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
     tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 24);
     setKeyboard(tester, keyboard);
     addTearDown(tester.view.reset);
+    // providerProfiles 现在会等待推理标记迁移，迁移依赖设置存储。
+    SharedPreferences.setMockInitialValues(preferences);
+    final prefs = await SharedPreferences.getInstance();
+    container = ProviderContainer(
+      overrides: [
+        providerProfileRepositoryProvider.overrideWith((ref) => repository),
+        sharedPreferencesProvider.overrideWith((ref) => prefs),
+        aiProviderFactoryProvider.overrideWith(
+          (ref) => (profile, apiKey) {
+            requests.add((profile: profile, apiKey: apiKey));
+            return provider;
+          },
+        ),
+        if (profileStream != null)
+          providerProfilesProvider.overrideWith((ref) => profileStream!()),
+      ],
+    );
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,

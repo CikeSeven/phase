@@ -5,34 +5,56 @@ import '../../data/models/chat_chunk.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
 import '../../data/models/reasoning_effort.dart';
+import '../attachment_encoder.dart';
 import '../sse_transport.dart';
 
 /// 构造 Responses API（POST /responses）请求体。
 ///
 /// 纯函数便于单测。system 消息置首条 developer 角色；
 /// 推理等级映射为 `reasoning: {effort, summary: auto}`（off → effort none）。
-Map<String, dynamic> buildResponsesPayload(ChatRequest request) {
+Map<String, dynamic> buildResponsesPayload(
+  ChatRequest request, {
+  List<List<AttachmentPayload>>? attachments,
+}) {
+  List<AttachmentPayload> partsFor(int index) =>
+      attachments == null || index >= attachments.length
+      ? const <AttachmentPayload>[]
+      : attachments[index];
+
+  List<Map<String, dynamic>> userContent(ChatMessage message, int index) {
+    return [
+      if (message.content.isNotEmpty)
+        {'type': 'input_text', 'text': message.content},
+      for (final part in partsFor(index))
+        if (part.isImage)
+          {
+            'type': 'input_image',
+            'image_url': 'data:${part.mimeType};base64,${part.base64Data}',
+          }
+        else
+          {'type': 'input_text', 'text': part.text},
+    ];
+  }
+
   return {
     'model': request.model,
     'input': [
-      for (final message in request.messages)
-        switch (message.role) {
+      for (var index = 0; index < request.messages.length; index++)
+        switch (request.messages[index].role) {
           ChatRole.system => {
             'role': 'developer',
             'content': [
-              {'type': 'input_text', 'text': message.content},
+              {'type': 'input_text', 'text': request.messages[index].content},
             ],
           },
           ChatRole.user => {
             'role': 'user',
-            'content': [
-              {'type': 'input_text', 'text': message.content},
-            ],
+            'content': userContent(request.messages[index], index),
           },
           ChatRole.assistant => {
             'role': 'assistant',
             'content': [
-              {'type': 'output_text', 'text': message.content},
+              {'type': 'output_text', 'text': request.messages[index].content},
             ],
           },
         },

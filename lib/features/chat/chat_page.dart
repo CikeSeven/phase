@@ -87,6 +87,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           onDrawerChanged: _onDrawerChanged,
           appBar: AppTopBar(
             toolbarHeight: toolbarHeight,
+            // 模型名用满标题槽：两侧留白收窄，长 id 在真实边界截断。
+            titleSpacing: 0,
             automaticallyImplyLeading: false,
             leading: IconButton(
               tooltip: '打开会话列表',
@@ -114,8 +116,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         children: [
                           Row(children: [Text('相月', style: titleStyle)]),
                           const SizedBox(height: AppSpacing.xs),
+                          // 行占满可用宽度：长模型名在真实边界截断；Flexible
+                          // 松散适配让短名称的下拉箭头仍然紧贴文字。
                           Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Flexible(
                                 child: Text(
@@ -132,7 +135,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               // 推理开启时跟在模型名右侧，关闭或不支持不显示。
                               if (current?.supportsReasoning == true &&
                                   current!.effort != ReasoningEffort.off) ...[
-                                const SizedBox(width: AppSpacing.s),
+                                const SizedBox(width: AppSpacing.xs),
                                 Text(
                                   current.effort.label,
                                   key: const ValueKey('chat-reasoning-effort'),

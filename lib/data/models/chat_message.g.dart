@@ -15,6 +15,11 @@ ChatMessage _$ChatMessageFromJson(Map<String, dynamic> json) => ChatMessage(
       ChatMessageStatus.done,
   modelName: json['modelName'] as String?,
   reasoning: json['reasoning'] as String?,
+  attachments:
+      (json['attachments'] as List<dynamic>?)
+          ?.map((e) => ChatAttachment.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [],
   createdAt: json['createdAt'] == null
       ? null
       : DateTime.parse(json['createdAt'] as String),
@@ -28,6 +33,7 @@ Map<String, dynamic> _$ChatMessageToJson(ChatMessage instance) =>
       'status': _$ChatMessageStatusEnumMap[instance.status]!,
       'modelName': instance.modelName,
       'reasoning': instance.reasoning,
+      'attachments': instance.attachments.map((e) => e.toJson()).toList(),
       'createdAt': instance.createdAt?.toIso8601String(),
     };
 

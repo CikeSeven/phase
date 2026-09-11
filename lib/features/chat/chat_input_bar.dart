@@ -7,6 +7,9 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/frosted_surface.dart';
+import '../../../data/models/chat_attachment.dart';
+import 'attachment_chips.dart';
+import 'attachment_picker.dart';
 import 'chat_controller.dart';
 import 'model_selection.dart';
 
@@ -24,6 +27,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   bool _canSend = false;
   bool _submitting = false;
   String? _pendingText;
+  List<ChatAttachment> _attachments = const [];
 
   @override
   void initState() {
@@ -35,7 +39,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   void _onFocusChanged() => setState(() {});
 
   void _onDraftChanged() {
-    final canSend = _controller.text.trim().isNotEmpty;
+    final canSend =
+        _controller.text.trim().isNotEmpty || _attachments.isNotEmpty;
     if (canSend != _canSend) {
       setState(() => _canSend = canSend);
     }
@@ -57,10 +62,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       _,
       generating,
     ) {
-      if (!generating || _pendingText == null) return;
+      if (!generating) return;
       // 生成状态意味着 controller 已接收并落库，之前的草稿不能提前清掉。
-      if (_controller.text == _pendingText) _controller.clear();
+      if (_pendingText != null && _controller.text == _pendingText) {
+        _controller.clear();
+      }
       _pendingText = null;
+      if (_attachments.isNotEmpty) setState(() => _attachments = const []);
     });
     final selection = ref.watch(modelSelectionProvider);
     final theme = Theme.of(context);
@@ -88,6 +96,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     );
     final actions = Row(
       children: [
+        IconButton(
+          key: const ValueKey('chat-attach'),
+          tooltip: '附件',
+          onPressed: _submitting ? null : _showAttachmentSheet,
+          icon: const Icon(Symbols.attach_file),
+        ),
         if (needsConfiguration)
           Expanded(
             child: Align(
@@ -167,6 +181,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (_attachments.isNotEmpty)
+                        AttachmentChips(
+                          attachments: _attachments,
+                          onRemove: (attachment) => setState(() {
+                            _attachments = [
+                              for (final entry in _attachments)
+                                if (entry.id != attachment.id) entry,
+                            ];
+                            _onDraftChanged();
+                          }),
+                        ),
                       Flexible(child: field),
                       actions,
                     ],
@@ -183,7 +208,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   Future<void> _send() async {
     final text = _controller.text;
     if (_submitting ||
-        text.trim().isEmpty ||
+        (text.trim().isEmpty && _attachments.isEmpty) ||
         ref.read(chatControllerProvider).isGenerating) {
       return;
     }
@@ -207,7 +232,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       }
       if (ref.read(chatControllerProvider).isGenerating) return;
       _pendingText = text;
-      await ref.read(chatControllerProvider.notifier).send(text);
+      await ref
+          .read(chatControllerProvider.notifier)
+          .send(text, attachments: _attachments);
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -224,5 +251,74 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       _pendingText = null;
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  /// 附件来源面板：拍照 / 相册 / 文件。
+  Future<void> _showAttachmentSheet() async {
+    FocusScope.of(context).unfocus();
+    final source = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      useSafeArea: true,
+      builder: (context) => SafeArea(
+        top: false,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              key: const ValueKey('attach-camera'),
+              leading: const Icon(Symbols.photo_camera),
+              title: const Text('拍照'),
+              onTap: () => Navigator.of(context).pop('camera'),
+            ),
+            ListTile(
+              key: const ValueKey('attach-gallery'),
+              leading: const Icon(Symbols.photo_library),
+              title: const Text('相册'),
+              onTap: () => Navigator.of(context).pop('gallery'),
+            ),
+            ListTile(
+              key: const ValueKey('attach-file'),
+              leading: const Icon(Symbols.description),
+              title: const Text('文件'),
+              subtitle: const Text('文本类文件，内容随消息发送'),
+              onTap: () => Navigator.of(context).pop('file'),
+            ),
+            const SizedBox(height: AppSpacing.s),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+    if (source != 'file' && !_modelSupportsImages()) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('当前模型未标记支持图片输入')));
+      return;
+    }
+    try {
+      final picker = await ref.read(attachmentPickerProvider.future);
+      if (!mounted) return;
+      final picked = switch (source) {
+        'camera' => [
+          ?await picker.pickCameraImage(),
+        ].whereType<ChatAttachment>().toList(),
+        'gallery' => await picker.pickImages(),
+        _ => await picker.pickFiles(),
+      };
+      if (picked.isEmpty || !mounted) return;
+      setState(() {
+        _attachments = [..._attachments, ...picked];
+        _onDraftChanged();
+      });
+    } on Failure catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(error.userMessage)));
+      }
+    }
+  }
+
+  bool _modelSupportsImages() {
+    return ref.read(modelSelectionProvider).value?.supportsImages ?? true;
   }
 }

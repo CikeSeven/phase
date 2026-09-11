@@ -8,6 +8,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../data/models/chat_message.dart';
+import 'attachment_chips.dart';
 import 'chat_code_block.dart';
 import 'message_actions_sheet.dart';
 import 'thinking_panel.dart';
@@ -74,7 +75,21 @@ class MessageBubble extends StatelessWidget {
                             horizontal: AppSpacing.l,
                             vertical: AppSpacing.m,
                           ),
-                          child: Text(message.content, style: textStyle),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (message.attachments.isNotEmpty) ...[
+                                MessageAttachments(
+                                  attachments: message.attachments,
+                                ),
+                                if (message.content.isNotEmpty)
+                                  const SizedBox(height: AppSpacing.s),
+                              ],
+                              if (message.content.isNotEmpty)
+                                Text(message.content, style: textStyle),
+                            ],
+                          ),
                         ),
                       ),
                     ),

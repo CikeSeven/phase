@@ -11,6 +11,7 @@ import '../../data/models/provider_profile.dart';
 import '../../data/models/reasoning_effort.dart';
 import '../ai_provider.dart';
 import '../dio_failure_mapper.dart';
+import '../attachment_encoder.dart';
 import '../sse_transport.dart';
 import 'sse_decoder.dart';
 import 'think_tag_filter.dart';
@@ -18,15 +19,27 @@ import 'think_tag_filter.dart';
 /// 构造 chat/completions 请求体。
 ///
 /// 纯函数便于单测；推理等级按 [OpenAiCompat.thinkingFormat] 映射。
+///
+/// [attachments] 与 request.messages 按下标对齐：有附件的消息 content 变为
+/// 结构化数组（text / image_url data URI），无附件保持纯字符串。
 Map<String, dynamic> buildCompletionsPayload({
   required ChatRequest request,
   required OpenAiCompat compat,
+  List<List<AttachmentPayload>>? attachments,
 }) {
   final payload = <String, dynamic>{
     'model': request.model,
     'messages': [
-      for (final message in request.messages)
-        {'role': _roleFor(message, compat), 'content': message.content},
+      for (var index = 0; index < request.messages.length; index++)
+        {
+          'role': _roleFor(request.messages[index], compat),
+          'content': _completionsContent(
+            request.messages[index],
+            attachments == null || index >= attachments.length
+                ? const <AttachmentPayload>[]
+                : attachments[index],
+          ),
+        },
     ],
     'stream': true,
     if (request.temperature != null) 'temperature': request.temperature,
@@ -41,6 +54,25 @@ Map<String, dynamic> buildCompletionsPayload({
     compat.thinkingFormat,
   );
   return payload;
+}
+
+Object _completionsContent(ChatMessage message, List<AttachmentPayload> parts) {
+  if (parts.isEmpty) {
+    return message.content;
+  }
+  return [
+    if (message.content.isNotEmpty) {'type': 'text', 'text': message.content},
+    for (final part in parts)
+      if (part.isImage)
+        {
+          'type': 'image_url',
+          'image_url': {
+            'url': 'data:${part.mimeType};base64,${part.base64Data}',
+          },
+        }
+      else
+        {'type': 'text', 'text': part.text},
+  ];
 }
 
 String _roleFor(ChatMessage message, OpenAiCompat compat) {
@@ -123,11 +155,19 @@ class OpenAiCompletionsProvider implements AiProvider {
   }
 
   @override
-  Stream<ChatChunk> streamChat(ChatRequest request) {
-    return postSseStream(
+  Stream<ChatChunk> streamChat(ChatRequest request) async* {
+    final attachments = await encodeRequestAttachments(
+      request,
+      supportsImages: modelSupportsImages(_profile, request.model),
+    );
+    yield* postSseStream(
       dio: _dio,
       uri: _resolve('chat/completions'),
-      payload: buildCompletionsPayload(request: request, compat: _compat),
+      payload: buildCompletionsPayload(
+        request: request,
+        compat: _compat,
+        attachments: attachments,
+      ),
       headers: _authHeaders,
       // think 标签拆分放在解码之后，保持 SSE 解析器纯粹；
       // 带内错误事件在进入状态机前抛出为 Failure。

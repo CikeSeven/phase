@@ -7,6 +7,7 @@ import '../../data/models/chat_request.dart';
 import '../../data/models/provider_profile.dart';
 import '../ai_provider.dart';
 import '../dio_failure_mapper.dart';
+import '../attachment_encoder.dart';
 import '../sse_transport.dart';
 import 'google_decoder.dart';
 
@@ -48,13 +49,17 @@ class GoogleGenerativeAiProvider implements AiProvider {
   }
 
   @override
-  Stream<ChatChunk> streamChat(ChatRequest request) {
-    return postSseStream(
+  Stream<ChatChunk> streamChat(ChatRequest request) async* {
+    final attachments = await encodeRequestAttachments(
+      request,
+      supportsImages: modelSupportsImages(_profile, request.model),
+    );
+    yield* postSseStream(
       dio: _dio,
       uri: _resolve(
         'v1beta/models/${request.model}:streamGenerateContent?alt=sse',
       ),
-      payload: buildGooglePayload(request),
+      payload: buildGooglePayload(request, attachments: attachments),
       headers: _authHeaders,
       decode: GoogleSseDecoder.decode,
     );

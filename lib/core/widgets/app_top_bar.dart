@@ -14,6 +14,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.automaticallyImplyLeading = true,
     this.toolbarHeight = 64,
     this.showDivider = true,
+    this.titleSpacing = AppSpacing.l,
   });
 
   final Widget title;
@@ -22,6 +23,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   final bool automaticallyImplyLeading;
   final double toolbarHeight;
   final bool showDivider;
+
+  /// 标题两侧留白；聊天页传更小的值，给模型名留出更多截断空间。
+  final double titleSpacing;
 
   @override
   Size get preferredSize => Size.fromHeight(toolbarHeight);
@@ -37,7 +41,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       actions: actions,
       actionsPadding: const EdgeInsets.only(right: AppSpacing.s),
       toolbarHeight: toolbarHeight,
-      titleSpacing: AppSpacing.l,
+      titleSpacing: titleSpacing,
       centerTitle: false,
       backgroundColor: clear,
       surfaceTintColor: clear,

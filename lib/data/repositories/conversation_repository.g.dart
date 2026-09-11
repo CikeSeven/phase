@@ -55,4 +55,4 @@ final class ConversationRepositoryProvider
 }
 
 String _$conversationRepositoryHash() =>
-    r'bfa4bcabb040a4f1cde406a25cdccbf42bc046ce';
+    r'13f794bcd3feea9793d5cf6142288c3ce1be48d4';

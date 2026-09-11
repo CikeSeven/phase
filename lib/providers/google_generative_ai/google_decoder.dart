@@ -5,6 +5,7 @@ import '../../data/models/chat_chunk.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
 import '../../data/models/reasoning_effort.dart';
+import '../attachment_encoder.dart';
 import '../sse_transport.dart';
 
 /// 构造 Google Generative AI（streamGenerateContent）请求体。
@@ -12,16 +13,43 @@ import '../sse_transport.dart';
 /// 纯函数便于单测。system 提取为 systemInstruction；
 /// 推理等级映射 `generationConfig.thinkingConfig.thinkingBudget`
 ///（off → 0；Gemini 2.x 支持以 0 关闭思考）。
-Map<String, dynamic> buildGooglePayload(ChatRequest request) {
+Map<String, dynamic> buildGooglePayload(
+  ChatRequest request, {
+  List<List<AttachmentPayload>>? attachments,
+}) {
+  List<AttachmentPayload> partsFor(int index) =>
+      attachments == null || index >= attachments.length
+      ? const <AttachmentPayload>[]
+      : attachments[index];
+
+  List<Map<String, dynamic>> parts(ChatMessage message, int index) {
+    final encoded = partsFor(index);
+    return [
+      // Gemini 拒绝空 parts；没有附件时保持原样的纯文本快路径。
+      if (message.content.isNotEmpty || encoded.isEmpty)
+        {'text': message.content},
+      for (final part in encoded)
+        if (part.isImage)
+          {
+            'inline_data': {
+              'mime_type': part.mimeType,
+              'data': part.base64Data,
+            },
+          }
+        else
+          {'text': part.text},
+    ];
+  }
+
   return {
     'contents': [
-      for (final message in request.messages)
-        if (message.role != ChatRole.system)
+      for (var index = 0; index < request.messages.length; index++)
+        if (request.messages[index].role != ChatRole.system)
           {
-            'role': message.role == ChatRole.assistant ? 'model' : 'user',
-            'parts': [
-              {'text': message.content},
-            ],
+            'role': request.messages[index].role == ChatRole.assistant
+                ? 'model'
+                : 'user',
+            'parts': parts(request.messages[index], index),
           },
     ],
     if (_systemText(request.messages) case final system?)
