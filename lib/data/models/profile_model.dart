@@ -2,8 +2,6 @@ import 'dart:convert';
 
 import 'package:json_annotation/json_annotation.dart';
 
-import 'reasoning_effort.dart';
-
 part 'profile_model.g.dart';
 
 /// 服务商配置下的一个模型条目。
@@ -11,57 +9,39 @@ part 'profile_model.g.dart';
 class ProfileModel {
   const ProfileModel({
     required this.id,
+    this.enabled = true,
     this.supportsReasoning = false,
-    this.reasoningEfforts = const [],
+    this.supportsTools = true,
+    this.supportsImages = true,
   });
 
   /// 调用 API 时使用的模型 id（如 `deepseek-reasoner`）。
   final String id;
 
+  /// 是否启用；只有启用的模型才出现在聊天页的模型选择列表。
+  final bool enabled;
+
   /// 是否支持推理（思考）能力；支持时聊天页可选择推理等级。
   final bool supportsReasoning;
 
-  /// 允许下发的推理等级（ReasoningEffort.name，不含 off）；
-  /// 空列表表示不限制，全部等级可选。
-  final List<String> reasoningEfforts;
+  /// 是否支持工具调用；默认支持，个别模型不支持时手动关闭。
+  final bool supportsTools;
 
-  /// 实际可选的推理等级（不含 off），按等级从低到高排序。
-  List<ReasoningEffort> get allowedEfforts {
-    if (reasoningEfforts.isEmpty) {
-      return ReasoningEffort.levels;
-    }
-    final allowed = [
-      for (final effort in ReasoningEffort.levels)
-        if (reasoningEfforts.contains(effort.name)) effort,
-    ];
-    // 全是未知名（脏数据）时按不限制处理。
-    return allowed.isEmpty ? ReasoningEffort.levels : allowed;
-  }
-
-  /// 把 effort 收敛到允许集合：优先不高于当前等级的最大等级（降级），
-  /// 没有更低的才取最近的更高等级；off 与已允许的等级原样返回。
-  ReasoningEffort nearestAllowedEffort(ReasoningEffort effort) {
-    final allowed = allowedEfforts;
-    if (effort == ReasoningEffort.off || allowed.contains(effort)) {
-      return effort;
-    }
-    for (var i = ReasoningEffort.levels.length - 1; i >= 0; i--) {
-      final level = ReasoningEffort.levels[i];
-      if (level.index < effort.index && allowed.contains(level)) {
-        return level;
-      }
-    }
-    return allowed.first;
-  }
+  /// 是否支持图片输入；默认支持，纯文本模型手动关闭。
+  final bool supportsImages;
 
   ProfileModel copyWith({
+    bool? enabled,
     bool? supportsReasoning,
-    List<String>? reasoningEfforts,
+    bool? supportsTools,
+    bool? supportsImages,
   }) {
     return ProfileModel(
       id: id,
+      enabled: enabled ?? this.enabled,
       supportsReasoning: supportsReasoning ?? this.supportsReasoning,
-      reasoningEfforts: reasoningEfforts ?? this.reasoningEfforts,
+      supportsTools: supportsTools ?? this.supportsTools,
+      supportsImages: supportsImages ?? this.supportsImages,
     );
   }
 

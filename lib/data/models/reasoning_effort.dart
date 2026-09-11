@@ -33,26 +33,4 @@ enum ReasoningEffort {
     // 默认关：不在请求里夹带网关可能不认识的推理参数（曾有网关因此返回空响应）。
     return ReasoningEffort.off;
   }
-
-  /// 仅匹配可下发等级；off 与未知名都返回 null。
-  static ReasoningEffort? tryLevel(String name) {
-    for (final effort in levels) {
-      if (effort.name == name) {
-        return effort;
-      }
-    }
-    return null;
-  }
-
-  /// 把选中的等级集合规整为存储格式：忽略 off，全选记为空列表（不限制）。
-  static List<String> normalizeLevels(Iterable<ReasoningEffort> selected) {
-    final set = selected.toSet();
-    if (set.containsAll(levels)) {
-      return const [];
-    }
-    return [
-      for (final effort in levels)
-        if (set.contains(effort)) effort.name,
-    ];
-  }
 }

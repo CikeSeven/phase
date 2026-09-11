@@ -33,4 +33,6 @@ const _$ReasoningEffortEnumMap = {
   ReasoningEffort.low: 'low',
   ReasoningEffort.medium: 'medium',
   ReasoningEffort.high: 'high',
+  ReasoningEffort.xhigh: 'xhigh',
+  ReasoningEffort.max: 'max',
 };

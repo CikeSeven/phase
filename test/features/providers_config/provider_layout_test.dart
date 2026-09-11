@@ -5,6 +5,8 @@ import 'package:phase/core/widgets/app_bottom_bar.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/data/models/profile_model.dart';
 
+import 'package:phase/features/providers_config/provider_ui.dart';
+
 import 'provider_test_harness.dart';
 
 void main() {
@@ -48,20 +50,17 @@ void main() {
       final barBefore = tester.getRect(find.byType(AppBottomBar));
 
       await searchModels(tester, 'long-model-id');
-      await tapProviderControl(tester, keyed('reasoning-$longId'));
-      expect(
-        tester.widget<FilterChip>(keyed('reasoning-$longId')).selected,
-        isFalse,
-      );
+      await tapProviderControl(tester, keyed('enabled-$longId'));
+      expect(tester.widget<Checkbox>(keyed('enabled-$longId')).value, isFalse);
       expect(tester.getRect(find.byType(AppBottomBar)), barBefore);
       expect(tester.takeException(), isNull);
 
       await searchModels(tester, 'model-219');
-      await tapProviderControl(tester, keyed('reasoning-model-219'));
-      await tapProviderControl(tester, keyed('default-model-219'));
+      await tapProviderControl(tester, keyed('enabled-model-219'));
+      await tapProviderControl(tester, keyed('tools-model-219'));
       expect(
-        tester.widget<Text>(keyed('default-model-summary')).data,
-        'model-219',
+        tester.widget<CapabilityChip>(keyed('tools-model-219')).selected,
+        isFalse,
       );
       setKeyboard(tester, keyboard);
       await settleProviderUi(tester);
@@ -90,19 +89,28 @@ void main() {
       final saved = (await tester.runAsync(harness.repository.listProfiles))!
           .single;
       expect(saved.baseUrl, longUrl);
-      expect(saved.defaultModel, 'model-219');
+      // 列表外默认模型原样保留（页面不再有默认模型操作）。
+      expect(saved.defaultModel, longId);
       expect(saved.models, hasLength(222));
+      expect(
+        saved.models.singleWhere((model) => model.id == longId).enabled,
+        isFalse,
+      );
       expect(
         saved.models
             .singleWhere((model) => model.id == longId)
             .supportsReasoning,
+        isTrue,
+      );
+      expect(
+        saved.models.singleWhere((model) => model.id == 'model-219').enabled,
         isFalse,
       );
       expect(
         saved.models
             .singleWhere((model) => model.id == 'model-219')
-            .supportsReasoning,
-        isTrue,
+            .supportsTools,
+        isFalse,
       );
       expect(
         saved.models

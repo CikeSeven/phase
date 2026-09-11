@@ -8,17 +8,17 @@ part of 'profile_model.dart';
 
 ProfileModel _$ProfileModelFromJson(Map<String, dynamic> json) => ProfileModel(
   id: json['id'] as String,
+  enabled: json['enabled'] as bool? ?? true,
   supportsReasoning: json['supportsReasoning'] as bool? ?? false,
-  reasoningEfforts:
-      (json['reasoningEfforts'] as List<dynamic>?)
-          ?.map((e) => e as String)
-          .toList() ??
-      const [],
+  supportsTools: json['supportsTools'] as bool? ?? true,
+  supportsImages: json['supportsImages'] as bool? ?? true,
 );
 
 Map<String, dynamic> _$ProfileModelToJson(ProfileModel instance) =>
     <String, dynamic>{
       'id': instance.id,
+      'enabled': instance.enabled,
       'supportsReasoning': instance.supportsReasoning,
-      'reasoningEfforts': instance.reasoningEfforts,
+      'supportsTools': instance.supportsTools,
+      'supportsImages': instance.supportsImages,
     };

@@ -4,29 +4,29 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_card.dart';
-import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_section.dart';
 import '../../../data/models/profile_model.dart';
-import '../../../data/models/reasoning_effort.dart';
+import 'provider_ui.dart';
 
 /// 用于 CustomScrollView 的模型管理分区，筛选后的条目惰性构建。
+///
+/// 每个模型左侧的勾选框控制「启用」：只有启用的模型才出现在聊天页
+/// 的模型选择列表。
 class ProviderModelEditor extends StatefulWidget {
   const ProviderModelEditor({
     required this.models,
-    required this.defaultModel,
     required this.enabled,
     required this.onAdd,
-    required this.onDefaultChanged,
     required this.onModelChanged,
     required this.onRemove,
     super.key,
   });
 
   final List<ProfileModel> models;
-  final String? defaultModel;
+
+  /// 表单是否可编辑（保存中锁定）。
   final bool enabled;
   final VoidCallback onAdd;
-  final ValueChanged<String> onDefaultChanged;
   final ValueChanged<ProfileModel> onModelChanged;
   final ValueChanged<ProfileModel> onRemove;
 
@@ -50,6 +50,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
     final models = widget.models
         .where((model) => model.id.toLowerCase().contains(query))
         .toList();
+    final enabledCount = widget.models.where((model) => model.enabled).length;
     return SliverMainAxisGroup(
       slivers: [
         SliverToBoxAdapter(
@@ -62,58 +63,33 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
             ),
             child: AppSection(
               title: '模型管理',
-              subtitle: '${widget.models.length} 个模型',
+              subtitle: '启用 $enabledCount / ${widget.models.length} 个模型',
               action: TextButton.icon(
                 key: const ValueKey('add-provider-model'),
                 onPressed: widget.enabled ? widget.onAdd : null,
                 icon: const Icon(Symbols.add),
                 label: const Text('添加模型'),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  AppCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Align(
-                          alignment: Alignment.centerLeft,
-                          child: AppBadge(label: '默认模型', tone: AppTone.teal),
+              child: TextField(
+                key: const ValueKey('provider-model-search'),
+                controller: _searchController,
+                enabled: widget.enabled,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  labelText: '搜索模型',
+                  hintText: '模型 ID',
+                  helperText: '勾选的模型才会出现在聊天模型列表',
+                  prefixIcon: const Icon(Symbols.search),
+                  suffixIcon: query.isEmpty
+                      ? null
+                      : IconButton(
+                          tooltip: '清除模型搜索',
+                          onPressed: widget.enabled
+                              ? () => setState(_searchController.clear)
+                              : null,
+                          icon: const Icon(Symbols.close),
                         ),
-                        const SizedBox(height: AppSpacing.s),
-                        Text(
-                          widget.defaultModel ??
-                              (widget.models.isEmpty ? '未设置' : '自动使用首个模型'),
-                          key: const ValueKey('default-model-summary'),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyLarge,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.l),
-                  TextField(
-                    key: const ValueKey('provider-model-search'),
-                    controller: _searchController,
-                    enabled: widget.enabled,
-                    onChanged: (_) => setState(() {}),
-                    decoration: InputDecoration(
-                      labelText: '搜索模型',
-                      hintText: '模型 ID',
-                      prefixIcon: const Icon(Symbols.search),
-                      suffixIcon: query.isEmpty
-                          ? null
-                          : IconButton(
-                              tooltip: '清除模型搜索',
-                              onPressed: widget.enabled
-                                  ? () => setState(_searchController.clear)
-                                  : null,
-                              icon: const Icon(Symbols.close),
-                            ),
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -162,96 +138,13 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
           sliver: SliverList.separated(
             itemCount: models.length,
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s),
-            itemBuilder: (context, index) {
-              final model = models[index];
-              final isDefault = widget.defaultModel == model.id;
-              return AppCard(
-                key: ValueKey('provider-model-${model.id}'),
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.m,
-                  AppSpacing.xs,
-                  AppSpacing.xs,
-                  AppSpacing.xs,
-                ),
-                borderRadius: AppRadius.mediumAll,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Tooltip(
-                            message: model.id,
-                            child: Text(
-                              model.id,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall,
-                            ),
-                          ),
-                        ),
-                        if (isDefault)
-                          const Padding(
-                            padding: EdgeInsets.only(right: AppSpacing.xs),
-                            child: AppBadge(label: '默认'),
-                          ),
-                        IconButton(
-                          key: ValueKey('default-${model.id}'),
-                          tooltip: isDefault ? '当前默认模型' : '设为默认模型',
-                          onPressed: widget.enabled && !isDefault
-                              ? () => widget.onDefaultChanged(model.id)
-                              : null,
-                          icon: Icon(
-                            isDefault
-                                ? Symbols.check_circle
-                                : Symbols.radio_button_unchecked,
-                          ),
-                        ),
-                        IconButton(
-                          key: ValueKey('remove-${model.id}'),
-                          tooltip: '移除模型',
-                          onPressed: widget.enabled
-                              ? () => widget.onRemove(model)
-                              : null,
-                          color: theme.colorScheme.error,
-                          icon: const Icon(Symbols.delete),
-                        ),
-                      ],
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.s),
-                      child: Wrap(
-                        spacing: AppSpacing.s,
-                        runSpacing: AppSpacing.xs,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          FilterChip(
-                            key: ValueKey('reasoning-${model.id}'),
-                            label: const Text('推理'),
-                            tooltip: '该模型是否支持推理（思考）',
-                            selected: model.supportsReasoning,
-                            onSelected: widget.enabled
-                                ? (value) => widget.onModelChanged(
-                                    model.copyWith(supportsReasoning: value),
-                                  )
-                                : null,
-                          ),
-                          if (model.supportsReasoning)
-                            for (final effort in ReasoningEffort.levels)
-                              _LevelChip(
-                                model: model,
-                                effort: effort,
-                                enabled: widget.enabled,
-                                onChanged: widget.onModelChanged,
-                              ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                  ],
-                ),
-              );
-            },
+            itemBuilder: (context, index) => _ModelCard(
+              key: ValueKey('provider-model-${models[index].id}'),
+              model: models[index],
+              enabled: widget.enabled,
+              onModelChanged: widget.onModelChanged,
+              onRemove: widget.onRemove,
+            ),
           ),
         ),
       ],
@@ -259,42 +152,102 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
   }
 }
 
-/// 单个推理等级的开关；最后一个已选等级不允许再取消，避免空集合。
-class _LevelChip extends StatelessWidget {
-  const _LevelChip({
+/// 单个模型的紧凑卡片：左侧勾选框控制启用，下方是能力开关。
+class _ModelCard extends StatelessWidget {
+  const _ModelCard({
     required this.model,
-    required this.effort,
     required this.enabled,
-    required this.onChanged,
+    required this.onModelChanged,
+    required this.onRemove,
+    super.key,
   });
 
   final ProfileModel model;
-  final ReasoningEffort effort;
+
+  /// 表单是否可编辑（保存中锁定）。
   final bool enabled;
-  final ValueChanged<ProfileModel> onChanged;
+  final ValueChanged<ProfileModel> onModelChanged;
+  final ValueChanged<ProfileModel> onRemove;
 
   @override
   Widget build(BuildContext context) {
-    final allowed = model.allowedEfforts;
-    final selected = allowed.contains(effort);
-    final lastSelected = selected && allowed.length == 1;
-    return FilterChip(
-      key: ValueKey('reasoning-level-${model.id}-${effort.name}'),
-      label: Text(effort.label),
-      tooltip: lastSelected ? '至少保留一个推理等级' : '推理等级：${effort.label}',
-      selected: selected,
-      onSelected: enabled && !lastSelected
-          ? (_) {
-              final next = selected
-                  ? allowed.where((level) => level != effort)
-                  : [...allowed, effort];
-              onChanged(
-                model.copyWith(
-                  reasoningEfforts: ReasoningEffort.normalizeLevels(next),
+    final theme = Theme.of(context);
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(0, 0, AppSpacing.xs, AppSpacing.s),
+      borderRadius: AppRadius.mediumAll,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Checkbox(
+                key: ValueKey('enabled-${model.id}'),
+                value: model.enabled,
+                semanticLabel: '启用该模型',
+                onChanged: enabled
+                    ? (value) => onModelChanged(
+                        model.copyWith(enabled: value ?? false),
+                      )
+                    : null,
+              ),
+              Expanded(
+                child: Tooltip(
+                  message: model.id,
+                  child: Text(
+                    model.id,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleSmall,
+                  ),
                 ),
-              );
-            }
-          : null,
+              ),
+              IconButton(
+                key: ValueKey('remove-${model.id}'),
+                tooltip: '移除模型',
+                onPressed: enabled ? () => onRemove(model) : null,
+                color: theme.colorScheme.error,
+                icon: const Icon(Symbols.delete),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.only(
+              left: AppSpacing.m,
+              right: AppSpacing.s,
+            ),
+            child: Wrap(
+              spacing: AppSpacing.s,
+              runSpacing: AppSpacing.xs,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                CapabilityChip(
+                  key: ValueKey('tools-${model.id}'),
+                  icon: Symbols.build,
+                  label: '工具',
+                  tooltip: '该模型是否支持工具调用',
+                  selected: model.supportsTools,
+                  onSelected: enabled
+                      ? (value) =>
+                            onModelChanged(model.copyWith(supportsTools: value))
+                      : null,
+                ),
+                CapabilityChip(
+                  key: ValueKey('images-${model.id}'),
+                  icon: Symbols.image,
+                  label: '图片',
+                  tooltip: '该模型是否支持图片输入',
+                  selected: model.supportsImages,
+                  onSelected: enabled
+                      ? (value) => onModelChanged(
+                          model.copyWith(supportsImages: value),
+                        )
+                      : null,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

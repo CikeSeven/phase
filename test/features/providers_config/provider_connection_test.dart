@@ -63,10 +63,7 @@ void main() {
     await tapProviderControl(tester, keyed('test-provider'));
     expect(find.text('已获取 0 个模型'), findsOneWidget);
     await searchModels(tester, 'manual');
-    expect(
-      tester.widget<FilterChip>(keyed('reasoning-manual')).selected,
-      isTrue,
-    );
+    expect(tester.widget<Checkbox>(keyed('enabled-manual')).value, isTrue);
     await tapProviderControl(tester, keyed('save-provider'));
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;

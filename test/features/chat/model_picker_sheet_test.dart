@@ -127,7 +127,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('模型限定推理等级时面板只给可选项，持久化的越界等级就近降级', (tester) async {
+  testWidgets('推理等级统一为全部五个，不按模型收窄', (tester) async {
     final host = await _pumpHost(
       tester,
       profiles: const [
@@ -135,45 +135,36 @@ void main() {
           id: 'daily',
           name: '日常',
           baseUrl: 'https://example.com/v1',
-          models: [
-            ProfileModel(
-              id: 'limited-thinker',
-              supportsReasoning: true,
-              reasoningEfforts: ['low'],
-            ),
-          ],
+          models: [ProfileModel(id: 'thinker', supportsReasoning: true)],
         ),
       ],
       values: const {
         'last_profile_id': 'daily',
-        'last_model': 'limited-thinker',
+        'last_model': 'thinker',
         'last_reasoning_effort': 'high',
       },
     );
 
-    // 持久化的「高」不在模型开放范围内，派生选择就近降级为「低」而不是关闭。
+    // 持久化等级原样保留，不再按模型降级。
     expect(
       host.container.read(modelSelectionProvider).value!.effort,
-      ReasoningEffort.low,
+      ReasoningEffort.high,
     );
 
     await _openPicker(tester);
-    expect(_effort('off'), findsOneWidget);
-    expect(_effort('low'), findsOneWidget);
-    expect(_effort('medium'), findsNothing);
-    expect(_effort('high'), findsNothing);
-    expect(tester.widget<ChoiceChip>(_effort('low')).selected, isTrue);
+    for (final effort in ReasoningEffort.values) {
+      expect(_effort(effort.name), findsOneWidget, reason: effort.name);
+    }
+    expect(tester.widget<ChoiceChip>(_effort('high')).selected, isTrue);
 
+    // 切换模型不影响已选等级，即使新模型「理论上」不支持该等级。
+    await _tapVisible(tester, _effort('max'));
     await _tapVisible(tester, _confirm);
-    expect(host.preferences.getString('last_reasoning_effort'), 'low');
-    expect(
-      host.container.read(modelSelectionProvider).value!.effort,
-      ReasoningEffort.low,
-    );
+    expect(host.preferences.getString('last_reasoning_effort'), 'max');
   });
 
-  testWidgets('面板内切换到开放范围更窄的模型时，已选等级就近降级而非关闭', (tester) async {
-    final host = await _pumpHost(
+  testWidgets('未勾选启用的模型不出现在选择列表，标签计数同步', (tester) async {
+    await _pumpHost(
       tester,
       profiles: const [
         ProviderProfile(
@@ -181,33 +172,47 @@ void main() {
           name: '日常',
           baseUrl: 'https://example.com/v1',
           models: [
-            ProfileModel(id: 'open-thinker', supportsReasoning: true),
-            ProfileModel(
-              id: 'limited-thinker',
-              supportsReasoning: true,
-              reasoningEfforts: ['low', 'high', 'max'],
-            ),
+            ProfileModel(id: 'enabled-model'),
+            ProfileModel(id: 'disabled-model', enabled: false),
           ],
         ),
       ],
-      values: const {
-        'last_profile_id': 'daily',
-        'last_model': 'open-thinker',
-        'last_reasoning_effort': 'off',
-      },
+      values: const {'last_profile_id': 'daily', 'last_model': 'enabled-model'},
     );
 
     await _openPicker(tester);
-    await _chooseModel(tester, 'daily', 'open-thinker');
-    await _tapVisible(tester, _effort('xhigh'));
-    await _chooseModel(tester, 'daily', 'limited-thinker');
-    // 超高不在开放范围（低/高/最高）内，降级为高而不是关。
-    expect(_effort('xhigh'), findsNothing);
-    expect(tester.widget<ChoiceChip>(_effort('high')).selected, isTrue);
+    expect(_option('daily', 'enabled-model'), findsOneWidget);
+    expect(_option('daily', 'disabled-model'), findsNothing);
+    expect(find.text('1 个模型'), findsOneWidget);
 
-    await _tapVisible(tester, _confirm);
-    expect(host.preferences.getString('last_model'), 'limited-thinker');
-    expect(host.preferences.getString('last_reasoning_effort'), 'high');
+    // 搜索也搜不到未启用的模型。
+    await tester.enterText(_search, 'disabled');
+    await tester.pumpAndSettle();
+    expect(find.text('没有找到模型'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('默认模型被停用时，派生选择回退到第一个启用的模型', (tester) async {
+    final host = await _pumpHost(
+      tester,
+      profiles: const [
+        ProviderProfile(
+          id: 'daily',
+          name: '日常',
+          baseUrl: 'https://example.com/v1',
+          defaultModel: 'disabled-default',
+          models: [
+            ProfileModel(id: 'enabled-model'),
+            ProfileModel(id: 'disabled-default', enabled: false),
+          ],
+        ),
+      ],
+      values: const {},
+    );
+    expect(
+      host.container.read(modelSelectionProvider).value!.model,
+      'enabled-model',
+    );
   });
 
   testWidgets('横向服务商标签切换模型列表，草稿落到该服务商默认模型', (tester) async {

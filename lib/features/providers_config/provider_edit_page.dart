@@ -214,11 +214,8 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                   ),
                   ProviderModelEditor(
                     models: _models,
-                    defaultModel: _defaultModel,
                     enabled: !_busy,
                     onAdd: _addModel,
-                    onDefaultChanged: (id) =>
-                        setState(() => _defaultModel = id),
                     onModelChanged: (model) => setState(() {
                       _models = [
                         for (final entry in _models)
@@ -384,10 +381,13 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       setState(() {
         final merged = {for (final model in _models) model.id: model};
         for (final id in ids) {
+          // 新拉到的模型默认不启用，由用户勾选后进入聊天模型列表；
+          // 已有模型的勾选与能力标记不受影响。
           merged.putIfAbsent(
             id,
             () => ProfileModel(
               id: id,
+              enabled: false,
               supportsReasoning: guessSupportsReasoning(id),
             ),
           );

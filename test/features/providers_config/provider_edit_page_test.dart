@@ -8,7 +8,6 @@ import 'package:phase/data/models/ai_model.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/openai_compat.dart';
 import 'package:phase/data/models/profile_model.dart';
-import 'package:phase/data/models/reasoning_effort.dart';
 import 'package:phase/features/providers_config/provider_preset_sheet.dart';
 import 'package:phase/features/providers_config/provider_ui.dart';
 import 'package:phase/features/providers_config/providers_page.dart';
@@ -43,8 +42,8 @@ void main() {
     await tapProviderControl(tester, keyed('new-model-reasoning'));
     await tapProviderControl(tester, keyed('confirm-add-model'));
     expect(
-      tester.widget<Text>(keyed('default-model-summary')).data,
-      'manual-private',
+      tester.widget<Checkbox>(keyed('enabled-manual-private')).value,
+      isTrue,
     );
 
     await tapProviderControl(tester, keyed('add-provider-model'));
@@ -73,11 +72,25 @@ void main() {
       ApiProtocol.openaiCompletions,
     );
     await searchModels(tester, 'remote-chat');
-    await tapProviderControl(tester, keyed('reasoning-remote-chat'));
-    await tapProviderControl(tester, keyed('default-remote-chat'));
+    // 新拉到的模型自动取消勾选，能力（工具/图片）默认开启。
     expect(
-      tester.widget<Text>(keyed('default-model-summary')).data,
-      'remote-chat',
+      tester.widget<Checkbox>(keyed('enabled-remote-chat')).value,
+      isFalse,
+    );
+    expect(
+      tester.widget<CapabilityChip>(keyed('tools-remote-chat')).selected,
+      isTrue,
+    );
+    expect(
+      tester.widget<CapabilityChip>(keyed('images-remote-chat')).selected,
+      isTrue,
+    );
+    // 勾选后才会出现在聊天模型列表；大小写重复项保持未勾选。
+    await tapProviderControl(tester, keyed('enabled-remote-chat'));
+    expect(tester.widget<Checkbox>(keyed('enabled-remote-chat')).value, isTrue);
+    expect(
+      tester.widget<Checkbox>(keyed('enabled-Remote-Chat')).value,
+      isFalse,
     );
     await tapProviderControl(tester, keyed('save-provider'));
     expect(find.byType(ProvidersPage), findsOneWidget);
@@ -88,7 +101,8 @@ void main() {
     expect(saved.baseUrl, presetById('deepseek').baseUrl);
     expect(saved.presetId, 'deepseek');
     expect(saved.protocol, ApiProtocol.openaiCompletions);
-    expect(saved.defaultModel, 'remote-chat');
+    // 首个添加的模型自动成为默认模型（页面不再提供默认模型操作）。
+    expect(saved.defaultModel, 'manual-private');
     expect(
       saved.models.map((model) => model.id),
       unorderedEquals(['manual-private', 'remote-chat', 'Remote-Chat']),
@@ -99,11 +113,15 @@ void main() {
           .supportsReasoning,
       isTrue,
     );
+    final remoteChat = saved.models.singleWhere(
+      (model) => model.id == 'remote-chat',
+    );
+    expect(remoteChat.enabled, isTrue);
+    expect(remoteChat.supportsTools, isTrue);
+    expect(remoteChat.supportsImages, isTrue);
     expect(
-      saved.models
-          .singleWhere((model) => model.id == 'remote-chat')
-          .supportsReasoning,
-      isTrue,
+      saved.models.singleWhere((model) => model.id == 'Remote-Chat').enabled,
+      isFalse,
     );
     expect(await harness.repository.readApiKey(saved.id), 'fake-new-key');
     expect(harness.keyStorage.deleteCount, 0);
@@ -152,17 +170,9 @@ void main() {
       compat.toJson(),
     );
     await searchModels(tester, 'gpt-5');
-    expect(
-      tester.widget<FilterChip>(keyed('reasoning-gpt-5')).selected,
-      isFalse,
-    );
+    expect(tester.widget<Checkbox>(keyed('enabled-gpt-5')).value, isTrue);
     await searchModels(tester, 'legacy');
     expect(keyed('provider-model-legacy/reasoner'), findsOneWidget);
-    expect(find.text('默认'), findsOneWidget);
-    expect(
-      tester.widget<Text>(keyed('default-model-summary')).data,
-      'legacy/reasoner',
-    );
     await tapProviderControl(tester, keyed('save-provider'));
     final saved = (await tester.runAsync(
       () => harness.repository.getProfile('p1'),
@@ -363,7 +373,7 @@ void main() {
     });
   }
 
-  testWidgets('获取模型位于 Key 下方，模型推理等级范围可编辑并随保存持久化', (tester) async {
+  testWidgets('获取模型位于 Key 下方，启用勾选与工具/图片能力随保存持久化', (tester) async {
     await harness.seed(
       tester,
       presetId: 'openai',
@@ -378,35 +388,40 @@ void main() {
     final testRect = tester.getRect(keyed('test-provider'));
     expect(testRect.top, greaterThanOrEqualTo(keyRect.bottom));
 
-    final highChip = keyed('reasoning-level-gpt-5-high');
-    final mediumChip = keyed('reasoning-level-gpt-5-medium');
-    final lowChip = keyed('reasoning-level-gpt-5-low');
-    for (final effort in ReasoningEffort.levels) {
-      expect(
-        tester
-            .widget<FilterChip>(keyed('reasoning-level-gpt-5-${effort.name}'))
-            .selected,
-        isTrue,
-        reason: effort.name,
-      );
-    }
+    // 卡片上不再有推理等级编辑。
+    expect(keyed('reasoning-gpt-5'), findsNothing);
+    expect(keyed('reasoning-level-gpt-5-high'), findsNothing);
 
-    // 只留「低」后它是最后一个已选等级，不允许再取消。
-    await tapProviderControl(tester, keyed('reasoning-level-gpt-5-max'));
-    await tapProviderControl(tester, keyed('reasoning-level-gpt-5-xhigh'));
-    await tapProviderControl(tester, highChip);
-    await tapProviderControl(tester, mediumChip);
-    expect(tester.widget<FilterChip>(lowChip).selected, isTrue);
-    expect(tester.widget<FilterChip>(lowChip).onSelected, isNull);
+    // 取消启用；工具/图片默认开启，点击可关闭。
+    await tapProviderControl(tester, keyed('enabled-gpt-5'));
+    expect(tester.widget<Checkbox>(keyed('enabled-gpt-5')).value, isFalse);
+    expect(
+      tester.widget<CapabilityChip>(keyed('tools-gpt-5')).selected,
+      isTrue,
+    );
+    expect(
+      tester.widget<CapabilityChip>(keyed('images-gpt-5')).selected,
+      isTrue,
+    );
+    await tapProviderControl(tester, keyed('tools-gpt-5'));
+    await tapProviderControl(tester, keyed('images-gpt-5'));
+    expect(
+      tester.widget<CapabilityChip>(keyed('tools-gpt-5')).selected,
+      isFalse,
+    );
+    expect(
+      tester.widget<CapabilityChip>(keyed('images-gpt-5')).selected,
+      isFalse,
+    );
 
-    await tapProviderControl(tester, mediumChip);
     await tapProviderControl(tester, keyed('save-provider'));
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
     final model = saved.models.single;
+    expect(model.enabled, isFalse);
     expect(model.supportsReasoning, isTrue);
-    expect(model.reasoningEfforts, ['low', 'medium']);
-    expect(model.allowedEfforts, [ReasoningEffort.low, ReasoningEffort.medium]);
+    expect(model.supportsTools, isFalse);
+    expect(model.supportsImages, isFalse);
   });
 
   testWidgets('保存中锁定重复操作，安全存储失败后重试不重复创建配置', (tester) async {

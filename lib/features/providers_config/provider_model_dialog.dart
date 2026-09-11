@@ -5,7 +5,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../data/models/profile_model.dart';
-import '../../../data/models/reasoning_effort.dart';
+import 'provider_ui.dart';
 
 /// 添加模型草稿；重复校验读取当前列表，兼容弹窗期间完成的模型拉取。
 class ProviderModelDialog extends StatefulWidget {
@@ -21,9 +21,10 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
   final _formKey = GlobalKey<FormState>();
   final _idController = TextEditingController();
   bool _supportsReasoning = false;
-  bool _switchTouched = false;
+  bool _supportsTools = true;
+  bool _supportsImages = true;
+  bool _capabilitiesTouched = false;
   bool _submitted = false;
-  final Set<ReasoningEffort> _levels = ReasoningEffort.levels.toSet();
 
   @override
   void dispose() {
@@ -38,9 +39,8 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
       ProfileModel(
         id: _idController.text.trim(),
         supportsReasoning: _supportsReasoning,
-        reasoningEfforts: _supportsReasoning
-            ? ReasoningEffort.normalizeLevels(_levels)
-            : const [],
+        supportsTools: _supportsTools,
+        supportsImages: _supportsImages,
       ),
     );
   }
@@ -76,7 +76,7 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                 return null;
               },
               onChanged: (value) {
-                if (!_switchTouched) {
+                if (!_capabilitiesTouched) {
                   setState(() {
                     _supportsReasoning = guessSupportsReasoning(value);
                   });
@@ -84,45 +84,45 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
               },
             ),
             const SizedBox(height: AppSpacing.l),
-            MergeSemantics(
-              child: Row(
-                children: [
-                  const Expanded(child: Text('支持推理')),
-                  Switch(
-                    key: const ValueKey('new-model-reasoning'),
-                    value: _supportsReasoning,
-                    onChanged: (value) => setState(() {
-                      _supportsReasoning = value;
-                      _switchTouched = true;
-                    }),
-                  ),
-                ],
-              ),
+            Wrap(
+              spacing: AppSpacing.s,
+              runSpacing: AppSpacing.xs,
+              children: [
+                CapabilityChip(
+                  key: const ValueKey('new-model-reasoning'),
+                  icon: Symbols.psychology,
+                  label: '推理',
+                  tooltip: '该模型是否支持推理（思考）',
+                  selected: _supportsReasoning,
+                  onSelected: (value) => setState(() {
+                    _supportsReasoning = value;
+                    _capabilitiesTouched = true;
+                  }),
+                ),
+                CapabilityChip(
+                  key: const ValueKey('new-model-tools'),
+                  icon: Symbols.build,
+                  label: '工具',
+                  tooltip: '该模型是否支持工具调用',
+                  selected: _supportsTools,
+                  onSelected: (value) => setState(() {
+                    _supportsTools = value;
+                    _capabilitiesTouched = true;
+                  }),
+                ),
+                CapabilityChip(
+                  key: const ValueKey('new-model-images'),
+                  icon: Symbols.image,
+                  label: '图片',
+                  tooltip: '该模型是否支持图片输入',
+                  selected: _supportsImages,
+                  onSelected: (value) => setState(() {
+                    _supportsImages = value;
+                    _capabilitiesTouched = true;
+                  }),
+                ),
+              ],
             ),
-            if (_supportsReasoning) ...[
-              const SizedBox(height: AppSpacing.s),
-              Wrap(
-                spacing: AppSpacing.s,
-                runSpacing: AppSpacing.xs,
-                children: [
-                  for (final effort in ReasoningEffort.levels)
-                    FilterChip(
-                      key: ValueKey('new-model-level-${effort.name}'),
-                      label: Text(effort.label),
-                      tooltip: '推理等级：${effort.label}',
-                      selected: _levels.contains(effort),
-                      onSelected: (_) => setState(() {
-                        if (_levels.contains(effort)) {
-                          // 空集合在存储语义里是「全部」，这里禁止清空以免歧义。
-                          if (_levels.length > 1) _levels.remove(effort);
-                        } else {
-                          _levels.add(effort);
-                        }
-                      }),
-                    ),
-                ],
-              ),
-            ],
           ],
         ),
       ),

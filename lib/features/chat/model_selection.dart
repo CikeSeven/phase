@@ -55,23 +55,23 @@ class ModelSelection extends _$ModelSelection {
         lastModel.isNotEmpty) {
       model = lastModel;
     } else {
-      model =
-          profile.defaultModel ??
-          (profile.modelCandidates.isEmpty
-              ? null
-              : profile.modelCandidates.first.id);
+      // 回退跳过未启用的模型。
+      final enabled = profile.modelCandidates
+          .where((candidate) => candidate.enabled)
+          .toList();
+      final fallback = profile.defaultModel;
+      model = fallback != null && enabled.any((entry) => entry.id == fallback)
+          ? fallback
+          : (enabled.isEmpty ? null : enabled.first.id);
     }
     if (model == null) {
       return null;
     }
 
     var supportsReasoning = guessSupportsReasoning(model);
-    var effort = ReasoningEffort.fromName(settings.readLastReasoningEffort());
     for (final candidate in profile.modelCandidates) {
       if (candidate.id == model) {
         supportsReasoning = candidate.supportsReasoning;
-        // 模型未开放持久化的等级时就近降级，不静默关闭推理。
-        effort = candidate.nearestAllowedEffort(effort);
         break;
       }
     }
@@ -80,7 +80,7 @@ class ModelSelection extends _$ModelSelection {
       profile: profile,
       model: model,
       supportsReasoning: supportsReasoning,
-      effort: effort,
+      effort: ReasoningEffort.fromName(settings.readLastReasoningEffort()),
     );
   }
 

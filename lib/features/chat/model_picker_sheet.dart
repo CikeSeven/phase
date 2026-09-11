@@ -128,7 +128,8 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     for (final profile in profiles) {
       final models = <String, ProfileModel>{};
       for (final model in profile.modelCandidates) {
-        models.putIfAbsent(model.id, () => model);
+        // 只有编辑页勾选启用的模型才进入选择列表。
+        if (model.enabled) models.putIfAbsent(model.id, () => model);
       }
       final initial = _initialSelection;
       String? manualModel;
@@ -406,6 +407,8 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final foreground = selected ? colors.onPrimaryContainer : colors.onSurface;
     final metadata = [
       if (model.supportsReasoning) '支持推理',
+      if (model.supportsTools) '支持工具',
+      if (model.supportsImages) '支持图片',
       if (entry.manual) '当前手动模型',
     ];
     return Semantics(
@@ -493,9 +496,6 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final theme = Theme.of(context);
     final brand = context.brandColors;
     final model = draft?.model;
-    final efforts = model == null
-        ? const <ReasoningEffort>[]
-        : [ReasoningEffort.off, ...model.allowedEfforts];
     return Column(
       key: const ValueKey('model-picker-footer'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -504,22 +504,23 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         if (model?.supportsReasoning == true) ...[
           Text('推理等级', style: theme.textTheme.labelLarge),
           const SizedBox(height: AppSpacing.xs),
+          // 统一提供全部五个等级；模型是否合规由服务商服务器判断。
           Wrap(
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.xs,
             children: [
-              for (final effort in efforts)
+              for (final effort in ReasoningEffort.values)
                 ChoiceChip(
                   key: ValueKey(('reasoning-effort', effort.name)),
                   label: Text(effort.label),
                   tooltip: '推理等级：${effort.label}',
-                  selected: _effectiveEffort(draft) == effort,
+                  selected: _draftEffort == effort,
                   side: BorderSide.none,
                   backgroundColor: theme.colorScheme.surfaceContainerHigh,
                   selectedColor: brand.lavenderContainer,
                   checkmarkColor: brand.onLavenderContainer,
                   labelStyle: theme.textTheme.labelLarge?.copyWith(
-                    color: _effectiveEffort(draft) == effort
+                    color: _draftEffort == effort
                         ? brand.onLavenderContainer
                         : theme.colorScheme.onSurface,
                   ),
@@ -660,7 +661,6 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     setState(() {
       _draftProfileId = entry.profile.id;
       _draftModel = entry.model!.id;
-      _draftEffort = _effectiveEffort(entry);
       _saveError = null;
     });
   }
@@ -674,27 +674,17 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
 
   void _activateProvider(ProviderProfile profile) {
     _draftProfileId = profile.id;
-    final models = profile.modelCandidates;
+    final models = profile.modelCandidates
+        .where((model) => model.enabled)
+        .toList();
     String? modelId;
     if (models.isNotEmpty) {
       modelId = models.any((model) => model.id == profile.defaultModel)
           ? profile.defaultModel
           : models.first.id;
-      final model = models.firstWhere((entry) => entry.id == modelId);
-      _draftEffort = model.nearestAllowedEffort(_draftEffort);
     }
     _draftModel = modelId;
     _saveError = null;
-  }
-
-  /// 模型未开放当前等级时就近降级（没有更低等级时取最近的更高等级），
-  /// 不把推理静默关掉。
-  ReasoningEffort _effectiveEffort(_PickerEntry? draft) {
-    final model = draft?.model;
-    if (model == null) {
-      return _draftEffort;
-    }
-    return model.nearestAllowedEffort(_draftEffort);
   }
 
   void _openConfiguration([String? profileId]) {
@@ -708,7 +698,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   }
 
   Future<void> _confirm(_PickerEntry draft) async {
-    final effort = _effectiveEffort(draft);
+    final effort = _draftEffort;
     FocusScope.of(context).unfocus();
     setState(() {
       _saving = true;

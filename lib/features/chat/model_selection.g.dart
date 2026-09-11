@@ -46,7 +46,7 @@ final class ModelSelectionProvider
   ModelSelection create() => ModelSelection();
 }
 
-String _$modelSelectionHash() => r'e2e490f59c41f034fe408bd029b310ee7e826f41';
+String _$modelSelectionHash() => r'd7fca973283a3c59cf1b0b7bf83f41f7ca43c7df';
 
 /// 模型选择：优先「最近使用」（shared_preferences），
 /// 否则回退到第一个服务商的默认模型 / 候选模型第一个。
