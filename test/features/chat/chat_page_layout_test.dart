@@ -22,8 +22,10 @@ import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/conversation.dart';
+import 'package:phase/data/models/model_selection.dart' as model;
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
+import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
@@ -35,6 +37,7 @@ import 'package:phase/providers/provider_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/fake_secure_storage.dart';
+import '../../support/memory_assistants.dart';
 
 final _profile = ProviderProfile(
   id: 'profile',
@@ -131,6 +134,7 @@ class _MemoryConversations implements ConversationRepository {
   Future<Conversation> createConversation({
     String title = '新会话',
     String? assistantId,
+    model.ModelSelection? modelSelectionOverride,
   }) async {
     createCalls++;
     await createGate?.future;
@@ -139,6 +143,7 @@ class _MemoryConversations implements ConversationRepository {
       id: 'created-$createCalls',
       title: title,
       assistantId: assistantId,
+      modelSelectionOverride: modelSelectionOverride,
       createdAt: DateTime(2026, 9, 9),
       updatedAt: DateTime(2026, 9, 9),
     );
@@ -151,6 +156,16 @@ class _MemoryConversations implements ConversationRepository {
   Future<void> updateConversation(Conversation conversation) async {
     final index = items.indexWhere((item) => item.id == conversation.id);
     if (index >= 0) items[index] = conversation;
+    _notify();
+  }
+
+  @override
+  Future<void> setModelSelection(
+    String id,
+    model.ModelSelection selection,
+  ) async {
+    final index = items.indexWhere((item) => item.id == id);
+    items[index] = items[index].copyWith(modelSelectionOverride: selection);
     _notify();
   }
 
@@ -216,8 +231,18 @@ class _MemoryConversations implements ConversationRepository {
   @override
   Future<void> updateAttachmentExtraction(
     String attachmentId, {
-    required String extractedTextPath,
+    String? extractedTextPath,
+    String? error,
   }) async {}
+
+  @override
+  Future<Conversation> duplicateConversation(String id) async {
+    final index = items.indexWhere((item) => item.id == id);
+    final copy = items[index].copyWith(title: '${items[index].title}（副本）');
+    items.add(copy);
+    _notify();
+    return copy;
+  }
 
   @override
   Future<List<Attachment>> attachmentsFor(String conversationId) async =>
@@ -324,6 +349,7 @@ void main() {
         overrides: [
           sharedPreferencesProvider.overrideWith((ref) => preferences),
           conversationRepositoryProvider.overrideWith((ref) => conversations),
+          assistantRepositoryProvider.overrideWith((ref) => MemoryAssistants()),
           providerProfilesProvider.overrideWith(
             (ref) => profiles ?? Stream.value(configured ? [_profile] : []),
           ),
@@ -581,7 +607,13 @@ void main() {
           tester.getRect(attach).right,
           lessThanOrEqualTo(tester.getRect(find.byTooltip('发送')).left),
         );
-        expect(find.byIcon(Symbols.expand_more), findsOneWidget);
+        // 助手行与模型行各有一个展开图标：模型行的那个在模型选择器内。
+        final modelIcon = find.descendant(
+          of: find.byKey(const ValueKey('chat-model-picker')),
+          matching: find.byIcon(Symbols.expand_more),
+        );
+        expect(modelIcon, findsOneWidget);
+        expect(find.byIcon(Symbols.expand_more), findsNWidgets(2));
         final modelText = tester.widget<Text>(
           find.text(_profile.defaultModel!),
         );
@@ -591,7 +623,7 @@ void main() {
           find.text(_profile.defaultModel!),
         );
         expect(modelParagraph.didExceedMaxLines, isTrue);
-        final iconRect = tester.getRect(find.byIcon(Symbols.expand_more));
+        final iconRect = tester.getRect(modelIcon);
         expect(
           iconRect.left -
               tester.getRect(find.text(_profile.defaultModel!)).right,
@@ -660,7 +692,10 @@ void main() {
             )
             .single;
         final textRight = paragraph.localToGlobal(Offset(textBox.right, 0)).dx;
-        final icon = find.byIcon(Symbols.expand_more);
+        final icon = find.descendant(
+          of: find.byKey(const ValueKey('chat-model-picker')),
+          matching: find.byIcon(Symbols.expand_more),
+        );
         final iconRect = tester.getRect(icon);
         expect(iconRect.left - textRight, closeTo(4, 0.5));
         expect(
@@ -1030,7 +1065,7 @@ void main() {
     await tester.tap(find.text('新的旅行计划'));
     await tester.pumpAndSettle();
     expect(
-      harness.container.read(chatControllerProvider).conversationId,
+      harness.container.read(activeConversationProvider).conversationId,
       'seed-0',
     );
     expect(find.text('已有的旅行建议', findRichText: true), findsOneWidget);
@@ -1054,7 +1089,7 @@ void main() {
     expect(repository.items.any((item) => item.id == 'seed-0'), isFalse);
     expect(repository.messages.containsKey('seed-0'), isFalse);
     expect(
-      harness.container.read(chatControllerProvider).conversationId,
+      harness.container.read(activeConversationProvider).conversationId,
       isNull,
     );
     expect(tester.takeException(), isNull);
@@ -1103,7 +1138,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, '删除'));
     await tester.pumpAndSettle();
     expect(
-      harness.container.read(chatControllerProvider).conversationId,
+      harness.container.read(activeConversationProvider).conversationId,
       'seed-0',
     );
     expect(repository.items, hasLength(1));

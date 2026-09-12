@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -56,6 +57,9 @@ class Models extends Table {
       boolean().withDefault(const Constant(false))();
   IntColumn get contextWindow => integer().nullable()();
   IntColumn get maxOutputTokens => integer().nullable()();
+
+  /// 采样温度；未设置时不下发。
+  RealColumn get temperature => real().nullable()();
 
   @override
   Set<Column> get primaryKey => {profileId, modelId};
@@ -136,6 +140,9 @@ class Attachments extends Table {
   TextColumn get localPath => text()();
   TextColumn get sha256 => text().nullable()();
   TextColumn get extractedTextPath => text().nullable()();
+
+  /// 抽取失败的原因（扫描件等）；成功或未尝试为 null。
+  TextColumn get extractionError => text().nullable()();
   IntColumn get width => integer().nullable()();
   IntColumn get height => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
@@ -226,45 +233,58 @@ class ToolCalls extends Table {
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
+  /// schema 变更记录：
+  /// 1 初版契约；2 附件新增抽取失败原因；3 模型新增采样温度。
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    beforeOpen: (details) async {
-      // 索引围绕实际查询建立；drift 的引用约束需要显式打开。
-      await customStatement('PRAGMA foreign_keys = ON');
-      await customStatement(
-        'CREATE INDEX IF NOT EXISTS idx_conversations_pinned_updated '
-        'ON conversations (pinned DESC, updated_at DESC)',
-      );
-      await customStatement(
-        'CREATE INDEX IF NOT EXISTS idx_messages_conversation '
-        'ON messages (conversation_id, created_at)',
-      );
-      await customStatement(
-        'CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages (parent_id)',
-      );
-      await customStatement(
-        'CREATE INDEX IF NOT EXISTS idx_messages_run ON messages (run_id)',
-      );
-      await customStatement(
-        'CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls (run_id)',
-      );
-      await customStatement(
-        'CREATE INDEX IF NOT EXISTS idx_tool_calls_status '
-        'ON tool_calls (status)',
-      );
-      await customStatement(
-        'CREATE INDEX IF NOT EXISTS idx_tool_calls_created '
-        'ON tool_calls (created_at)',
-      );
-      await customStatement(
-        'CREATE INDEX IF NOT EXISTS idx_agent_runs_conversation '
-        'ON agent_runs (conversation_id, status)',
-      );
+    onUpgrade: (migrator, from, to) async {
+      if (from < 2) {
+        await migrator.addColumn(attachments, attachments.extractionError);
+      }
+      if (from < 3) {
+        await migrator.addColumn(models, models.temperature);
+      }
     },
+    beforeOpen: _prepareDatabase,
   );
+
+  /// 每次打开都确保外键与索引就绪（建表、升级后都会执行）。
+  Future<void> _prepareDatabase(OpeningDetails details) async {
+    // 引用约束需要显式打开；索引围绕实际查询建立。
+    await customStatement('PRAGMA foreign_keys = ON');
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_conversations_pinned_updated '
+      'ON conversations (pinned DESC, updated_at DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_messages_conversation '
+      'ON messages (conversation_id, created_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages (parent_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_messages_run ON messages (run_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls (run_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_tool_calls_status '
+      'ON tool_calls (status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_tool_calls_created '
+      'ON tool_calls (created_at)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_agent_runs_conversation '
+      'ON agent_runs (conversation_id, status)',
+    );
+  }
 
   /// 校验实际链接的 SQLite 支持加密；上游 sqlite3 没有 cipher pragma。
   Future<void> assertEncryptionAvailable() async {
@@ -303,17 +323,73 @@ AppDatabase openAppDatabase({
 @Riverpod(keepAlive: true)
 Future<AppDatabase> appDatabase(Ref ref) async {
   try {
-    final hexKey = await const DatabaseKey(SecureKeyStore()).readOrCreate();
     final directory = await getApplicationDocumentsDirectory();
-    final database = openAppDatabase(
-      path: p.join(directory.path, 'phase.sqlite'),
-      hexKey: hexKey,
+    final database = await openDeviceDatabase(
+      directory: directory,
+      keyStore: const SecureKeyStore(),
     );
-    await database.assertEncryptionAvailable();
     ref.onDispose(database.close);
     return database;
   } on Exception catch (e, st) {
     AppLogger.error('打开数据库失败', e, st);
     throw UnknownFailure('打开数据库失败', cause: e);
+  }
+}
+
+/// 打开设备上的加密数据库，并保证它确实是加密库。
+///
+/// 数据库从创建时加密，因此磁盘上的文件必须是密文（SQLite3MultipleCiphers
+/// 的头部不是 `SQLite format 3`）。若遇见明文文件——例如未加密的原型库——
+/// 它不是本应用的数据格式，连同旧密钥一并清理后重建；否则它会被当成明文
+/// 库打开，密钥形同虚设，表结构也对不上。
+Future<AppDatabase> openDeviceDatabase({
+  required Directory directory,
+  required KeyStore keyStore,
+  bool background = true,
+}) async {
+  final path = p.join(directory.path, 'phase.sqlite');
+  final key = DatabaseKey(keyStore);
+  if (isPlaintextDatabase(path)) {
+    AppLogger.warning('检测到非加密数据库文件，清理后重建：$path');
+    key.delete();
+    _deleteDatabaseFiles(path);
+  }
+  final hexKey = await key.readOrCreate();
+  final database = openAppDatabase(
+    path: path,
+    hexKey: hexKey,
+    background: background,
+  );
+  await database.assertEncryptionAvailable();
+  return database;
+}
+
+/// 文件是否为明文 SQLite 库（SQLite3MultipleCiphers 的密文没有这个文件头）。
+bool isPlaintextDatabase(String path) {
+  final file = File(path);
+  if (!file.existsSync()) return false;
+  final RandomAccessFile handle;
+  try {
+    handle = file.openSync();
+  } on FileSystemException {
+    return false;
+  }
+  try {
+    if (handle.lengthSync() < 16) return false;
+    final header = handle.readSync(16);
+    return utf8.decode(header, allowMalformed: true) == 'SQLite format 3 ';
+  } finally {
+    handle.closeSync();
+  }
+}
+
+void _deleteDatabaseFiles(String path) {
+  for (final suffix in const ['', '-wal', '-shm', '-journal']) {
+    final file = File('$path$suffix');
+    try {
+      if (file.existsSync()) file.deleteSync();
+    } on FileSystemException catch (e, st) {
+      AppLogger.error('清理数据库文件失败', e, st);
+    }
   }
 }

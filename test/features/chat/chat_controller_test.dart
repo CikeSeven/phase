@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:dio/dio.dart';
@@ -12,10 +13,12 @@ import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/api_protocol.dart';
+import 'package:phase/data/models/attachment.dart';
 import 'package:phase/data/models/chat_chunk.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/message_part.dart';
+import 'package:phase/data/models/model_selection.dart' as model;
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/data/models/reasoning_effort.dart';
@@ -124,6 +127,9 @@ void main() {
 
   ChatState state() => container.read(chatControllerProvider);
 
+  String? activeConversation() =>
+      container.read(activeConversationProvider).conversationId;
+
   /// 等待发送流程推进到可观察状态（send 内部有多次异步落库）。
   Future<void> waitUntil(FutureOr<bool> Function() condition) async {
     var met = false;
@@ -148,7 +154,7 @@ void main() {
       fakeProvider.streamFactory = () =>
           Stream.fromIterable(textResponse('回答1'));
       await controller().send('问题1');
-      final conversationId = state().conversationId!;
+      final conversationId = activeConversation()!;
       var thread = await threadOf(conversationId);
 
       if (reopen) {
@@ -163,7 +169,7 @@ void main() {
         await controller().send('问题$round');
         thread = await threadOf(conversationId);
 
-        expect(state().conversationId, conversationId);
+        expect(activeConversation(), conversationId);
         expect(thread.conversation.title, '问题1');
         expect(thread.messages, hasLength(round * 2));
         expect(thread.branch, hasLength(round * 2));
@@ -191,10 +197,351 @@ void main() {
     });
   }
 
+  test('重新生成：新回答挂在同一条用户消息下，旧回答保留', () async {
+    fakeProvider.streamFactory = () =>
+        Stream.fromIterable(textResponse('第一次回答'));
+    await controller().send('问题');
+    final conversationId = activeConversation()!;
+    final before = await threadOf(conversationId);
+    expect(before.branch.map((message) => message.text), ['问题', '第一次回答']);
+
+    fakeProvider.streamFactory = () =>
+        Stream.fromIterable(textResponse('第二次回答'));
+    await controller().regenerate();
+
+    final after = await threadOf(conversationId);
+    // 当前分支只剩新回答；旧回答仍在消息树里（同级分支）。
+    expect(after.branch.map((message) => message.text), ['问题', '第二次回答']);
+    expect(after.messages, hasLength(3));
+    expect(
+      after.messages.where((message) => message.text == '第一次回答'),
+      hasLength(1),
+    );
+    // 两次回答挂在同一条用户消息下。
+    final parentId = after.branch.first.id;
+    expect(after.branch.last.parentId, parentId);
+    final old = after.messages.firstWhere((message) => message.text == '第一次回答');
+    expect(old.parentId, parentId);
+  });
+
+  test('复制会话：副本保留全部消息与分支，原会话不变', () async {
+    fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('回答'));
+    await controller().send('问题');
+    final sourceId = activeConversation()!;
+    final source = await threadOf(sourceId);
+
+    final copyId = await controller().duplicateFrom(sourceId);
+    expect(copyId, isNot(sourceId));
+    expect(activeConversation(), copyId);
+
+    final copy = await threadOf(copyId);
+    expect(copy.conversation.title, '问题（副本）');
+    expect(copy.messages, hasLength(2));
+    expect(copy.branch.map((message) => message.text), ['问题', '回答']);
+    // 副本里的消息 id 与父链都是新的，但指向关系一致。
+    expect(copy.branch.last.id, isNot(source.branch.last.id));
+    expect(copy.branch.last.parentId, copy.branch.first.id);
+
+    // 原会话不受影响。
+    final unchanged = await threadOf(sourceId);
+    expect(unchanged.messages, hasLength(2));
+    expect(unchanged.branch.last.id, source.branch.last.id);
+  });
+
+  test('复制带附件的会话后，删除原会话仍可用副本上下文继续发送', () async {
+    fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('回答'));
+    final storage = await container.read(attachmentStorageProvider.future);
+    final image = await storage.save(
+      name: 'image.png',
+      mimeType: 'image/png',
+      kind: AttachmentKind.image,
+      bytes: const [1, 2, 3],
+    );
+    final text = await storage.save(
+      name: 'notes.txt',
+      mimeType: 'text/plain',
+      kind: AttachmentKind.text,
+      bytes: utf8.encode('原始文本'),
+    );
+    final pdf = await storage.save(
+      name: 'report.pdf',
+      mimeType: 'application/pdf',
+      kind: AttachmentKind.pdf,
+      bytes: const [37, 80, 68, 70],
+    );
+    final extraction = await storage.saveExtractedText(pdf.id, 'PDF 抽取正文');
+    await controller().send(
+      '读取附件',
+      attachments: [
+        image,
+        text,
+        pdf.withExtraction(extractedTextPath: extraction),
+      ],
+    );
+    final originalId = activeConversation()!;
+    final copyId = await controller().duplicateFrom(originalId);
+    final repository = await container.read(
+      conversationRepositoryProvider.future,
+    );
+    await repository.deleteConversation(originalId);
+    await controller().send('继续');
+
+    expect(activeConversation(), copyId);
+    final originalInput = fakeProvider.lastRequest!.messages.first.parts;
+    expect(originalInput.whereType<ResolvedText>().map((part) => part.text), [
+      '原始文本',
+      'PDF 抽取正文',
+      '读取附件',
+    ]);
+    final copiedImage = originalInput
+        .whereType<ResolvedImage>()
+        .single
+        .attachment;
+    expect(copiedImage.id, isNot(image.id));
+    expect(copiedImage.conversationId, copyId);
+    expect(await File(copiedImage.localPath).readAsBytes(), [1, 2, 3]);
+    expect((await threadOf(copyId)).branch, hasLength(4));
+  });
+
+  test('文档附件用抽取文本参与请求，失败时如实告知', () async {
+    fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('好'));
+    final storage = await container.read(attachmentStorageProvider.future);
+
+    // 抽取成功的 PDF：请求里出现抽取文本，不出现原始二进制。
+    final pdf = await storage.save(
+      name: '报告.pdf',
+      mimeType: 'application/pdf',
+      kind: AttachmentKind.pdf,
+      bytes: const [37, 80, 68, 70],
+    );
+    final extractedPath = await storage.saveExtractedText(pdf.id, '第一段：季度总结。');
+    await controller().send(
+      '看下这份文档',
+      attachments: [pdf.withExtraction(extractedTextPath: extractedPath)],
+    );
+    // 请求消息里既有附件文本也有用户正文：拼起来看内容。
+    String userText(ChatRequest request) => request.messages.last.parts
+        .whereType<ResolvedText>()
+        .map((part) => part.text)
+        .join('\n');
+    var request = fakeProvider.lastRequest!;
+    expect(userText(request), contains('第一段：季度总结。'));
+    expect(userText(request), contains('看下这份文档'));
+
+    // 抽取失败的文档：请求里说明该附件没有文字，而不是默默丢掉。
+    final scanned = await storage.save(
+      name: '扫描件.pdf',
+      mimeType: 'application/pdf',
+      kind: AttachmentKind.pdf,
+      bytes: const [37, 80, 68, 70],
+    );
+    await controller().send(
+      '再看这份',
+      attachments: [scanned.withExtraction(error: '没有可提取的文字（扫描件需要 OCR）')],
+    );
+    request = fakeProvider.lastRequest!;
+    expect(userText(request), contains('扫描件需要 OCR'));
+
+    // 抽取结果随附件落库。
+    final repository = await container.read(
+      conversationRepositoryProvider.future,
+    );
+    final stored = await repository.attachmentsFor(activeConversation()!);
+    final savedPdf = stored.firstWhere((item) => item.id == pdf.id);
+    expect(savedPdf.extractedTextPath, extractedPath);
+    final savedScanned = stored.firstWhere((item) => item.id == scanned.id);
+    expect(savedScanned.extractionError, contains('OCR'));
+  });
+
+  test('模型参数按配置下发，未设置时不下发', () async {
+    fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('好'));
+    final repository = await container.read(
+      providerProfileRepositoryProvider.future,
+    );
+
+    await repository.saveProfile(
+      profile.copyWith(
+        models: const [
+          ProfileModel(
+            id: 'model-a',
+            enabled: true,
+            supportsReasoning: true,
+            temperature: 0.4,
+            maxOutputTokens: 2048,
+          ),
+        ],
+        defaultModel: 'model-a',
+      ),
+    );
+    await controller().send('你好');
+    var request = fakeProvider.lastRequest!;
+    expect(request.temperature, 0.4);
+    expect(request.maxOutputTokens, 2048);
+
+    // 未设置参数：不下发，由服务端默认决定。保存后让选择重建再发送。
+    await repository.saveProfile(
+      profile.copyWith(
+        models: const [
+          ProfileModel(id: 'model-a', enabled: true, supportsReasoning: true),
+        ],
+        defaultModel: 'model-a',
+      ),
+    );
+    // fake-async 下 Drift 的表变更不会推给界面/状态：显式重读配置与选择。
+    await container.refresh(providerProfilesProvider.future);
+    await container.refresh(modelSelectionProvider.future);
+    await controller().send('再来');
+    request = fakeProvider.lastRequest!;
+    expect(request.temperature, isNull);
+    expect(request.maxOutputTokens, isNull);
+  });
+
+  test('助手系统提示词随请求下发，新会话绑定该助手', () async {
+    fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('好'));
+    final assistant = await controller().createAssistant(
+      name: '代码助手',
+      systemPrompt: '只回答与代码有关的问题。',
+    );
+
+    await controller().send('你好');
+    expect(fakeProvider.lastRequest!.systemPrompt, '只回答与代码有关的问题。');
+
+    final repository = await container.read(
+      conversationRepositoryProvider.future,
+    );
+    final conversation = await repository.getThread(activeConversation()!);
+    expect(conversation!.conversation.assistantId, assistant.id);
+  });
+
+  test('助手默认模型覆盖「最近使用」，未设置时回落', () async {
+    fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('好'));
+    final repository = await container.read(
+      providerProfileRepositoryProvider.future,
+    );
+    await repository.saveProfile(
+      profile.copyWith(
+        models: const [
+          ProfileModel(id: 'model-a', enabled: true, supportsReasoning: true),
+          ProfileModel(id: 'assistant-model', enabled: true),
+        ],
+      ),
+    );
+    final assistant = await controller().createAssistant(
+      name: '指定模型助手',
+      defaultModelSelection: model.ModelSelection(
+        profileId: profile.id,
+        modelId: 'assistant-model',
+      ),
+    );
+    // 新会话使用该助手（列表里排在更前的内置助手此时不含默认模型）。
+    await controller().selectAssistant(assistant.id);
+    await controller().send('你好');
+    expect(fakeProvider.lastRequest!.modelId, 'assistant-model');
+
+    // 未设置默认模型的助手：回落到「最近使用」的模型。
+    final fallback = await controller().createAssistant(name: '跟随助手');
+    await controller().selectAssistant(fallback.id);
+    await controller().send('再来');
+    expect(fakeProvider.lastRequest!.modelId, 'model-a');
+  });
+
+  for (final beforeFirstSend in [true, false]) {
+    test('显式选择覆盖助手默认值并随会话保存（发送前选择：$beforeFirstSend）', () async {
+      fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('好'));
+      final profiles = await container.read(
+        providerProfileRepositoryProvider.future,
+      );
+      final other = await profiles.createProfile(
+        name: '另一个服务商',
+        baseUrl: 'https://example.invalid/v1',
+        models: const [ProfileModel(id: 'model-b', supportsReasoning: true)],
+      );
+      final assistant = await controller().createAssistant(
+        name: '指定模型',
+        defaultModelSelection: model.ModelSelection(
+          profileId: profile.id,
+          modelId: 'model-a',
+          reasoningEffort: ReasoningEffort.medium,
+        ),
+      );
+      await controller().selectAssistant(assistant.id);
+      if (!beforeFirstSend) await controller().send('第一轮');
+      await container
+          .read(modelSelectionProvider.notifier)
+          .select(other.id, 'model-b', effort: ReasoningEffort.high);
+      if (beforeFirstSend) {
+        expect(activeConversation(), isNull);
+        expect(await db.select(db.conversations).get(), isEmpty);
+      }
+      final selected = (await container.read(modelSelectionProvider.future))!;
+      expect(selected.profile.id, other.id);
+      expect(selected.model, 'model-b');
+      expect(selected.effort, ReasoningEffort.high);
+      await controller().send('使用手动选择');
+      expect(fakeProvider.lastRequest!.modelId, 'model-b');
+      expect(fakeProvider.lastRequest!.reasoningEffort, ReasoningEffort.high);
+      final id = activeConversation()!;
+      final saved = (await threadOf(id)).conversation.modelSelectionOverride!;
+      expect(saved.profileId, other.id);
+      expect(saved.modelId, 'model-b');
+      expect(saved.reasoningEffort, ReasoningEffort.high);
+
+      controller().startNewConversation();
+      await controller().selectAssistant(assistant.id);
+      final defaultSelection = (await container.read(
+        modelSelectionProvider.future,
+      ))!;
+      expect(defaultSelection.model, 'model-a');
+      expect(defaultSelection.effort, ReasoningEffort.medium);
+      await controller().send('独立会话');
+
+      await controller().openConversation(id);
+      await controller().send('重开原会话');
+      expect(fakeProvider.lastRequest!.modelId, 'model-b');
+      expect(fakeProvider.lastRequest!.reasoningEffort, ReasoningEffort.high);
+      final copyId = await controller().duplicateFrom(id);
+      await controller().send('副本');
+      expect(activeConversation(), copyId);
+      expect(fakeProvider.lastRequest!.modelId, 'model-b');
+      expect(fakeProvider.lastRequest!.reasoningEffort, ReasoningEffort.high);
+    });
+  }
+
+  test('单独修改推理等级不会切换模型或改写助手默认值', () async {
+    fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('好'));
+    final assistant = await controller().createAssistant(
+      name: '推理助手',
+      defaultModelSelection: model.ModelSelection(
+        profileId: profile.id,
+        modelId: 'model-a',
+        reasoningEffort: ReasoningEffort.medium,
+      ),
+    );
+    await controller().selectAssistant(assistant.id);
+    await container
+        .read(modelSelectionProvider.notifier)
+        .selectEffort(ReasoningEffort.off);
+    await controller().send('关闭思考');
+    final conversationId = activeConversation()!;
+    expect(fakeProvider.lastRequest!.modelId, 'model-a');
+    expect(fakeProvider.lastRequest!.reasoningEffort, ReasoningEffort.off);
+    await controller().openConversation(conversationId);
+    expect(
+      (await container.read(modelSelectionProvider.future))!.effort,
+      ReasoningEffort.off,
+    );
+    final unchanged = (await container.read(assistantsProvider.future))
+        .singleWhere((item) => item.id == assistant.id);
+    expect(
+      unchanged.defaultModelSelection!.reasoningEffort,
+      ReasoningEffort.medium,
+    );
+  });
+
   test('发送使用仓储当前分支，不把其他分支带入上下文', () async {
     fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('回答1'));
     await controller().send('问题1');
-    final conversationId = state().conversationId!;
+    final conversationId = activeConversation()!;
     final first = await threadOf(conversationId);
 
     fakeProvider.streamFactory = () => Stream.fromIterable(textResponse('旧回答'));
@@ -242,17 +589,15 @@ void main() {
       providerProfileRepositoryProvider.future,
     );
     await repository.saveProfile(
-      profile.copyWith(
-        models: const [ProfileModel(id: 'model-b', enabled: true)],
-        defaultModel: 'model-b',
-      ),
+      profile.copyWith(models: const [], defaultModel: 'model-b'),
     );
+    await container.refresh(providerProfilesProvider.future);
     await container
-        .read(settingsStorageProvider)
-        .writeLastModelSelection(profileId: profile.id, model: 'model-b');
-    container.refresh(modelSelectionProvider);
+        .read(modelSelectionProvider.notifier)
+        .select(profile.id, 'model-b');
     await container.read(modelSelectionProvider.future);
     await controller().send('未登记模型');
+    expect(fakeProvider.lastRequest!.modelId, 'model-b');
     expect(fakeProvider.lastRequest!.reasoningEffort, ReasoningEffort.medium);
 
     // 显式关闭推理的模型：不下发推理字段。
@@ -264,10 +609,10 @@ void main() {
         defaultModel: 'model-b',
       ),
     );
+    await container.refresh(providerProfilesProvider.future);
     await container
-        .read(settingsStorageProvider)
-        .writeLastModelSelection(profileId: profile.id, model: 'model-b');
-    container.refresh(modelSelectionProvider);
+        .read(modelSelectionProvider.notifier)
+        .select(profile.id, 'model-b');
     await container.read(modelSelectionProvider.future);
 
     await controller().send('再来');
@@ -280,11 +625,11 @@ void main() {
 
     const text = '你好，请介绍一下你自己，这句话超过二十个字了';
     final sendFuture = controller().send(text);
-    await waitUntil(() => state().conversationId != null);
+    // 会话 id 在请求发出前就写好，状态可能还没进入生成中：等状态本身。
+    await waitUntil(() => state().isGenerating);
 
-    expect(state().conversationId, isNotNull);
-    expect(state().isGenerating, isTrue);
-    final conversationId = state().conversationId!;
+    expect(activeConversation(), isNotNull);
+    final conversationId = activeConversation()!;
 
     // 会话标题取首条消息前 20 字。
     final conversations = await db.select(db.conversations).get();
@@ -352,7 +697,7 @@ void main() {
     ]);
 
     await controller().send('你好');
-    final thread = await threadOf(state().conversationId!);
+    final thread = await threadOf(activeConversation()!);
     final answer = thread.branch.last;
 
     expect(answer.parts.whereType<ReasoningPart>().single.publicText, '先想一下');
@@ -367,7 +712,7 @@ void main() {
 
     final sendFuture = controller().send('你好');
     await waitUntil(() => state().isGenerating);
-    final conversationId = state().conversationId!;
+    final conversationId = activeConversation()!;
 
     chunks.add(const PartStart(partId: 'text_0', kind: PartKind.text));
     chunks.add(const TextDelta(partId: 'text_0', text: '部分内容'));
@@ -465,7 +810,7 @@ void main() {
           onTimeout: () => fail('停止后底层连接未断开'),
         );
 
-        final answer = (await threadOf(state().conversationId!)).branch.last;
+        final answer = (await threadOf(activeConversation()!)).branch.last;
         expect(answer.status, MessageStatus.cancelled);
         expect(answer.text, sendHeaders ? 'partial' : '');
         expect(state().isGenerating, isFalse);
@@ -491,7 +836,7 @@ void main() {
     ]);
 
     await controller().send('你好');
-    var thread = await threadOf(state().conversationId!);
+    var thread = await threadOf(activeConversation()!);
     var answer = thread.branch.last;
     expect(answer.status, MessageStatus.failed);
     expect(answer.text, contains('半句'));
@@ -501,7 +846,7 @@ void main() {
     fakeProvider.streamFactory = () =>
         Stream<ChatChunk>.error(const ServerFailure('boom'));
     await controller().send('再来');
-    thread = await threadOf(state().conversationId!);
+    thread = await threadOf(activeConversation()!);
     answer = thread.branch.last;
     expect(answer.status, MessageStatus.failed);
     expect(answer.text, contains('服务商暂时不可用'));
@@ -511,7 +856,7 @@ void main() {
     fakeProvider.streamFactory = () => const Stream<ChatChunk>.empty();
 
     await controller().send('你好');
-    final thread = await threadOf(state().conversationId!);
+    final thread = await threadOf(activeConversation()!);
 
     expect(thread.branch.last.status, MessageStatus.failed);
     expect(thread.branch.last.text, contains('空响应'));
@@ -540,7 +885,7 @@ void main() {
 
     expect(await db.select(db.conversations).get(), isEmpty);
     expect(await db.select(db.messages).get(), isEmpty);
-    expect(state().conversationId, isNull);
+    expect(activeConversation(), isNull);
     expect(state().isGenerating, isFalse);
   });
 }

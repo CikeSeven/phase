@@ -1,120 +1,220 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:path/path.dart' as p;
 import 'package:phase/core/theme/app_theme.dart';
-import 'package:phase/core/widgets/app_icon_badge.dart';
 import 'package:phase/core/widgets/app_scaffold.dart';
+import 'package:phase/data/datasources/local/app_database.dart';
+import 'package:phase/data/datasources/local/secure_key_storage.dart';
+import 'package:phase/data/datasources/local/settings_storage.dart';
+import 'package:phase/data/models/assistant.dart';
+import 'package:phase/data/models/model_selection.dart';
+import 'package:phase/data/repositories/assistant_repository.dart';
+import 'package:phase/features/assistants/assistant_edit_page.dart';
 import 'package:phase/features/assistants/assistants_page.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../support/fake_secure_storage.dart';
 
 void main() {
-  testWidgets('助手无冗余未来说明，保留即将上线状态与真实返回', (tester) async {
-    final router = await _pumpHost(tester);
-    await tester.tap(find.text('打开助手'));
-    await tester.pumpAndSettle();
-    expect(find.byType(AppScaffold), findsOneWidget);
-    expect(find.byType(AppIconBadge), findsOneWidget);
-    expect(find.text('助手功能即将上线'), findsOneWidget);
-    expect(find.byType(SingleChildScrollView), findsOneWidget);
-    expect(find.textContaining('系统提示词（system prompt）与任务模板'), findsNothing);
-    expect(find.textContaining('现在，先与已配置的模型'), findsNothing);
-    expect(find.byType(FilledButton), findsOneWidget);
-    expect(find.text('创建助手'), findsNothing);
-    expect(find.byType(Switch), findsNothing);
-    await tester.tap(find.text('返回对话'));
-    await tester.pumpAndSettle();
-    expect(router.routeInformationProvider.value.uri.path, '/');
-    expect(find.text('对话目的页'), findsOneWidget);
-    expect(find.byType(AssistantsPage), findsNothing);
-    expect(tester.takeException(), isNull);
+  late Directory temp;
+  late AppDatabase db;
+
+  setUp(() {
+    temp = Directory.systemTemp.createTempSync('phase_assistants');
+    // widget 测试的 fake-async 无法驱动后台 isolate：同 isolate 打开加密库。
+    db = openAppDatabase(
+      path: p.join(temp.path, 'phase.sqlite'),
+      hexKey: '0123456789abcdef' * 4,
+      background: false,
+    );
   });
 
-  for (final scenario in [
-    (size: const Size(320, 760), scale: 1.3, keyboard: 0.0, dark: false),
-    (size: const Size(360, 800), scale: 1.3, keyboard: 0.0, dark: true),
-    (size: const Size(320, 760), scale: 2.0, keyboard: 0.0, dark: true),
-    (size: const Size(360, 800), scale: 2.0, keyboard: 0.0, dark: false),
-    (size: const Size(800, 360), scale: 2.0, keyboard: 160.0, dark: true),
-  ]) {
-    testWidgets('助手空态在窄屏/短窗口可滚动返回：$scenario', (tester) async {
-      final router = await _pumpHost(
-        tester,
-        size: scenario.size,
-        scale: scenario.scale,
-        keyboard: scenario.keyboard,
-        dark: scenario.dark,
-        initialLocation: '/assistants',
-      );
-      expect(find.text('助手功能即将上线'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-      await tester.ensureVisible(find.text('返回对话'));
-      await tester.pumpAndSettle();
-      expect(find.text('返回对话').hitTestable(), findsOneWidget);
-      await tester.tap(find.text('返回对话'));
-      await tester.pumpAndSettle();
-      expect(router.routeInformationProvider.value.uri.path, '/');
-      expect(find.text('对话目的页'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-  }
-}
+  tearDown(() async {
+    await db.close();
+    if (temp.existsSync()) temp.deleteSync(recursive: true);
+  });
 
-Future<GoRouter> _pumpHost(
-  WidgetTester tester, {
-  Size size = const Size(390, 844),
-  double scale = 1,
-  double keyboard = 0,
-  bool dark = false,
-  String initialLocation = '/',
-}) async {
-  tester.view.devicePixelRatio = 1;
-  tester.view.physicalSize = size;
-  tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
-  tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 24);
-  tester.view.padding = FakeViewPadding(
-    top: 24,
-    bottom: keyboard == 0 ? 24 : 0,
-  );
-  addTearDown(tester.view.reset);
-  final router = GoRouter(
-    initialLocation: initialLocation,
-    routes: [
-      GoRoute(
-        path: '/',
-        builder: (context, state) => Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text('对话目的页'),
-                TextButton(
-                  onPressed: () => context.push('/assistants'),
-                  child: const Text('打开助手'),
-                ),
-              ],
+  /// 预置一个带系统提示词与默认模型的助手。
+  Future<Assistant> seedAssistant({
+    String name = '代码助手',
+    String prompt = '只回答与代码有关的问题。',
+    ModelSelection? selection,
+  }) async {
+    final repository = AssistantRepository(db);
+    final assistant = Assistant(
+      id: 'a-$name',
+      name: name,
+      systemPrompt: prompt,
+      defaultModelSelection: selection,
+      createdAt: DateTime(2026),
+    );
+    await repository.save(assistant);
+    return assistant;
+  }
+
+  Future<({ProviderContainer container, GoRouter router})> pumpHost(
+    WidgetTester tester, {
+    Size size = const Size(390, 844),
+    double scale = 1,
+    String initialLocation = '/assistants',
+  }) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = size;
+    tester.view.viewPadding = const FakeViewPadding(top: 24, bottom: 24);
+    addTearDown(tester.view.reset);
+
+    SharedPreferences.setMockInitialValues({});
+    final preferences = await SharedPreferences.getInstance();
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWith((ref) => preferences),
+        appDatabaseProvider.overrideWith((ref) => db),
+        secureKeyStorageProvider.overrideWith(
+          (ref) => SecureKeyStorage(FakeSecureStorage()),
+        ),
+      ],
+    );
+    final router = GoRouter(
+      initialLocation: initialLocation,
+      routes: [
+        GoRoute(
+          path: '/assistants',
+          builder: (context, state) => const AssistantsPage(),
+          routes: [
+            GoRoute(
+              path: 'new',
+              builder: (context, state) => const AssistantEditPage(),
             ),
+            GoRoute(
+              path: ':id',
+              builder: (context, state) =>
+                  AssistantEditPage(assistantId: state.pathParameters['id']),
+            ),
+          ],
+        ),
+      ],
+    );
+    addTearDown(router.dispose);
+
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp.router(
+          theme: AppTheme.light(),
+          darkTheme: AppTheme.dark(),
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context)
+                .copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
           ),
+          routerConfig: router,
         ),
       ),
-      GoRoute(
-        path: '/assistants',
-        builder: (context, state) => const AssistantsPage(),
+    );
+    await tester.pumpAndSettle();
+    return (container: container, router: router);
+  }
+
+  /// 收尾：拆组件树 → 关容器 → 关库（drift 的流清理计时器需要这一步）。
+  Future<void> closeHost(
+    WidgetTester tester,
+    ProviderContainer container,
+  ) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    container.dispose();
+    var closed = false;
+    unawaited(db.close().then((_) => closed = true));
+    for (var i = 0; i < 40 && !closed; i++) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(closed, isTrue, reason: '数据库未在预期时间内关闭');
+  }
+
+  testWidgets('列出真实助手：名称、系统提示词与默认模型，并标记当前', (tester) async {
+    await seedAssistant();
+    final seeded = await seedAssistant(
+      name: '写作助手',
+      prompt: '',
+      selection: const ModelSelection(
+        profileId: 'p1',
+        modelId: 'deepseek-chat',
       ),
-    ],
-  );
-  addTearDown(router.dispose);
-  await tester.pumpWidget(
-    MaterialApp.router(
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
-      themeMode: dark ? ThemeMode.dark : ThemeMode.light,
-      builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context)
-            .copyWith(textScaler: TextScaler.linear(scale)),
-        child: child!,
-      ),
-      routerConfig: router,
-    ),
-  );
-  await tester.pumpAndSettle();
-  return router;
+    );
+    final host = await pumpHost(tester);
+
+    expect(find.text('代码助手'), findsOneWidget);
+    expect(find.text('只回答与代码有关的问题。'), findsOneWidget);
+    expect(find.text('未设置系统提示词'), findsOneWidget);
+    expect(find.text('默认模型：deepseek-chat'), findsOneWidget);
+    // 列表里第一个助手是当前助手（内置默认排在更前，这里只有一个「当前」）。
+    expect(
+      find.byKey(const ValueKey('assistant-current-badge')),
+      findsOneWidget,
+    );
+    expect(find.byKey(ValueKey('assistant-${seeded.id}')), findsOneWidget);
+
+    await closeHost(tester, host.container);
+  });
+
+  testWidgets('点击助手进入编辑页，新建入口打开空白编辑页', (tester) async {
+    await seedAssistant();
+    final host = await pumpHost(tester);
+
+    await tester.tap(find.byKey(const ValueKey('assistant-a-代码助手')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AssistantEditPage), findsOneWidget);
+    expect(find.text('编辑助手'), findsOneWidget);
+    expect(find.byKey(const ValueKey('delete-assistant')), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('add-assistant')));
+    await tester.pumpAndSettle();
+    expect(find.text('新建助手'), findsOneWidget);
+    expect(find.byKey(const ValueKey('delete-assistant')), findsNothing);
+    expect(find.byKey(const ValueKey('save-assistant')), findsOneWidget);
+
+    await closeHost(tester, host.container);
+  });
+
+  testWidgets('窄屏与大字号下列表与底部入口可用', (tester) async {
+    await seedAssistant(
+      name: '很长很长的助手名称用于验证窄屏省略',
+      prompt: '这是一段很长的系统提示词，用于验证两行省略不会溢出，也不会把卡片撑破。',
+    );
+    final host = await pumpHost(tester, size: const Size(320, 760), scale: 2);
+
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(const ValueKey('add-assistant')), findsOneWidget);
+    expect(find.byIcon(Symbols.add), findsWidgets);
+
+    await closeHost(tester, host.container);
+  });
+
+  testWidgets('删除助手后列表更新，会话保留（解除绑定）', (tester) async {
+    final assistant = await seedAssistant();
+    final host = await pumpHost(tester);
+
+    await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('delete-assistant')));
+    await tester.pumpAndSettle();
+    expect(find.text('删除助手'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('confirm-delete-assistant')));
+    await tester.pumpAndSettle();
+
+    // 回到列表：该助手已不在列表里（内置默认助手仍在）。
+    expect(find.text('代码助手'), findsNothing);
+    expect(find.byType(AppScaffold), findsOneWidget);
+
+    await closeHost(tester, host.container);
+  });
 }

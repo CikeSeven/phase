@@ -50,6 +50,46 @@ class AttachmentStorage {
     );
   }
 
+  /// 保存文档的抽取文本，返回文本文件路径。
+  ///
+  /// 抽取结果与原始文件分开保存：请求用文本，查看用原文件。
+  Future<String> saveExtractedText(String attachmentId, String text) async {
+    await root.create(recursive: true);
+    final file = File(p.join(root.path, '$attachmentId.extracted.txt'));
+    await file.writeAsString(text);
+    return file.path;
+  }
+
+  /// 把附件及其抽取文本复制到新 id，保证不同会话互不删除文件。
+  Future<Attachment> copy(
+    Attachment source, {
+    required String conversationId,
+    required String id,
+  }) async {
+    await root.create(recursive: true);
+    final extension = p.extension(source.localPath);
+    final copiedPath = p.join(root.path, '$id$extension');
+    final extractedPath = source.extractedTextPath;
+    final copiedTextPath = extractedPath == null
+        ? null
+        : p.join(root.path, '$id.extracted.txt');
+    try {
+      await File(source.localPath).copy(copiedPath);
+      if (extractedPath != null) {
+        await File(extractedPath).copy(copiedTextPath!);
+      }
+      return source.copyTo(
+        conversationId: conversationId,
+        id: id,
+        localPath: copiedPath,
+        extractedTextPath: copiedTextPath,
+      );
+    } catch (_) {
+      await deletePaths([copiedPath, ?copiedTextPath]);
+      rethrow;
+    }
+  }
+
   /// 删除附件文件；文件已不存在不算错误（删除会话时尽力清理）。
   Future<void> deletePaths(Iterable<String> paths) async {
     for (final path in paths) {

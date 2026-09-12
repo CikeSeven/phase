@@ -72,9 +72,12 @@ void main() {
     expect(File(saved.localPath).existsSync(), isFalse);
   });
 
-  test('未知附件类型按文本处理，不冒充图片', () {
-    expect(attachmentKindFromName('pdf'), AttachmentKind.text);
+  test('附件类型按名称还原，未登记的按文本处理', () {
+    expect(attachmentKindFromName('pdf'), AttachmentKind.pdf);
+    expect(attachmentKindFromName('docx'), AttachmentKind.docx);
     expect(attachmentKindFromName('image'), AttachmentKind.image);
     expect(attachmentKindFromName('artifact'), AttachmentKind.artifact);
+    // 未登记的类型不冒充图片或文档。
+    expect(attachmentKindFromName('unknown'), AttachmentKind.text);
   });
 }

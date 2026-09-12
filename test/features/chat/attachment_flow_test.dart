@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -101,7 +102,26 @@ void main() {
     );
   }
 
-  Future<void> pumpChat(
+  /// 收尾：拆组件树 → 关容器（解除数据库流订阅）→ 关库。
+  ///
+  /// 顺序与 chat_flow_test 一致：drift 关闭查询流时会排零延时清理计时器，
+  /// 先解除订阅再关库，测试结束前它们就能跑完。
+  Future<void> closeChat(
+    WidgetTester tester,
+    ProviderContainer container,
+  ) async {
+    await tester.pumpWidget(const SizedBox.shrink());
+    container.dispose();
+    var closed = false;
+    unawaited(db.close().then((_) => closed = true));
+    for (var i = 0; i < 40 && !closed; i++) {
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      await tester.pump(const Duration(milliseconds: 20));
+    }
+    expect(closed, isTrue, reason: '数据库未在预期时间内关闭');
+  }
+
+  Future<ProviderContainer> pumpChat(
     WidgetTester tester, {
     bool supportsImages = true,
   }) async {
@@ -117,36 +137,39 @@ void main() {
       ],
     );
     addTearDown(router.dispose);
+    final container = ProviderContainer(
+      overrides: [
+        sharedPreferencesProvider.overrideWith((ref) => preferences),
+        appDatabaseProvider.overrideWith((ref) => db),
+        secureKeyStorageProvider.overrideWith(
+          (ref) => SecureKeyStorage(FakeSecureStorage()),
+        ),
+        attachmentStorageProvider.overrideWith((ref) => storage),
+        providerProfilesProvider.overrideWith(
+          (ref) => Stream.value([
+            ProviderProfile(
+              id: 'p',
+              name: '服务商',
+              protocol: ApiProtocol.openaiCompletions,
+              baseUrl: 'https://example.com/v1',
+              defaultModel: 'model-x',
+              models: [
+                ProfileModel(id: 'model-x', supportsImages: supportsImages),
+              ],
+              createdAt: DateTime(2026),
+            ),
+          ]),
+        ),
+        aiProviderFactoryProvider.overrideWith(
+          (ref) =>
+              (_, _) => ai,
+        ),
+        attachmentPickerProvider.overrideWith((ref) async => picker),
+      ],
+    );
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [
-          sharedPreferencesProvider.overrideWith((ref) => preferences),
-          appDatabaseProvider.overrideWith((ref) => db),
-          secureKeyStorageProvider.overrideWith(
-            (ref) => SecureKeyStorage(FakeSecureStorage()),
-          ),
-          attachmentStorageProvider.overrideWith((ref) => storage),
-          providerProfilesProvider.overrideWith(
-            (ref) => Stream.value([
-              ProviderProfile(
-                id: 'p',
-                name: '服务商',
-                protocol: ApiProtocol.openaiCompletions,
-                baseUrl: 'https://example.com/v1',
-                defaultModel: 'model-x',
-                models: [
-                  ProfileModel(id: 'model-x', supportsImages: supportsImages),
-                ],
-                createdAt: DateTime(2026),
-              ),
-            ]),
-          ),
-          aiProviderFactoryProvider.overrideWith(
-            (ref) =>
-                (_, _) => ai,
-          ),
-          attachmentPickerProvider.overrideWith((ref) async => picker),
-        ],
+      UncontrolledProviderScope(
+        container: container,
         child: MaterialApp.router(
           theme: AppTheme.light(),
           routerConfig: router,
@@ -158,13 +181,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    return container;
   }
 
   testWidgets('相册选图后出现附件条，可移除', (tester) async {
     await tester.runAsync(() async {
       picker.next = await makeAttachment(AttachmentKind.image, 'a.png');
     });
-    await pumpChat(tester);
+    final container = await pumpChat(tester);
     await tester.tap(find.byTooltip('附件'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('attach-gallery')));
@@ -180,13 +204,15 @@ void main() {
     await tester.tap(find.byTooltip('移除附件'));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('attachment-chips')), findsNothing);
+
+    await closeChat(tester, container);
   });
 
   testWidgets('选择文件后只出现附件条，不进入文本输入框', (tester) async {
     await tester.runAsync(() async {
       picker.next = await makeAttachment(AttachmentKind.text, 'note.txt');
     });
-    await pumpChat(tester);
+    final container = await pumpChat(tester);
     await tester.tap(find.byTooltip('附件'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('attach-file')));
@@ -201,13 +227,15 @@ void main() {
           .text,
       isEmpty,
     );
+
+    await closeChat(tester, container);
   });
 
   testWidgets('模型未标记支持图片时拦截图片入口，文件入口不受影响', (tester) async {
     await tester.runAsync(() async {
       picker.next = await makeAttachment(AttachmentKind.text, 'note.txt');
     });
-    await pumpChat(tester, supportsImages: false);
+    final container = await pumpChat(tester, supportsImages: false);
     await tester.tap(find.byTooltip('附件'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('attach-gallery')));
@@ -224,5 +252,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(picker.fileCalls, 1);
     expect(find.byKey(const ValueKey('attachment-chips')), findsOneWidget);
+
+    await closeChat(tester, container);
   });
 }

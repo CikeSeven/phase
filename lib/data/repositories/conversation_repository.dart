@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -12,6 +13,7 @@ import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../models/message_part.dart';
+import '../models/model_selection.dart';
 import 'row_mappers.dart';
 
 part 'conversation_repository.g.dart';
@@ -45,7 +47,7 @@ class ConversationRepository {
 
   final AppDatabase _db;
 
-  /// 删除会话时清理附件文件；测试可注入 null（不清理文件）。
+  /// 复制和删除会话时管理附件文件；纯数据测试可不注入。
   final AttachmentStorage? attachments;
 
   // --- 会话 ---
@@ -74,6 +76,7 @@ class ConversationRepository {
   Future<Conversation> createConversation({
     String title = '新会话',
     String? assistantId,
+    ModelSelection? modelSelectionOverride,
   }) async {
     return _guard('创建会话失败', () async {
       final now = DateTime.now();
@@ -81,6 +84,7 @@ class ConversationRepository {
         id: generateId(),
         title: title,
         assistantId: assistantId,
+        modelSelectionOverride: modelSelectionOverride,
         createdAt: now,
         updatedAt: now,
       );
@@ -98,6 +102,20 @@ class ConversationRepository {
       )..where((t) => t.id.equals(conversation.id))).write(
         conversationCompanion(conversation.copyWith(updatedAt: DateTime.now())),
       );
+    });
+  }
+
+  Future<void> setModelSelection(String id, ModelSelection selection) {
+    return _guard('保存会话模型失败', () async {
+      final changed =
+          await (_db.update(
+            _db.conversations,
+          )..where((t) => t.id.equals(id))).write(
+            ConversationsCompanion(
+              selectionJson: Value(jsonEncode(selection.toJson())),
+            ),
+          );
+      if (changed == 0) throw const UnknownFailure('会话不存在或已删除');
     });
   }
 
@@ -129,8 +147,127 @@ class ConversationRepository {
         _db.attachments,
       )..where((t) => t.conversationId.equals(id))).get();
       await (_db.delete(_db.conversations)..where((t) => t.id.equals(id))).go();
-      await attachments?.deletePaths(rows.map((row) => row.localPath));
+      await attachments?.deletePaths([
+        for (final row in rows) ...[
+          row.localPath,
+          if (row.extractedTextPath != null) row.extractedTextPath!,
+        ],
+      ]);
     });
+  }
+
+  /// 复制会话：新会话带同样的助手、模型覆盖与全部消息（含其他分支）。
+  ///
+  /// 副本拥有独立附件文件；消息父指针和所有分支中的附件引用一起重映射。
+  Future<Conversation> duplicateConversation(String id) {
+    return _guard('复制会话失败', () async {
+      final source = await getThread(id);
+      if (source == null) {
+        throw const UnknownFailure('会话不存在或已删除');
+      }
+      final now = DateTime.now();
+      final copy = Conversation(
+        id: generateId(),
+        title: '${source.conversation.title}（副本）',
+        assistantId: source.conversation.assistantId,
+        modelSelectionOverride: source.conversation.modelSelectionOverride,
+        createdAt: now,
+        updatedAt: now,
+      );
+      final attachmentRows = await (_db.select(
+        _db.attachments,
+      )..where((t) => t.conversationId.equals(id))).get();
+      if (attachmentRows.isNotEmpty && attachments == null) {
+        throw const UnknownFailure('复制会话需要附件存储');
+      }
+      final attachmentIds = <String, String>{};
+      final copiedAttachments = <Attachment>[];
+      try {
+        for (final row in attachmentRows) {
+          final newId = generateId();
+          final copied = await attachments!.copy(
+            attachmentFromRow(row),
+            conversationId: copy.id,
+            id: newId,
+          );
+          attachmentIds[row.id] = newId;
+          copiedAttachments.add(copied);
+        }
+        await _db.transaction(() async {
+          await _db.into(_db.conversations).insert(conversationCompanion(copy));
+
+          // 旧消息 id → 新消息 id，用于重建父指针与当前分支指针。
+          final idMap = {
+            for (final message in source.messages) message.id: generateId(),
+          };
+          for (final message in source.messages) {
+            await _db
+                .into(_db.messages)
+                .insert(
+                  messageCompanion(
+                    message.copyTo(
+                      conversationId: copy.id,
+                      id: idMap[message.id]!,
+                      parentId: message.parentId == null
+                          ? null
+                          : idMap[message.parentId!],
+                      parts: _copyMessageParts(message.parts, attachmentIds),
+                    ),
+                  ),
+                );
+          }
+
+          final currentId = source.currentMessageId;
+          await (_db.update(
+            _db.conversations,
+          )..where((t) => t.id.equals(copy.id))).write(
+            ConversationsCompanion(
+              currentMessageId: Value(
+                currentId == null ? null : idMap[currentId],
+              ),
+            ),
+          );
+
+          for (final attachment in copiedAttachments) {
+            await _db
+                .into(_db.attachments)
+                .insert(attachmentCompanion(attachment));
+          }
+        });
+      } catch (_) {
+        await attachments?.deletePaths([
+          for (final attachment in copiedAttachments) ...[
+            attachment.localPath,
+            if (attachment.extractedTextPath != null)
+              attachment.extractedTextPath!,
+          ],
+        ]);
+        rethrow;
+      }
+      return copy;
+    });
+  }
+
+  List<MessagePart> _copyMessageParts(
+    List<MessagePart> parts,
+    Map<String, String> attachmentIds,
+  ) {
+    return [
+      for (final part in parts)
+        switch (part) {
+          ImagePart(:final attachmentId) => ImagePart(
+            attachmentId:
+                attachmentIds[attachmentId] ??
+                (throw const UnknownFailure('复制会话的图片附件引用不存在')),
+          ),
+          DocumentPart(:final attachmentId) => DocumentPart(
+            attachmentId:
+                attachmentIds[attachmentId] ??
+                (throw const UnknownFailure('复制会话的文档附件引用不存在')),
+          ),
+          _ => part,
+        },
+    ];
   }
 
   // --- 消息 ---
@@ -208,18 +345,6 @@ class ConversationRepository {
   }
 
   /// 更新附件的文本抽取结果（S2 的 PDF/DOCX 抽取落库）。
-  Future<void> updateAttachmentExtraction(
-    String attachmentId, {
-    required String extractedTextPath,
-  }) {
-    return _guard('保存附件文本失败', () async {
-      await (_db.update(
-        _db.attachments,
-      )..where((t) => t.id.equals(attachmentId))).write(
-        AttachmentsCompanion(extractedTextPath: Value(extractedTextPath)),
-      );
-    });
-  }
 
   Future<List<Attachment>> attachmentsFor(String conversationId) {
     return _guard('读取附件失败', () async {
@@ -227,6 +352,24 @@ class ConversationRepository {
         _db.attachments,
       )..where((t) => t.conversationId.equals(conversationId))).get();
       return rows.map(attachmentFromRow).toList();
+    });
+  }
+
+  /// 记录文档抽取结果：成功的文本路径或失败原因（二者互斥）。
+  Future<void> updateAttachmentExtraction(
+    String attachmentId, {
+    String? extractedTextPath,
+    String? error,
+  }) {
+    return _guard('保存附件抽取结果失败', () async {
+      await (_db.update(
+        _db.attachments,
+      )..where((t) => t.id.equals(attachmentId))).write(
+        AttachmentsCompanion(
+          extractedTextPath: Value(extractedTextPath),
+          extractionError: Value(extractedTextPath == null ? error : null),
+        ),
+      );
     });
   }
 

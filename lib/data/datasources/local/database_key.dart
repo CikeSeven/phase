@@ -15,6 +15,9 @@ class DatabaseKey {
 
   final KeyStore _store;
 
+  /// 删除已保存的密钥（数据库重建时一并清理）。
+  Future<void> delete() => _store.delete(_storageKey);
+
   /// 读取已有密钥；不存在时生成并保存。
   Future<String> readOrCreate() async {
     final existing = await _store.read(_storageKey);

@@ -20,6 +20,7 @@ class MessageBubble extends StatelessWidget {
   const MessageBubble({
     required this.message,
     this.attachments = const {},
+    this.onRegenerate,
     super.key,
   });
 
@@ -27,6 +28,12 @@ class MessageBubble extends StatelessWidget {
 
   /// 当前会话的附件索引，用于把 Part 里的附件引用还原成文件。
   final Map<String, Attachment> attachments;
+
+  /// 重新生成本条回答；仅当前分支最后一条回答会传入。
+  final Future<void> Function()? onRegenerate;
+
+  /// 面板里是否提供「重新生成」。
+  bool get canRegenerate => onRegenerate != null && !_isUser;
 
   bool get _isUser => message.role == ChatRole.user;
 
@@ -239,11 +246,20 @@ class MessageBubble extends StatelessWidget {
   }
 
   Future<void> _showActions(BuildContext context) async {
-    final copy = await showMessageActionsSheet(
+    final action = await showMessageActionsSheet(
       context,
       canCopy: message.text.isNotEmpty,
+      canRegenerate: canRegenerate,
     );
-    if (copy == true && context.mounted) await _copy(context);
+    if (!context.mounted) return;
+    switch (action) {
+      case MessageAction.copy:
+        await _copy(context);
+      case MessageAction.regenerate:
+        await onRegenerate?.call();
+      case null:
+        break;
+    }
   }
 
   Future<void> _copy(BuildContext context) async {

@@ -13,6 +13,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_top_bar.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/reasoning_effort.dart';
+import '../assistants/assistant_picker_sheet.dart';
 import 'chat_controller.dart';
 import 'chat_empty_state.dart';
 import 'chat_input_bar.dart';
@@ -30,6 +31,9 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage> {
+  /// 顶栏两行各自的最小触区（设计要求的 48dp）。
+  static const _minTapTarget = 48.0;
+
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerOpen = false;
   double _composerExtent = 0;
@@ -49,7 +53,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   Widget build(BuildContext context) {
     final conversationId = ref.watch(
-      chatControllerProvider.select((state) => state.conversationId),
+      activeConversationProvider.select((active) => active.conversationId),
     );
     final selection = ref.watch(modelSelectionProvider);
     final theme = Theme.of(context);
@@ -57,14 +61,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final scaler = MediaQuery.textScalerOf(context);
     final titleStyle = theme.textTheme.titleMedium;
     final modelStyle = theme.textTheme.bodyMedium;
-    final toolbarHeight = math.max(
-      64.0,
-      // 结尾只加标题列自身之外的垂直余量（padding xs*2）。
+    // 标题列两行各是可点区域：每行至少 48dp 触区，文字更大时随之增高。
+    final titleRow = math.max(
+      _minTapTarget,
       scaler.scale(titleStyle?.fontSize ?? 16) * (titleStyle?.height ?? 1.4) +
-          scaler.scale(modelStyle?.fontSize ?? 14) *
-              (modelStyle?.height ?? 1.45) +
           AppSpacing.s,
     );
+    final modelRow = math.max(
+      _minTapTarget,
+      scaler.scale(modelStyle?.fontSize ?? 14) * (modelStyle?.height ?? 1.45) +
+          AppSpacing.s,
+    );
+    final toolbarHeight = titleRow + modelRow;
     final modelLabel = selection.hasError
         ? '模型加载失败'
         : selection.when(
@@ -73,6 +81,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             error: (_, _) => '模型加载失败',
           );
     final current = selection.value;
+    final assistantName =
+        ref
+            .watch(
+              currentAssistantProvider(ref.watch(activeConversationProvider)),
+            )
+            ?.name ??
+        '相月';
 
     return PopScope<void>(
       canPop: !_drawerOpen,
@@ -96,30 +111,64 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               onPressed: _openDrawer,
               icon: const Icon(Symbols.menu),
             ),
-            title: Tooltip(
-              message: '选择模型',
-              child: Material(
-                type: MaterialType.transparency,
-                child: InkWell(
-                  key: const ValueKey('chat-model-picker'),
-                  borderRadius: AppRadius.smallAll,
-                  onTap: () => showModelPickerSheet(context),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.xs,
+            title: Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 助手名一行：点击切换助手。
+                  Tooltip(
+                    message: '切换助手',
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        key: const ValueKey('chat-assistant-picker'),
+                        borderRadius: AppRadius.smallAll,
+                        onTap: () => showAssistantPickerSheet(context),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            minHeight: _minTapTarget,
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  assistantName,
+                                  key: const ValueKey('chat-assistant-name'),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: titleStyle,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.xs),
+                              Icon(
+                                Symbols.expand_more,
+                                size: 18,
+                                color: colors.primary,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Row(children: [Text('相月', style: titleStyle)]),
-                          const SizedBox(height: AppSpacing.xs),
-                          // 行占满可用宽度：长模型名在真实边界截断；Flexible
-                          // 松散适配让短名称的下拉箭头仍然紧贴文字。
-                          Row(
+                    ),
+                  ),
+                  // 模型一行：点击选择模型。
+                  Tooltip(
+                    message: '选择模型',
+                    child: Material(
+                      type: MaterialType.transparency,
+                      child: InkWell(
+                        key: const ValueKey('chat-model-picker'),
+                        borderRadius: AppRadius.smallAll,
+                        onTap: () => showModelPickerSheet(context),
+                        child: ConstrainedBox(
+                          constraints: const BoxConstraints(
+                            minHeight: _minTapTarget,
+                          ),
+                          child: Row(
                             children: [
                               Flexible(
                                 child: Text(
@@ -154,11 +203,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
             actions: [
@@ -243,6 +292,16 @@ class _ConversationMessages extends ConsumerWidget {
   final String conversationId;
   final double bottomPadding;
 
+  /// 重新生成最后一条回答；失败按统一文案提示，不改动已有回答。
+  Future<void> _regenerate(BuildContext context, WidgetRef ref) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(chatControllerProvider.notifier).regenerate();
+    } on Failure catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final thread = ref.watch(conversationThreadProvider(conversationId));
@@ -260,6 +319,8 @@ class _ConversationMessages extends ConsumerWidget {
           conversationId: conversationId,
           messages: messages,
           attachments: state.attachments,
+          isGenerating: state.isGenerating,
+          onRegenerate: () => _regenerate(context, ref),
           bottomPadding: bottomPadding,
         );
       },

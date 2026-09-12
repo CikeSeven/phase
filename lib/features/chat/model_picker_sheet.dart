@@ -715,9 +715,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     try {
       await ref
           .read(modelSelectionProvider.notifier)
-          .select(draft.profile.id, draft.model!.id);
-      if (!mounted) return;
-      await ref.read(modelSelectionProvider.notifier).selectEffort(effort);
+          .select(draft.profile.id, draft.model!.id, effort: effort);
       if (!mounted) return;
       setState(() => _saving = false);
       Navigator.of(context).pop();

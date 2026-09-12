@@ -1,0 +1,372 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:material_symbols_icons/symbols.dart';
+
+import '../../../core/error/failure.dart';
+import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_bottom_bar.dart';
+import '../../../core/widgets/app_dialog.dart';
+import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_scaffold.dart';
+import '../../../data/models/assistant.dart';
+import '../../../data/models/model_selection.dart';
+import '../../../data/repositories/assistant_repository.dart';
+import '../chat/chat_controller.dart';
+import 'assistant_model_sheet.dart';
+
+/// 助手新增 / 编辑：名称、系统提示词、默认模型与工具范围。
+class AssistantEditPage extends ConsumerStatefulWidget {
+  const AssistantEditPage({super.key, this.assistantId});
+
+  /// null 表示新增。
+  final String? assistantId;
+
+  @override
+  ConsumerState<AssistantEditPage> createState() => _AssistantEditPageState();
+}
+
+class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
+  final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _promptController = TextEditingController();
+
+  ModelSelection? _defaultModel;
+  bool _clearDefaultModel = false;
+  bool _loading = true;
+  bool _saving = false;
+  String? _loadError;
+
+  bool get _isNew => widget.assistantId == null;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _promptController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    if (_isNew) {
+      setState(() => _loading = false);
+      return;
+    }
+    setState(() {
+      _loading = true;
+      _loadError = null;
+    });
+    try {
+      final repository = await ref.read(assistantRepositoryProvider.future);
+      final assistant = await repository.getById(widget.assistantId!);
+      if (assistant == null) {
+        if (mounted) {
+          setState(() {
+            _loadError = '助手已不存在。';
+            _loading = false;
+          });
+        }
+        return;
+      }
+      if (!mounted) return;
+      setState(() {
+        _nameController.text = assistant.name;
+        _promptController.text = assistant.systemPrompt;
+        _defaultModel = assistant.defaultModelSelection;
+        _loading = false;
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = error is Failure ? error.userMessage : '读取助手失败，请重试。';
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _pickDefaultModel() async {
+    final picked = await showAssistantModelSheet(
+      context,
+      current: _defaultModel,
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      _defaultModel = picked;
+      _clearDefaultModel = false;
+    });
+  }
+
+  Future<void> _save() async {
+    if (_saving || _loading || _loadError != null) return;
+    if (!_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
+    setState(() => _saving = true);
+    final controller = ref.read(chatControllerProvider.notifier);
+    try {
+      if (_isNew) {
+        await controller.createAssistant(
+          name: _nameController.text,
+          systemPrompt: _promptController.text,
+          defaultModelSelection: _defaultModel,
+        );
+      } else {
+        await controller.updateAssistant(
+          id: widget.assistantId!,
+          name: _nameController.text,
+          systemPrompt: _promptController.text,
+          defaultModelSelection: _defaultModel,
+          clearDefaultModel: _clearDefaultModel,
+        );
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('已保存助手')));
+      context.pop();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _saving = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error is Failure ? error.userMessage : '保存助手失败，请重试。'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    final assistant = widget.assistantId;
+    if (assistant == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AppDialog(
+        title: '删除助手',
+        description: '已有会话会保留，只解除与该助手的绑定。',
+        icon: Symbols.delete,
+        tone: AppTone.lavender,
+        content: const SizedBox.shrink(),
+        actions: [
+          TextButton(
+            key: const ValueKey('cancel-delete-assistant'),
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            key: const ValueKey('confirm-delete-assistant'),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('删除'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await ref
+          .read(chatControllerProvider.notifier)
+          .deleteAssistant(assistant);
+      if (!mounted) return;
+      context.pop();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error is Failure ? error.userMessage : '删除助手失败，请重试。'),
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppScaffold(
+      title: _isNew ? '新建助手' : '编辑助手',
+      bottomBar: _loading || _loadError != null
+          ? null
+          : AppBottomBar(
+              child: Row(
+                children: [
+                  if (!_isNew)
+                    IconButton.filledTonal(
+                      key: const ValueKey('delete-assistant'),
+                      tooltip: '删除助手',
+                      onPressed: _saving ? null : _confirmDelete,
+                      icon: const Icon(Symbols.delete),
+                    ),
+                  if (!_isNew) const SizedBox(width: AppSpacing.m),
+                  Expanded(
+                    child: FilledButton.icon(
+                      key: const ValueKey('save-assistant'),
+                      onPressed: _saving ? null : _save,
+                      icon: _saving
+                          ? const SizedBox.square(
+                              dimension: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Symbols.check),
+                      label: Text(_saving ? '保存中…' : '保存'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+      body: _loading
+          ? const Center(
+              child: CircularProgressIndicator(semanticsLabel: '正在读取助手'),
+            )
+          : _loadError != null
+          ? AppEmptyState(
+              icon: Symbols.error,
+              title: '无法读取助手',
+              message: '$_loadError\n读取成功前不可编辑或保存。',
+              action: FilledButton.tonal(
+                onPressed: _load,
+                child: const Text('重新加载'),
+              ),
+            )
+          : Form(
+              key: _formKey,
+              child: ListView(
+                key: const ValueKey('assistant-edit-scroll'),
+                padding: const EdgeInsets.all(AppSpacing.l),
+                children: [
+                  TextFormField(
+                    key: const ValueKey('assistant-name'),
+                    controller: _nameController,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: '名称',
+                      hintText: '如「代码助手」',
+                    ),
+                    validator: (value) {
+                      final name = value?.trim() ?? '';
+                      if (name.isEmpty) return '请填写助手名称';
+                      if (name.length > 100) return '名称最多 100 个字符';
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.l),
+                  TextFormField(
+                    key: const ValueKey('assistant-prompt'),
+                    controller: _promptController,
+                    minLines: 4,
+                    maxLines: 12,
+                    keyboardType: TextInputType.multiline,
+                    decoration: const InputDecoration(
+                      labelText: '系统提示词',
+                      hintText: '写给模型的角色与规则，随每次请求发送',
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  Text('默认模型', style: theme.textTheme.labelLarge),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    '会话没有单独选择模型时使用它；留空则跟随最近使用的选择。',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s),
+                  _DefaultModelRow(
+                    selection: _defaultModel,
+                    onPick: _pickDefaultModel,
+                    onClear: _defaultModel == null
+                        ? null
+                        : () => setState(() {
+                            _defaultModel = null;
+                            _clearDefaultModel = true;
+                          }),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  _ToolScopeSection(policy: const ToolPolicyConfig()),
+                ],
+              ),
+            ),
+    );
+  }
+}
+
+class _DefaultModelRow extends StatelessWidget {
+  const _DefaultModelRow({
+    required this.selection,
+    required this.onPick,
+    this.onClear,
+  });
+
+  final ModelSelection? selection;
+  final VoidCallback onPick;
+  final VoidCallback? onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            key: const ValueKey('pick-default-model'),
+            onPressed: onPick,
+            icon: const Icon(Symbols.model_training, size: 18),
+            label: Text(
+              selection == null
+                  ? '跟随当前选择'
+                  : '${selection!.modelId} · ${selection!.reasoningEffort.label}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+        if (onClear != null) ...[
+          const SizedBox(width: AppSpacing.s),
+          IconButton(
+            key: const ValueKey('clear-default-model'),
+            tooltip: '不使用默认模型',
+            onPressed: onClear,
+            icon: const Icon(Symbols.close),
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// 工具范围：工具在 S3 落地，这里只呈现真实状态，不显示可点的假开关。
+class _ToolScopeSection extends StatelessWidget {
+  const _ToolScopeSection({required this.policy});
+
+  final ToolPolicyConfig policy;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('工具范围', style: theme.textTheme.labelLarge),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          '本版还没有可用的工具；工具与分组策略将在工具能力落地后在此配置。',
+          key: const ValueKey('tool-scope-placeholder'),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s),
+        Text(
+          '当前策略：${policy.enabledTools.isEmpty ? '未开放任何工具' : policy.enabledTools.join('、')}',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}

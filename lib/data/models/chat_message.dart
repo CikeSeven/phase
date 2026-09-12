@@ -96,6 +96,28 @@ class ChatMessage {
     },
   );
 
+  /// 复制到另一个会话（会话内复制时同时换新 id）。
+  ChatMessage copyTo({
+    required String conversationId,
+    String? id,
+    String? parentId,
+    List<MessagePart>? parts,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      conversationId: conversationId,
+      parentId: parentId,
+      runId: runId,
+      role: role,
+      status: status,
+      parts: parts ?? this.parts,
+      modelLabel: modelLabel,
+      usage: usage,
+      thinkingDurationMs: thinkingDurationMs,
+      createdAt: createdAt,
+    );
+  }
+
   ChatMessage copyWith({
     String? parentId,
     String? runId,

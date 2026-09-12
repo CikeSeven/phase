@@ -15,6 +15,8 @@ class ChatTranscript extends StatefulWidget {
     required this.messages,
     super.key,
     this.attachments = const {},
+    this.onRegenerate,
+    this.isGenerating = false,
     this.bottomPadding = 0,
   });
 
@@ -23,6 +25,11 @@ class ChatTranscript extends StatefulWidget {
 
   /// 会话附件索引，随消息的 Part 引用还原成文件。
   final Map<String, Attachment> attachments;
+
+  /// 重新生成最后一条回答；生成中时不提供。
+  final Future<void> Function()? onRegenerate;
+
+  final bool isGenerating;
 
   /// 预留给悬浮输入栏的高度，末条消息可滚出遮挡区。
   final double bottomPadding;
@@ -207,6 +214,14 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                                 itemBuilder: (context, index) => MessageBubble(
                                   key: ValueKey(widget.messages[index].id),
                                   message: widget.messages[index],
+                                  attachments: widget.attachments,
+                                  // 只有分支最后一条回答可以重新生成。
+                                  onRegenerate:
+                                      widget.onRegenerate != null &&
+                                          !widget.isGenerating &&
+                                          index == widget.messages.length - 1
+                                      ? widget.onRegenerate
+                                      : null,
                                 ),
                               ),
                             ),

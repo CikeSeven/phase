@@ -15,6 +15,7 @@ ProfileModel _$ProfileModelFromJson(Map<String, dynamic> json) => ProfileModel(
   supportsImages: json['supportsImages'] as bool? ?? true,
   contextWindow: (json['contextWindow'] as num?)?.toInt(),
   maxOutputTokens: (json['maxOutputTokens'] as num?)?.toInt(),
+  temperature: (json['temperature'] as num?)?.toDouble(),
 );
 
 Map<String, dynamic> _$ProfileModelToJson(ProfileModel instance) =>
@@ -27,4 +28,5 @@ Map<String, dynamic> _$ProfileModelToJson(ProfileModel instance) =>
       'supportsImages': instance.supportsImages,
       'contextWindow': instance.contextWindow,
       'maxOutputTokens': instance.maxOutputTokens,
+      'temperature': instance.temperature,
     };

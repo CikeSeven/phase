@@ -179,7 +179,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                                   onDeleted: () {
                                     if (!mounted) return;
                                     if (ref
-                                            .read(chatControllerProvider)
+                                            .read(activeConversationProvider)
                                             .conversationId ==
                                         filtered[index].id) {
                                       ref
@@ -290,8 +290,8 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
   @override
   Widget build(BuildContext context) {
     final selected = ref.watch(
-      chatControllerProvider.select(
-        (state) => state.conversationId == conversation.id,
+      activeConversationProvider.select(
+        (active) => active.conversationId == conversation.id,
       ),
     );
     final theme = Theme.of(context);
@@ -393,6 +393,15 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                       child: const Text('重命名'),
                     ),
                     MenuItemButton(
+                      key: ValueKey(
+                        'duplicate-conversation-${conversation.id}',
+                      ),
+                      leadingIcon: const Icon(Symbols.content_copy),
+                      onPressed: () =>
+                          _duplicate(context, ref, conversation.id),
+                      child: const Text('复制会话'),
+                    ),
+                    MenuItemButton(
                       leadingIcon: const Icon(Symbols.push_pin),
                       onPressed: () => _runGuarded(context, () async {
                         final repository = await ref.read(
@@ -437,6 +446,25 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
       final repository = await ref.read(conversationRepositoryProvider.future);
       await repository.renameConversation(conversation.id, newTitle);
     });
+  }
+
+  /// 复制会话并切到副本（副本立刻可用，原会话不受影响）。
+  Future<void> _duplicate(
+    BuildContext context,
+    WidgetRef ref,
+    String conversationId,
+  ) async {
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref
+          .read(chatControllerProvider.notifier)
+          .duplicateFrom(conversationId);
+      if (!context.mounted) return;
+      Navigator.of(context).maybePop();
+      messenger.showSnackBar(const SnackBar(content: Text('已复制会话')));
+    } on Failure catch (error) {
+      messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
+    }
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {

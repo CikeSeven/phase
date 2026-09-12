@@ -1,7 +1,7 @@
-/// 附件类型：图片、文本文件与工具执行产物。
+/// 附件类型：图片、文本、PDF/DOCX 文档与工具执行产物。
 ///
-/// PDF/DOCX 的抽取结果属于 S2，抽取后按文本附件参与请求。
-enum AttachmentKind { image, text, artifact }
+/// PDF/DOCX 在导入时抽取文本，抽取结果与原始文件分开保存。
+enum AttachmentKind { image, text, pdf, docx, artifact }
 
 AttachmentKind attachmentKindFromName(String name) {
   for (final kind in AttachmentKind.values) {
@@ -27,6 +27,7 @@ class Attachment {
     required this.createdAt,
     this.sha256,
     this.extractedTextPath,
+    this.extractionError,
     this.width,
     this.height,
   });
@@ -46,6 +47,9 @@ class Attachment {
   /// 文本/PDF/DOCX 抽取结果所在的私有文件路径。
   final String? extractedTextPath;
 
+  /// 抽取失败的原因（如扫描件需要 OCR）；成功或未尝试时为 null。
+  final String? extractionError;
+
   /// 图片像素尺寸。
   final int? width;
   final int? height;
@@ -53,6 +57,10 @@ class Attachment {
   final DateTime createdAt;
 
   bool get isImage => kind == AttachmentKind.image;
+
+  /// 文档类附件：内容以抽取文本参与请求。
+  bool get isDocument =>
+      kind == AttachmentKind.pdf || kind == AttachmentKind.docx;
 
   /// 认领到会话；已认领的附件保持原会话不变。
   Attachment withConversation(String conversationId) => Attachment(
@@ -65,8 +73,48 @@ class Attachment {
     localPath: localPath,
     sha256: sha256,
     extractedTextPath: extractedTextPath,
+    extractionError: extractionError,
     width: width,
     height: height,
     createdAt: createdAt,
   );
+
+  /// 复制到另一个会话；文件路径由 [AttachmentStorage] 复制后传入。
+  Attachment copyTo({
+    required String conversationId,
+    required String id,
+    required String localPath,
+    String? extractedTextPath,
+  }) => Attachment(
+    id: id,
+    conversationId: conversationId,
+    kind: kind,
+    name: name,
+    mimeType: mimeType,
+    size: size,
+    localPath: localPath,
+    sha256: sha256,
+    extractedTextPath: extractedTextPath,
+    extractionError: extractionError,
+    width: width,
+    height: height,
+    createdAt: createdAt,
+  );
+
+  Attachment withExtraction({String? extractedTextPath, String? error}) =>
+      Attachment(
+        id: id,
+        conversationId: conversationId,
+        kind: kind,
+        name: name,
+        mimeType: mimeType,
+        size: size,
+        localPath: localPath,
+        sha256: sha256,
+        extractedTextPath: extractedTextPath ?? this.extractedTextPath,
+        extractionError: error,
+        width: width,
+        height: height,
+        createdAt: createdAt,
+      );
 }

@@ -85,6 +85,19 @@ class _Chip extends StatelessWidget {
                 style: theme.textTheme.labelMedium,
               ),
             ),
+            // 文档抽取失败：给出真实原因，而不是让内容悄悄缺失。
+            if (attachment.extractionError != null) ...[
+              const SizedBox(width: AppSpacing.xs),
+              Tooltip(
+                message: attachment.extractionError!,
+                child: Icon(
+                  Symbols.warning,
+                  key: ValueKey('attachment-warning-${attachment.id}'),
+                  size: 16,
+                  color: colors.error,
+                ),
+              ),
+            ],
           ],
           IconButton(
             tooltip: '移除附件',

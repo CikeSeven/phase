@@ -24,13 +24,21 @@ final class ChatControllerProvider
         retry: null,
         name: r'chatControllerProvider',
         isAutoDispose: false,
-        dependencies: <ProviderOrFamily>[modelSelectionProvider],
+        dependencies: <ProviderOrFamily>[
+          modelSelectionProvider,
+          currentAssistantProvider,
+          activeConversationProvider,
+        ],
         $allTransitiveDependencies: <ProviderOrFamily>{
           ChatControllerProvider.$allTransitiveDependencies0,
           ChatControllerProvider.$allTransitiveDependencies1,
           ChatControllerProvider.$allTransitiveDependencies2,
           ChatControllerProvider.$allTransitiveDependencies3,
           ChatControllerProvider.$allTransitiveDependencies4,
+          ChatControllerProvider.$allTransitiveDependencies5,
+          ChatControllerProvider.$allTransitiveDependencies6,
+          ChatControllerProvider.$allTransitiveDependencies7,
+          ChatControllerProvider.$allTransitiveDependencies8,
         },
       );
 
@@ -43,6 +51,13 @@ final class ChatControllerProvider
       ModelSelectionProvider.$allTransitiveDependencies2;
   static final $allTransitiveDependencies4 =
       ModelSelectionProvider.$allTransitiveDependencies3;
+  static final $allTransitiveDependencies5 =
+      ModelSelectionProvider.$allTransitiveDependencies4;
+  static final $allTransitiveDependencies6 =
+      ModelSelectionProvider.$allTransitiveDependencies5;
+  static final $allTransitiveDependencies7 =
+      ModelSelectionProvider.$allTransitiveDependencies6;
+  static final $allTransitiveDependencies8 = currentAssistantProvider;
 
   @override
   String debugGetCreateSourceHash() => _$chatControllerHash();
@@ -60,7 +75,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'59040cf56efa4224b8fca62667ae28fbe7de0b2d';
+String _$chatControllerHash() => r'5830d5177627b271323161ac07027f614f6014e2';
 
 /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 
@@ -213,4 +228,227 @@ final class ConversationThreadFamily extends $Family
 
   @override
   String toString() => r'conversationThreadProvider';
+}
+
+/// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
+
+@ProviderFor(assistants)
+final assistantsProvider = AssistantsProvider._();
+
+/// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
+
+final class AssistantsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<Assistant>>,
+          List<Assistant>,
+          Stream<List<Assistant>>
+        >
+    with $FutureModifier<List<Assistant>>, $StreamProvider<List<Assistant>> {
+  /// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
+  AssistantsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'assistantsProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$assistantsHash();
+
+  @$internal
+  @override
+  $StreamProviderElement<List<Assistant>> $createElement(
+    $ProviderPointer pointer,
+  ) => $StreamProviderElement(pointer);
+
+  @override
+  Stream<List<Assistant>> create(Ref ref) {
+    return assistants(ref);
+  }
+}
+
+String _$assistantsHash() => r'0b86eb7d2c1998ebcce3c045fefc08672be34591';
+
+/// 当前生效的助手。
+///
+/// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
+/// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+///
+/// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
+/// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
+
+@ProviderFor(currentAssistant)
+final currentAssistantProvider = CurrentAssistantFamily._();
+
+/// 当前生效的助手。
+///
+/// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
+/// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+///
+/// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
+/// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
+
+final class CurrentAssistantProvider
+    extends $FunctionalProvider<Assistant?, Assistant?, Assistant?>
+    with $Provider<Assistant?> {
+  /// 当前生效的助手。
+  ///
+  /// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
+  /// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+  ///
+  /// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
+  /// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
+  CurrentAssistantProvider._({
+    required CurrentAssistantFamily super.from,
+    required ActiveConversationState super.argument,
+  }) : super(
+         retry: null,
+         name: r'currentAssistantProvider',
+         isAutoDispose: false,
+         dependencies: null,
+         $allTransitiveDependencies: null,
+       );
+
+  static final $allTransitiveDependencies0 = assistantsProvider;
+  static final $allTransitiveDependencies1 = conversationThreadProvider;
+
+  @override
+  String debugGetCreateSourceHash() => _$currentAssistantHash();
+
+  @override
+  String toString() {
+    return r'currentAssistantProvider'
+        ''
+        '($argument)';
+  }
+
+  @$internal
+  @override
+  $ProviderElement<Assistant?> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  Assistant? create(Ref ref) {
+    final argument = this.argument as ActiveConversationState;
+    return currentAssistant(ref, argument);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(Assistant? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<Assistant?>(value),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is CurrentAssistantProvider && other.argument == argument;
+  }
+
+  @override
+  int get hashCode {
+    return argument.hashCode;
+  }
+}
+
+String _$currentAssistantHash() => r'22256fa8d478f1e00d6839666171601a5a4f4038';
+
+/// 当前生效的助手。
+///
+/// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
+/// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+///
+/// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
+/// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
+
+final class CurrentAssistantFamily extends $Family
+    with $FunctionalFamilyOverride<Assistant?, ActiveConversationState> {
+  CurrentAssistantFamily._()
+    : super(
+        retry: null,
+        name: r'currentAssistantProvider',
+        dependencies: <ProviderOrFamily>[
+          assistantsProvider,
+          conversationThreadProvider,
+        ],
+        $allTransitiveDependencies: <ProviderOrFamily>[
+          CurrentAssistantProvider.$allTransitiveDependencies0,
+          CurrentAssistantProvider.$allTransitiveDependencies1,
+        ],
+        isAutoDispose: false,
+      );
+
+  /// 当前生效的助手。
+  ///
+  /// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
+  /// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+  ///
+  /// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
+  /// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
+
+  CurrentAssistantProvider call(ActiveConversationState active) =>
+      CurrentAssistantProvider._(argument: active, from: this);
+
+  @override
+  String toString() => r'currentAssistantProvider';
+}
+
+@ProviderFor(ActiveConversation)
+final activeConversationProvider = ActiveConversationProvider._();
+
+final class ActiveConversationProvider
+    extends $NotifierProvider<ActiveConversation, ActiveConversationState> {
+  ActiveConversationProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'activeConversationProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$activeConversationHash();
+
+  @$internal
+  @override
+  ActiveConversation create() => ActiveConversation();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(ActiveConversationState value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<ActiveConversationState>(value),
+    );
+  }
+}
+
+String _$activeConversationHash() =>
+    r'f48db7acd16d8af76913812abdf6cb6b8f1b5758';
+
+abstract class _$ActiveConversation extends $Notifier<ActiveConversationState> {
+  ActiveConversationState build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref as $Ref<ActiveConversationState, ActiveConversationState>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<ActiveConversationState, ActiveConversationState>,
+              ActiveConversationState,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
 }

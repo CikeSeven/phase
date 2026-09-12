@@ -708,6 +708,17 @@ class $ModelsTable extends Models with TableInfo<$ModelsTable, ModelRow> {
     type: DriftSqlType.int,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _temperatureMeta = const VerificationMeta(
+    'temperature',
+  );
+  @override
+  late final GeneratedColumn<double> temperature = GeneratedColumn<double>(
+    'temperature',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     profileId,
@@ -719,6 +730,7 @@ class $ModelsTable extends Models with TableInfo<$ModelsTable, ModelRow> {
     supportsImages,
     contextWindow,
     maxOutputTokens,
+    temperature,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -808,6 +820,15 @@ class $ModelsTable extends Models with TableInfo<$ModelsTable, ModelRow> {
         ),
       );
     }
+    if (data.containsKey('temperature')) {
+      context.handle(
+        _temperatureMeta,
+        temperature.isAcceptableOrUnknown(
+          data['temperature']!,
+          _temperatureMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -853,6 +874,10 @@ class $ModelsTable extends Models with TableInfo<$ModelsTable, ModelRow> {
         DriftSqlType.int,
         data['${effectivePrefix}max_output_tokens'],
       ),
+      temperature: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}temperature'],
+      ),
     );
   }
 
@@ -872,6 +897,9 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
   final bool supportsImages;
   final int? contextWindow;
   final int? maxOutputTokens;
+
+  /// 采样温度；未设置时不下发。
+  final double? temperature;
   const ModelRow({
     required this.profileId,
     required this.modelId,
@@ -882,6 +910,7 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
     required this.supportsImages,
     this.contextWindow,
     this.maxOutputTokens,
+    this.temperature,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -900,6 +929,9 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
     }
     if (!nullToAbsent || maxOutputTokens != null) {
       map['max_output_tokens'] = Variable<int>(maxOutputTokens);
+    }
+    if (!nullToAbsent || temperature != null) {
+      map['temperature'] = Variable<double>(temperature);
     }
     return map;
   }
@@ -921,6 +953,9 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
       maxOutputTokens: maxOutputTokens == null && nullToAbsent
           ? const Value.absent()
           : Value(maxOutputTokens),
+      temperature: temperature == null && nullToAbsent
+          ? const Value.absent()
+          : Value(temperature),
     );
   }
 
@@ -939,6 +974,7 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
       supportsImages: serializer.fromJson<bool>(json['supportsImages']),
       contextWindow: serializer.fromJson<int?>(json['contextWindow']),
       maxOutputTokens: serializer.fromJson<int?>(json['maxOutputTokens']),
+      temperature: serializer.fromJson<double?>(json['temperature']),
     );
   }
   @override
@@ -954,6 +990,7 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
       'supportsImages': serializer.toJson<bool>(supportsImages),
       'contextWindow': serializer.toJson<int?>(contextWindow),
       'maxOutputTokens': serializer.toJson<int?>(maxOutputTokens),
+      'temperature': serializer.toJson<double?>(temperature),
     };
   }
 
@@ -967,6 +1004,7 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
     bool? supportsImages,
     Value<int?> contextWindow = const Value.absent(),
     Value<int?> maxOutputTokens = const Value.absent(),
+    Value<double?> temperature = const Value.absent(),
   }) => ModelRow(
     profileId: profileId ?? this.profileId,
     modelId: modelId ?? this.modelId,
@@ -981,6 +1019,7 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
     maxOutputTokens: maxOutputTokens.present
         ? maxOutputTokens.value
         : this.maxOutputTokens,
+    temperature: temperature.present ? temperature.value : this.temperature,
   );
   ModelRow copyWithCompanion(ModelsCompanion data) {
     return ModelRow(
@@ -1005,6 +1044,9 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
       maxOutputTokens: data.maxOutputTokens.present
           ? data.maxOutputTokens.value
           : this.maxOutputTokens,
+      temperature: data.temperature.present
+          ? data.temperature.value
+          : this.temperature,
     );
   }
 
@@ -1019,7 +1061,8 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
           ..write('supportsTools: $supportsTools, ')
           ..write('supportsImages: $supportsImages, ')
           ..write('contextWindow: $contextWindow, ')
-          ..write('maxOutputTokens: $maxOutputTokens')
+          ..write('maxOutputTokens: $maxOutputTokens, ')
+          ..write('temperature: $temperature')
           ..write(')'))
         .toString();
   }
@@ -1035,6 +1078,7 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
     supportsImages,
     contextWindow,
     maxOutputTokens,
+    temperature,
   );
   @override
   bool operator ==(Object other) =>
@@ -1048,7 +1092,8 @@ class ModelRow extends DataClass implements Insertable<ModelRow> {
           other.supportsTools == this.supportsTools &&
           other.supportsImages == this.supportsImages &&
           other.contextWindow == this.contextWindow &&
-          other.maxOutputTokens == this.maxOutputTokens);
+          other.maxOutputTokens == this.maxOutputTokens &&
+          other.temperature == this.temperature);
 }
 
 class ModelsCompanion extends UpdateCompanion<ModelRow> {
@@ -1061,6 +1106,7 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
   final Value<bool> supportsImages;
   final Value<int?> contextWindow;
   final Value<int?> maxOutputTokens;
+  final Value<double?> temperature;
   final Value<int> rowid;
   const ModelsCompanion({
     this.profileId = const Value.absent(),
@@ -1072,6 +1118,7 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
     this.supportsImages = const Value.absent(),
     this.contextWindow = const Value.absent(),
     this.maxOutputTokens = const Value.absent(),
+    this.temperature = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ModelsCompanion.insert({
@@ -1084,6 +1131,7 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
     this.supportsImages = const Value.absent(),
     this.contextWindow = const Value.absent(),
     this.maxOutputTokens = const Value.absent(),
+    this.temperature = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : profileId = Value(profileId),
        modelId = Value(modelId);
@@ -1097,6 +1145,7 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
     Expression<bool>? supportsImages,
     Expression<int>? contextWindow,
     Expression<int>? maxOutputTokens,
+    Expression<double>? temperature,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -1109,6 +1158,7 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
       if (supportsImages != null) 'supports_images': supportsImages,
       if (contextWindow != null) 'context_window': contextWindow,
       if (maxOutputTokens != null) 'max_output_tokens': maxOutputTokens,
+      if (temperature != null) 'temperature': temperature,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -1123,6 +1173,7 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
     Value<bool>? supportsImages,
     Value<int?>? contextWindow,
     Value<int?>? maxOutputTokens,
+    Value<double?>? temperature,
     Value<int>? rowid,
   }) {
     return ModelsCompanion(
@@ -1135,6 +1186,7 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
       supportsImages: supportsImages ?? this.supportsImages,
       contextWindow: contextWindow ?? this.contextWindow,
       maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      temperature: temperature ?? this.temperature,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1169,6 +1221,9 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
     if (maxOutputTokens.present) {
       map['max_output_tokens'] = Variable<int>(maxOutputTokens.value);
     }
+    if (temperature.present) {
+      map['temperature'] = Variable<double>(temperature.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1187,6 +1242,7 @@ class ModelsCompanion extends UpdateCompanion<ModelRow> {
           ..write('supportsImages: $supportsImages, ')
           ..write('contextWindow: $contextWindow, ')
           ..write('maxOutputTokens: $maxOutputTokens, ')
+          ..write('temperature: $temperature, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2957,6 +3013,17 @@ class $AttachmentsTable extends Attachments
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _extractionErrorMeta = const VerificationMeta(
+    'extractionError',
+  );
+  @override
+  late final GeneratedColumn<String> extractionError = GeneratedColumn<String>(
+    'extraction_error',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _widthMeta = const VerificationMeta('width');
   @override
   late final GeneratedColumn<int> width = GeneratedColumn<int>(
@@ -2997,6 +3064,7 @@ class $AttachmentsTable extends Attachments
     localPath,
     sha256,
     extractedTextPath,
+    extractionError,
     width,
     height,
     createdAt,
@@ -3084,6 +3152,15 @@ class $AttachmentsTable extends Attachments
         ),
       );
     }
+    if (data.containsKey('extraction_error')) {
+      context.handle(
+        _extractionErrorMeta,
+        extractionError.isAcceptableOrUnknown(
+          data['extraction_error']!,
+          _extractionErrorMeta,
+        ),
+      );
+    }
     if (data.containsKey('width')) {
       context.handle(
         _widthMeta,
@@ -3149,6 +3226,10 @@ class $AttachmentsTable extends Attachments
         DriftSqlType.string,
         data['${effectivePrefix}extracted_text_path'],
       ),
+      extractionError: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}extraction_error'],
+      ),
       width: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}width'],
@@ -3180,6 +3261,9 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
   final String localPath;
   final String? sha256;
   final String? extractedTextPath;
+
+  /// 抽取失败的原因（扫描件等）；成功或未尝试为 null。
+  final String? extractionError;
   final int? width;
   final int? height;
   final DateTime createdAt;
@@ -3193,6 +3277,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     required this.localPath,
     this.sha256,
     this.extractedTextPath,
+    this.extractionError,
     this.width,
     this.height,
     required this.createdAt,
@@ -3212,6 +3297,9 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     }
     if (!nullToAbsent || extractedTextPath != null) {
       map['extracted_text_path'] = Variable<String>(extractedTextPath);
+    }
+    if (!nullToAbsent || extractionError != null) {
+      map['extraction_error'] = Variable<String>(extractionError);
     }
     if (!nullToAbsent || width != null) {
       map['width'] = Variable<int>(width);
@@ -3238,6 +3326,9 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
       extractedTextPath: extractedTextPath == null && nullToAbsent
           ? const Value.absent()
           : Value(extractedTextPath),
+      extractionError: extractionError == null && nullToAbsent
+          ? const Value.absent()
+          : Value(extractionError),
       width: width == null && nullToAbsent
           ? const Value.absent()
           : Value(width),
@@ -3265,6 +3356,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
       extractedTextPath: serializer.fromJson<String?>(
         json['extractedTextPath'],
       ),
+      extractionError: serializer.fromJson<String?>(json['extractionError']),
       width: serializer.fromJson<int?>(json['width']),
       height: serializer.fromJson<int?>(json['height']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -3283,6 +3375,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
       'localPath': serializer.toJson<String>(localPath),
       'sha256': serializer.toJson<String?>(sha256),
       'extractedTextPath': serializer.toJson<String?>(extractedTextPath),
+      'extractionError': serializer.toJson<String?>(extractionError),
       'width': serializer.toJson<int?>(width),
       'height': serializer.toJson<int?>(height),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -3299,6 +3392,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     String? localPath,
     Value<String?> sha256 = const Value.absent(),
     Value<String?> extractedTextPath = const Value.absent(),
+    Value<String?> extractionError = const Value.absent(),
     Value<int?> width = const Value.absent(),
     Value<int?> height = const Value.absent(),
     DateTime? createdAt,
@@ -3314,6 +3408,9 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     extractedTextPath: extractedTextPath.present
         ? extractedTextPath.value
         : this.extractedTextPath,
+    extractionError: extractionError.present
+        ? extractionError.value
+        : this.extractionError,
     width: width.present ? width.value : this.width,
     height: height.present ? height.value : this.height,
     createdAt: createdAt ?? this.createdAt,
@@ -3333,6 +3430,9 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
       extractedTextPath: data.extractedTextPath.present
           ? data.extractedTextPath.value
           : this.extractedTextPath,
+      extractionError: data.extractionError.present
+          ? data.extractionError.value
+          : this.extractionError,
       width: data.width.present ? data.width.value : this.width,
       height: data.height.present ? data.height.value : this.height,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -3351,6 +3451,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
           ..write('localPath: $localPath, ')
           ..write('sha256: $sha256, ')
           ..write('extractedTextPath: $extractedTextPath, ')
+          ..write('extractionError: $extractionError, ')
           ..write('width: $width, ')
           ..write('height: $height, ')
           ..write('createdAt: $createdAt')
@@ -3369,6 +3470,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     localPath,
     sha256,
     extractedTextPath,
+    extractionError,
     width,
     height,
     createdAt,
@@ -3386,6 +3488,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
           other.localPath == this.localPath &&
           other.sha256 == this.sha256 &&
           other.extractedTextPath == this.extractedTextPath &&
+          other.extractionError == this.extractionError &&
           other.width == this.width &&
           other.height == this.height &&
           other.createdAt == this.createdAt);
@@ -3401,6 +3504,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
   final Value<String> localPath;
   final Value<String?> sha256;
   final Value<String?> extractedTextPath;
+  final Value<String?> extractionError;
   final Value<int?> width;
   final Value<int?> height;
   final Value<DateTime> createdAt;
@@ -3415,6 +3519,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     this.localPath = const Value.absent(),
     this.sha256 = const Value.absent(),
     this.extractedTextPath = const Value.absent(),
+    this.extractionError = const Value.absent(),
     this.width = const Value.absent(),
     this.height = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -3430,6 +3535,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     required String localPath,
     this.sha256 = const Value.absent(),
     this.extractedTextPath = const Value.absent(),
+    this.extractionError = const Value.absent(),
     this.width = const Value.absent(),
     this.height = const Value.absent(),
     required DateTime createdAt,
@@ -3452,6 +3558,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     Expression<String>? localPath,
     Expression<String>? sha256,
     Expression<String>? extractedTextPath,
+    Expression<String>? extractionError,
     Expression<int>? width,
     Expression<int>? height,
     Expression<DateTime>? createdAt,
@@ -3467,6 +3574,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
       if (localPath != null) 'local_path': localPath,
       if (sha256 != null) 'sha256': sha256,
       if (extractedTextPath != null) 'extracted_text_path': extractedTextPath,
+      if (extractionError != null) 'extraction_error': extractionError,
       if (width != null) 'width': width,
       if (height != null) 'height': height,
       if (createdAt != null) 'created_at': createdAt,
@@ -3484,6 +3592,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     Value<String>? localPath,
     Value<String?>? sha256,
     Value<String?>? extractedTextPath,
+    Value<String?>? extractionError,
     Value<int?>? width,
     Value<int?>? height,
     Value<DateTime>? createdAt,
@@ -3499,6 +3608,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
       localPath: localPath ?? this.localPath,
       sha256: sha256 ?? this.sha256,
       extractedTextPath: extractedTextPath ?? this.extractedTextPath,
+      extractionError: extractionError ?? this.extractionError,
       width: width ?? this.width,
       height: height ?? this.height,
       createdAt: createdAt ?? this.createdAt,
@@ -3536,6 +3646,9 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     if (extractedTextPath.present) {
       map['extracted_text_path'] = Variable<String>(extractedTextPath.value);
     }
+    if (extractionError.present) {
+      map['extraction_error'] = Variable<String>(extractionError.value);
+    }
     if (width.present) {
       map['width'] = Variable<int>(width.value);
     }
@@ -3563,6 +3676,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
           ..write('localPath: $localPath, ')
           ..write('sha256: $sha256, ')
           ..write('extractedTextPath: $extractedTextPath, ')
+          ..write('extractionError: $extractionError, ')
           ..write('width: $width, ')
           ..write('height: $height, ')
           ..write('createdAt: $createdAt, ')
@@ -6257,6 +6371,7 @@ typedef $$ModelsTableCreateCompanionBuilder = ModelsCompanion Function({
   Value<bool> supportsImages,
   Value<int?> contextWindow,
   Value<int?> maxOutputTokens,
+  Value<double?> temperature,
   Value<int> rowid,
 });
 typedef $$ModelsTableUpdateCompanionBuilder = ModelsCompanion Function({
@@ -6269,6 +6384,7 @@ typedef $$ModelsTableUpdateCompanionBuilder = ModelsCompanion Function({
   Value<bool> supportsImages,
   Value<int?> contextWindow,
   Value<int?> maxOutputTokens,
+  Value<double?> temperature,
   Value<int> rowid,
 });
 
@@ -6341,6 +6457,11 @@ class $$ModelsTableFilterComposer
 
   ColumnFilters<int> get maxOutputTokens => $composableBuilder(
     column: $table.maxOutputTokens,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get temperature => $composableBuilder(
+    column: $table.temperature,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6417,6 +6538,11 @@ class $$ModelsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get temperature => $composableBuilder(
+    column: $table.temperature,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   $$ProviderProfilesTableOrderingComposer get profileId {
     final $$ProviderProfilesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -6486,6 +6612,11 @@ class $$ModelsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<double> get temperature => $composableBuilder(
+    column: $table.temperature,
+    builder: (column) => column,
+  );
+
   $$ProviderProfilesTableAnnotationComposer get profileId {
     final $$ProviderProfilesTableAnnotationComposer composer = $composerBuilder(
       composer: this,
@@ -6547,6 +6678,7 @@ class $$ModelsTableTableManager
                 Value<bool> supportsImages = const Value.absent(),
                 Value<int?> contextWindow = const Value.absent(),
                 Value<int?> maxOutputTokens = const Value.absent(),
+                Value<double?> temperature = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ModelsCompanion(
                 profileId: profileId,
@@ -6558,6 +6690,7 @@ class $$ModelsTableTableManager
                 supportsImages: supportsImages,
                 contextWindow: contextWindow,
                 maxOutputTokens: maxOutputTokens,
+                temperature: temperature,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6571,6 +6704,7 @@ class $$ModelsTableTableManager
                 Value<bool> supportsImages = const Value.absent(),
                 Value<int?> contextWindow = const Value.absent(),
                 Value<int?> maxOutputTokens = const Value.absent(),
+                Value<double?> temperature = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ModelsCompanion.insert(
                 profileId: profileId,
@@ -6582,6 +6716,7 @@ class $$ModelsTableTableManager
                 supportsImages: supportsImages,
                 contextWindow: contextWindow,
                 maxOutputTokens: maxOutputTokens,
+                temperature: temperature,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -7892,6 +8027,7 @@ typedef $$AttachmentsTableCreateCompanionBuilder =
       required String localPath,
       Value<String?> sha256,
       Value<String?> extractedTextPath,
+      Value<String?> extractionError,
       Value<int?> width,
       Value<int?> height,
       required DateTime createdAt,
@@ -7908,6 +8044,7 @@ typedef $$AttachmentsTableUpdateCompanionBuilder =
       Value<String> localPath,
       Value<String?> sha256,
       Value<String?> extractedTextPath,
+      Value<String?> extractionError,
       Value<int?> width,
       Value<int?> height,
       Value<DateTime> createdAt,
@@ -7983,6 +8120,11 @@ class $$AttachmentsTableFilterComposer
 
   ColumnFilters<String> get extractedTextPath => $composableBuilder(
     column: $table.extractedTextPath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get extractionError => $composableBuilder(
+    column: $table.extractionError,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8074,6 +8216,11 @@ class $$AttachmentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get extractionError => $composableBuilder(
+    column: $table.extractionError,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get width => $composableBuilder(
     column: $table.width,
     builder: (column) => ColumnOrderings(column),
@@ -8148,6 +8295,11 @@ class $$AttachmentsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get extractionError => $composableBuilder(
+    column: $table.extractionError,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<int> get width =>
       $composableBuilder(column: $table.width, builder: (column) => column);
 
@@ -8218,6 +8370,7 @@ class $$AttachmentsTableTableManager
                 Value<String> localPath = const Value.absent(),
                 Value<String?> sha256 = const Value.absent(),
                 Value<String?> extractedTextPath = const Value.absent(),
+                Value<String?> extractionError = const Value.absent(),
                 Value<int?> width = const Value.absent(),
                 Value<int?> height = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -8232,6 +8385,7 @@ class $$AttachmentsTableTableManager
                 localPath: localPath,
                 sha256: sha256,
                 extractedTextPath: extractedTextPath,
+                extractionError: extractionError,
                 width: width,
                 height: height,
                 createdAt: createdAt,
@@ -8248,6 +8402,7 @@ class $$AttachmentsTableTableManager
                 required String localPath,
                 Value<String?> sha256 = const Value.absent(),
                 Value<String?> extractedTextPath = const Value.absent(),
+                Value<String?> extractionError = const Value.absent(),
                 Value<int?> width = const Value.absent(),
                 Value<int?> height = const Value.absent(),
                 required DateTime createdAt,
@@ -8262,6 +8417,7 @@ class $$AttachmentsTableTableManager
                 localPath: localPath,
                 sha256: sha256,
                 extractedTextPath: extractedTextPath,
+                extractionError: extractionError,
                 width: width,
                 height: height,
                 createdAt: createdAt,
@@ -9674,4 +9830,4 @@ final class AppDatabaseProvider
   }
 }
 
-String _$appDatabaseHash() => r'56eaf57b8a79611ef0cb5a3ddb8b59c469f520c5';
+String _$appDatabaseHash() => r'427a129eee5d6174b200a1bf0f586ede649c65bd';

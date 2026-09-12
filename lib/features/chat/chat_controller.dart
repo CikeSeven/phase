@@ -6,14 +6,18 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/error/provider_error.dart';
 import '../../../core/utils/id.dart';
+import '../../../core/utils/logger.dart';
 import '../../../data/datasources/local/secure_key_storage.dart';
+import '../../../data/models/assistant.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_chunk.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/chat_request.dart';
 import '../../../data/models/conversation.dart';
 import '../../../data/models/message_part.dart';
+import '../../../data/models/model_selection.dart' as model;
 import '../../../data/models/reasoning_effort.dart';
+import '../../../data/repositories/assistant_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import '../../../providers/provider_factory.dart';
 import 'model_selection.dart';
@@ -26,13 +30,10 @@ part 'chat_controller.g.dart';
 /// 流式期间尚未落库的最后一条回答。
 class ChatState {
   const ChatState({
-    this.conversationId,
     this.streamingParts = const [],
     this.attachments = const {},
     this.isGenerating = false,
   });
-
-  final String? conversationId;
 
   /// 正在生成的回答内容块（按 Part 顺序）。
   final List<MessagePart> streamingParts;
@@ -43,13 +44,11 @@ class ChatState {
   final bool isGenerating;
 
   ChatState copyWith({
-    String? conversationId,
     List<MessagePart>? streamingParts,
     Map<String, Attachment>? attachments,
     bool? isGenerating,
   }) {
     return ChatState(
-      conversationId: conversationId ?? this.conversationId,
       streamingParts: streamingParts ?? this.streamingParts,
       attachments: attachments ?? this.attachments,
       isGenerating: isGenerating ?? this.isGenerating,
@@ -58,7 +57,10 @@ class ChatState {
 }
 
 /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
-@Riverpod(keepAlive: true, dependencies: [ModelSelection])
+@Riverpod(
+  keepAlive: true,
+  dependencies: [ModelSelection, currentAssistant, ActiveConversation],
+)
 class ChatController extends _$ChatController {
   /// 流式增量写库的节流间隔：SSE chunk 远密于屏幕刷新。
   static const _flushInterval = Duration(milliseconds: 100);
@@ -87,6 +89,7 @@ class ChatController extends _$ChatController {
   }
 
   void startNewConversation() {
+    ref.read(activeConversationProvider.notifier).clear();
     state = const ChatState();
   }
 
@@ -95,10 +98,108 @@ class ChatController extends _$ChatController {
     final repository = await ref.read(conversationRepositoryProvider.future);
     final thread = await repository.getThread(conversationId);
     if (thread == null) return;
+    ref.read(activeConversationProvider.notifier).open(conversationId);
     state = ChatState(
-      conversationId: conversationId,
       attachments: await _attachmentIndex(conversationId, const []),
     );
+    // 会话绑定的助手可能不同：刷新派生选择。
+    ref.invalidate(modelSelectionProvider);
+  }
+
+  /// 为当前会话切换助手；还没有会话时记为草稿，建会话时使用该助手。
+  ///
+  /// 草稿同时用于「会话内刚切换、尚未落库」的瞬间，保证下一次发送立即生效。
+  Future<void> selectAssistant(String assistantId) async {
+    final active = ref.read(activeConversationProvider);
+    ref.read(activeConversationProvider.notifier).draftAssistant(assistantId);
+    final conversationId = active.conversationId;
+    if (conversationId == null) {
+      ref.invalidate(modelSelectionProvider);
+      return;
+    }
+    final repository = await ref.read(conversationRepositoryProvider.future);
+    final thread = await repository.getThread(conversationId);
+    if (thread == null) return;
+    await repository.updateConversation(
+      thread.conversation.copyWith(assistantId: assistantId),
+    );
+    ref.invalidate(modelSelectionProvider);
+  }
+
+  /// 新建助手（名称必填，其余留空表示未设置）。
+  Future<Assistant> createAssistant({
+    required String name,
+    String systemPrompt = '',
+    model.ModelSelection? defaultModelSelection,
+  }) {
+    return _guardAssistant('创建助手失败', () async {
+      final repository = await ref.read(assistantRepositoryProvider.future);
+      final assistant = Assistant(
+        id: generateId(),
+        name: name.trim(),
+        systemPrompt: systemPrompt.trim(),
+        defaultModelSelection: defaultModelSelection,
+        createdAt: DateTime.now(),
+      );
+      await repository.save(assistant);
+      // 新建的助手按列表顺序可能成为当前助手：刷新派生选择。
+      ref.invalidate(modelSelectionProvider);
+      return assistant;
+    });
+  }
+
+  /// 更新助手；未传的字段保持不变（含清空默认模型）。
+  Future<Assistant> updateAssistant({
+    required String id,
+    required String name,
+    required String systemPrompt,
+    model.ModelSelection? defaultModelSelection,
+    bool clearDefaultModel = false,
+  }) {
+    return _guardAssistant('保存助手失败', () async {
+      final repository = await ref.read(assistantRepositoryProvider.future);
+      final existing = await repository.getById(id);
+      if (existing == null) {
+        throw const UnknownFailure('助手已不存在');
+      }
+      final updated = Assistant(
+        id: existing.id,
+        name: name.trim(),
+        systemPrompt: systemPrompt.trim(),
+        defaultModelSelection: clearDefaultModel
+            ? null
+            : (defaultModelSelection ?? existing.defaultModelSelection),
+        toolPolicy: existing.toolPolicy,
+        createdAt: existing.createdAt,
+      );
+      await repository.save(updated);
+      ref.invalidate(modelSelectionProvider);
+      return updated;
+    });
+  }
+
+  /// 删除助手；已有会话保留，仅解除与助手的绑定。
+  Future<void> deleteAssistant(String id) {
+    return _guardAssistant('删除助手失败', () async {
+      final repository = await ref.read(assistantRepositoryProvider.future);
+      await repository.delete(id);
+      ref.invalidate(modelSelectionProvider);
+    });
+  }
+
+  /// 助手写操作的统一错误收口。
+  Future<T> _guardAssistant<T>(
+    String message,
+    Future<T> Function() action,
+  ) async {
+    try {
+      return await action();
+    } on Failure {
+      rethrow;
+    } on Exception catch (e, st) {
+      AppLogger.error(message, e, st);
+      throw UnknownFailure(message, cause: e);
+    }
   }
 
   /// 发送一条消息并流式接收回复。
@@ -114,17 +215,27 @@ class ChatController extends _$ChatController {
       return;
     }
 
-    final selection = await ref.read(modelSelectionProvider.future);
+    // 强刷：刚切换的助手/会话要立刻作用到本次请求，不依赖竞态的重建时机。
+    final selection = await ref.refresh(modelSelectionProvider.future);
     if (selection == null) {
       throw const UnknownFailure('尚未选择服务商与模型');
     }
 
     final repository = await ref.read(conversationRepositoryProvider.future);
 
-    var conversationId = state.conversationId;
+    // 助手列表可能还在首次加载：先把列表与会话线程等就绪，
+    // 否则本次请求会丢掉系统提示词与助手默认模型。
+    final assistant = await awaitAssistantContext(ref);
+    var conversationId = ref.read(activeConversationProvider).conversationId;
     if (conversationId == null) {
-      final conversation = await repository.createConversation();
+      final conversation = await repository.createConversation(
+        assistantId: assistant?.id,
+        modelSelectionOverride: ref
+            .read(activeConversationProvider)
+            .draftModelSelection,
+      );
       conversationId = conversation.id;
+      ref.read(activeConversationProvider.notifier).adopt(conversationId);
     }
     final thread = await repository.getThread(conversationId);
     if (thread == null) {
@@ -136,14 +247,19 @@ class ChatController extends _$ChatController {
     ];
     for (final attachment in claimed) {
       await repository.saveAttachment(attachment);
+      // 文档抽取在选择时已完成：结果（文本路径或失败原因）随附件落库。
+      if (attachment.isDocument) {
+        await repository.updateAttachmentExtraction(
+          attachment.id,
+          extractedTextPath: attachment.extractedTextPath,
+          error: attachment.extractionError,
+        );
+      }
     }
     // 附件索引带上刚落库的这批，发送后即可在气泡里看到缩略图，
     // 同时用于把历史消息里的附件引用解析成请求内容。
     final attachmentIndex = await _attachmentIndex(conversationId, claimed);
-    state = state.copyWith(
-      conversationId: conversationId,
-      attachments: attachmentIndex,
-    );
+    state = state.copyWith(attachments: attachmentIndex);
 
     final parentId = thread.currentMessageId;
     final userMessage = ChatMessage(
@@ -164,10 +280,80 @@ class ChatController extends _$ChatController {
     );
     await repository.appendMessage(userMessage, updateTitle: parentId == null);
 
+    await _streamInto(
+      repository: repository,
+      conversationId: conversationId,
+      context: [...thread.branch, userMessage],
+      attachments: attachmentIndex,
+      selection: selection,
+      assistant: assistant,
+    );
+  }
+
+  /// 重新生成当前分支的最后一条回答。
+  ///
+  /// 新建一条回答挂在同一条用户消息下，旧回答保留在消息树里不覆盖；
+  /// 有工具执行历史时不自动重做动作（S3 起生效）。
+  Future<void> regenerate() async {
+    if (state.isGenerating) return;
+    final conversationId = ref.read(activeConversationProvider).conversationId;
+    if (conversationId == null) return;
+
+    final repository = await ref.read(conversationRepositoryProvider.future);
+    final thread = await repository.getThread(conversationId);
+    if (thread == null || thread.branch.isEmpty) return;
+
+    // 找到最近一条用户消息：它就是本轮要重新回答的输入。
+    final index = thread.branch.lastIndexWhere(
+      (message) => message.role == ChatRole.user,
+    );
+    if (index < 0) return;
+    final userMessage = thread.branch[index];
+    final context = thread.branch.sublist(0, index + 1);
+
+    final selection = await ref.refresh(modelSelectionProvider.future);
+    if (selection == null) {
+      throw const UnknownFailure('尚未选择服务商与模型');
+    }
+    final assistant = await awaitAssistantContext(ref);
+
+    // 分支指针回到该用户消息：新回答成为它的下一条，旧回答保留为历史分支。
+    await repository.setCurrentMessage(conversationId, userMessage.id);
+
+    await _streamInto(
+      repository: repository,
+      conversationId: conversationId,
+      context: context,
+      attachments: await _attachmentIndex(conversationId, const []),
+      selection: selection,
+      assistant: assistant,
+    );
+  }
+
+  /// 复制指定会话：副本带同样的助手、模型覆盖与全部消息/分支结构，
+  /// 并切换到副本；原会话不受影响。
+  Future<String> duplicateFrom(String conversationId) async {
+    final repository = await ref.read(conversationRepositoryProvider.future);
+    final copy = await repository.duplicateConversation(conversationId);
+    await openConversation(copy.id);
+    return copy.id;
+  }
+
+  /// 一次回答的完整流式过程：写占位助手消息 → 流式累积 → 收口落库。
+  ///
+  /// 发送与重新生成共用它，保证两条路径的停止、错误与空回复语义一致。
+  Future<void> _streamInto({
+    required ConversationRepository repository,
+    required String conversationId,
+    required List<ChatMessage> context,
+    required Map<String, Attachment> attachments,
+    required ChatModelSelection selection,
+    required Assistant? assistant,
+  }) async {
     final assistantMessage = ChatMessage(
       id: generateId(),
       conversationId: conversationId,
-      parentId: userMessage.id,
+      parentId: context.last.id,
       role: ChatRole.assistant,
       status: MessageStatus.streaming,
       parts: const [],
@@ -175,9 +361,6 @@ class ChatController extends _$ChatController {
       createdAt: DateTime.now(),
     );
     await repository.appendMessage(assistantMessage);
-
-    // 使用刚读取的当前分支，不包含本轮刚落库的空回答。
-    final branch = [...thread.branch, userMessage];
 
     state = state.copyWith(isGenerating: true, streamingParts: const []);
 
@@ -204,18 +387,24 @@ class ChatController extends _$ChatController {
       }
     }
 
+    // 模型参数来自该模型的配置；未设置时不下发，由服务端默认决定。
+    final modelConfig = selection.profile.models
+        .where((model) => model.id == selection.model)
+        .firstOrNull;
+
     // 不能用 asFuture：它会覆盖 onError，且取消后永不完成（stop 会挂死）。
     final subscription = provider
         .streamChat(
           ChatRequest(
             modelId: selection.model,
-            // 助手系统提示词在 S2 接入（助手选择 + 提示词装配）。
-            systemPrompt: '',
-            messages: _resolveHistory(branch, attachmentIndex),
+            systemPrompt: assistant?.systemPrompt ?? '',
+            messages: _resolveHistory(context, attachments),
             // 模型不支持推理时不下发任何推理字段。
             reasoningEffort: selection.supportsReasoning
                 ? selection.effort
                 : ReasoningEffort.off,
+            temperature: modelConfig?.temperature,
+            maxOutputTokens: modelConfig?.maxOutputTokens,
           ),
         )
         .listen(
@@ -429,9 +618,17 @@ class ChatController extends _$ChatController {
     return resolved;
   }
 
-  /// 读取附件的文本内容（S1 直接读原文件；PDF/DOCX 抽取在 S2 接入）。
+  /// 读取附件的文本内容。
+  ///
+  /// 文档用抽取结果（PDF/DOCX 在导入时抽取），文本文件直接读原文件；
+  /// 抽取失败时把失败原因作为内容交给模型，让它知道这份文档没有文字，
+  /// 而不是让请求里凭空少一份附件。
   String? _readExtractedText(Attachment? attachment) {
     if (attachment == null) return null;
+    final error = attachment.extractionError;
+    if (error != null) {
+      return '【附件「${attachment.name}」未能提取文字：$error】';
+    }
     final path = attachment.extractedTextPath ?? attachment.localPath;
     try {
       return File(path).readAsStringSync();
@@ -526,4 +723,141 @@ List<ChatMessage> visibleMessages(ConversationThread thread, ChatState state) {
     );
   }
   return branch;
+}
+
+/// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
+@Riverpod(keepAlive: true)
+Stream<List<Assistant>> assistants(Ref ref) async* {
+  final repository = await ref.watch(assistantRepositoryProvider.future);
+  await repository.ensureDefault();
+  yield* repository.watchAssistants();
+}
+
+/// 当前生效的助手。
+///
+/// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
+/// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+///
+/// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
+/// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
+@Riverpod(keepAlive: true, dependencies: [assistants, conversationThread])
+Assistant? currentAssistant(Ref ref, ActiveConversationState active) {
+  final assistants = ref.watch(assistantsProvider).value ?? const <Assistant>[];
+  final conversationId = active.conversationId;
+  final bound = conversationId == null
+      ? null
+      : ref
+            .watch(conversationThreadProvider(conversationId))
+            .value
+            ?.conversation
+            .assistantId;
+  return resolveAssistant(
+    assistants,
+    draftAssistantId: active.draftAssistantId,
+    boundAssistantId: bound,
+  );
+}
+
+/// 从助手列表里解析当前助手。
+///
+/// 优先级：本次会话显式选择（草稿）→ 会话绑定的助手 → 列表第一个。
+/// 草稿在会话建立后继续代表「用户刚为这个会话选定的助手」，因此排在绑定的
+/// 助手之前；下发到会话的绑定关系由 [ChatController.selectAssistant] 落库。
+///
+/// 发送（[awaitAssistantContext]）与模型选择共用这一处规则。
+Assistant? resolveAssistant(
+  List<Assistant> assistants, {
+  String? draftAssistantId,
+  String? boundAssistantId,
+}) {
+  if (assistants.isEmpty) return null;
+  final wanted = draftAssistantId ?? boundAssistantId;
+  if (wanted != null) {
+    for (final assistant in assistants) {
+      if (assistant.id == wanted) return assistant;
+    }
+  }
+  return assistants.first;
+}
+
+/// 发送前的助手解析：先把列表等就绪，再按当前会话/草稿取助手。
+///
+/// 供 [ChatController.send] 使用；不使用 provider 的 `.value`，那样在流式
+/// provider 已就绪时也可能读到 null。
+Future<Assistant?> awaitAssistantContext(Ref ref) async {
+  final assistants = await ref.read(assistantsProvider.future);
+  if (assistants.isEmpty) return null;
+  final active = ref.read(activeConversationProvider);
+  var boundId = active.draftAssistantId;
+  final conversationId = active.conversationId;
+  if (conversationId != null) {
+    final repository = await ref.read(conversationRepositoryProvider.future);
+    final thread = await repository.getThread(conversationId);
+    boundId = thread?.conversation.assistantId ?? boundId;
+  }
+  return resolveAssistant(
+    assistants,
+    draftAssistantId: active.draftAssistantId,
+    boundAssistantId: boundId,
+  );
+}
+
+/// 当前会话状态：会话 id 与新会话的助手、显式模型选择。
+///
+/// 单独成状态：会话选择既影响聊天控制器，也影响助手/模型解析，
+/// 由它避免「选择依赖会话、会话依赖选择」的循环。
+class ActiveConversationState {
+  const ActiveConversationState({
+    this.conversationId,
+    this.draftAssistantId,
+    this.draftModelSelection,
+  });
+
+  /// 当前打开的会话；null 表示新会话（尚未落库）。
+  final String? conversationId;
+
+  /// 本次会话显式选定的助手，切到其他会话时清空。
+  final String? draftAssistantId;
+
+  /// 新会话确认的模型选择；建会话时保存到 modelSelectionOverride。
+  final model.ModelSelection? draftModelSelection;
+}
+
+@Riverpod(keepAlive: true)
+class ActiveConversation extends _$ActiveConversation {
+  @override
+  ActiveConversationState build() => const ActiveConversationState();
+
+  /// 打开某个已有会话；草稿助手不再需要。
+  void open(String conversationId) {
+    state = ActiveConversationState(conversationId: conversationId);
+  }
+
+  /// 回到新会话状态（或开始新的会话）。
+  void clear() => state = const ActiveConversationState();
+
+  /// 发送后新会话已有 id：记录它，并保留本次会话选定的助手。
+  void adopt(String conversationId) {
+    state = ActiveConversationState(
+      conversationId: conversationId,
+      draftAssistantId: state.draftAssistantId,
+    );
+  }
+
+  /// 本次会话选定的助手（新会话尚未落库、或刚切换时）。
+  void draftAssistant(String assistantId) {
+    state = ActiveConversationState(
+      conversationId: state.conversationId,
+      draftAssistantId: assistantId,
+      draftModelSelection: state.draftModelSelection,
+    );
+  }
+
+  void draftModel(model.ModelSelection selection) {
+    state = ActiveConversationState(
+      conversationId: state.conversationId,
+      draftAssistantId: state.draftAssistantId,
+      draftModelSelection: selection,
+    );
+  }
 }

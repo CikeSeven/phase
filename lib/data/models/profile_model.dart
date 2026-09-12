@@ -16,6 +16,7 @@ class ProfileModel {
     this.supportsImages = true,
     this.contextWindow,
     this.maxOutputTokens,
+    this.temperature,
   });
 
   /// 请求中使用的模型 id（如 `deepseek-reasoner`）。
@@ -35,6 +36,9 @@ class ProfileModel {
   final int? contextWindow;
   final int? maxOutputTokens;
 
+  /// 采样温度；未设置时不下发该字段。
+  final double? temperature;
+
   String get label => displayName?.isNotEmpty == true ? displayName! : id;
 
   /// 能力设置的局部更新；未提供的字段保持不变。
@@ -46,6 +50,7 @@ class ProfileModel {
     bool? supportsImages,
     int? contextWindow,
     int? maxOutputTokens,
+    double? temperature,
   }) {
     return ProfileModel(
       id: id,
@@ -56,6 +61,7 @@ class ProfileModel {
       supportsImages: supportsImages ?? this.supportsImages,
       contextWindow: contextWindow ?? this.contextWindow,
       maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      temperature: temperature ?? this.temperature,
     );
   }
 

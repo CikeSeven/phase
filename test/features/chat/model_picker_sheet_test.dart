@@ -14,13 +14,18 @@ import 'package:phase/core/widgets/app_card.dart';
 import 'package:phase/core/widgets/app_sheet.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/api_protocol.dart';
+import 'package:phase/data/models/assistant.dart';
+import 'package:phase/data/models/model_selection.dart' as model;
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/data/models/reasoning_effort.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/chat/model_picker_sheet.dart';
 import 'package:phase/features/chat/model_selection.dart';
+import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../support/memory_assistants.dart';
 
 final _profiles = [
   ProviderProfile(
@@ -131,6 +136,47 @@ void main() {
     expect(find.byType(ModelPickerSheet), findsNothing);
     expect(host.preferences.getString('last_profile_id'), 'daily');
     expect(host.preferences.getString('last_model'), 'chat-basic');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('助手有默认模型时，取消保持默认，确认后使用显式模型与推理', (tester) async {
+    final host = await _pumpHost(
+      tester,
+      assistants: [
+        Assistant(
+          id: 'custom-assistant',
+          name: '指定模型',
+          systemPrompt: '',
+          defaultModelSelection: const model.ModelSelection(
+            profileId: 'daily',
+            modelId: 'think-model',
+            reasoningEffort: ReasoningEffort.medium,
+          ),
+          createdAt: DateTime(2026),
+        ),
+      ],
+    );
+    await _openPicker(tester);
+    await _chooseModel(tester, 'workspace', 'think-model');
+    await _setEffort(tester, ReasoningEffort.high);
+    await _tapVisible(tester, find.text('取消'));
+    var selected = host.container.read(modelSelectionProvider).value!;
+    expect(selected.profile.id, 'daily');
+    expect(selected.effort, ReasoningEffort.medium);
+    expect(host.preferences.getString('last_reasoning_effort'), 'low');
+
+    await _openPicker(tester);
+    await _chooseModel(tester, 'workspace', 'think-model');
+    await _setEffort(tester, ReasoningEffort.high);
+    await _tapVisible(tester, _confirm);
+    selected = host.container.read(modelSelectionProvider).value!;
+    expect(selected.profile.id, 'workspace');
+    expect(selected.model, 'think-model');
+    expect(selected.effort, ReasoningEffort.high);
+    expect(host.preferences.getString('last_profile_id'), 'workspace');
+    await _openPicker(tester);
+    expect(_sliderValue(tester), ReasoningEffort.high.index.toDouble());
+    await _tapVisible(tester, find.byTooltip('关闭'));
     expect(tester.takeException(), isNull);
   });
 
@@ -767,6 +813,7 @@ Future<
 _pumpHost(
   WidgetTester tester, {
   List<ProviderProfile>? profiles,
+  List<Assistant>? assistants,
   Map<String, Object> values = _initialValues,
   Stream<List<ProviderProfile>> Function()? profileStream,
   SettingsStorage Function(SharedPreferences)? settings,
@@ -811,6 +858,9 @@ _pumpHost(
       retry: (_, _) => null,
       overrides: [
         sharedPreferencesProvider.overrideWith((ref) => preferences),
+        assistantRepositoryProvider.overrideWith(
+          (ref) => MemoryAssistants(assistants),
+        ),
         providerProfilesProvider.overrideWith(
           (ref) => profileStream?.call() ?? Stream.value(profiles ?? _profiles),
         ),

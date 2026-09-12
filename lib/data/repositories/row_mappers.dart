@@ -64,6 +64,7 @@ Attachment attachmentFromRow(AttachmentRow row) => Attachment(
   localPath: row.localPath,
   sha256: row.sha256,
   extractedTextPath: row.extractedTextPath,
+  extractionError: row.extractionError,
   width: row.width,
   height: row.height,
   createdAt: row.createdAt,
@@ -143,6 +144,7 @@ ProfileModel profileModelFromRow(ModelRow row) => ProfileModel(
   supportsImages: row.supportsImages,
   contextWindow: row.contextWindow,
   maxOutputTokens: row.maxOutputTokens,
+  temperature: row.temperature,
 );
 
 // --- companion 构造 ---
@@ -158,6 +160,7 @@ ModelsCompanion modelCompanion(String profileId, ProfileModel model) =>
       supportsImages: Value(model.supportsImages),
       contextWindow: Value(model.contextWindow),
       maxOutputTokens: Value(model.maxOutputTokens),
+      temperature: Value(model.temperature),
     );
 
 ConversationsCompanion conversationCompanion(Conversation conversation) =>
@@ -258,6 +261,7 @@ AttachmentsCompanion attachmentCompanion(Attachment attachment) =>
       localPath: Value(attachment.localPath),
       sha256: Value(attachment.sha256),
       extractedTextPath: Value(attachment.extractedTextPath),
+      extractionError: Value(attachment.extractionError),
       width: Value(attachment.width),
       height: Value(attachment.height),
       createdAt: Value(attachment.createdAt),

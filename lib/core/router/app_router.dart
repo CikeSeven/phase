@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../features/assistants/assistant_edit_page.dart';
 import '../../features/assistants/assistants_page.dart';
 import '../../features/chat/chat_page.dart';
 import '../../features/providers_config/provider_edit_page.dart';
@@ -58,6 +59,20 @@ GoRouter appRouter(Ref ref) {
         path: '/assistants',
         pageBuilder: (context, state) =>
             materialPage(state, const AssistantsPage()),
+        routes: [
+          GoRoute(
+            path: 'new',
+            pageBuilder: (context, state) =>
+                materialPage(state, const AssistantEditPage()),
+          ),
+          GoRoute(
+            path: ':id',
+            pageBuilder: (context, state) => materialPage(
+              state,
+              AssistantEditPage(assistantId: state.pathParameters['id']),
+            ),
+          ),
+        ],
       ),
     ],
   );

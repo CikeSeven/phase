@@ -167,7 +167,7 @@ void main() {
     );
     expect(find.byTooltip('发送'), findsOneWidget);
     final conversationId = container
-        .read(chatControllerProvider)
+        .read(activeConversationProvider)
         .conversationId!;
 
     await tester.enterText(find.byType(TextField).first, '再细化第一步');
