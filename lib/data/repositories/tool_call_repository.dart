@@ -61,11 +61,13 @@ class ToolCallRepository {
   /// 进入等待确认；期限从请求时刻起算，重新打开应用不重新计时。
   Future<ToolCallRecord> requestConfirmation(String id) {
     return _apply(id, '请求确认失败', (record) {
+      if (record.status == ToolCallStatus.awaitingConfirmation) return record;
       final now = DateTime.now();
       return record.copyWith(
         status: ToolCallStatus.awaitingConfirmation,
-        confirmationRequestedAt: now,
-        confirmationExpiresAt: now.add(confirmationTimeout),
+        confirmationRequestedAt: record.confirmationRequestedAt ?? now,
+        confirmationExpiresAt:
+            record.confirmationExpiresAt ?? now.add(confirmationTimeout),
       );
     });
   }
@@ -73,27 +75,53 @@ class ToolCallRepository {
   /// 记录用户决定；批准后由执行方推进到 executing。
   Future<ToolCallRecord> recordDecision(String id, ToolDecision decision) {
     return _apply(id, '记录确认决定失败', (record) {
+      if (record.status != ToolCallStatus.awaitingConfirmation) {
+        throw const OperationFailure('本次确认已经结束');
+      }
       final now = DateTime.now();
+      if (record.confirmationExpiresAt?.isAfter(now) != true) {
+        decision = ToolDecision.expired;
+      }
       return record.copyWith(
         decision: decision,
         decidedAt: now,
         status: switch (decision) {
-          ToolDecision.approved => ToolCallStatus.executing,
+          ToolDecision.approved => ToolCallStatus.prepared,
           ToolDecision.rejected => ToolCallStatus.rejected,
           ToolDecision.expired => ToolCallStatus.rejected,
         },
+        result: decision == ToolDecision.approved
+            ? null
+            : (decision == ToolDecision.expired
+                  ? '确认已过期，没有执行。'
+                  : '用户拒绝了本次动作，没有执行。'),
+        finishedAt: decision == ToolDecision.approved ? null : now,
       );
     });
   }
 
   /// 直接执行前的落库：先保存 executing，再派发外部动作。
   Future<ToolCallRecord> markExecuting(String id) {
-    return _apply(id, '更新工具状态失败', (record) {
-      return record.copyWith(
-        status: ToolCallStatus.executing,
-        startedAt: DateTime.now(),
-      );
-    });
+    return _guard(
+      '更新工具状态失败',
+      () => _db.transaction(() async {
+        final record = await getById(id);
+        if (record.status != ToolCallStatus.prepared) {
+          throw const OperationFailure('此动作已不再等待派发');
+        }
+        final executing = record.copyWith(
+          status: ToolCallStatus.executing,
+          startedAt: DateTime.now(),
+        );
+        await (_db.update(
+          _db.toolCalls,
+        )..where((t) => t.id.equals(id))).write(toolCallCompanion(executing));
+        await (_db.update(_db.agentRuns)
+              ..where((t) => t.id.equals(record.runId)))
+            .write(AgentRunsCompanion(activeToolCallId: Value(id)));
+        return executing;
+      }),
+    );
   }
 
   Future<ToolCallRecord> markSucceeded(
@@ -128,20 +156,28 @@ class ToolCallRepository {
     });
   }
 
-  Future<ToolCallRecord> markRejected(String id, {ToolDecision? decision}) {
+  Future<ToolCallRecord> markRejected(
+    String id, {
+    ToolDecision? decision,
+    String? result,
+    String? errorCode,
+  }) {
     return _apply(id, '记录拒绝失败', (record) {
       return record.copyWith(
         status: ToolCallStatus.rejected,
         decision: decision,
+        result: result,
+        errorCode: errorCode,
         finishedAt: DateTime.now(),
       );
     });
   }
 
-  Future<ToolCallRecord> markCancelled(String id) {
+  Future<ToolCallRecord> markCancelled(String id, {String? result}) {
     return _apply(id, '记录取消失败', (record) {
       return record.copyWith(
         status: ToolCallStatus.cancelled,
+        result: result ?? '本次调用已取消，未继续执行。',
         finishedAt: DateTime.now(),
       );
     });
@@ -183,7 +219,7 @@ class ToolCallRepository {
     } on Failure {
       rethrow;
     } on Exception catch (e, st) {
-      AppLogger.error(message, e, st);
+      AppLogger.error('$message (${e.runtimeType})', null, st);
       throw UnknownFailure(message, cause: e);
     }
   }

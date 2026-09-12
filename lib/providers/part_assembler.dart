@@ -116,14 +116,14 @@ class PartAssembler {
   }
 
   /// 响应收口：补齐未结束的块 → Usage → ResponseEnd（一次响应只发一次）。
-  void finish({TokenUsage? usage}) {
+  void finish({TokenUsage? usage, bool complete = true}) {
     if (_finished) return;
     _finished = true;
     for (final block in _order) {
       _end(block);
     }
     if (usage != null) _emit(UsageChunk(usage: usage));
-    _emit(ResponseEnd(hasVisibleContent: _visible));
+    _emit(ResponseEnd(hasVisibleContent: _visible, complete: complete));
   }
 
   _Block _block(Object key, PartKind kind) {

@@ -15,6 +15,7 @@ import '../../../data/models/model_selection.dart';
 import '../../../data/repositories/assistant_repository.dart';
 import '../chat/chat_controller.dart';
 import 'assistant_model_sheet.dart';
+import 'assistant_tool_policy_section.dart';
 
 /// 助手新增 / 编辑：名称、系统提示词、默认模型与工具范围。
 class AssistantEditPage extends ConsumerStatefulWidget {
@@ -33,6 +34,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
   final _promptController = TextEditingController();
 
   ModelSelection? _defaultModel;
+  ToolPolicyConfig _toolPolicy = defaultToolPolicyConfig;
   bool _clearDefaultModel = false;
   bool _loading = true;
   bool _saving = false;
@@ -79,6 +81,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
         _nameController.text = assistant.name;
         _promptController.text = assistant.systemPrompt;
         _defaultModel = assistant.defaultModelSelection;
+        _toolPolicy = assistant.toolPolicy;
         _loading = false;
       });
     } catch (error) {
@@ -114,6 +117,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           name: _nameController.text,
           systemPrompt: _promptController.text,
           defaultModelSelection: _defaultModel,
+          toolPolicy: _toolPolicy,
         );
       } else {
         await controller.updateAssistant(
@@ -122,6 +126,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           systemPrompt: _promptController.text,
           defaultModelSelection: _defaultModel,
           clearDefaultModel: _clearDefaultModel,
+          toolPolicy: _toolPolicy,
         );
       }
       if (!mounted) return;
@@ -284,7 +289,13 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                           }),
                   ),
                   const SizedBox(height: AppSpacing.xl),
-                  _ToolScopeSection(policy: const ToolPolicyConfig()),
+                  AssistantToolPolicySection(
+                    tools: ref.watch(toolRegistryProvider).tools.toList(),
+                    policy: _toolPolicy,
+                    onChanged: _saving
+                        ? null
+                        : (policy) => setState(() => _toolPolicy = policy),
+                  ),
                 ],
               ),
             ),
@@ -332,40 +343,6 @@ class _DefaultModelRow extends StatelessWidget {
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ],
-      ],
-    );
-  }
-}
-
-/// 工具范围：工具在 S3 落地，这里只呈现真实状态，不显示可点的假开关。
-class _ToolScopeSection extends StatelessWidget {
-  const _ToolScopeSection({required this.policy});
-
-  final ToolPolicyConfig policy;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('工具范围', style: theme.textTheme.labelLarge),
-        const SizedBox(height: AppSpacing.xs),
-        Text(
-          '本版还没有可用的工具；工具与分组策略将在工具能力落地后在此配置。',
-          key: const ValueKey('tool-scope-placeholder'),
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: colors.onSurfaceVariant,
-          ),
-        ),
-        const SizedBox(height: AppSpacing.s),
-        Text(
-          '当前策略：${policy.enabledTools.isEmpty ? '未开放任何工具' : policy.enabledTools.join('、')}',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: colors.onSurfaceVariant,
-          ),
-        ),
       ],
     );
   }

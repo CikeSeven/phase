@@ -195,7 +195,7 @@ abstract final class AnthropicSseDecoder {
     final chunks = decoder.parse(data);
     // 畸形的载荷不是协议事件：既不产出内容，也不收口。
     if (!decoder.sawEvent) return const [];
-    return [...chunks, ...decoder.finish()];
+    return [...chunks, ...decoder.finish(complete: true)];
   }
 
   /// 把 HTTP 响应字节流解码为类型化事件流；message_stop 或流结束收口。
@@ -226,6 +226,7 @@ class _AnthropicStreamDecoder {
   var _terminated = false;
   var _sawEvent = false;
   var _finished = false;
+  bool? _normalFinish;
 
   bool get isDone => _terminated || _finished;
 
@@ -256,6 +257,14 @@ class _AnthropicStreamDecoder {
       case 'content_block_stop':
         if (decoded['index'] case final int index) _parts.close(index);
       case 'message_delta':
+        final delta = decoded['delta'];
+        if (delta is Map && delta['stop_reason'] is String) {
+          _normalFinish = const {
+            'end_turn',
+            'tool_use',
+            'stop_sequence',
+          }.contains(delta['stop_reason']);
+        }
         _usage =
             _parseUsage(
               decoded['usage'],
@@ -264,7 +273,7 @@ class _AnthropicStreamDecoder {
             ) ??
             _usage;
       case 'message_stop':
-        return finish();
+        return finish(complete: _normalFinish ?? true);
       case 'error':
         // 协议明确的错误字段是唯一分类依据。
         _terminated = true;
@@ -277,10 +286,10 @@ class _AnthropicStreamDecoder {
   }
 
   /// 响应收口：补齐未结束的块，产出 usage 与 ResponseEnd。
-  List<ChatChunk> finish({TokenUsage? usage}) {
+  List<ChatChunk> finish({TokenUsage? usage, bool complete = false}) {
     if (isDone) return const [];
     _finished = true;
-    _parts.finish(usage: usage ?? _usage);
+    _parts.finish(usage: usage ?? _usage, complete: complete);
     return _drain();
   }
 

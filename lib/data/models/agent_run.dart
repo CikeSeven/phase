@@ -1,6 +1,7 @@
 import 'chat_message.dart';
 import 'model_selection.dart';
 import 'tool_policy.dart';
+import 'openai_compat.dart';
 
 enum RunStatus {
   running,
@@ -61,6 +62,10 @@ class RunConfiguration {
     required this.systemPrompt,
     this.enabledTools = const {},
     this.toolPolicies = const {},
+    this.supportsReasoning = false,
+    this.supportsImages = true,
+    this.supportsTools = true,
+    this.compatOverrides,
   });
 
   final RunConnection connection;
@@ -70,6 +75,10 @@ class RunConfiguration {
 
   /// 工具级策略覆盖；未列出的工具按定义的默认策略。
   final Map<String, ToolPolicy> toolPolicies;
+  final bool supportsReasoning;
+  final bool supportsImages;
+  final bool supportsTools;
+  final OpenAiCompat? compatOverrides;
 
   Map<String, dynamic> toJson() => {
     'connection': connection.toJson(),
@@ -79,6 +88,10 @@ class RunConfiguration {
     'toolPolicies': {
       for (final entry in toolPolicies.entries) entry.key: entry.value.name,
     },
+    'supportsReasoning': supportsReasoning,
+    'supportsImages': supportsImages,
+    'supportsTools': supportsTools,
+    'compatOverrides': compatOverrides?.toJson(),
   };
 
   factory RunConfiguration.fromJson(Map<String, dynamic> json) =>
@@ -90,6 +103,14 @@ class RunConfiguration {
           json['modelSelection'] as Map<String, dynamic>,
         ),
         systemPrompt: json['systemPrompt'] as String? ?? '',
+        supportsReasoning: json['supportsReasoning'] as bool? ?? false,
+        supportsImages: json['supportsImages'] as bool? ?? true,
+        supportsTools: json['supportsTools'] as bool? ?? true,
+        compatOverrides: json['compatOverrides'] == null
+            ? null
+            : OpenAiCompat.fromJson(
+                json['compatOverrides'] as Map<String, dynamic>,
+              ),
         enabledTools: {
           for (final tool in json['enabledTools'] as List? ?? const [])
             tool as String,

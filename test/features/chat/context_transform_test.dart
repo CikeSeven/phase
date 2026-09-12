@@ -251,6 +251,7 @@ void main() {
     );
 
     stream.add(const TextDelta(partId: 'text_0', text: '第二'));
+    stream.add(const ResponseEnd());
     await stream.close();
     await sending;
     // 收口时最后一批已经补上，界面不会停在半句话上。

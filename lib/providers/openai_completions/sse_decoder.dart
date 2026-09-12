@@ -23,12 +23,12 @@ abstract final class OpenAiSseDecoder {
     final chunks = decoder.parse(line.substring(_dataPrefix.length));
     // 空载荷与畸形 JSON 不是协议事件：既不产出内容，也不收口。
     if (!decoder.sawEvent) return const [];
-    return [...chunks, ...decoder.finish()];
+    return [...chunks, ...decoder.finish(complete: true)];
   }
 
   /// 把 HTTP 响应字节流按 SSE 事件解码为类型化事件流。
   ///
-  /// 收口时机：[DONE]、带内错误或字节流结束（网关提前断开时也要有明确结果）。
+  /// EOF 只收集已收内容；没有协议终态时禁止上层执行工具。
   static Stream<ChatChunk> decode(Stream<List<int>> byteStream) async* {
     final decoder = _CompletionsStreamDecoder();
     await for (final data in decodeSseDataLines(byteStream)) {
@@ -55,6 +55,7 @@ class _CompletionsStreamDecoder {
   var _terminated = false;
   var _sawEvent = false;
   var _finished = false;
+  bool? _normalFinish;
 
   /// 是否已收口（发过 ResponseEnd 或流内错误）。
   bool get isDone => _terminated || _finished;
@@ -69,7 +70,7 @@ class _CompletionsStreamDecoder {
     if (data.isEmpty) return const [];
     if (data == OpenAiSseDecoder._doneMarker) {
       _sawEvent = true;
-      return finish();
+      return finish(complete: _normalFinish ?? true);
     }
 
     final Object? decoded;
@@ -101,17 +102,27 @@ class _CompletionsStreamDecoder {
   }
 
   /// 响应收口：补齐未结束的块，产出 usage 与 ResponseEnd。
-  List<ChatChunk> finish({TokenUsage? usage}) {
+  List<ChatChunk> finish({TokenUsage? usage, bool? complete}) {
     if (isDone) return const [];
     final tail = _think.flush();
     if (tail.reasoning.isNotEmpty) _parts.reasoning(0, tail.reasoning);
     if (tail.content.isNotEmpty) _parts.text(0, tail.content);
     _finished = true;
-    _parts.finish(usage: usage ?? _usage);
+    _parts.finish(
+      usage: usage ?? _usage,
+      complete: complete ?? _normalFinish == true,
+    );
     return _drain();
   }
 
   void _parseChoice(Map<String, dynamic> choice) {
+    if (choice['finish_reason'] case final String reason) {
+      _normalFinish = const {
+        'stop',
+        'tool_calls',
+        'function_call',
+      }.contains(reason);
+    }
     final delta = choice['delta'];
     if (delta is! Map<String, dynamic>) return;
 

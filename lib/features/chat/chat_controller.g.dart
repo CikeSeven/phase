@@ -75,7 +75,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'4d23d0a9455a32e0140a3815732bb9188d0a670b';
+String _$chatControllerHash() => r'0b1a5074f4ea6be7c15c97093053738313944e5c';
 
 /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 
@@ -150,7 +150,7 @@ final class ToolRegistryProvider
   }
 }
 
-String _$toolRegistryHash() => r'17499420721dbeea1456221d0db6f9340f0a0cb2';
+String _$toolRegistryHash() => r'6ee5336edf52011934310d8ff738fcb87a80a645';
 
 /// 工具运行的存储能力：会话附件、按会话隔离的产物目录与产物登记。
 ///
@@ -201,56 +201,6 @@ final class ArtifactStorageProvider
 }
 
 String _$artifactStorageHash() => r'2bb76c2793cbd29413863ba40b56353cb59fb727';
-
-/// 启动时尚未结束的运行：界面据此显示「结果未确认」等中断状态。
-///
-/// 只读取状态：不自动重跑任何动作，也不从日志回放（design 第二部分 §7）。
-
-@ProviderFor(unfinishedRuns)
-final unfinishedRunsProvider = UnfinishedRunsProvider._();
-
-/// 启动时尚未结束的运行：界面据此显示「结果未确认」等中断状态。
-///
-/// 只读取状态：不自动重跑任何动作，也不从日志回放（design 第二部分 §7）。
-
-final class UnfinishedRunsProvider
-    extends
-        $FunctionalProvider<
-          AsyncValue<List<AgentRun>>,
-          List<AgentRun>,
-          FutureOr<List<AgentRun>>
-        >
-    with $FutureModifier<List<AgentRun>>, $FutureProvider<List<AgentRun>> {
-  /// 启动时尚未结束的运行：界面据此显示「结果未确认」等中断状态。
-  ///
-  /// 只读取状态：不自动重跑任何动作，也不从日志回放（design 第二部分 §7）。
-  UnfinishedRunsProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'unfinishedRunsProvider',
-        isAutoDispose: false,
-        dependencies: null,
-        $allTransitiveDependencies: null,
-      );
-
-  @override
-  String debugGetCreateSourceHash() => _$unfinishedRunsHash();
-
-  @$internal
-  @override
-  $FutureProviderElement<List<AgentRun>> $createElement(
-    $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
-
-  @override
-  FutureOr<List<AgentRun>> create(Ref ref) {
-    return unfinishedRuns(ref);
-  }
-}
-
-String _$unfinishedRunsHash() => r'7267663de189ffdae6e16199d805e558e6103b00';
 
 /// 会话列表流（置顶优先、按更新时间倒序）。
 
@@ -427,7 +377,7 @@ final class AssistantsProvider
   }
 }
 
-String _$assistantsHash() => r'0b86eb7d2c1998ebcce3c045fefc08672be34591';
+String _$assistantsHash() => r'e669126c276bb39598993f28b6ad81678621ab97';
 
 /// 当前生效的助手。
 ///

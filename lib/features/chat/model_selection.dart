@@ -53,6 +53,7 @@ class ModelSelection extends _$ModelSelection {
   Future<ChatModelSelection?> build() async {
     final active = ref.watch(activeConversationProvider);
     final profiles = await ref.watch(providerProfilesProvider.future);
+    if (!ref.mounted) return null;
     if (profiles.isEmpty) {
       return null;
     }
@@ -62,6 +63,7 @@ class ModelSelection extends _$ModelSelection {
 
     // 等待会话和助手就绪，避免把加载中的覆盖配置误判为未设置。
     final assistants = await ref.watch(assistantsProvider.future);
+    if (!ref.mounted) return null;
     final conversationId = active.conversationId;
     // 只订阅用到的两个字段：线程流在生成期间每落一次库就更新一次，
     // 整条订阅会把模型选择反复重建（标题栏在模型名与加载态之间跳）。

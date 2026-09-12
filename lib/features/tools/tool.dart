@@ -75,22 +75,33 @@ class ToolOutcome {
     this.artifacts = const [],
     this.errorCode,
     this.unknown = false,
+    this.cancelled = false,
   });
 
   const ToolOutcome.success(this.content, {this.artifacts = const []})
     : ok = true,
       unknown = false,
+      cancelled = false,
       errorCode = null;
 
   const ToolOutcome.failure(this.content, {this.errorCode})
     : ok = false,
       unknown = false,
+      cancelled = false,
       artifacts = const [];
 
   /// 已派发但结果不可靠：界面提示核验，不自动重做动作。
   const ToolOutcome.unknown(this.content, {this.errorCode})
     : ok = false,
       unknown = true,
+      cancelled = false,
+      artifacts = const [];
+
+  const ToolOutcome.cancelled(this.content)
+    : ok = false,
+      unknown = false,
+      cancelled = true,
+      errorCode = 'cancelled',
       artifacts = const [];
 
   final bool ok;
@@ -102,6 +113,7 @@ class ToolOutcome {
 
   /// 结果是否未确认。
   final bool unknown;
+  final bool cancelled;
 }
 
 /// 工具执行中可选的进度上报（章节、字节等）。
@@ -150,12 +162,12 @@ class RunCancellation {
 
   /// 已取消时抛出，让调用方走统一的停止路径。
   void throwIfCancelled() {
-    if (isCancelled) throw const _ToolCancelled();
+    if (isCancelled) throw const ToolCancelled();
   }
 }
 
-class _ToolCancelled implements Exception {
-  const _ToolCancelled();
+class ToolCancelled implements Exception {
+  const ToolCancelled();
 }
 
 /// 参数读取辅助：缺失或类型不符时抛出明确的参数错误。
@@ -284,13 +296,8 @@ class ToolRegistry {
     Set<String> enabledTools,
     Map<String, ToolPolicy> overrides,
   ) {
-    final override = overrides[tool.name];
-    if (override != null) return override;
-    // 助手声明了工具范围且不含该工具：不开放，避免执行未配置的能力。
-    if (enabledTools.isNotEmpty && !enabledTools.contains(tool.name)) {
-      return ToolPolicy.deny;
-    }
-    return tool.defaultPolicy;
+    if (!enabledTools.contains(tool.name)) return ToolPolicy.deny;
+    return overrides[tool.name] ?? tool.defaultPolicy;
   }
 }
 

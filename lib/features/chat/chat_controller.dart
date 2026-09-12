@@ -24,6 +24,9 @@ import '../../../data/models/model_selection.dart' as model;
 import '../../../data/models/reasoning_effort.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/api_protocol.dart';
+import '../../../data/models/profile_model.dart';
+import '../../../data/models/provider_profile.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../../../data/repositories/assistant_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
@@ -31,7 +34,8 @@ import '../../../data/repositories/tool_call_repository.dart';
 import '../../../providers/ai_provider.dart';
 import '../../../providers/provider_factory.dart';
 import '../tools/agent_loop.dart';
-import '../tools/http_tool.dart';
+import '../tools/http_transport.dart';
+import '../tools/run_recovery_controller.dart';
 import '../tools/tool.dart';
 import '../tools/tool_executor.dart';
 import '../tools/tool_registry.dart';
@@ -48,6 +52,8 @@ class ChatState {
     this.streamingParts = const [],
     this.attachments = const {},
     this.isGenerating = false,
+    this.runningConversationId,
+    this.streamingMessageId,
   });
 
   /// 正在生成的回答内容块（按 Part 顺序）。
@@ -57,16 +63,30 @@ class ChatState {
   final Map<String, Attachment> attachments;
 
   final bool isGenerating;
+  final String? runningConversationId;
+  final String? streamingMessageId;
 
   ChatState copyWith({
     List<MessagePart>? streamingParts,
     Map<String, Attachment>? attachments,
     bool? isGenerating,
+    String? runningConversationId,
+    String? streamingMessageId,
+    bool clearStreaming = false,
+    bool clearRun = false,
   }) {
     return ChatState(
-      streamingParts: streamingParts ?? this.streamingParts,
+      streamingParts: clearStreaming
+          ? const []
+          : streamingParts ?? this.streamingParts,
       attachments: attachments ?? this.attachments,
       isGenerating: isGenerating ?? this.isGenerating,
+      runningConversationId: clearRun
+          ? null
+          : runningConversationId ?? this.runningConversationId,
+      streamingMessageId: clearStreaming
+          ? null
+          : streamingMessageId ?? this.streamingMessageId,
     );
   }
 }
@@ -99,8 +119,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   Timer? _publishTimer;
   String? _streamingMessageId;
 
-  /// 本轮助手消息 id：流式结束后仍可用于补写工具调用引用。
-  String? _turnMessageId;
   ProviderError? _streamError;
 
   /// 流式期间的块缓冲：partId → 已累积内容。
@@ -123,19 +141,17 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 运行内的模型选择快照：连接、能力与推理等级全程取它，不看中途改动。
   ChatModelSelection? _selection;
   ConversationRepository? _repository;
-  ToolCallRepository? _toolCalls;
   AgentRunRepository? _runs;
   ArtifactStorage? _storage;
   ToolRegistry? _registry;
   ToolExecutor? _executor;
   RunCancellation? _cancellation;
 
-  /// 本轮助手的最终内容块（含执行后补上的 ToolCallPart）。
+  /// 本轮助手的最终内容块；工具引用在响应收口时与整轮记录一起保存。
   List<MessagePart> _turnParts = const [];
-  MessageStatus _turnStatus = MessageStatus.streaming;
   TokenUsage? _turnUsage;
 
-  /// 本轮思考耗时：在收口时定下来，补写调用引用时不重算。
+  /// 本轮思考耗时；恢复已知工具结果时沿用原消息的值。
   int? _turnThinkingDurationMs;
 
   /// 本轮分支末尾的消息：下一轮助手消息与运行位置都指向它。
@@ -144,32 +160,41 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 本轮以错误或空回复收场时，运行结束原因取它。
   RunFinishReason? _turnFailure;
   bool _runFinished = false;
+  bool _busy = false;
+  int _viewRevision = 0;
+  bool _responseComplete = false;
+  Map<String, Attachment> _runAttachments = const {};
+  Future<void> _pendingFlush = Future.value();
+  Failure? _flushFailure;
 
   @override
   ChatState build() {
     ref.onDispose(() {
       _flushTimer?.cancel();
       _publishTimer?.cancel();
+      _cancellation?.cancel();
       unawaited(_subscription?.cancel());
-      _doneCompleter?.complete();
+      _completeRequest();
     });
     return const ChatState();
   }
 
   void startNewConversation() {
+    _viewRevision++;
     ref.read(activeConversationProvider.notifier).clear();
-    state = const ChatState();
+    state = state.copyWith(attachments: const {});
   }
 
   /// 切换到某个会话；消息由界面订阅仓储，附件索引进入时读取。
   Future<void> openConversation(String conversationId) async {
+    final revision = ++_viewRevision;
     final repository = await ref.read(conversationRepositoryProvider.future);
     final thread = await repository.getThread(conversationId);
-    if (thread == null) return;
+    if (thread == null || !ref.mounted || revision != _viewRevision) return;
+    final attachments = await _attachmentIndex(conversationId, const []);
+    if (!ref.mounted || revision != _viewRevision) return;
     ref.read(activeConversationProvider.notifier).open(conversationId);
-    state = ChatState(
-      attachments: await _attachmentIndex(conversationId, const []),
-    );
+    state = state.copyWith(attachments: attachments);
     // 会话绑定的助手可能不同：刷新派生选择。
     ref.invalidate(modelSelectionProvider);
   }
@@ -199,6 +224,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required String name,
     String systemPrompt = '',
     model.ModelSelection? defaultModelSelection,
+    ToolPolicyConfig toolPolicy = defaultToolPolicyConfig,
   }) {
     return _guardAssistant('创建助手失败', () async {
       final repository = await ref.read(assistantRepositoryProvider.future);
@@ -207,6 +233,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         name: name.trim(),
         systemPrompt: systemPrompt.trim(),
         defaultModelSelection: defaultModelSelection,
+        toolPolicy: toolPolicy,
         createdAt: DateTime.now(),
       );
       await repository.save(assistant);
@@ -223,6 +250,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required String systemPrompt,
     model.ModelSelection? defaultModelSelection,
     bool clearDefaultModel = false,
+    ToolPolicyConfig? toolPolicy,
   }) {
     return _guardAssistant('保存助手失败', () async {
       final repository = await ref.read(assistantRepositoryProvider.future);
@@ -237,7 +265,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         defaultModelSelection: clearDefaultModel
             ? null
             : (defaultModelSelection ?? existing.defaultModelSelection),
-        toolPolicy: existing.toolPolicy,
+        toolPolicy: toolPolicy ?? existing.toolPolicy,
         createdAt: existing.createdAt,
       );
       await repository.save(updated);
@@ -278,12 +306,27 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     String text, {
     List<Attachment> attachments = const [],
   }) async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await ref.read(runRecoveryControllerProvider.notifier).initialize();
+      await _send(text, attachments: attachments);
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _send(
+    String text, {
+    List<Attachment> attachments = const [],
+  }) async {
     final trimmed = text.trim();
     if ((trimmed.isEmpty && attachments.isEmpty) || state.isGenerating) {
       return;
     }
 
     // 强刷：刚切换的助手/会话要立刻作用到本次请求，不依赖竞态的重建时机。
+    final revision = _viewRevision;
     final selection = await ref.refresh(modelSelectionProvider.future);
     if (selection == null) {
       throw const UnknownFailure('尚未选择服务商与模型');
@@ -294,7 +337,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     // 助手列表可能还在首次加载：先把列表与会话线程等就绪，
     // 否则本次请求会丢掉系统提示词与助手默认模型。
     final assistant = await awaitAssistantContext(ref);
+    if (revision != _viewRevision) throw const OperationFailure('会话已切换，请重新发送');
     var conversationId = ref.read(activeConversationProvider).conversationId;
+    _checkRecoveredConversation(conversationId);
     if (conversationId == null) {
       final conversation = await repository.createConversation(
         assistantId: assistant?.id,
@@ -303,7 +348,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             .draftModelSelection,
       );
       conversationId = conversation.id;
-      ref.read(activeConversationProvider.notifier).adopt(conversationId);
+      if (revision == _viewRevision) {
+        ref.read(activeConversationProvider.notifier).adopt(conversationId);
+      }
     }
     final thread = await repository.getThread(conversationId);
     if (thread == null) {
@@ -327,7 +374,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     // 附件索引带上刚落库的这批，发送后即可在气泡里看到缩略图，
     // 同时用于把历史消息里的附件引用解析成请求内容。
     final attachmentIndex = await _attachmentIndex(conversationId, claimed);
-    state = state.copyWith(attachments: attachmentIndex);
+    if (ref.read(activeConversationProvider).conversationId == conversationId) {
+      state = state.copyWith(attachments: attachmentIndex);
+    }
 
     final parentId = thread.currentMessageId;
     final userMessage = ChatMessage(
@@ -362,9 +411,21 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 新建一条回答挂在同一条用户消息下，旧回答保留在消息树里不覆盖；
   /// 有工具执行历史时不自动重做动作（S3 起生效）。
   Future<void> regenerate() async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      await ref.read(runRecoveryControllerProvider.notifier).initialize();
+      await _regenerate();
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<void> _regenerate() async {
     if (state.isGenerating) return;
     final conversationId = ref.read(activeConversationProvider).conversationId;
     if (conversationId == null) return;
+    _checkRecoveredConversation(conversationId);
 
     final repository = await ref.read(conversationRepositoryProvider.future);
     final thread = await repository.getThread(conversationId);
@@ -421,8 +482,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required Assistant? assistant,
   }) async {
     final runs = await ref.read(agentRunRepositoryProvider.future);
-    final toolCalls = await ref.read(toolCallRepositoryProvider.future);
-    final storage = await ref.read(artifactStorageProvider.future);
+    final modelConfig = selection.profile.models
+        .where((m) => m.id == selection.model)
+        .firstOrNull;
 
     // 连接快照只存服务商 id、协议与地址，密钥按 id 在调用时读取。
     final run = await runs.create(
@@ -442,31 +504,56 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             profileId: selection.profile.id,
             modelId: selection.model,
             reasoningEffort: selection.effort,
+            temperature: modelConfig?.temperature,
+            maxOutputTokens: modelConfig?.maxOutputTokens,
           ),
           systemPrompt: assistant?.systemPrompt ?? '',
-          enabledTools: assistant?.toolPolicy.enabledTools ?? const {},
-          toolPolicies: assistant?.toolPolicy.overrides ?? const {},
+          enabledTools: selection.supportsTools
+              ? assistant?.toolPolicy.enabledTools ?? const {}
+              : const {},
+          toolPolicies: selection.supportsTools
+              ? assistant?.toolPolicy.overrides ?? const {}
+              : const {},
+          supportsReasoning: selection.supportsReasoning,
+          supportsImages: selection.supportsImages,
+          supportsTools: selection.supportsTools,
+          compatOverrides: selection.profile.compatOverrides,
         ),
         createdAt: DateTime.now(),
       ),
     );
+
+    try {
+      await _driveRun(run, repository, selection);
+    } on Failure {
+      final stored = await runs.getById(run.id);
+      if (stored?.status == RunStatus.running && stored?.turnCount == 0) {
+        await runs.finish(
+          run.id,
+          status: RunStatus.failed,
+          finishReason: RunFinishReason.storageError,
+        );
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> _driveRun(
+    AgentRun run,
+    ConversationRepository repository,
+    ChatModelSelection selection, {
+    bool resuming = false,
+  }) async {
+    final runs = await ref.read(agentRunRepositoryProvider.future);
+    final toolCalls = await ref.read(toolCallRepositoryProvider.future);
+    final storage = await ref.read(artifactStorageProvider.future);
+    final recovery = ref.read(runRecoveryControllerProvider.notifier);
 
     final registry = ref.read(toolRegistryProvider);
     final executor = ToolExecutor(
       registry: registry,
       toolCalls: toolCalls,
       runs: runs,
-      // 记录一创建就把调用写进助手消息：工具卡片在"等待确认"时就出现，
-      // 而不是等执行结束才补上。
-      onRecordCreated: (record) {
-        final messageId = _turnMessageId;
-        if (messageId == null) return Future<void>.value();
-        return _attachToolCallPart(
-          messageId,
-          record.id,
-          providerData: record.providerData,
-        );
-      },
     );
     if (onToolConfirmation != null) {
       executor.onConfirmationRequired = _confirmToolCall;
@@ -475,7 +562,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _run = run;
     _selection = selection;
     _repository = repository;
-    _toolCalls = toolCalls;
     _runs = runs;
     _storage = storage;
     _registry = registry;
@@ -484,17 +570,29 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _runFinished = false;
     _turnFailure = null;
     _turnTailId = null;
-    state = state.copyWith(
-      isGenerating: true,
-      streamingParts: const [],
-      attachments: await _attachmentIndex(conversationId, const []),
-    );
-
+    recovery.runStarted(run.id);
     try {
-      await AgentLoop(this, maxTurns: run.maxTurns).run();
+      _runAttachments = await _attachmentIndex(run.conversationId, const []);
+      state = state.copyWith(
+        isGenerating: true,
+        clearStreaming: true,
+        runningConversationId: run.conversationId,
+        attachments:
+            ref.read(activeConversationProvider).conversationId ==
+                run.conversationId
+            ? _runAttachments
+            : null,
+      );
+
+      if (resuming && !await _restorePendingTools()) return;
+      await AgentLoop(this, maxTurns: run.maxTurns - run.turnCount).run();
     } on Failure {
       // 落库失败：运行按存储失败收口后再交给界面提示，不留永远 running 的运行。
-      await _finishRun(RunStatus.failed, RunFinishReason.storageError);
+      try {
+        await _finishRun(RunStatus.failed, RunFinishReason.storageError);
+      } on Failure {
+        AppLogger.error('运行终态未能保存，启动时需核对');
+      }
       rethrow;
     } finally {
       _flushTimer?.cancel();
@@ -502,12 +600,142 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _publishTimer?.cancel();
       _publishTimer = null;
       _streamingMessageId = null;
+      _cancellation?.cancel();
+      await _subscription?.cancel();
+      _subscription = null;
+      _doneCompleter = null;
       _run = null;
       _selection = null;
       _cancellation = null;
       _executor = null;
-      state = state.copyWith(isGenerating: false, streamingParts: const []);
+      if (ref.mounted) {
+        // 清理与恢复索引刷新完成后才解锁发送，避免两个根任务交错写入。
+        await recovery.runFinished().catchError((Object _) {});
+      }
+      if (ref.mounted) {
+        state = state.copyWith(
+          isGenerating: false,
+          clearStreaming: true,
+          clearRun: true,
+        );
+      }
     }
+  }
+
+  void _checkRecoveredConversation(String? id) {
+    final recovery = ref.read(runRecoveryControllerProvider);
+    if (recovery.hasError) throw const OperationFailure('请先重试读取中断任务');
+    if (id != null &&
+        (recovery.value ?? []).any((entry) => entry.run.conversationId == id)) {
+      throw const OperationFailure('请先继续、核验或停止此会话的中断任务');
+    }
+  }
+
+  /// 用户主动继续已保存的位置；配置取运行快照，不重新执行已知结果。
+  Future<void> resumeRun(String runId) async {
+    if (_busy) return;
+    _busy = true;
+    try {
+      final recovery = ref.read(runRecoveryControllerProvider.notifier);
+      await recovery.refresh();
+      final entry = (ref.read(runRecoveryControllerProvider).value ?? [])
+          .where((entry) => entry.run.id == runId)
+          .firstOrNull;
+      if (entry == null) throw const OperationFailure('此任务已结束');
+      if (entry.needsVerification) throw const OperationFailure('请先核验结果未确认的动作');
+      final run = entry.run;
+      final config = run.configuration;
+      final modelConfig = config.modelSelection;
+      final protocol = ApiProtocol.values
+          .where((p) => p.name == config.connection.protocol)
+          .firstOrNull;
+      if (protocol == null) throw const OperationFailure('运行的协议配置无效');
+      final profile = ProviderProfile(
+        id: config.connection.profileId,
+        name: '运行配置',
+        protocol: protocol,
+        baseUrl: config.connection.baseUrl,
+        requiresKey: config.connection.requiresKey,
+        compatOverrides: config.compatOverrides,
+        createdAt: run.createdAt,
+        models: [
+          ProfileModel(
+            id: modelConfig.modelId,
+            supportsReasoning: config.supportsReasoning,
+            supportsImages: config.supportsImages,
+            supportsTools: config.supportsTools,
+            temperature: modelConfig.temperature,
+            maxOutputTokens: modelConfig.maxOutputTokens,
+          ),
+        ],
+      );
+      await openConversation(run.conversationId);
+      final repository = await ref.read(conversationRepositoryProvider.future);
+      await _driveRun(
+        run,
+        repository,
+        ChatModelSelection(
+          profile: profile,
+          model: modelConfig.modelId,
+          supportsReasoning: config.supportsReasoning,
+          supportsImages: config.supportsImages,
+          supportsTools: config.supportsTools,
+          effort: modelConfig.reasoningEffort,
+        ),
+        resuming: true,
+      );
+    } finally {
+      _busy = false;
+    }
+  }
+
+  Future<bool> _restorePendingTools() async {
+    final run = _run!;
+    final thread = await _repository!.getThread(run.conversationId);
+    if (thread == null) throw const OperationFailure('会话已不存在');
+    _run = await _runs!.resume(run.id);
+    _turnTailId = thread.currentMessageId;
+    final records = await _recordsFor(thread.branch);
+    for (final message in thread.branch.where(
+      (m) => m.runId == run.id && m.role == ChatRole.assistant,
+    )) {
+      _turnParts = message.parts;
+      _turnUsage = message.usage;
+      _turnThinkingDurationMs = message.thinkingDurationMs;
+      final turn = StreamedTurn(
+        messageId: message.id,
+        parts: message.parts,
+        toolCalls: const [],
+      );
+      for (final part in message.parts.whereType<ToolCallPart>()) {
+        final record = records[part.toolCallId];
+        if (record == null) throw const OperationFailure('中断任务的工具记录不完整');
+        if (record.resultMessageId != null) continue;
+        final providerCallId = record.providerCallId;
+        if (providerCallId == null) {
+          throw const OperationFailure('中断调用缺少协议标识，无法继续');
+        }
+        if (isCancelled) {
+          await finish(AgentFinishReason.cancelled);
+          return false;
+        }
+        final result = await executeTool(
+          ToolCall(
+            callId: providerCallId,
+            toolName: record.toolName,
+            arguments: record.arguments,
+            providerData: record.providerData,
+            recordId: record.id,
+          ),
+          turn,
+        );
+        if (result.suspended) {
+          await finish(AgentFinishReason.unknownResult);
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   /// 一轮模型请求：装配上下文 → 创建助手消息 → 流式累积 → 收口落库。
@@ -525,7 +753,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _run = await _runs!.beginTurn(run.id);
     final messages = await _resolveHistory(
       thread.branch,
-      state.attachments,
+      _runAttachments,
       currentModelId: selection.model,
     );
 
@@ -544,35 +772,49 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
     _liveParts.clear();
     _streamingMessageId = assistantMessage.id;
-    _turnMessageId = assistantMessage.id;
     _streamError = null;
-    _stoppedManually = false;
+    _stoppedManually = isCancelled;
+    _responseComplete = false;
+    _flushFailure = null;
     _thinkingStartedAt = null;
     _firstTextAt = null;
     _turnParts = const [];
-    _turnStatus = MessageStatus.streaming;
     _turnUsage = null;
     _turnFailure = null;
     _turnTailId = assistantMessage.id;
-    state = state.copyWith(streamingParts: const []);
+    state = state.copyWith(
+      streamingParts: const [],
+      streamingMessageId: assistantMessage.id,
+    );
 
     await _requestWithRetry(selection, messages);
 
     final parts = _partsFromLive(_liveParts);
     final toolCalls = _toolCallsFromLive();
-    final failure = _streamError;
+    final failure =
+        _streamError ??
+        (!_responseComplete &&
+                !isCancelled &&
+                (parts.isNotEmpty || toolCalls.isNotEmpty)
+            ? const ProviderError(
+                ProviderErrorCategory.incompleteResponse,
+                'incomplete response',
+              )
+            : null);
     _streamError = null;
     _flushTimer?.cancel();
     _flushTimer = null;
+    await _pendingFlush;
+    if (_flushFailure case final error?) throw error;
     _publishImmediately();
+    if (ref.mounted) state = state.copyWith(clearStreaming: true);
     _streamingMessageId = null;
     _subscription = null;
     _doneCompleter = null;
     _turnThinkingDurationMs = _currentThinkingDurationMs;
 
-    if (_stoppedManually) {
+    if (_stoppedManually || isCancelled) {
       // 停止保留已收内容；未执行的调用不再进入调度。
-      _turnStatus = MessageStatus.cancelled;
       _turnParts = parts;
       await repository.updateMessage(
         messageId: assistantMessage.id,
@@ -591,7 +833,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
     if (failure != null) {
       // 流内错误与连接错误都保留已收内容，按失败收口。
-      _turnStatus = MessageStatus.failed;
       _turnFailure = RunFinishReason.modelError;
       _turnParts = [...parts, TextPart(text: failure.userMessage)];
       await repository.updateMessage(
@@ -611,7 +852,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
     if (parts.isEmpty && toolCalls.isEmpty) {
       // 网关用非 SSE 错误体（HTTP 200 + JSON）时会空跑结束，明确报错。
-      _turnStatus = MessageStatus.failed;
       _turnFailure = RunFinishReason.emptyResponse;
       _turnParts = const [TextPart(text: '服务商返回了空响应，请检查模型名称与推理等级设置')];
       await repository.updateMessage(
@@ -627,12 +867,49 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       );
     }
 
-    _turnStatus = MessageStatus.completed;
-    _turnParts = parts;
-    await repository.updateMessage(
+    final records = [
+      for (final call in toolCalls)
+        ToolCallRecord(
+          id: call.recordId!,
+          runId: run.id,
+          assistantMessageId: assistantMessage.id,
+          providerCallId: call.callId,
+          toolName: call.toolName,
+          arguments: call.arguments,
+          providerData: call.providerData,
+          target: _registry!
+              .byName(call.toolName)
+              ?.describeAction(call.arguments),
+          channel: ExecutionChannel.app,
+          defaultPolicy:
+              _registry!.byName(call.toolName)?.defaultPolicy ??
+              ToolPolicy.deny,
+          status: call.argumentsError == null
+              ? ToolCallStatus.prepared
+              : ToolCallStatus.failed,
+          result: call.argumentsError,
+          errorCode: call.argumentsError == null ? null : 'invalidArguments',
+          createdAt: DateTime.now(),
+          finishedAt: call.argumentsError == null ? null : DateTime.now(),
+        ),
+    ];
+    var callIndex = 0;
+    _turnParts = [
+      for (final part in _liveParts)
+        if (part.kind == PartKind.toolCall)
+          ToolCallPart(
+            toolCallId: records[callIndex++].id,
+            providerData: part.providerData,
+          )
+        else if (part.kind != PartKind.provider &&
+            (part.buffer.isNotEmpty || part.providerData != null))
+          part.toPart(),
+    ];
+    await repository.completeToolTurn(
       messageId: assistantMessage.id,
-      parts: parts,
-      status: MessageStatus.completed,
+      runId: run.id,
+      parts: _turnParts,
+      calls: records,
       usage: _turnUsage,
       thinkingDurationMs: _turnThinkingDurationMs,
     );
@@ -650,40 +927,32 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final cancellation = _cancellation!;
     final repository = _repository!;
 
-    ToolCallRecord record;
-    final argumentsError = call.argumentsError;
-    if (argumentsError != null) {
-      // 参数不完整：如实记为参数错误并回填，不派发、不猜命令。
-      record = await _recordInvalidArguments(run, turn, call, argumentsError);
-    } else {
-      final executed = await _executor!.execute(
-        ToolExecutionRequest(
-          runId: run.id,
-          assistantMessageId: turn.messageId,
-          toolName: call.toolName,
-          arguments: call.arguments,
-          channel: ExecutionChannel.app,
-          conversationId: run.conversationId,
-          attachments: await _storage!.attachments(run.conversationId),
-          storage: _storage!,
-          enabledTools: run.configuration.enabledTools,
-          toolPolicies: run.configuration.toolPolicies,
-          providerCallId: call.callId,
-          providerData: call.providerData,
-        ),
-        cancellation,
+    if (call.recordId == null) throw const OperationFailure('调用尚未持久化，不能执行');
+    final executed = await _executor!.execute(
+      ToolExecutionRequest(
+        runId: run.id,
+        assistantMessageId: turn.messageId,
+        toolName: call.toolName,
+        arguments: call.arguments,
+        channel: ExecutionChannel.app,
+        conversationId: run.conversationId,
+        attachments: await _storage!.attachments(run.conversationId),
+        storage: _storage!,
+        enabledTools: run.configuration.enabledTools,
+        toolPolicies: run.configuration.toolPolicies,
+        providerCallId: call.callId,
+        providerData: call.providerData,
+        recordId: call.recordId,
+      ),
+      cancellation,
+    );
+    final record = executed.record;
+    if (record.status == ToolCallStatus.succeeded) {
+      await _registerArtifacts(
+        run.conversationId,
+        toolReported: record.artifacts.isNotEmpty,
       );
-      record = executed.record;
-      if (record.status == ToolCallStatus.succeeded) {
-        await _registerArtifacts(
-          run.conversationId,
-          toolReported: record.artifacts.isNotEmpty,
-        );
-      }
     }
-
-    // 助手消息里只引用记录 id：参数与结果留在 tool_calls 记录里。
-    await _attachToolCallPart(turn.messageId, record.id);
 
     if (record.status == ToolCallStatus.unknown) {
       // 结果未确认：不写结果消息，运行挂起等待核验，不自动重做动作。
@@ -772,13 +1041,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   ) async {
     final run = _run;
     if (run == null || _runFinished) return;
-    _runFinished = true;
     _run = await _runs!.finish(
       run.id,
       status: status,
       finishReason: finishReason,
       currentMessageId: _turnTailId,
     );
+    _runFinished = true;
   }
 
   /// 请求用户确认：等待期间运行记 awaitingConfirmation 与待确认调用。
@@ -820,11 +1089,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 等待确认中停止不执行动作（记录 cancelled）；执行中停止请求工具取消，
   /// 工具实际返回的结果如实记录（design 第二部分 §6）。
   void stop() {
-    if (!state.isGenerating) return;
+    if (_cancellation == null) return;
     _stoppedManually = true;
     _cancellation?.cancel();
     unawaited(_subscription?.cancel());
-    _doneCompleter?.complete();
+    _completeRequest();
+  }
+
+  void _completeRequest() {
+    final done = _doneCompleter;
+    if (done != null && !done.isCompleted) done.complete();
   }
 
   /// 一次真实请求：订阅事件流，累积内容直到结束、出错或停止。
@@ -839,6 +1113,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         ? await ref.read(secureKeyStorageProvider).read(selection.profile.id) ??
               ''
         : '';
+    if (isCancelled) return;
     final provider = ref.read(aiProviderFactoryProvider)(
       selection.profile,
       apiKey,
@@ -861,6 +1136,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     );
 
     for (var attempt = 0; ; attempt++) {
+      if (isCancelled) return;
       _run = await _runs!.countModelAttempt(_run!.id);
       await _consume(provider, request);
       final error = _streamError;
@@ -875,6 +1151,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
   /// 订阅一次请求的事件流，直到结束、出错或被停止。
   Future<void> _consume(AiProvider provider, ChatRequest request) async {
+    if (isCancelled) return;
     final doneCompleter = Completer<void>();
     void completeOnce() {
       if (!doneCompleter.isCompleted) {
@@ -931,6 +1208,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           arguments: parsed.arguments,
           argumentsError: parsed.error,
           providerData: part.providerData,
+          recordId: generateId(),
         ),
       );
     }
@@ -957,62 +1235,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     return (arguments: const {}, error: '工具参数必须是 JSON 对象，本次调用未执行');
   }
 
-  /// 参数 JSON 非法：记为参数错误并回填，不派发。
-  Future<ToolCallRecord> _recordInvalidArguments(
-    AgentRun run,
-    StreamedTurn turn,
-    ToolCall call,
-    String reason,
-  ) {
-    final tool = _registry!.byName(call.toolName);
-    final now = DateTime.now();
-    return _toolCalls!.create(
-      ToolCallRecord(
-        id: generateId(),
-        runId: run.id,
-        assistantMessageId: turn.messageId,
-        providerCallId: call.callId,
-        toolName: call.toolName,
-        arguments: call.arguments,
-        providerData: call.providerData,
-        target: tool?.describeAction(call.arguments),
-        channel: ExecutionChannel.app,
-        defaultPolicy: tool?.defaultPolicy ?? ToolPolicy.ask,
-        status: ToolCallStatus.failed,
-        result: reason,
-        errorCode: 'invalidArguments',
-        createdAt: now,
-        finishedAt: now,
-      ),
-    );
-  }
-
-  /// 把调用引用补进助手消息；消息只存记录 id，不复制参数。
-  ///
-  /// 记录创建时补一次（卡片在等待确认/执行中就出现），执行后再补一次
-  /// 时同一调用只保留一份。
-  Future<void> _attachToolCallPart(
-    String messageId,
-    String toolCallId, {
-    Map<String, dynamic>? providerData,
-  }) async {
-    final alreadyAttached = _turnParts.any(
-      (part) => part is ToolCallPart && part.toolCallId == toolCallId,
-    );
-    if (alreadyAttached) return;
-    _turnParts = [
-      ..._turnParts,
-      ToolCallPart(toolCallId: toolCallId, providerData: providerData),
-    ];
-    await _repository!.updateMessage(
-      messageId: messageId,
-      parts: _turnParts,
-      status: _turnStatus,
-      usage: _turnUsage,
-      thinkingDurationMs: _turnThinkingDurationMs,
-    );
-  }
-
   /// 产物登记与附件索引刷新：写文件产生的产物要出现在会话附件里。
   ///
   /// [toolReported] 表示工具自己已登记并引用了产物（不会出现在待登记扫描里），
@@ -1026,12 +1248,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     try {
       final registered = await storage.registerPendingArtifacts(conversationId);
       if (registered.isEmpty && !toolReported) return;
-      state = state.copyWith(
-        attachments: await _attachmentIndex(conversationId, const []),
-      );
-    } on Exception catch (error, stackTrace) {
-      // 登记失败不影响结果回填：产物仍在磁盘上，可再次登记。
-      AppLogger.error('产物登记失败', error, stackTrace);
+      _runAttachments = await _attachmentIndex(conversationId, const []);
+      if (ref.read(activeConversationProvider).conversationId ==
+          conversationId) {
+        state = state.copyWith(attachments: _runAttachments);
+      }
+    } on Failure {
+      rethrow;
+    } on Exception {
+      throw const OperationFailure('产物登记失败，请处理后再继续任务');
     }
   }
 
@@ -1062,6 +1287,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   }
 
   void _onChunk(ChatChunk chunk) {
+    if (isCancelled || !ref.mounted) return;
     switch (chunk) {
       case PartStart():
         if (chunk.kind == PartKind.toolCall) {
@@ -1113,13 +1339,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         }
       case UsageChunk(:final usage):
         _turnUsage = usage;
-      case ResponseEnd():
-        break;
+      case ResponseEnd(:final complete):
+        _responseComplete = complete;
       case ResponseError(:final error):
         // 流内错误即本次响应结束：保留已收内容，按失败收口。
         _streamError = error;
         unawaited(_subscription?.cancel());
-        _doneCompleter?.complete();
+        _completeRequest();
     }
     _scheduleFlush();
   }
@@ -1160,7 +1386,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 把累积的流式内容合批发布到界面；定时器停在这里，下一次增量再起。
   void _publishNow() {
     _publishTimer = null;
-    if (_liveParts.isEmpty) return;
+    if (_liveParts.isEmpty || !ref.mounted) return;
     state = state.copyWith(streamingParts: _partsFromLive(_liveParts));
   }
 
@@ -1175,19 +1401,23 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _flushTimer = null;
     final messageId = _streamingMessageId;
     if (messageId == null) return;
-    // 节流写库：内存视图每帧都新，落库按 [_flushInterval] 合并。
-    unawaited(
-      ref
-          .read(conversationRepositoryProvider.future)
-          .then(
-            (repository) => repository.updateMessage(
-              messageId: messageId,
-              parts: _partsFromLive(_liveParts),
-              status: MessageStatus.streaming,
-              thinkingDurationMs: _currentThinkingDurationMs,
-            ),
-          ),
-    );
+    final parts = _partsFromLive(_liveParts);
+    final thinkingDuration = _currentThinkingDurationMs;
+    _pendingFlush = _pendingFlush.then((_) async {
+      if (_flushFailure != null) return;
+      try {
+        await _repository!.updateMessage(
+          messageId: messageId,
+          parts: parts,
+          status: MessageStatus.streaming,
+          thinkingDurationMs: thinkingDuration,
+        );
+      } on Failure catch (error) {
+        _flushFailure = error;
+        unawaited(_subscription?.cancel());
+        _completeRequest();
+      }
+    });
   }
 
   /// 当前分支 + 工具记录 → 一次请求的内容（design 第二部分 §3）。
@@ -1215,12 +1445,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                 ? message.text
                 : (record.result ?? _statusText(record.status)),
           ),
-          isError: record.status == ToolCallStatus.failed,
+          isError: record.status != ToolCallStatus.succeeded,
         );
       }
     }
 
     final resolved = <ResolvedMessage>[];
+    final sourceRuns = <String, AgentRun?>{_run!.id: _run};
     for (final message in messages) {
       // 被中断（停止生成）或出错收场的那一轮：已经产出的正文、已经执行的调用与
       // 结果照常进上下文——用户看到的和模型知道的要对得上，否则模型不知道文件
@@ -1231,11 +1462,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       // 有调用却没有结果的调用：补一条合成结果，而不是把调用删掉
       // （pi transform-messages 规则 5）。删掉会让模型以为自己没调用过，
       // 补上它才知道那次调用没有得到结果。
-      final missingResults = <ResolvedToolCall>[];
+      final missingResults = <ResolvedToolCall, ToolCallRecord>{};
       for (final part in message.parts) {
         switch (part) {
           case TextPart(:final text):
-            if (text.isNotEmpty) parts.add(ResolvedText(text));
+            if (message.role != ChatRole.tool && text.isNotEmpty) {
+              parts.add(ResolvedText(text));
+            }
           case ReasoningPart(:final publicText, :final providerData):
             // 中断那一轮的思考是半截的：回放给模型会把它带回被打断的思路，
             // 而半截思考既没有完整签名也不该当正文发回去。
@@ -1265,7 +1498,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               providerData: record.providerData,
             );
             parts.add(call);
-            if (!results.containsKey(toolCallId)) missingResults.add(call);
+            if (!results.containsKey(toolCallId)) missingResults[call] = record;
           case ToolResultPart(:final toolCallId):
             // 结果由所在消息自己回填（协议要求它与调用分属不同角色）。
             final result = results[toolCallId];
@@ -1276,26 +1509,46 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         }
       }
       if (parts.isEmpty) continue;
+      var sameModel = message.modelLabel == currentModelId;
+      if (sameModel && message.runId != null) {
+        final sourceId = message.runId!;
+        if (!sourceRuns.containsKey(sourceId)) {
+          sourceRuns[sourceId] = await _runs!.getById(sourceId);
+        }
+        final source = sourceRuns[sourceId]?.configuration;
+        sameModel =
+            source != null &&
+            source.connection.profileId == _selection!.profile.id &&
+            source.connection.protocol == _selection!.profile.protocol.name &&
+            source.connection.baseUrl == _selection!.profile.baseUrl &&
+            source.modelSelection.modelId == currentModelId;
+      } else if (message.runId == null) {
+        sameModel = false;
+      }
       resolved.add(
         ResolvedMessage(
           role: message.role,
           parts: parts,
-          // modelLabel 缺失说明这条消息来自更早的版本，按跨模型处理：宁可
-          // 不回传签名，也不要送回一个可能对不上的。
-          sameModel: message.modelLabel == currentModelId,
+          // 协议状态绑定配置、协议与模型；名称相同不代表签名可以跨端点回放。
+          sameModel: sameModel,
         ),
       );
       if (missingResults.isNotEmpty) {
         resolved.add(
           ResolvedMessage(
             role: ChatRole.tool,
-            sameModel: message.modelLabel == currentModelId,
+            sameModel: sameModel,
             parts: [
-              for (final call in missingResults)
+              for (final entry in missingResults.entries)
                 ResolvedToolResult(
-                  callId: call.callId,
-                  content: _noResultText,
-                  isError: true,
+                  callId: entry.key.callId,
+                  content: _truncateResult(
+                    entry.value.result ??
+                        (entry.value.status == ToolCallStatus.unknown
+                            ? '动作已经派发但结果未确认，请先核验实际效果，不要重复执行。'
+                            : _noResultText),
+                  ),
+                  isError: entry.value.status != ToolCallStatus.succeeded,
                 ),
             ],
           ),
@@ -1426,64 +1679,9 @@ ToolRegistry toolRegistry(Ref ref) {
   final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
   ref.onDispose(() => dio.close(force: true));
   return buildBuiltInRegistry(
-    httpFetch: (request) => _fetchOverHttp(dio, request),
+    httpFetch: (request) => fetchToolHttp(dio, request),
   );
 }
-
-/// 工具 HTTP 请求：只带超时，不挂日志拦截器。
-///
-/// 工具请求的 URL、请求头与正文都可能带用户数据（AGENTS.md §5），
-/// 因此这条通道不记录任何请求内容；错误只回给工具，不写日志。
-Future<HttpFetchResult> _fetchOverHttp(
-  Dio dio,
-  HttpFetchRequest request,
-) async {
-  try {
-    final response = await dio.request<List<int>>(
-      request.uri.toString(),
-      data: request.body,
-      options: Options(
-        method: request.method,
-        headers: request.headers,
-        responseType: ResponseType.bytes,
-        receiveTimeout: request.timeout,
-        sendTimeout: request.timeout,
-        // 4xx/5xx 是工具要如实汇报的结果，不当作连接异常。
-        validateStatus: (status) => true,
-      ),
-    );
-    final bytes = response.data ?? const <int>[];
-    final truncated = bytes.length > request.maxBytes;
-    return HttpFetchResult(
-      statusCode: response.statusCode ?? 0,
-      body: truncated ? bytes.sublist(0, request.maxBytes) : bytes,
-      truncated: truncated,
-    );
-  } on DioException catch (error) {
-    throw HttpFetchException(_fetchErrorCode(error), _fetchErrorMessage(error));
-  }
-}
-
-String _fetchErrorCode(DioException error) => switch (error.type) {
-  DioExceptionType.connectionTimeout ||
-  DioExceptionType.sendTimeout ||
-  DioExceptionType.receiveTimeout => 'timeout',
-  DioExceptionType.cancel => 'cancelled',
-  DioExceptionType.badCertificate => 'badCertificate',
-  _ => 'network',
-};
-
-/// 错误文案只说明发生了什么，不回显 URL、请求头或异常原文。
-String _fetchErrorMessage(DioException error) => switch (error.type) {
-  DioExceptionType.connectionTimeout ||
-  DioExceptionType.sendTimeout ||
-  DioExceptionType.receiveTimeout =>
-    '请求超时（${error.requestOptions.receiveTimeout?.inSeconds ?? 0} 秒）',
-  DioExceptionType.cancel => '请求已取消',
-  DioExceptionType.badCertificate => '服务端证书校验失败',
-  DioExceptionType.connectionError => '连接服务器失败',
-  _ => '请求未能完成',
-};
 
 /// 工具运行的存储能力：会话附件、按会话隔离的产物目录与产物登记。
 ///
@@ -1497,15 +1695,6 @@ Future<ArtifactStorage> artifactStorage(Ref ref) async {
     loadAttachments: repository.attachmentsFor,
     saveAttachment: repository.saveAttachment,
   );
-}
-
-/// 启动时尚未结束的运行：界面据此显示「结果未确认」等中断状态。
-///
-/// 只读取状态：不自动重跑任何动作，也不从日志回放（design 第二部分 §7）。
-@Riverpod(keepAlive: true)
-Future<List<AgentRun>> unfinishedRuns(Ref ref) async {
-  final runs = await ref.watch(agentRunRepositoryProvider.future);
-  return runs.unfinished();
 }
 
 /// 会话列表流（置顶优先、按更新时间倒序）。
@@ -1549,7 +1738,10 @@ List<ChatMessage> visibleMessages(ConversationThread thread, ChatState state) {
     final message = thread.branch[index];
     if (message.role == ChatRole.tool) continue;
     final live =
-        streaming && index == tail && message.role == ChatRole.assistant;
+        streaming &&
+        index == tail &&
+        message.role == ChatRole.assistant &&
+        message.id == state.streamingMessageId;
     visible.add(
       live
           ? message.copyWith(
@@ -1629,8 +1821,11 @@ List<MessagePart> _mergeAnswerParts(ChatMessage head, ChatMessage tail) {
 /// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
 @Riverpod(keepAlive: true)
 Stream<List<Assistant>> assistants(Ref ref) async* {
+  if (!ref.mounted) return;
   final repository = await ref.watch(assistantRepositoryProvider.future);
+  if (!ref.mounted) return;
   await repository.ensureDefault();
+  if (!ref.mounted) return;
   yield* repository.watchAssistants();
 }
 

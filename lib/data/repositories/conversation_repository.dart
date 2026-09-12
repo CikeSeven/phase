@@ -15,6 +15,7 @@ import '../models/conversation.dart';
 import '../models/message_part.dart';
 import '../models/model_selection.dart';
 import '../models/tool_call_record.dart';
+import '../models/agent_run.dart';
 import 'row_mappers.dart';
 
 part 'conversation_repository.g.dart';
@@ -166,6 +167,23 @@ class ConversationRepository {
       if (source == null) {
         throw const UnknownFailure('会话不存在或已删除');
       }
+      final runRows = await (_db.select(
+        _db.agentRuns,
+      )..where((t) => t.conversationId.equals(id))).get();
+      if (runRows.any(
+        (run) => const {
+          RunStatus.running,
+          RunStatus.awaitingConfirmation,
+          RunStatus.awaitingResult,
+        }.contains(run.status),
+      )) {
+        throw const OperationFailure('请先结束或处理此会话的任务，再复制会话');
+      }
+      final runIds = {for (final run in runRows) run.id: generateId()};
+      final callRows = await (_db.select(
+        _db.toolCalls,
+      )..where((t) => t.runId.isIn(runIds.keys))).get();
+      final callIds = {for (final call in callRows) call.id: generateId()};
       final now = DateTime.now();
       final copy = Conversation(
         id: generateId(),
@@ -212,9 +230,75 @@ class ConversationRepository {
                       parentId: message.parentId == null
                           ? null
                           : idMap[message.parentId!],
-                      parts: _copyMessageParts(message.parts, attachmentIds),
+                      parts: _copyMessageParts(
+                        message.parts,
+                        attachmentIds,
+                        callIds,
+                      ),
+                    ),
+                  ).copyWith(
+                    runId: Value(
+                      message.runId == null ? null : runIds[message.runId],
                     ),
                   ),
+                );
+          }
+
+          String mappedMessage(String old) =>
+              idMap[old] ?? (throw const OperationFailure('会话的运行消息引用不完整，无法复制'));
+          for (final row in runRows) {
+            await _db
+                .into(_db.agentRuns)
+                .insert(
+                  row
+                      .toCompanion(false)
+                      .copyWith(
+                        id: Value(runIds[row.id]!),
+                        conversationId: Value(copy.id),
+                        inputMessageId: Value(
+                          mappedMessage(row.inputMessageId),
+                        ),
+                        currentMessageId: Value(
+                          row.currentMessageId == null
+                              ? null
+                              : mappedMessage(row.currentMessageId!),
+                        ),
+                        activeToolCallId: Value(
+                          row.activeToolCallId == null
+                              ? null
+                              : callIds[row.activeToolCallId],
+                        ),
+                      ),
+                );
+          }
+          for (final row in callRows) {
+            final record = toolCallFromRow(row);
+            await _db
+                .into(_db.toolCalls)
+                .insert(
+                  row
+                      .toCompanion(false)
+                      .copyWith(
+                        id: Value(callIds[row.id]!),
+                        runId: Value(runIds[row.runId]!),
+                        assistantMessageId: Value(
+                          mappedMessage(row.assistantMessageId),
+                        ),
+                        resultMessageId: Value(
+                          row.resultMessageId == null
+                              ? null
+                              : mappedMessage(row.resultMessageId!),
+                        ),
+                        artifactsJson: Value(
+                          jsonEncode([
+                            for (final id in record.artifacts)
+                              attachmentIds[id] ??
+                                  (throw const OperationFailure(
+                                    '工具产物引用不完整，无法复制',
+                                  )),
+                          ]),
+                        ),
+                      ),
                 );
           }
 
@@ -252,6 +336,7 @@ class ConversationRepository {
   List<MessagePart> _copyMessageParts(
     List<MessagePart> parts,
     Map<String, String> attachmentIds,
+    Map<String, String> callIds,
   ) {
     return [
       for (final part in parts)
@@ -265,6 +350,17 @@ class ConversationRepository {
             attachmentId:
                 attachmentIds[attachmentId] ??
                 (throw const UnknownFailure('复制会话的文档附件引用不存在')),
+          ),
+          ToolCallPart(:final toolCallId, :final providerData) => ToolCallPart(
+            toolCallId:
+                callIds[toolCallId] ??
+                (throw const OperationFailure('工具调用引用不完整，无法复制')),
+            providerData: providerData,
+          ),
+          ToolResultPart(:final toolCallId) => ToolResultPart(
+            toolCallId:
+                callIds[toolCallId] ??
+                (throw const OperationFailure('工具结果引用不完整，无法复制')),
           ),
           _ => part,
         },
@@ -294,6 +390,16 @@ class ConversationRepository {
                 : const Value.absent(),
           ),
         );
+        if (message.runId case final runId?) {
+          await (_db.update(
+            _db.agentRuns,
+          )..where((t) => t.id.equals(runId))).write(
+            AgentRunsCompanion(
+              currentMessageId: Value(message.id),
+              activeToolCallId: const Value(null),
+            ),
+          );
+        }
       });
       return message;
     });
@@ -320,6 +426,33 @@ class ConversationRepository {
       );
     });
   }
+
+  /// 响应收口与整轮调用原子保存；重启不依赖尚未派发调用的内存缓冲。
+  Future<void> completeToolTurn({
+    required String messageId,
+    required String runId,
+    required List<MessagePart> parts,
+    required List<ToolCallRecord> calls,
+    TokenUsage? usage,
+    int? thinkingDurationMs,
+  }) => _guard(
+    '保存模型响应失败',
+    () => _db.transaction(() async {
+      await updateMessage(
+        messageId: messageId,
+        parts: parts,
+        status: MessageStatus.completed,
+        usage: usage,
+        thinkingDurationMs: thinkingDurationMs,
+      );
+      for (final call in calls) {
+        await _db.into(_db.toolCalls).insert(toolCallCompanion(call));
+      }
+      await (_db.update(_db.agentRuns)..where((t) => t.id.equals(runId))).write(
+        AgentRunsCompanion(currentMessageId: Value(messageId)),
+      );
+    }),
+  );
 
   /// 装配上下文用的工具记录：消息里的 ToolCallPart/ToolResultPart 只存记录 id，
   /// 参数与结果按 id 批量读回。缺失的 id 不出现在结果里。
@@ -360,6 +493,16 @@ class ConversationRepository {
             updatedAt: Value(message.createdAt),
           ),
         );
+        if (message.runId case final runId?) {
+          await (_db.update(
+            _db.agentRuns,
+          )..where((t) => t.id.equals(runId))).write(
+            AgentRunsCompanion(
+              currentMessageId: Value(message.id),
+              activeToolCallId: const Value(null),
+            ),
+          );
+        }
       });
       final stored = await toolCallsByIds([toolCallId]);
       final record = stored[toolCallId];
@@ -483,7 +626,7 @@ class ConversationRepository {
     } on Failure {
       rethrow;
     } on Exception catch (e, st) {
-      AppLogger.error(message, e, st);
+      AppLogger.error('$message (${e.runtimeType})', null, st);
       throw UnknownFailure(message, cause: e);
     }
   }

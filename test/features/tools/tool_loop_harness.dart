@@ -10,6 +10,10 @@ import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/agent_run.dart';
+import 'package:phase/data/models/attachment.dart';
+import 'package:phase/data/models/assistant.dart';
+import 'package:phase/data/repositories/assistant_repository.dart';
+import 'package:phase/data/datasources/local/artifact_storage.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_chunk.dart';
 import 'package:phase/data/models/chat_message.dart';
@@ -208,6 +212,8 @@ class ToolLoopHarness {
   static Future<ToolLoopHarness> create({
     ToolRegistry? registry,
     List<ProfileModel>? models,
+    AiProvider Function(ProviderProfile profile, String apiKey)? factory,
+    Future<void> Function(Attachment attachment)? saveArtifact,
   }) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -231,6 +237,19 @@ class ToolLoopHarness {
       defaultModel: 'model-a',
     );
 
+    if (registry != null) {
+      final assistants = AssistantRepository(database);
+      final assistant = await assistants.ensureDefault();
+      await assistants.save(
+        assistant.copyWith(
+          toolPolicy: ToolPolicyConfig(
+            policies: {
+              for (final tool in registry.tools) tool.name: tool.defaultPolicy,
+            },
+          ),
+        ),
+      );
+    }
     final container = ProviderContainer(
       overrides: [
         sharedPreferencesProvider.overrideWith((ref) => preferences),
@@ -242,8 +261,18 @@ class ToolLoopHarness {
         ),
         aiProviderFactoryProvider.overrideWith(
           (ref) =>
-              (profile, apiKey) => scripted,
+              (profile, apiKey) => factory?.call(profile, apiKey) ?? scripted,
         ),
+        if (saveArtifact != null)
+          artifactStorageProvider.overrideWith(
+            (ref) => ArtifactStorage(
+              root: Directory(p.join(tempDir.path, 'files')),
+              loadAttachments: (id) async =>
+                  (await ref.read(conversationRepositoryProvider.future))
+                      .attachmentsFor(id),
+              saveAttachment: saveArtifact,
+            ),
+          ),
         if (registry != null)
           toolRegistryProvider.overrideWith((ref) => registry),
       ],

@@ -81,7 +81,7 @@ class AssistantRepository {
     } on Failure {
       rethrow;
     } on Exception catch (e, st) {
-      AppLogger.error(message, e, st);
+      AppLogger.error('$message (${e.runtimeType})', null, st);
       throw UnknownFailure(message, cause: e);
     }
   }

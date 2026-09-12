@@ -11,9 +11,9 @@ import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/tool_policy.dart';
-import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/tools/tool.dart';
 import 'package:phase/features/tools/tool_executor.dart';
+import 'package:phase/features/tools/run_recovery_controller.dart';
 
 import 'tool_loop_harness.dart';
 
@@ -227,10 +227,13 @@ void main() {
       return record?.status == ToolCallStatus.executing;
     });
 
-    // 批准后执行前：运行回到运行中，待确认调用已清空。
+    // 派发状态与 activeToolCallId 一起落库，恢复时能定位在途动作。
     final during = await harness.latestRun();
     expect(during.status, RunStatus.running);
-    expect(during.activeToolCallId, isNull);
+    expect(
+      during.activeToolCallId,
+      (await harness.recordsByCall())['call_1']!.id,
+    );
 
     gate.complete();
     await sending;
@@ -465,8 +468,8 @@ void main() {
     expect(harness.state().isGenerating, isFalse);
     // 未结束的运行在启动恢复入口可见（状态不丢）。
     final unfinished = await harness.container.read(
-      unfinishedRunsProvider.future,
+      runRecoveryControllerProvider.future,
     );
-    expect(unfinished.map((entry) => entry.id), contains(run.id));
+    expect(unfinished.map((entry) => entry.run.id), contains(run.id));
   });
 }

@@ -13,6 +13,7 @@ enum ProviderErrorCategory {
   providerError,
   cancelled,
   config,
+  incompleteResponse,
 }
 
 /// 带业务分类的协议错误，供 UI 决定重试与提示方式。
@@ -37,6 +38,7 @@ class ProviderError implements Exception {
     ProviderErrorCategory.providerError => '服务商暂时不可用，请稍后再试',
     ProviderErrorCategory.cancelled => '已停止生成',
     ProviderErrorCategory.config => '服务商配置不完整，请先完成配置',
+    ProviderErrorCategory.incompleteResponse => '响应未完整结束，工具未执行，请重试',
   };
 
   /// 尚未产生输出时可以按有限策略重试。

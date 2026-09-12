@@ -124,6 +124,83 @@ void main() {
   });
 
   group('buildGooglePayload 多轮回填', () {
+    test('多工具结果成组回填，重复的响应内 ID 不串到后一轮函数名', () async {
+      final payload = await buildGooglePayload(
+        request(
+          messages: const [
+            ResolvedMessage(
+              role: ChatRole.assistant,
+              parts: [
+                ResolvedToolCall(
+                  callId: 'tool_0',
+                  toolName: 'read_file',
+                  arguments: {},
+                ),
+                ResolvedToolCall(
+                  callId: 'tool_1',
+                  toolName: 'list_files',
+                  arguments: {},
+                ),
+              ],
+            ),
+            ResolvedMessage(
+              role: ChatRole.tool,
+              parts: [ResolvedToolResult(callId: 'tool_0', content: 'read')],
+            ),
+            ResolvedMessage(
+              role: ChatRole.tool,
+              parts: [ResolvedToolResult(callId: 'tool_1', content: 'list')],
+            ),
+            ResolvedMessage(
+              role: ChatRole.assistant,
+              parts: [
+                ResolvedToolCall(
+                  callId: 'tool_0',
+                  toolName: 'write_file',
+                  arguments: {},
+                ),
+              ],
+            ),
+            ResolvedMessage(
+              role: ChatRole.tool,
+              parts: [ResolvedToolResult(callId: 'tool_0', content: 'write')],
+            ),
+          ],
+        ),
+      );
+      final contents = payload['contents'] as List;
+      expect(contents, hasLength(4));
+      expect(
+        (contents[1]['parts'] as List).map(
+          (part) => part['functionResponse']['name'],
+        ),
+        ['read_file', 'list_files'],
+      );
+      expect(contents[3]['parts'][0]['functionResponse']['name'], 'write_file');
+    });
+
+    test('跨模型不回传工具思考签名', () async {
+      final payload = await buildGooglePayload(
+        request(
+          messages: const [
+            ResolvedMessage(
+              role: ChatRole.assistant,
+              sameModel: false,
+              parts: [
+                ResolvedToolCall(
+                  callId: 'tool_0',
+                  toolName: 'read_file',
+                  arguments: {},
+                  providerData: {'thoughtSignature': 'old-signature'},
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      expect(jsonEncode(payload), isNot(contains('thoughtSignature')));
+    });
+
     test('functionCall 回填参数与 thoughtSignature；结果按函数名配对', () async {
       final payload = await buildGooglePayload(
         request(
@@ -154,8 +231,8 @@ void main() {
           'functionCall': {
             'name': 'get_weather',
             'args': {'city': '北京'},
-            'thoughtSignature': 'sig-1',
           },
+          'thoughtSignature': 'sig-1',
         },
       ]);
       // functionResponse 用函数名回填（协议没有调用 id）。

@@ -6,9 +6,24 @@ import '../../core/utils/logger.dart';
 import '../datasources/local/app_database.dart';
 import '../models/agent_run.dart';
 import '../models/chat_message.dart';
+import '../models/tool_call_record.dart';
 import 'row_mappers.dart';
 
 part 'agent_run_repository.g.dart';
+
+class RecoveredRun {
+  const RecoveredRun({
+    required this.run,
+    required this.title,
+    required this.calls,
+  });
+  final AgentRun run;
+  final String title;
+  final List<ToolCallRecord> calls;
+
+  bool get needsVerification =>
+      calls.any((call) => call.status == ToolCallStatus.unknown);
+}
 
 /// 运行的读写：保存循环位置、计数与终态，供中断后按已存状态恢复。
 class AgentRunRepository {
@@ -56,6 +71,193 @@ class AgentRunRepository {
     });
   }
 
+  /// 启动时核对已派发动作；后续刷新只处理原确认期限，不触碰活跃任务。
+  Future<List<RecoveredRun>> recover({
+    bool afterRestart = false,
+    String? activeRunId,
+  }) {
+    return _guard(
+      '读取中断任务失败',
+      () => _db.transaction(() async {
+        final rows =
+            await (_db.select(_db.agentRuns)
+                  ..where(
+                    (t) => t.status.isIn([
+                      RunStatus.running.name,
+                      RunStatus.awaitingConfirmation.name,
+                      RunStatus.awaitingResult.name,
+                      RunStatus.failed.name,
+                    ]),
+                  )
+                  ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+                .get();
+        final recovered = <RecoveredRun>[];
+        final now = DateTime.now();
+        for (final row in rows) {
+          if (row.id == activeRunId) continue;
+          final callRows =
+              await (_db.select(_db.toolCalls)
+                    ..where((t) => t.runId.equals(row.id))
+                    ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
+                  .get();
+          if (row.status == RunStatus.failed &&
+              !callRows.any(
+                (c) =>
+                    c.status == ToolCallStatus.unknown ||
+                    c.status == ToolCallStatus.executing ||
+                    (row.finishReason == RunFinishReason.storageError &&
+                        c.resultMessageId == null),
+              )) {
+            continue;
+          }
+          final calls = <ToolCallRecord>[];
+          for (final value in callRows) {
+            var call = toolCallFromRow(value);
+            if (afterRestart && call.status == ToolCallStatus.executing) {
+              call = call.copyWith(
+                status: ToolCallStatus.unknown,
+                errorCode: 'interrupted',
+                finishedAt: now,
+              );
+            } else if (call.status == ToolCallStatus.awaitingConfirmation &&
+                call.confirmationExpiresAt?.isAfter(now) != true) {
+              call = call.copyWith(
+                status: ToolCallStatus.rejected,
+                decision: ToolDecision.expired,
+                decidedAt: now,
+                finishedAt: now,
+                result: '确认已过期，没有执行。',
+              );
+            }
+            if (call.status != value.status) {
+              await (_db.update(_db.toolCalls)
+                    ..where((t) => t.id.equals(call.id)))
+                  .write(toolCallCompanion(call));
+            }
+            calls.add(call);
+          }
+          if (afterRestart) {
+            await (_db.update(_db.messages)..where(
+                  (t) =>
+                      t.runId.equals(row.id) &
+                      t.status.equals(MessageStatus.streaming.name),
+                ))
+                .write(
+                  const MessagesCompanion(
+                    status: Value(MessageStatus.cancelled),
+                  ),
+                );
+          }
+          final unknown = calls
+              .where((c) => c.status == ToolCallStatus.unknown)
+              .firstOrNull;
+          final awaiting = calls
+              .where((c) => c.status == ToolCallStatus.awaitingConfirmation)
+              .firstOrNull;
+          final run = agentRunFromRow(row).copyWith(
+            status: unknown != null
+                ? RunStatus.awaitingResult
+                : awaiting != null
+                ? RunStatus.awaitingConfirmation
+                : RunStatus.running,
+            activeToolCallId: unknown?.id ?? awaiting?.id,
+            clearActiveToolCall: unknown == null && awaiting == null,
+          );
+          await (_db.update(
+            _db.agentRuns,
+          )..where((t) => t.id.equals(run.id))).write(
+            agentRunCompanion(run).copyWith(
+              finishedAt: const Value(null),
+              finishReason: const Value(null),
+            ),
+          );
+          final conversation = await (_db.select(
+            _db.conversations,
+          )..where((t) => t.id.equals(run.conversationId))).getSingle();
+          recovered.add(
+            RecoveredRun(
+              run: (await getById(run.id))!,
+              title: conversation.title,
+              calls: calls,
+            ),
+          );
+        }
+        return recovered;
+      }),
+    );
+  }
+
+  /// 用户明确结束中断任务；未知外部效果仍保留 unknown，不宣称撤销。
+  Future<void> stopRecovered(String id) => _guard(
+    '结束中断任务失败',
+    () => _db.transaction(() async {
+      final rows = await (_db.select(
+        _db.toolCalls,
+      )..where((t) => t.runId.equals(id))).get();
+      for (final row in rows) {
+        if (row.status != ToolCallStatus.prepared &&
+            row.status != ToolCallStatus.awaitingConfirmation) {
+          continue;
+        }
+        await (_db.update(
+          _db.toolCalls,
+        )..where((t) => t.id.equals(row.id))).write(
+          ToolCallsCompanion(
+            status: const Value(ToolCallStatus.cancelled),
+            result: const Value('用户停止了任务，没有执行本次动作。'),
+            finishedAt: Value(DateTime.now()),
+          ),
+        );
+      }
+      await finish(
+        id,
+        status: RunStatus.stopped,
+        finishReason: RunFinishReason.cancelled,
+      );
+    }),
+  );
+
+  /// 核验是用户对实际效果的明确记录，不自动检查或重放动作。
+  Future<void> verifyResult(
+    String callId, {
+    required bool succeeded,
+    required String result,
+  }) {
+    if (result.trim().isEmpty) throw const OperationFailure('请填写核验到的实际结果');
+    return _guard(
+      '保存核验结果失败',
+      () => _db.transaction(() async {
+        final row = await (_db.select(
+          _db.toolCalls,
+        )..where((t) => t.id.equals(callId))).getSingle();
+        if (row.status != ToolCallStatus.unknown) {
+          throw const OperationFailure('此动作已不再等待核验');
+        }
+        await (_db.update(
+          _db.toolCalls,
+        )..where((t) => t.id.equals(callId))).write(
+          ToolCallsCompanion(
+            status: Value(
+              succeeded ? ToolCallStatus.succeeded : ToolCallStatus.failed,
+            ),
+            result: Value('人工核验：${result.trim()}'),
+            errorCode: const Value('verified'),
+            finishedAt: Value(DateTime.now()),
+          ),
+        );
+        await (_db.update(
+          _db.agentRuns,
+        )..where((t) => t.id.equals(row.runId))).write(
+          const AgentRunsCompanion(
+            status: Value(RunStatus.running),
+            finishReason: Value(null),
+            finishedAt: Value(null),
+          ),
+        );
+      }),
+    );
+  }
+
   /// 本轮模型调用前增加轮次计数。
   Future<AgentRun> beginTurn(String runId) {
     return _update(runId, '开始轮次失败', (run) {
@@ -75,7 +277,7 @@ class AgentRunRepository {
     return _update(runId, '结束轮次失败', (run) {
       return run.copyWith(
         currentMessageId: currentMessageId,
-        activeToolCallId: null,
+        clearActiveToolCall: true,
       );
     });
   }
@@ -137,6 +339,39 @@ class AgentRunRepository {
         await (_db.update(
           _db.agentRuns,
         )..where((t) => t.id.equals(runId))).write(agentRunCompanion(finished));
+        if (status != RunStatus.completed) {
+          await (_db.update(_db.messages)..where(
+                (t) =>
+                    t.runId.equals(runId) &
+                    t.status.equals(MessageStatus.streaming.name),
+              ))
+              .write(
+                MessagesCompanion(
+                  status: Value(
+                    status == RunStatus.stopped
+                        ? MessageStatus.cancelled
+                        : MessageStatus.failed,
+                  ),
+                ),
+              );
+        }
+        if (status == RunStatus.stopped) {
+          await (_db.update(_db.toolCalls)..where(
+                (t) =>
+                    t.runId.equals(runId) &
+                    t.status.isIn([
+                      ToolCallStatus.prepared.name,
+                      ToolCallStatus.awaitingConfirmation.name,
+                    ]),
+              ))
+              .write(
+                ToolCallsCompanion(
+                  status: const Value(ToolCallStatus.cancelled),
+                  result: const Value('任务已停止，本次动作没有执行。'),
+                  finishedAt: Value(DateTime.now()),
+                ),
+              );
+        }
       });
       final updated = await getById(runId);
       if (updated == null) {
@@ -171,7 +406,7 @@ class AgentRunRepository {
     } on Failure {
       rethrow;
     } on Exception catch (e, st) {
-      AppLogger.error(message, e, st);
+      AppLogger.error('$message (${e.runtimeType})', null, st);
       throw UnknownFailure(message, cause: e);
     }
   }

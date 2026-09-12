@@ -215,6 +215,7 @@ class WriteFileTool implements Tool {
 
     try {
       await target.parent.create(recursive: true);
+      cancellation.throwIfCancelled();
       final directory = Directory(context.artifactsDirectory).absolute.path;
       if (!p.isWithin(directory, target.absolute.path)) {
         return ToolOutcome.failure('路径越出会话产物目录', errorCode: 'invalidPath');

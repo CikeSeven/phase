@@ -20,18 +20,23 @@ Future<Map<String, dynamic>> buildGooglePayload(
   bool supportsReasoning = true,
 }) async {
   final attachments = RequestAttachmentEncoder(supportsImages: supportsImages);
-  // functionResponse 按函数名回填，name 从同一批消息里的调用记录取回。
-  final toolNames = <String, String>{
-    for (final message in request.messages)
-      for (final part in message.parts)
-        if (part is ResolvedToolCall) part.callId: part.toolName,
-  };
+  // Google 的合成调用 ID 会跨响应重复，配对只能使用当时最近的调用轮。
+  final toolNames = <String, String>{};
 
   final contents = <Map<String, dynamic>>[];
+  var previousWasTool = false;
   for (final message in request.messages) {
     // system 角色消息并入 systemInstruction，不进入 contents。
     if (message.role == ChatRole.system) continue;
+    for (final call in message.parts.whereType<ResolvedToolCall>()) {
+      toolNames[call.callId] = call.toolName;
+    }
     final parts = await _googleParts(message, attachments, toolNames);
+    if (message.role == ChatRole.tool && previousWasTool) {
+      (contents.last['parts'] as List).addAll(parts);
+      continue;
+    }
+    previousWasTool = message.role == ChatRole.tool;
     contents.add({
       'role': message.role == ChatRole.assistant ? 'model' : 'user',
       // Gemini 拒绝空 parts；没有内容时保留一个空文本占位。
@@ -113,13 +118,9 @@ Future<List<Map<String, dynamic>>> _googleParts(
         :final providerData,
       ):
         parts.add({
-          'functionCall': {
-            'name': toolName,
-            'args': arguments,
-            // 协议状态（thoughtSignature）随当前协议的 functionCall 一起回传。
-            if (providerData?['thoughtSignature'] case final String signature)
-              'thoughtSignature': signature,
-          },
+          'functionCall': {'name': toolName, 'args': arguments},
+          if (message.sameModel && providerData?['thoughtSignature'] is String)
+            'thoughtSignature': providerData!['thoughtSignature'],
         });
       case ResolvedToolResult(:final callId, :final content, :final isError):
         parts.add({
@@ -154,7 +155,7 @@ abstract final class GoogleSseDecoder {
     final chunks = decoder.parse(data);
     // 畸形的载荷不是协议事件：既不产出内容，也不收口。
     if (!decoder.sawEvent) return const [];
-    return [...chunks, ...decoder.finish()];
+    return [...chunks, ...decoder.finish(complete: true)];
   }
 
   /// 把 HTTP 响应字节流解码为类型化事件流。
@@ -187,6 +188,7 @@ class _GoogleStreamDecoder {
   var _terminated = false;
   var _sawEvent = false;
   var _finished = false;
+  bool _normalFinish = false;
 
   bool get isDone => _terminated || _finished;
 
@@ -222,10 +224,10 @@ class _GoogleStreamDecoder {
   }
 
   /// 响应收口：补齐未结束的块，产出 usage 与 ResponseEnd。
-  List<ChatChunk> finish({TokenUsage? usage}) {
+  List<ChatChunk> finish({TokenUsage? usage, bool? complete}) {
     if (isDone) return const [];
     _finished = true;
-    _parts.finish(usage: usage ?? _usage);
+    _parts.finish(usage: usage ?? _usage, complete: complete ?? _normalFinish);
     return _drain();
   }
 
@@ -239,8 +241,9 @@ class _GoogleStreamDecoder {
         }
       }
     }
-    // finishReason 只表示本次响应结束（STOP/MAX_TOKENS 都按正常结束处理），
-    // 收口统一在流结束时做，保证 usage 不被丢掉。
+    if (candidate['finishReason'] case final String reason) {
+      _normalFinish = reason == 'STOP';
+    }
   }
 
   void _parsePart(Map<String, dynamic> part) {

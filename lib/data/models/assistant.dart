@@ -18,7 +18,7 @@ class ToolPolicyConfig {
       if (entry.value != ToolPolicy.deny) entry.key,
   };
 
-  /// 工具级策略；未列出的工具按工具定义声明的默认策略。
+  /// 工具级策略；未列出的工具不开放。
   Map<String, ToolPolicy> get overrides => {...policies};
 
   ToolPolicyConfig withPolicy(String toolName, ToolPolicy policy) {
@@ -51,7 +51,7 @@ class Assistant {
     required this.name,
     required this.systemPrompt,
     this.defaultModelSelection,
-    this.toolPolicy = const ToolPolicyConfig(),
+    this.toolPolicy = defaultToolPolicyConfig,
     required this.createdAt,
   });
 
@@ -82,6 +82,17 @@ class Assistant {
 
 /// 初始助手：首次创建数据库时写入，未配置模型时由界面引导去配置。
 const defaultAssistantName = '普通助手';
+
+/// 新助手的显式默认范围；空 ToolPolicyConfig 始终表示全部禁止。
+const defaultToolPolicyConfig = ToolPolicyConfig(
+  policies: {
+    'system_info': ToolPolicy.allow,
+    'read_file': ToolPolicy.allow,
+    'list_files': ToolPolicy.allow,
+    'write_file': ToolPolicy.ask,
+    'http_request': ToolPolicy.ask,
+  },
+);
 
 String encodeModelSelection(ModelSelection? selection) =>
     selection == null ? '' : jsonEncode(selection.toJson());

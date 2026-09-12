@@ -63,6 +63,12 @@ class _MemoryRuns implements AgentRunRepository {
   final runs = <String, AgentRun>{};
 
   @override
+  Future<List<RecoveredRun>> recover({
+    bool afterRestart = false,
+    String? activeRunId,
+  }) async => const [];
+
+  @override
   Future<AgentRun> create(AgentRun run) async {
     runs[run.id] = run;
     return run;
@@ -148,6 +154,22 @@ class _UnusedToolCalls implements ToolCallRepository {
 /// 内存版会话仓储：布局测试只需要可控的会话与消息视图，
 /// 不走真实数据库（其行为由 repositories_test 覆盖）。
 class _MemoryConversations implements ConversationRepository {
+  @override
+  Future<void> completeToolTurn({
+    required String messageId,
+    required String runId,
+    required List<MessagePart> parts,
+    required List<ToolCallRecord> calls,
+    TokenUsage? usage,
+    int? thinkingDurationMs,
+  }) => updateMessage(
+    messageId: messageId,
+    parts: parts,
+    status: MessageStatus.completed,
+    usage: usage,
+    thinkingDurationMs: thinkingDurationMs,
+  );
+
   final items = <Conversation>[];
   final messages = <String, List<ChatMessage>>{};
   final _changes = StreamController<void>.broadcast(sync: true);

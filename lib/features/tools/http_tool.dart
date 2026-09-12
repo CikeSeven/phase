@@ -116,9 +116,9 @@ class HttpRequestTool implements Tool {
           body: args.optionalString('body'),
           timeout: timeout,
           maxBytes: maxBytes,
+          cancellation: cancellation,
         ),
       );
-      cancellation.throwIfCancelled();
       final body = _decodeBody(result);
       final headerLine =
           'HTTP ${result.statusCode}'
@@ -132,6 +132,12 @@ class HttpRequestTool implements Tool {
       }
       return ToolOutcome.success('$headerLine\n$body');
     } on HttpFetchException catch (error) {
+      if (error.unknown) {
+        return ToolOutcome.unknown(error.message, errorCode: error.code);
+      }
+      if (error.code == 'cancelled') {
+        return ToolOutcome.cancelled(error.message);
+      }
       return ToolOutcome.failure(error.message, errorCode: error.code);
     }
   }
@@ -154,6 +160,7 @@ class HttpFetchRequest {
     required this.headers,
     required this.timeout,
     required this.maxBytes,
+    required this.cancellation,
     this.body,
   });
 
@@ -163,6 +170,7 @@ class HttpFetchRequest {
   final String? body;
   final Duration timeout;
   final int maxBytes;
+  final RunCancellation cancellation;
 }
 
 class HttpFetchResult {
@@ -178,8 +186,9 @@ class HttpFetchResult {
 }
 
 class HttpFetchException implements Exception {
-  const HttpFetchException(this.code, this.message);
+  const HttpFetchException(this.code, this.message, {this.unknown = false});
 
   final String code;
   final String message;
+  final bool unknown;
 }

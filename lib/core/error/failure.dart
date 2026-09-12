@@ -18,6 +18,14 @@ sealed class Failure implements Exception {
   String toString() => '$runtimeType: $message';
 }
 
+/// 已知的操作前置条件不满足；调用方只传固定、安全的用户提示。
+final class OperationFailure extends Failure {
+  const OperationFailure(super.message);
+
+  @override
+  String get userMessage => message;
+}
+
 /// 网络不可达、超时、DNS 等连接层错误。
 final class NetworkFailure extends Failure {
   const NetworkFailure(super.message, {super.cause});

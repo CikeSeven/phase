@@ -82,9 +82,12 @@ class UsageChunk extends ChatChunk {
   final TokenUsage usage;
 }
 
-/// 响应正常结束。
+/// 响应收口；传输结束不一定代表协议正常完成。
 class ResponseEnd extends ChatChunk {
-  const ResponseEnd({this.hasVisibleContent = true});
+  const ResponseEnd({this.hasVisibleContent = true, this.complete = true});
+
+  /// 仅正常协议终态可以调度工具；EOF、输出截断等不能授予执行资格。
+  final bool complete;
 
   /// 是否产生了可见内容；全空响应由运行层记为失败。
   final bool hasVisibleContent;

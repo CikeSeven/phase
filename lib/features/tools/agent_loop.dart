@@ -61,6 +61,7 @@ class ToolCall {
     required this.arguments,
     this.argumentsError,
     this.providerData,
+    this.recordId,
   });
 
   /// 模型协议自己的调用 id，用于回填与配对。
@@ -72,6 +73,7 @@ class ToolCall {
   final String? argumentsError;
 
   final Map<String, dynamic>? providerData;
+  final String? recordId;
 }
 
 /// 一次工具执行的结果（已落库）。

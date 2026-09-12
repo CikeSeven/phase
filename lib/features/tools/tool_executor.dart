@@ -2,6 +2,7 @@ import 'dart:async';
 
 import '../../../core/utils/id.dart';
 import '../../../core/utils/logger.dart';
+import '../../../core/error/failure.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
@@ -26,6 +27,7 @@ class ToolExecutionRequest {
     this.providerCallId,
     this.providerData,
     this.target,
+    this.recordId,
   });
 
   final String runId;
@@ -48,6 +50,7 @@ class ToolExecutionRequest {
   /// 需要随结果回传给模型的协议状态。
   final Map<String, dynamic>? providerData;
   final String? target;
+  final String? recordId;
 }
 
 /// 等待用户确认的请求：界面据此展示确认面板。
@@ -95,7 +98,6 @@ class ToolExecutor {
     required this.toolCalls,
     this.runs,
     this.onConfirmationRequired,
-    this.onRecordCreated,
     this.confirmationTimeout = ToolCallRepository.confirmationTimeout,
   });
 
@@ -109,12 +111,6 @@ class ToolExecutor {
   Future<ToolDecision> Function(ToolConfirmationRequest request)?
   onConfirmationRequired;
 
-  /// 记录创建后立即回调（此时尚未确认与执行）。
-  ///
-  /// 调用方据此把 ToolCallPart 写进助手消息，让"等待确认 / 执行中"
-  /// 的工具卡片在动作发生前就出现在会话里。
-  Future<void> Function(ToolCallRecord record)? onRecordCreated;
-
   final Duration confirmationTimeout;
 
   /// 执行一次工具调用；返回最终记录状态与工具输出。
@@ -123,7 +119,22 @@ class ToolExecutor {
     RunCancellation cancellation, {
     ToolProgress? onProgress,
   }) async {
+    final existing = request.recordId == null
+        ? null
+        : await toolCalls.getById(request.recordId!);
+    if (existing != null &&
+        (existing.runId != request.runId ||
+            existing.assistantMessageId != request.assistantMessageId ||
+            existing.toolName != request.toolName)) {
+      throw const OperationFailure('工具调用与运行记录不一致');
+    }
+    if (existing != null &&
+        existing.status != ToolCallStatus.prepared &&
+        existing.status != ToolCallStatus.awaitingConfirmation) {
+      return ToolExecutionResult(record: existing, outcome: null);
+    }
     final tool = registry.byName(request.toolName);
+    final arguments = existing?.arguments ?? request.arguments;
     if (tool == null) {
       // 未注册的工具名不会被"就近执行"。
       return _rejected(
@@ -149,7 +160,7 @@ class ToolExecutor {
     }
 
     // 参数校验在派发前完成：缺参数属于模型响应问题，不进确认与执行。
-    final validation = _validate(tool, request.arguments);
+    final validation = _validate(tool, arguments);
     if (validation != null) {
       final record = await _create(
         request,
@@ -172,9 +183,6 @@ class ToolExecutor {
       tool,
       status: ToolCallStatus.prepared,
     );
-    // 记录已就绪：调用方现在就能把工具卡片放进会话（此时还没确认/执行）。
-    await onRecordCreated?.call(record);
-
     if (policy == ToolPolicy.ask) {
       final decision = await _confirm(record, tool, cancellation);
       if (decision == null) {
@@ -217,41 +225,65 @@ class ToolExecutor {
     ToolOutcome outcome;
     try {
       outcome = await tool.execute(
-        request.arguments,
+        arguments,
         context,
         cancellation,
         onProgress: onProgress,
       );
+    } on ToolCancelled {
+      outcome = const ToolOutcome.cancelled('本次动作在明确的取消点停止。');
+    } on Failure {
+      await _markStorageUnknown(record.id);
+      rethrow;
     } on ToolArgumentException catch (error) {
       outcome = ToolOutcome.failure(
         error.message,
         errorCode: 'invalidArguments',
       );
     } on Exception catch (error, stackTrace) {
-      AppLogger.error('工具执行异常：${tool.name}', error, stackTrace);
-      outcome = ToolOutcome.failure(
-        '工具执行失败（${error.runtimeType}）',
-        errorCode: 'toolFailed',
+      AppLogger.error('工具执行异常：${error.runtimeType}', null, stackTrace);
+      outcome = const ToolOutcome.unknown(
+        '工具未返回可靠结果，请核验实际状态。',
+        errorCode: 'toolUnknown',
       );
     }
 
-    final updated = switch (outcome) {
-      ToolOutcome(unknown: true) => await toolCalls.markUnknown(
-        record.id,
-        errorCode: outcome.errorCode,
-      ),
-      ToolOutcome(ok: true) => await toolCalls.markSucceeded(
-        record.id,
-        result: outcome.content,
-        artifacts: outcome.artifacts,
-      ),
-      _ => await toolCalls.markFailed(
-        record.id,
-        result: outcome.content,
-        errorCode: outcome.errorCode,
-      ),
-    };
+    final ToolCallRecord updated;
+    try {
+      updated = switch (outcome) {
+        ToolOutcome(cancelled: true) => await toolCalls.markCancelled(
+          record.id,
+          result: outcome.content,
+        ),
+        ToolOutcome(unknown: true) => await toolCalls.markUnknown(
+          record.id,
+          errorCode: outcome.errorCode,
+        ),
+        ToolOutcome(ok: true) => await toolCalls.markSucceeded(
+          record.id,
+          result: outcome.content,
+          artifacts: outcome.artifacts,
+        ),
+        _ => await toolCalls.markFailed(
+          record.id,
+          result: outcome.content,
+          errorCode: outcome.errorCode,
+        ),
+      };
+    } on Failure {
+      await _markStorageUnknown(record.id);
+      rethrow;
+    }
     return ToolExecutionResult(record: updated, outcome: outcome);
+  }
+
+  Future<void> _markStorageUnknown(String id) async {
+    try {
+      await toolCalls.markUnknown(id, errorCode: 'storageError');
+    } on Failure {
+      // 原异常由调用者收口；数据库仍不可写时由启动核对处理 executing。
+      AppLogger.error('工具结果未能持久化，需在启动时核对');
+    }
   }
 
   /// 请求确认并等待决定；无界面或到点按拒绝，停止按取消。
@@ -267,29 +299,37 @@ class ToolExecutor {
         awaiting.confirmationExpiresAt ??
         DateTime.now().add(confirmationTimeout);
 
-    final callback = onConfirmationRequired;
-    if (callback == null) {
-      // 没有界面可确认：不把动作当成已批准，等满期限后按拒绝处理。
-      await Future.any([
-        Future<void>.delayed(confirmationTimeout),
-        cancellation.whenCancelled,
-      ]);
-      if (cancellation.isCancelled) return null;
+    final remaining = expiresAt.difference(DateTime.now());
+    if (remaining <= Duration.zero) {
       await toolCalls.recordDecision(record.id, ToolDecision.expired);
       return ToolDecision.expired;
     }
-
-    final decision = await callback(
-      ToolConfirmationRequest(
-        record: awaiting,
-        summary: tool.describeAction(record.arguments),
-        policy: ToolPolicy.ask,
-        expiresAt: expiresAt,
-      ),
+    final expired = Completer<ToolDecision>();
+    final timer = Timer(
+      remaining,
+      () => expired.complete(ToolDecision.expired),
     );
-    if (cancellation.isCancelled) return null;
-    await toolCalls.recordDecision(record.id, decision);
-    return decision;
+    try {
+      final callback = onConfirmationRequired;
+      final decision = await Future.any([
+        if (callback != null)
+          callback(
+            ToolConfirmationRequest(
+              record: awaiting,
+              summary: tool.describeAction(record.arguments),
+              policy: ToolPolicy.ask,
+              expiresAt: expiresAt,
+            ),
+          ),
+        expired.future,
+        cancellation.whenCancelled.then((_) => ToolDecision.expired),
+      ]);
+      if (cancellation.isCancelled) return null;
+      final saved = await toolCalls.recordDecision(record.id, decision);
+      return saved.decision;
+    } finally {
+      timer.cancel();
+    }
   }
 
   /// 参数校验：必填与声明类型由工具的 schema 决定。
@@ -337,6 +377,7 @@ class ToolExecutor {
     Tool tool, {
     required ToolCallStatus status,
   }) {
+    if (request.recordId != null) return toolCalls.getById(request.recordId!);
     return toolCalls.create(
       ToolCallRecord(
         id: generateId(),
@@ -362,6 +403,16 @@ class ToolExecutor {
     required String errorCode,
     required ToolPolicy policy,
   }) async {
+    if (request.recordId case final id?) {
+      return ToolExecutionResult(
+        record: await toolCalls.markRejected(
+          id,
+          result: reason,
+          errorCode: errorCode,
+        ),
+        outcome: ToolOutcome.failure(reason, errorCode: errorCode),
+      );
+    }
     final record = await toolCalls.create(
       ToolCallRecord(
         id: generateId(),

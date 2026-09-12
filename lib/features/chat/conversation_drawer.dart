@@ -410,6 +410,14 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                       child: const Text('导出会话'),
                     ),
                     MenuItemButton(
+                      key: ValueKey('tool-records-${conversation.id}'),
+                      leadingIcon: const Icon(Symbols.history),
+                      onPressed: () => context.push(
+                        '/conversations/${conversation.id}/tools',
+                      ),
+                      child: const Text('执行记录'),
+                    ),
+                    MenuItemButton(
                       leadingIcon: const Icon(Symbols.push_pin),
                       onPressed: () => _runGuarded(context, () async {
                         final repository = await ref.read(

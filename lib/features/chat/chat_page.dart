@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -20,6 +21,7 @@ import '../tools/tool_executor.dart';
 import 'chat_controller.dart';
 import 'chat_empty_state.dart';
 import 'chat_input_bar.dart';
+import 'chat_run_banner.dart';
 import 'chat_transcript.dart';
 import 'conversation_drawer.dart';
 import 'model_picker_sheet.dart';
@@ -48,7 +50,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   late final ChatController _chatController;
 
   /// 同一时间只有一个确认面板。
-  bool _confirmationOpen = false;
+  Completer<void>? _confirmationClosed;
 
   @override
   void initState() {
@@ -70,6 +72,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   /// 请求直接按拒绝返回，不补弹第二个面板，也不复用上一次的批准。
   Future<ToolDecision> _confirmToolCall(ToolConfirmationRequest request) async {
     if (!mounted) return ToolDecision.expired;
+    // 上次确认可能刚超时、面板还在退出；等它关闭，而不是拒绝下一次动作。
+    await _confirmationClosed?.future;
+    if (!mounted) return ToolDecision.expired;
     final ToolCallRecord record;
     try {
       final toolCalls = await ref.read(toolCallRepositoryProvider.future);
@@ -83,9 +88,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       return ToolDecision.rejected;
     }
     if (!request.expiresAt.isAfter(DateTime.now())) return ToolDecision.expired;
-    if (_confirmationOpen) return ToolDecision.rejected;
-
-    _confirmationOpen = true;
+    final closed = Completer<void>();
+    _confirmationClosed = closed;
     try {
       final outcome = await showToolConfirmationSheet(context, request);
       switch (outcome) {
@@ -101,7 +105,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           return ToolDecision.expired;
       }
     } finally {
-      _confirmationOpen = false;
+      if (identical(_confirmationClosed, closed)) _confirmationClosed = null;
+      closed.complete();
     }
   }
 
@@ -284,54 +289,61 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           body: SafeArea(
             top: false,
             bottom: false,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final composerHeight = math.min(
-                  constraints.maxHeight,
-                  math.max(
-                    scaler.scale(16) * 1.5 +
-                        96 +
-                        MediaQuery.paddingOf(context).bottom,
-                    constraints.maxHeight * 0.5,
-                  ),
-                );
-                // 消息区占满全高，输入栏悬浮其上；内容按实测输入栏高度留白，
-                // 可以滚到磨砂底后面透出。
-                return Stack(
-                  children: [
-                    Positioned.fill(
-                      child: conversationId == null
-                          ? ChatEmptyState(bottomPadding: _composerExtent)
-                          : _ConversationMessages(
-                              key: ValueKey(conversationId),
-                              conversationId: conversationId,
-                              bottomPadding: _composerExtent,
-                            ),
-                    ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: 840,
-                            maxHeight: composerHeight,
-                          ),
-                          child: _ReportSize(
-                            onChanged: (height) {
-                              if (mounted && _composerExtent != height) {
-                                setState(() => _composerExtent = height);
-                              }
-                            },
-                            child: const ChatInputBar(),
-                          ),
+            child: Column(
+              children: [
+                const ChatRunBanner(),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final composerHeight = math.min(
+                        constraints.maxHeight,
+                        math.max(
+                          scaler.scale(16) * 1.5 +
+                              96 +
+                              MediaQuery.paddingOf(context).bottom,
+                          constraints.maxHeight * 0.5,
                         ),
-                      ),
-                    ),
-                  ],
-                );
-              },
+                      );
+                      // 消息区占满全高，输入栏悬浮其上；内容按实测输入栏高度留白，
+                      // 可以滚到磨砂底后面透出。
+                      return Stack(
+                        children: [
+                          Positioned.fill(
+                            child: conversationId == null
+                                ? ChatEmptyState(bottomPadding: _composerExtent)
+                                : _ConversationMessages(
+                                    key: ValueKey(conversationId),
+                                    conversationId: conversationId,
+                                    bottomPadding: _composerExtent,
+                                  ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: 840,
+                                  maxHeight: composerHeight,
+                                ),
+                                child: _ReportSize(
+                                  onChanged: (height) {
+                                    if (mounted && _composerExtent != height) {
+                                      setState(() => _composerExtent = height);
+                                    }
+                                  },
+                                  child: const ChatInputBar(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
           ),
         ),

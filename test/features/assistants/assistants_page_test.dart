@@ -14,6 +14,7 @@ import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/models/model_selection.dart';
+import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/features/assistants/assistant_edit_page.dart';
 import 'package:phase/features/assistants/assistants_page.dart';
@@ -215,6 +216,114 @@ void main() {
     expect(find.text('代码助手'), findsNothing);
     expect(find.byType(AppScaffold), findsOneWidget);
 
+    await closeHost(tester, host.container);
+  });
+
+  Future<void> changeWritePolicy(WidgetTester tester, String label) async {
+    final field = find.byKey(const ValueKey('tool-policy-write_file'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    await tester.tap(field);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label).last);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('工具策略编辑取消不保存，确认后保存且重新打开一致', (tester) async {
+    final assistant = await seedAssistant();
+    final host = await pumpHost(tester);
+    await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
+    await tester.pumpAndSettle();
+    await changeWritePolicy(tester, '禁止使用');
+    expect(
+      (await AssistantRepository(db).getById(assistant.id))!
+          .toolPolicy
+          .policies['write_file'],
+      ToolPolicy.ask,
+    );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButtonFormField<ToolPolicy>>(
+            find.byKey(const ValueKey('tool-policy-write_file')),
+          )
+          .initialValue,
+      ToolPolicy.ask,
+    );
+    await changeWritePolicy(tester, '禁止使用');
+    await tester.tap(find.byKey(const ValueKey('save-assistant')));
+    await tester.pumpAndSettle();
+    expect(
+      (await AssistantRepository(db).getById(assistant.id))!
+          .toolPolicy
+          .policies['write_file'],
+      ToolPolicy.deny,
+    );
+    await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<DropdownButtonFormField<ToolPolicy>>(
+            find.byKey(const ValueKey('tool-policy-write_file')),
+          )
+          .initialValue,
+      ToolPolicy.deny,
+    );
+    await closeHost(tester, host.container);
+  });
+
+  testWidgets('工具策略保存失败保留草稿，修复存储后可重试', (tester) async {
+    final assistant = await seedAssistant();
+    final host = await pumpHost(tester);
+    await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
+    await tester.pumpAndSettle();
+    await changeWritePolicy(tester, '直接执行');
+    await db.customStatement(
+      "CREATE TRIGGER reject_policy BEFORE UPDATE ON assistants BEGIN SELECT RAISE(ABORT, 'test failure'); END",
+    );
+    await tester.tap(find.byKey(const ValueKey('save-assistant')));
+    await tester.pumpAndSettle();
+    expect(find.byType(AssistantEditPage), findsOneWidget);
+    expect(
+      tester
+          .widget<DropdownButtonFormField<ToolPolicy>>(
+            find.byKey(const ValueKey('tool-policy-write_file')),
+          )
+          .initialValue,
+      ToolPolicy.allow,
+    );
+    expect(
+      (await AssistantRepository(db).getById(assistant.id))!
+          .toolPolicy
+          .policies['write_file'],
+      ToolPolicy.ask,
+    );
+    await db.customStatement('DROP TRIGGER reject_policy');
+    await tester.tap(find.byKey(const ValueKey('save-assistant')));
+    await tester.pumpAndSettle();
+    expect(
+      (await AssistantRepository(db).getById(assistant.id))!
+          .toolPolicy
+          .policies['write_file'],
+      ToolPolicy.allow,
+    );
+    await closeHost(tester, host.container);
+  });
+
+  testWidgets('320dp 两倍字号工具策略可滚动选择，保存仍可达', (tester) async {
+    final assistant = await seedAssistant();
+    final host = await pumpHost(tester, size: const Size(320, 760), scale: 2);
+    await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
+    await tester.pumpAndSettle();
+    await changeWritePolicy(tester, '禁止使用');
+    expect(tester.takeException(), isNull);
+    expect(
+      find.byKey(const ValueKey('save-assistant')).hitTestable(),
+      findsOneWidget,
+    );
     await closeHost(tester, host.container);
   });
 }

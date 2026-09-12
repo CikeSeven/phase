@@ -160,7 +160,7 @@ abstract final class ResponsesSseDecoder {
     final chunks = decoder.parse(data, standalone: true);
     // 畸形的载荷不是协议事件：既不产出内容，也不收口。
     if (!decoder.sawEvent) return const [];
-    return [...chunks, ...decoder.finish()];
+    return [...chunks, ...decoder.finish(complete: true)];
   }
 
   /// 每条响应独立追踪 item 与文本段，只补齐已发前缀的缺失后缀。
@@ -205,7 +205,7 @@ class _ResponsesStreamDecoder {
 
   List<ChatChunk> parse(String data, {bool standalone = false}) {
     if (isDone) return const [];
-    if (data.trim() == '[DONE]') return finish();
+    if (data.trim() == '[DONE]') return finish(complete: _normalFinish ?? true);
     final Object? decoded;
     try {
       decoded = jsonDecode(data);
@@ -279,6 +279,7 @@ class _ResponsesStreamDecoder {
         _readItem(_item(decoded), decoded['item']);
       case 'response.completed':
       case 'response.incomplete':
+        _normalFinish = type == 'response.completed';
         final response = decoded['response'];
         if (response is Map<String, dynamic>) {
           final output = response['output'];
@@ -312,15 +313,21 @@ class _ResponsesStreamDecoder {
         return const [];
     }
     _flush(finish: done || standalone, done: done, usage: usage);
+    if (done) return [..._drain(), ...finish(complete: _normalFinish == true)];
     return _drain();
   }
 
   /// 响应收口：补齐未结束的块，产出 usage 与 ResponseEnd。
-  List<ChatChunk> finish({TokenUsage? usage}) {
+  bool? _normalFinish;
+
+  List<ChatChunk> finish({TokenUsage? usage, bool? complete}) {
     if (isDone) return const [];
     _finished = true;
     _flush(finish: true);
-    _parts.finish(usage: usage ?? _pendingUsage);
+    _parts.finish(
+      usage: usage ?? _pendingUsage,
+      complete: _normalFinish ?? complete ?? false,
+    );
     return _drain();
   }
 

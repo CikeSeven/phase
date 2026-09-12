@@ -356,6 +356,7 @@ void main() {
             TextPart(text: '正在总结'),
             ToolCallPart(toolCallId: 'tool-2'),
           ],
+          streamingMessageId: 'm2',
         ),
       );
 
@@ -585,6 +586,7 @@ void main() {
         const ChatState(
           isGenerating: true,
           streamingParts: [TextPart(text: '正在总结')],
+          streamingMessageId: 'm2',
         ),
       );
       await pumpTranscript(

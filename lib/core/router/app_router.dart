@@ -8,6 +8,8 @@ import '../../features/chat/chat_page.dart';
 import '../../features/providers_config/provider_edit_page.dart';
 import '../../features/providers_config/providers_page.dart';
 import '../../features/settings/settings_page.dart';
+import '../../features/tools/run_recovery_page.dart';
+import '../../features/tools/tool_records_page.dart';
 
 part 'app_router.g.dart';
 
@@ -25,6 +27,18 @@ GoRouter appRouter(Ref ref) {
   return GoRouter(
     initialLocation: '/',
     routes: [
+      GoRoute(
+        path: '/tasks',
+        pageBuilder: (context, state) =>
+            materialPage(state, const RunRecoveryPage()),
+      ),
+      GoRoute(
+        path: '/conversations/:id/tools',
+        pageBuilder: (context, state) => materialPage(
+          state,
+          ToolRecordsPage(conversationId: state.pathParameters['id']!),
+        ),
+      ),
       GoRoute(
         path: '/',
         pageBuilder: (context, state) => materialPage(state, const ChatPage()),
