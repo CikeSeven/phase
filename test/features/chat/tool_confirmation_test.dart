@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phase/core/theme/app_spacing.dart';
+import 'package:phase/core/widgets/app_sheet.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/tool_policy.dart';
@@ -111,6 +113,52 @@ void main() {
     // 面板不展示模型的原始参数 JSON。
     expect(find.textContaining('{"path"'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('三个动作各占一行，停止任务在最上且是红色，拖动杆只有一根', (tester) async {
+    // 手机尺寸的视口：面板 footer 有 32% 高度上限，过矮的窗口里它自身会滚动，
+    // 量出来的位置就不代表真机上的排版。
+    tester.view.physicalSize = const Size(400, 860);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await openSheet(tester, confirmation: request());
+
+    final stop = tester.getRect(
+      find.byKey(const ValueKey('tool-confirm-stop')),
+    );
+    final reject = tester.getRect(
+      find.byKey(const ValueKey('tool-confirm-reject')),
+    );
+    final allow = tester.getRect(
+      find.byKey(const ValueKey('tool-confirm-allow')),
+    );
+    // 自上而下：停止任务 → 拒绝 → 允许一次，每个各占一整行。
+    expect(stop.bottom, lessThanOrEqualTo(reject.top));
+    expect(reject.bottom, lessThanOrEqualTo(allow.top));
+    expect(reject.left, closeTo(stop.left, 0.5));
+    expect(allow.width, closeTo(stop.width, 0.5));
+    expect(stop.width, greaterThan(200));
+
+    // 停止任务用错误色：这是不可撤销的收尾动作。
+    final colors = AppTheme.light().colorScheme;
+    final style = tester
+        .widget<OutlinedButton>(find.byKey(const ValueKey('tool-confirm-stop')))
+        .style;
+    expect(style?.foregroundColor?.resolve({}), colors.error);
+
+    // 按钮再往上一截：贴着面板下沿容易误触（footer 内边距 + 这一段留白）。
+    final sheetBottom = tester.getRect(find.byType(AppSheet)).bottom;
+    expect(sheetBottom - allow.bottom, greaterThanOrEqualTo(AppSpacing.l * 2));
+
+    // 拖动杆只有 AppSheet 自己画的那一根：框架再画一根会变成上下两根。
+    final handles = tester
+        .widgetList<Container>(find.byType(Container))
+        .where(
+          (container) =>
+              container.constraints?.maxWidth == AppSpacing.xxl &&
+              container.constraints?.maxHeight == AppSpacing.xs,
+        );
+    expect(handles, hasLength(1));
   });
 
   testWidgets('未登记的工具也逐条展示真实参数', (tester) async {

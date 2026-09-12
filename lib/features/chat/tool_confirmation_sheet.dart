@@ -32,11 +32,11 @@ Future<ToolConfirmationOutcome> showToolConfirmationSheet(
   ToolConfirmationRequest request,
 ) async {
   FocusManager.instance.primaryFocus?.unfocus();
+  // 拖动杆由 AppSheet 自己画，这里不能再让框架画一个（会变成两根）。
   final outcome = await showModalBottomSheet<ToolConfirmationOutcome>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    showDragHandle: true,
     builder: (context) => ToolConfirmationSheet(request: request),
   );
   return outcome ?? ToolConfirmationOutcome.expired;
@@ -123,27 +123,35 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
           color: _remaining <= _urgent ? colors.error : colors.onSurfaceVariant,
         ),
       ),
-      footer: OverflowBar(
-        alignment: MainAxisAlignment.end,
-        overflowAlignment: OverflowBarAlignment.end,
-        spacing: AppSpacing.s,
-        overflowSpacing: AppSpacing.s,
+      // 三个动作各占一整行：从最重（停止任务）到最轻（允许一次）自上而下排，
+      // 大字号下也不会被挤成换行的一团。
+      footer: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          TextButton(
+          OutlinedButton(
             key: const ValueKey('tool-confirm-stop'),
             onPressed: () => _decide(ToolConfirmationOutcome.stopTask),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: colors.error,
+              side: BorderSide(color: colors.error.withValues(alpha: 0.56)),
+            ),
             child: const Text('停止任务'),
           ),
+          const SizedBox(height: AppSpacing.s),
           OutlinedButton(
             key: const ValueKey('tool-confirm-reject'),
             onPressed: () => _decide(ToolConfirmationOutcome.reject),
             child: const Text('拒绝'),
           ),
+          const SizedBox(height: AppSpacing.s),
           FilledButton(
             key: const ValueKey('tool-confirm-allow'),
             onPressed: () => _decide(ToolConfirmationOutcome.allowOnce),
             child: const Text('允许一次'),
           ),
+          // 再留一点底部内边距：三个按钮贴着面板下沿和手势条太近，容易误触。
+          const SizedBox(height: AppSpacing.l),
         ],
       ),
       child: ListView(

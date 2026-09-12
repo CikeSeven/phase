@@ -123,7 +123,7 @@ Future<void> _showTextPreview(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    showDragHandle: true,
+    // 拖动杆由 AppSheet 自己画，这里不能再让框架画一个（会变成两根）。
     builder: (context) => AppSheet(
       title: attachment.name,
       subtitle: truncated
