@@ -63,7 +63,7 @@ final class ModelSelectionProvider
   ModelSelection create() => ModelSelection();
 }
 
-String _$modelSelectionHash() => r'506fe09753ec73c853d0e8333b295e5c8a3edbea';
+String _$modelSelectionHash() => r'a1f60eaaafe0d82b33f3fea237bee10451644296';
 
 /// 模型选择：会话显式覆盖优先于助手默认，再取「最近使用」，
 /// 否则回退到第一个服务商的默认模型 / 候选模型第一个。

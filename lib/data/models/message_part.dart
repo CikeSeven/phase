@@ -103,19 +103,29 @@ class DocumentPart extends MessagePart {
 }
 
 /// 引用一次工具调用；参数与结果在 tool_calls 表。
+///
+/// [providerData] 保存随后续请求回传的协议状态（如 Google 的
+/// thoughtSignature），由 Provider 解析并写入对应工具记录。
 class ToolCallPart extends MessagePart {
-  const ToolCallPart({required this.toolCallId});
+  const ToolCallPart({required this.toolCallId, this.providerData});
 
   final String toolCallId;
+  final Map<String, dynamic>? providerData;
 
   @override
   String get type => 'toolCall';
 
   @override
-  Map<String, dynamic> toJson() => {'type': type, 'toolCallId': toolCallId};
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'toolCallId': toolCallId,
+    if (providerData != null) 'providerData': providerData,
+  };
 
-  factory ToolCallPart.fromJson(Map<String, dynamic> json) =>
-      ToolCallPart(toolCallId: json['toolCallId'] as String);
+  factory ToolCallPart.fromJson(Map<String, dynamic> json) => ToolCallPart(
+    toolCallId: json['toolCallId'] as String,
+    providerData: json['providerData'] as Map<String, dynamic>?,
+  );
 }
 
 /// 引用一条工具结果消息对应的工具记录。

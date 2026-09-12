@@ -51,6 +51,7 @@ class ToolCallDelta extends ChatChunk {
     this.callId,
     this.toolName,
     this.argumentsFragment,
+    this.providerData,
   });
 
   final String partId;
@@ -61,6 +62,9 @@ class ToolCallDelta extends ChatChunk {
 
   /// 参数 JSON 的片段；只追加到当前调用缓冲，不逐段重新解析。
   final String? argumentsFragment;
+
+  /// 该调用需要随后续请求回传的协议状态（如 Google 的 thoughtSignature）。
+  final Map<String, dynamic>? providerData;
 }
 
 /// 结束一个内容块；[part] 为完整块，协议状态一并带上。

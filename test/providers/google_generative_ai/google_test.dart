@@ -34,14 +34,8 @@ void main() {
     );
   }
 
-  Stream<ChatChunk> decode(
-    String sseText, {
-    String modelId = 'gemini-2.5-pro',
-  }) {
-    return GoogleSseDecoder.decode(
-      Stream.value(utf8.encode(sseText)),
-      modelId: modelId,
-    );
+  Stream<ChatChunk> decode(String sseText) {
+    return GoogleSseDecoder.decode(Stream.value(utf8.encode(sseText)));
   }
 
   group('buildGooglePayload', () {
@@ -238,7 +232,7 @@ void main() {
       ]);
     });
 
-    test('functionCall 一次给全参数，thoughtSignature 进入协议状态块', () async {
+    test('functionCall 一次给全参数，thoughtSignature 挂在调用上', () async {
       final chunks = await decode(
         'data: {"candidates":[{"content":{"role":"model","parts":'
         '[{"functionCall":{"name":"get_weather","args":{"city":"北京"}},'
@@ -252,25 +246,16 @@ void main() {
       expect(delta.callId, isNull);
       expect(delta.toolName, 'get_weather');
       expect(delta.argumentsFragment, '{"city":"北京"}');
-      expect(
-        chunks
-            .whereType<PartEnd>()
-            .map((end) => end.part)
-            .whereType<ToolCallPart>(),
-        hasLength(1),
-      );
-      // signature 只作为协议状态，不能显示为思考。
-      final providerPart = chunks
+      // 协议状态随这次调用一起交付，不再另开内容块。
+      expect(delta.providerData, {'thoughtSignature': 'sig-1'});
+      final toolPart = chunks
           .whereType<PartEnd>()
           .map((end) => end.part)
-          .whereType<ProviderPart>()
+          .whereType<ToolCallPart>()
           .single;
-      expect(providerPart.protocol, 'googleGenerativeAi');
-      expect(providerPart.modelId, 'gemini-2.5-pro');
-      expect(providerPart.data, {
-        'toolCallId': 'tool_0',
-        'thoughtSignature': 'sig-1',
-      });
+      expect(toolPart.toolCallId, 'tool_0');
+      expect(toolPart.providerData, {'thoughtSignature': 'sig-1'});
+      // signature 只作为协议状态，不能显示为思考。
       expect(chunks.whereType<ReasoningDelta>(), isEmpty);
     });
 

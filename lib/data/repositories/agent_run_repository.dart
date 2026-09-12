@@ -90,6 +90,16 @@ class AgentRunRepository {
     });
   }
 
+  /// 用户已对确认作出决定：运行回到运行中，不再停在等待确认。
+  ///
+  /// 批准与拒绝都在决定落库后调用它；等待期间被停止的运行走终态，
+  /// 不经过这里（执行器按取消收口）。
+  Future<AgentRun> resume(String runId) {
+    return _update(runId, '恢复运行状态失败', (run) {
+      return run.copyWith(status: RunStatus.running, clearActiveToolCall: true);
+    });
+  }
+
   /// 动作已派发但结果未取得：挂起运行，等待核验。
   Future<AgentRun> waitForResult(String runId, String toolCallId) {
     return _update(runId, '等待工具结果失败', (run) {

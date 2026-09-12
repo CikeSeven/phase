@@ -14,6 +14,7 @@ import 'attachment_chips.dart';
 import 'chat_code_block.dart';
 import 'message_actions_sheet.dart';
 import 'thinking_panel.dart';
+import 'tool_call_card.dart';
 
 /// 用户消息保留右侧色面，AI 正文使用完整的阅读宽度。
 class MessageBubble extends StatelessWidget {
@@ -225,6 +226,14 @@ class MessageBubble extends StatelessWidget {
                         ],
                       ),
                     ),
+                    // 工具卡片按 Part 顺序接在正文之后：只引用记录 id，
+                    // 记录从仓储读回，卡片上不出现模型的原始参数 JSON。
+                    for (final part in message.parts)
+                      if (part is ToolCallPart)
+                        ToolCallCard(
+                          toolCallId: part.toolCallId,
+                          attachments: attachments,
+                        ),
                     if (streaming)
                       Align(
                         key: const ValueKey('generation-cursor'),

@@ -13,6 +13,8 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../data/models/conversation.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import 'chat_controller.dart';
+import 'conversation_export.dart';
+import 'conversation_export_sheet.dart';
 
 /// 可搜索的惰性会话列表；设置始终留在侧栏底部。
 class ConversationDrawer extends ConsumerStatefulWidget {
@@ -402,6 +404,12 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                       child: const Text('复制会话'),
                     ),
                     MenuItemButton(
+                      key: ValueKey('export-conversation-${conversation.id}'),
+                      leadingIcon: const Icon(Symbols.download),
+                      onPressed: () => _export(context, ref),
+                      child: const Text('导出会话'),
+                    ),
+                    MenuItemButton(
                       leadingIcon: const Icon(Symbols.push_pin),
                       onPressed: () => _runGuarded(context, () async {
                         final repository = await ref.read(
@@ -464,6 +472,40 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
       messenger.showSnackBar(const SnackBar(content: Text('已复制会话')));
     } on Failure catch (error) {
       messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
+    }
+  }
+
+  /// 导出会话：选格式 → 写入应用私有导出目录 → 提示文件路径。
+  ///
+  /// 首版不接系统分享（S5 再做）；导出成功后收起侧栏，路径提示才可见。
+  Future<void> _export(BuildContext context, WidgetRef ref) async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final format = await showConversationExportSheet(context);
+    if (format == null || !context.mounted) return;
+    // 收起侧栏前取好导出器：之后只用拿到的对象，不再用 ref 与 context。
+    final ConversationExporter exporter;
+    try {
+      exporter = await ref.read(conversationExporterProvider.future);
+    } on Failure catch (error) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(error.userMessage)));
+      return;
+    }
+    if (!context.mounted) return;
+    navigator.maybePop();
+    try {
+      final result = await exporter.export(conversation.id, format);
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text('已导出 ${result.formatLabel}：${result.path}')),
+        );
+    } on Failure catch (error) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(error.userMessage)));
     }
   }
 

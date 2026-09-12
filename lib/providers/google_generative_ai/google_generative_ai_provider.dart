@@ -55,7 +55,7 @@ class GoogleGenerativeAiProvider implements AiProvider {
       ),
       headers: _headers,
       // 协议状态块写入当次模型 id，与后续请求绑定。
-      decode: (body) => GoogleSseDecoder.decode(body, modelId: request.modelId),
+      decode: GoogleSseDecoder.decode,
     );
   }
 

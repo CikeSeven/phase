@@ -14,6 +14,7 @@ import '../models/chat_message.dart';
 import '../models/conversation.dart';
 import '../models/message_part.dart';
 import '../models/model_selection.dart';
+import '../models/tool_call_record.dart';
 import 'row_mappers.dart';
 
 part 'conversation_repository.g.dart';
@@ -317,6 +318,53 @@ class ConversationRepository {
           thinkingDurationMs: Value(thinkingDurationMs),
         ),
       );
+    });
+  }
+
+  /// 装配上下文用的工具记录：消息里的 ToolCallPart/ToolResultPart 只存记录 id，
+  /// 参数与结果按 id 批量读回。缺失的 id 不出现在结果里。
+  Future<Map<String, ToolCallRecord>> toolCallsByIds(Iterable<String> ids) {
+    final wanted = ids.toSet();
+    if (wanted.isEmpty) return Future.value(const {});
+    return _guard('读取工具记录失败', () async {
+      final rows = await (_db.select(
+        _db.toolCalls,
+      )..where((t) => t.id.isIn(wanted))).get();
+      return {for (final row in rows) row.id: toolCallFromRow(row)};
+    });
+  }
+
+  /// 工具结果与结果消息在同一事务提交（design 第五部分 §3.3）。
+  ///
+  /// 事务内完成：结果消息落库、记录回填 resultMessageId、会话当前位置前移，
+  /// 避免「结果已记、消息缺失」或反过来的中间态。
+  Future<ToolCallRecord> saveToolResult({
+    required String toolCallId,
+    required ChatMessage message,
+  }) {
+    return _guard('保存工具结果失败', () async {
+      await _db.transaction(() async {
+        await _db.into(_db.messages).insert(messageCompanion(message));
+        final changed =
+            await (_db.update(_db.toolCalls)
+                  ..where((t) => t.id.equals(toolCallId)))
+                .write(ToolCallsCompanion(resultMessageId: Value(message.id)));
+        if (changed == 0) {
+          throw const UnknownFailure('工具记录不存在');
+        }
+        await (_db.update(
+          _db.conversations,
+        )..where((t) => t.id.equals(message.conversationId))).write(
+          ConversationsCompanion(
+            currentMessageId: Value(message.id),
+            updatedAt: Value(message.createdAt),
+          ),
+        );
+      });
+      final stored = await toolCallsByIds([toolCallId]);
+      final record = stored[toolCallId];
+      if (record == null) throw const UnknownFailure('工具记录不存在');
+      return record;
     });
   }
 

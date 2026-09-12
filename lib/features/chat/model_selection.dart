@@ -17,6 +17,7 @@ class ChatModelSelection {
     required this.model,
     required this.supportsReasoning,
     required this.supportsImages,
+    required this.supportsTools,
     required this.effort,
   });
 
@@ -25,6 +26,9 @@ class ChatModelSelection {
 
   /// 当前模型是否声明支持推理；false 时 effort 不下发。
   final bool supportsReasoning;
+
+  /// 当前模型是否声明支持工具调用；false 时不下发工具定义。
+  final bool supportsTools;
 
   /// 当前模型是否声明支持图片输入；false 时附件入口拦截图片。
   final bool supportsImages;
@@ -123,8 +127,8 @@ class ModelSelection extends _$ModelSelection {
 
   /// 组装一次选择：能力以模型配置为准，已登记但与所选模型无关时不影响。
   ///
-  /// 未登记的（手输或列表外）模型保留原型的宽松默认：默认支持推理与图片，
-  /// 是否合规交给服务商服务器判断。
+  /// 未登记的（手输或列表外）模型保留原型的宽松默认：默认支持推理、图片与
+  /// 工具调用，是否合规交给服务商服务器判断。
   ChatModelSelection _describe({
     required ProviderProfile profile,
     required String model,
@@ -132,10 +136,12 @@ class ModelSelection extends _$ModelSelection {
   }) {
     var supportsReasoning = true;
     var supportsImages = true;
+    var supportsTools = true;
     for (final candidate in profile.models) {
       if (candidate.id == model) {
         supportsReasoning = candidate.supportsReasoning;
         supportsImages = candidate.supportsImages;
+        supportsTools = candidate.supportsTools;
         break;
       }
     }
@@ -144,6 +150,7 @@ class ModelSelection extends _$ModelSelection {
       model: model,
       supportsReasoning: supportsReasoning,
       supportsImages: supportsImages,
+      supportsTools: supportsTools,
       effort: effort,
     );
   }

@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,6 +20,7 @@ import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/chat_chunk.dart';
 import 'package:phase/data/models/attachment.dart';
+import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/message_part.dart';
@@ -26,8 +29,11 @@ import 'package:phase/data/models/conversation.dart';
 import 'package:phase/data/models/model_selection.dart' as model;
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
+import 'package:phase/data/models/tool_call_record.dart';
+import 'package:phase/data/repositories/agent_run_repository.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
+import 'package:phase/data/repositories/tool_call_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/chat/chat_page.dart';
@@ -49,6 +55,95 @@ final _profile = ProviderProfile(
       'very-long-reasoning-model-name-2026-preview-with-extra-context',
   createdAt: DateTime(2026),
 );
+
+/// 内存版运行仓储：布局测试只走发送流程，运行状态与计数留在内存。
+///
+/// 真实仓储的行为由 repositories_test 与工具循环测试覆盖。
+class _MemoryRuns implements AgentRunRepository {
+  final runs = <String, AgentRun>{};
+
+  @override
+  Future<AgentRun> create(AgentRun run) async {
+    runs[run.id] = run;
+    return run;
+  }
+
+  @override
+  Future<AgentRun> beginTurn(String runId) =>
+      _update(runId, (run) => run.copyWith(turnCount: run.turnCount + 1));
+
+  @override
+  Future<AgentRun> countModelAttempt(String runId) => _update(
+    runId,
+    (run) => run.copyWith(modelAttemptCount: run.modelAttemptCount + 1),
+  );
+
+  @override
+  Future<AgentRun> finishTurn(String runId, {String? currentMessageId}) =>
+      _update(
+        runId,
+        (run) => run.copyWith(
+          currentMessageId: currentMessageId,
+          activeToolCallId: null,
+        ),
+      );
+
+  @override
+  Future<AgentRun> resume(String runId) => _update(
+    runId,
+    (run) => run.copyWith(status: RunStatus.running, clearActiveToolCall: true),
+  );
+
+  @override
+  Future<AgentRun> awaitConfirmation(String runId, String toolCallId) =>
+      _update(
+        runId,
+        (run) => run.copyWith(
+          status: RunStatus.awaitingConfirmation,
+          activeToolCallId: toolCallId,
+        ),
+      );
+
+  @override
+  Future<AgentRun> finish(
+    String runId, {
+    required RunStatus status,
+    RunFinishReason? finishReason,
+    String? currentMessageId,
+    TokenUsage? usage,
+  }) => _update(
+    runId,
+    (run) => run.copyWith(
+      status: status,
+      finishReason: finishReason,
+      currentMessageId: currentMessageId,
+      clearActiveToolCall: true,
+      usage: usage,
+      finishedAt: DateTime.now(),
+    ),
+  );
+
+  Future<AgentRun> _update(
+    String runId,
+    AgentRun Function(AgentRun run) change,
+  ) async {
+    final updated = change(runs[runId]!);
+    runs[runId] = updated;
+    return updated;
+  }
+
+  /// 布局测试不涉及恢复、等待确认与结果核验。
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('布局测试不涉及运行仓储');
+}
+
+/// 布局测试的脚本里没有工具调用：工具记录通道用不到。
+class _UnusedToolCalls implements ToolCallRepository {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('布局测试不涉及工具记录');
+}
 
 /// 内存版会话仓储：布局测试只需要可控的会话与消息视图，
 /// 不走真实数据库（其行为由 repositories_test 覆盖）。
@@ -249,6 +344,20 @@ class _MemoryConversations implements ConversationRepository {
   Future<List<Attachment>> attachmentsFor(String conversationId) async =>
       const [];
 
+  // 布局测试不涉及工具循环：装配上下文与结果回填由控制器测试覆盖。
+  @override
+  Future<Map<String, ToolCallRecord>> toolCallsByIds(
+    Iterable<String> ids,
+  ) async => const {};
+
+  @override
+  Future<ToolCallRecord> saveToolResult({
+    required String toolCallId,
+    required ChatMessage message,
+  }) {
+    throw UnimplementedError('布局测试不涉及工具结果回写');
+  }
+
   @override
   Future<void> renameConversation(String id, String title) async {
     renameCalls++;
@@ -327,6 +436,9 @@ void main() {
     final preferences = await SharedPreferences.getInstance();
     final conversations = repository ?? _MemoryConversations();
     final ai = _StreamingAi();
+    // 发送会创建 AgentRun：运行与工具记录也用内存仓储，本文件只验证界面流程。
+    final tempDir = Directory.systemTemp.createTempSync('phase_chat_layout');
+    addTearDown(() => tempDir.deleteSync(recursive: true));
     final router = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (context, state) => const ChatPage()),
@@ -349,7 +461,13 @@ void main() {
         retry: (retryCount, error) => null,
         overrides: [
           sharedPreferencesProvider.overrideWith((ref) => preferences),
+          attachmentStorageProvider.overrideWith(
+            (ref) =>
+                AttachmentStorage(Directory(p.join(tempDir.path, 'files'))),
+          ),
           conversationRepositoryProvider.overrideWith((ref) => conversations),
+          agentRunRepositoryProvider.overrideWith((ref) => _MemoryRuns()),
+          toolCallRepositoryProvider.overrideWith((ref) => _UnusedToolCalls()),
           assistantRepositoryProvider.overrideWith((ref) => MemoryAssistants()),
           providerProfilesProvider.overrideWith(
             (ref) => profiles ?? Stream.value(configured ? [_profile] : []),
@@ -1037,6 +1155,8 @@ void main() {
     expect(find.text('历史会话 1'), findsNothing);
 
     await openMenu(tester);
+    // 导出入口与其它会话操作同在一个菜单里。
+    expect(find.text('导出会话'), findsOneWidget);
     await tester.tap(find.text('重命名'));
     await tester.pumpAndSettle();
     expect(find.byType(AppDialog), findsOneWidget);

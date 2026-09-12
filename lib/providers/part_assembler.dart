@@ -74,12 +74,22 @@ class PartAssembler {
     String? callId,
     String? toolName,
     String? argumentsFragment,
+    Map<String, dynamic>? providerData,
   }) {
-    if (callId == null && toolName == null && argumentsFragment == null) return;
+    if (callId == null &&
+        toolName == null &&
+        argumentsFragment == null &&
+        providerData == null) {
+      return;
+    }
     final block = _block(key, PartKind.toolCall);
     _start(block);
     if (callId != null && callId.isNotEmpty) block.callId = callId;
     if (argumentsFragment != null) block.text.write(argumentsFragment);
+    // 协议状态绑定到该调用块：回填时随工具调用一起交给执行器。
+    if (providerData != null) {
+      block.providerData = {...?block.providerData, ...providerData};
+    }
     _visible = true;
     _emit(
       ToolCallDelta(
@@ -87,6 +97,7 @@ class PartAssembler {
         callId: callId,
         toolName: toolName,
         argumentsFragment: argumentsFragment,
+        providerData: providerData,
       ),
     );
   }
@@ -158,7 +169,11 @@ class PartAssembler {
     ),
     // ToolCallPart 只引用调用；协议没有调用 id 时（Google）回落到 partId，
     // 保证上层仍能把增量累积结果与这个块对应起来。
-    PartKind.toolCall => ToolCallPart(toolCallId: block.callId ?? block.partId),
+    // 协议状态（如 thoughtSignature）随块保存，回填时交回协议层。
+    PartKind.toolCall => ToolCallPart(
+      toolCallId: block.callId ?? block.partId,
+      providerData: block.providerData,
+    ),
     PartKind.provider => throw UnsupportedError('组装器不产生 provider 块'),
   };
 }

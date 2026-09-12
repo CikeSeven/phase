@@ -75,7 +75,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'5830d5177627b271323161ac07027f614f6014e2';
+String _$chatControllerHash() => r'4d23d0a9455a32e0140a3815732bb9188d0a670b';
 
 /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 
@@ -96,6 +96,161 @@ abstract class _$ChatController extends $Notifier<ChatState> {
     return element.handleCreate(ref, build);
   }
 }
+
+/// 内置工具集：文件工具只访问应用私有目录，HTTP 工具走独立的 Dio 实例。
+///
+/// 单独开注入点是为了让测试能替换工具集（记录调用的假工具、替代网络实现），
+/// 与 [aiProviderFactoryProvider] 同样的理由。
+
+@ProviderFor(toolRegistry)
+final toolRegistryProvider = ToolRegistryProvider._();
+
+/// 内置工具集：文件工具只访问应用私有目录，HTTP 工具走独立的 Dio 实例。
+///
+/// 单独开注入点是为了让测试能替换工具集（记录调用的假工具、替代网络实现），
+/// 与 [aiProviderFactoryProvider] 同样的理由。
+
+final class ToolRegistryProvider
+    extends $FunctionalProvider<ToolRegistry, ToolRegistry, ToolRegistry>
+    with $Provider<ToolRegistry> {
+  /// 内置工具集：文件工具只访问应用私有目录，HTTP 工具走独立的 Dio 实例。
+  ///
+  /// 单独开注入点是为了让测试能替换工具集（记录调用的假工具、替代网络实现），
+  /// 与 [aiProviderFactoryProvider] 同样的理由。
+  ToolRegistryProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'toolRegistryProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$toolRegistryHash();
+
+  @$internal
+  @override
+  $ProviderElement<ToolRegistry> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  ToolRegistry create(Ref ref) {
+    return toolRegistry(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(ToolRegistry value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<ToolRegistry>(value),
+    );
+  }
+}
+
+String _$toolRegistryHash() => r'17499420721dbeea1456221d0db6f9340f0a0cb2';
+
+/// 工具运行的存储能力：会话附件、按会话隔离的产物目录与产物登记。
+///
+/// 附件索引由仓储注入：数据源只依赖模型与文件系统。
+
+@ProviderFor(artifactStorage)
+final artifactStorageProvider = ArtifactStorageProvider._();
+
+/// 工具运行的存储能力：会话附件、按会话隔离的产物目录与产物登记。
+///
+/// 附件索引由仓储注入：数据源只依赖模型与文件系统。
+
+final class ArtifactStorageProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<ArtifactStorage>,
+          ArtifactStorage,
+          FutureOr<ArtifactStorage>
+        >
+    with $FutureModifier<ArtifactStorage>, $FutureProvider<ArtifactStorage> {
+  /// 工具运行的存储能力：会话附件、按会话隔离的产物目录与产物登记。
+  ///
+  /// 附件索引由仓储注入：数据源只依赖模型与文件系统。
+  ArtifactStorageProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'artifactStorageProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$artifactStorageHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<ArtifactStorage> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<ArtifactStorage> create(Ref ref) {
+    return artifactStorage(ref);
+  }
+}
+
+String _$artifactStorageHash() => r'2bb76c2793cbd29413863ba40b56353cb59fb727';
+
+/// 启动时尚未结束的运行：界面据此显示「结果未确认」等中断状态。
+///
+/// 只读取状态：不自动重跑任何动作，也不从日志回放（design 第二部分 §7）。
+
+@ProviderFor(unfinishedRuns)
+final unfinishedRunsProvider = UnfinishedRunsProvider._();
+
+/// 启动时尚未结束的运行：界面据此显示「结果未确认」等中断状态。
+///
+/// 只读取状态：不自动重跑任何动作，也不从日志回放（design 第二部分 §7）。
+
+final class UnfinishedRunsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<AgentRun>>,
+          List<AgentRun>,
+          FutureOr<List<AgentRun>>
+        >
+    with $FutureModifier<List<AgentRun>>, $FutureProvider<List<AgentRun>> {
+  /// 启动时尚未结束的运行：界面据此显示「结果未确认」等中断状态。
+  ///
+  /// 只读取状态：不自动重跑任何动作，也不从日志回放（design 第二部分 §7）。
+  UnfinishedRunsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'unfinishedRunsProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$unfinishedRunsHash();
+
+  @$internal
+  @override
+  $FutureProviderElement<List<AgentRun>> $createElement(
+    $ProviderPointer pointer,
+  ) => $FutureProviderElement(pointer);
+
+  @override
+  FutureOr<List<AgentRun>> create(Ref ref) {
+    return unfinishedRuns(ref);
+  }
+}
+
+String _$unfinishedRunsHash() => r'7267663de189ffdae6e16199d805e558e6103b00';
 
 /// 会话列表流（置顶优先、按更新时间倒序）。
 

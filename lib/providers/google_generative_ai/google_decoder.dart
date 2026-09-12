@@ -1,10 +1,8 @@
 import 'dart:convert';
 
-import '../../data/models/api_protocol.dart';
 import '../../data/models/chat_chunk.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
-import '../../data/models/message_part.dart';
 import '../../data/models/reasoning_effort.dart';
 import '../attachment_encoder.dart';
 import '../dio_failure_mapper.dart';
@@ -151,8 +149,8 @@ String _systemText(ChatRequest request) => [
 /// GenerateContentResponse JSON；`thought: true` 的 part 是公开思考。
 abstract final class GoogleSseDecoder {
   /// 独立解析单个 data 载荷并收口，用于报文级测试与诊断。
-  static List<ChatChunk> parseEvent(String data, {String modelId = ''}) {
-    final decoder = _GoogleStreamDecoder(modelId: modelId);
+  static List<ChatChunk> parseEvent(String data) {
+    final decoder = _GoogleStreamDecoder();
     final chunks = decoder.parse(data);
     // 畸形的载荷不是协议事件：既不产出内容，也不收口。
     if (!decoder.sawEvent) return const [];
@@ -161,12 +159,8 @@ abstract final class GoogleSseDecoder {
 
   /// 把 HTTP 响应字节流解码为类型化事件流。
   ///
-  /// [modelId] 写进协议状态块（[ProviderPart]），与后续请求绑定同一模型。
-  static Stream<ChatChunk> decode(
-    Stream<List<int>> byteStream, {
-    String modelId = '',
-  }) async* {
-    final decoder = _GoogleStreamDecoder(modelId: modelId);
+  static Stream<ChatChunk> decode(Stream<List<int>> byteStream) async* {
+    final decoder = _GoogleStreamDecoder();
     await for (final data in decodeSseDataLines(byteStream)) {
       for (final chunk in decoder.parse(data)) {
         yield chunk;
@@ -180,19 +174,15 @@ abstract final class GoogleSseDecoder {
 }
 
 class _GoogleStreamDecoder {
-  _GoogleStreamDecoder({required this.modelId}) {
+  _GoogleStreamDecoder() {
     _parts = PartAssembler(_out.add);
   }
-
-  /// 当前响应的模型 id，随协议状态一起写入 [ProviderPart]。
-  final String modelId;
 
   final _out = <ChatChunk>[];
   late final PartAssembler _parts;
 
   /// functionCall 在响应内的序号；Gemini 不给块编号，按出现顺序编号。
   var _toolIndex = 0;
-  var _providerCount = 0;
   TokenUsage? _usage;
   var _terminated = false;
   var _sawEvent = false;
@@ -267,6 +257,13 @@ class _GoogleStreamDecoder {
     final call = part['functionCall'];
     if (call is Map<String, dynamic>) {
       final index = _toolIndex++;
+      // thoughtSignature 必须随该调用回传，且不能当成公开思考展示；
+      // 它作为协议状态直接挂在这次工具调用上，由上层存入工具记录并在
+      // 下一次请求按 Google 协议回填。
+      final signature = part['thoughtSignature'];
+      final providerData = signature is String && signature.isNotEmpty
+          ? {'thoughtSignature': signature}
+          : null;
       // Gemini 的 functionCall 一次给全参数，没有增量片段。
       _parts.toolCall(
         index,
@@ -275,35 +272,10 @@ class _GoogleStreamDecoder {
           final Map<String, dynamic> args => jsonEncode(args),
           _ => null,
         },
+        providerData: providerData,
       );
-      // thoughtSignature 必须随该调用回传，且不能当成公开思考展示；
-      // 它绑定到本次响应的工具块，由上层存入工具记录的 providerData，
-      // 下一次请求按 Google 协议回填。
-      final partId = _parts.partIdOf(PartKind.toolCall, index);
-      final signature = part['thoughtSignature'];
-      if (partId != null && signature is String && signature.isNotEmpty) {
-        _addProviderState({
-          'toolCallId': partId,
-          'thoughtSignature': signature,
-        });
-      }
     }
     // P0 不使用服务端内置工具（搜索/代码执行），其余 part 类型不进入内容。
-  }
-
-  void _addProviderState(Map<String, dynamic> data) {
-    final partId = 'provider_${_providerCount++}';
-    _out.add(PartStart(partId: partId, kind: PartKind.provider));
-    _out.add(
-      PartEnd(
-        partId: partId,
-        part: ProviderPart(
-          protocol: ApiProtocol.googleGenerativeAi.name,
-          modelId: modelId,
-          data: data,
-        ),
-      ),
-    );
   }
 
   static TokenUsage? _parseUsage(Object? usageMetadata) {

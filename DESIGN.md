@@ -118,6 +118,9 @@
 | 重命名、删除确认、主题选择 | `AppDialog`；标题必需，图标/说明按需，普通内容滚动；懒列表须 `scrollableContent: true` |
 | 模型/预设搜索等长列表 | `AppSheet`；扣除键盘等父约束后占可用高度 85%，正常高度下 footer 固定，短窗口整体滚动 |
 | 消息复制等短操作 | 原生模态 BottomSheet + `MessageActionsSheet`；按内容高度，不用 85% 高度的大面板 |
+| 工具确认 | `AppSheet`；标题为工具名，副标题是动作摘要，正文是执行通道、目标与逐条真实参数（长正文限高内滚动），标题右侧显示剩余秒数；footer 三个动作：允许一次 / 拒绝 / 停止任务。到点未决定按拒绝，关闭等同于未决定 |
+| 导出会话 | 原生模态 BottomSheet + 两个 `ListTile`（Markdown / JSON），选中后导出并提示文件路径 |
+| 查看产物 | 文本 `AppSheet`（限 256KB 预览），图片 `AppDialog` + `InteractiveViewer`；文件丢失或二进制内容明确说明，不显示空内容 |
 | 会话更多操作 | 按钮锚定 `MenuAnchor`，不是消息的长按菜单 |
 
 - BottomSheet 保留拖柄、标题、关闭入口；未提交时支持返回、点遮罩和下滑关闭，取消不执行动作，保存中遵循防重复与离开保护。`AppSheet` 的 child 默认是有界可滚动区域，静态内容设 `scrollableChild: false`，不要双重无界滚动。
