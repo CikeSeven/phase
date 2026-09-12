@@ -269,7 +269,7 @@ void main() {
       }
     });
 
-    test('encrypted、signature、usage 与畸形 details 不能生成思考', () {
+    test('encrypted、signature、usage 与畸形 details 不生成公开思考，但留下回传明细', () {
       final chunks = OpenAiSseDecoder.parseLine(
         'data:${jsonEncode({
           'choices': [
@@ -290,8 +290,15 @@ void main() {
         })}',
       );
       expect(_reasoning(chunks), isEmpty);
-      expect(chunks.whereType<PartStart>(), isEmpty);
       expect(_text(chunks), isEmpty);
+      // 明细没有可展示文本，但下一轮要原样送回去：块照样成立，带着协议状态。
+      final ends = chunks.whereType<PartEnd>().toList();
+      expect(ends, hasLength(1));
+      expect(ends.single.part, isA<ReasoningPart>());
+      expect(
+        (ends.single.part as ReasoningPart).providerData?['details'],
+        isNotEmpty,
+      );
       expect(_usage(chunks)?.outputTokens, 10);
     });
 

@@ -128,19 +128,30 @@ Future<List<Map<String, dynamic>>> _anthropicBlocks(
           blocks.add({'type': 'text', 'text': text});
         }
       case ResolvedReasoning(:final providerData):
-        // 思考块只有带回协议状态才能回传：签名块原样送回，
-        // 加密内容按 redacted_thinking 送回；缺状态时不猜测。
+        // 三档：同模型且带签名 → 原样回传；跨模型 → 就地降级成普通文本；
+        // 没签名也没内容 → 丢弃。签名只对生成它的模型有效，跨模型送回去
+        // 会被判为非法（pi 的 transform-messages 规则 2）。
         final redacted = providerData?['data'];
         final signature = providerData?['signature'];
         if (providerData?['type'] == 'redacted_thinking' &&
             redacted is String) {
-          blocks.add({'type': 'redacted_thinking', 'data': redacted});
+          // 加密思考是不透明载荷，只能给同一个模型。
+          if (message.sameModel) {
+            blocks.add({'type': 'redacted_thinking', 'data': redacted});
+          }
         } else if (signature is String && signature.isNotEmpty) {
-          blocks.add({
-            'type': 'thinking',
-            'thinking': part.text,
-            'signature': signature,
-          });
+          if (message.sameModel) {
+            blocks.add({
+              'type': 'thinking',
+              'thinking': part.text,
+              'signature': signature,
+            });
+          } else if (part.text.trim().isNotEmpty) {
+            blocks.add({'type': 'text', 'text': part.text});
+          }
+        } else if (part.text.trim().isNotEmpty) {
+          // 没签名的思考块不能当 thinking 回传：降级成普通文本，位置不变。
+          blocks.add({'type': 'text', 'text': part.text});
         }
       case ResolvedToolCall(:final callId, :final toolName, :final arguments):
         blocks.add({

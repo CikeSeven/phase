@@ -180,7 +180,7 @@ void main() {
       });
     });
 
-    test('缺签名的思考块不回传，加密内容按 redacted_thinking 回传', () async {
+    test('缺签名的思考块降级成正文，加密内容按 redacted_thinking 回传', () async {
       final payload = await buildAnthropicPayload(
         request(
           systemPrompt: '',
@@ -200,7 +200,10 @@ void main() {
       );
       final messages = (payload['messages'] as List)
           .cast<Map<String, dynamic>>();
+      // 没有签名的思考不能当 thinking 送回（会被判非法），降级为普通文本；
+      // 加密思考只能给同一个模型，同模型时原样回传。
       expect(messages.single['content'], [
+        {'type': 'text', 'text': '没有签名'},
         {'type': 'redacted_thinking', 'data': 'cipher'},
       ]);
     });

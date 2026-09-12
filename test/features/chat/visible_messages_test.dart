@@ -18,6 +18,7 @@ import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/chat/chat_page.dart';
 import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/message_bubble.dart';
+import 'package:phase/features/chat/thinking_panel.dart';
 import 'package:phase/features/chat/tool_call_card.dart';
 import 'package:phase/features/tools/tool.dart';
 import 'package:phase/features/tools/tool_card.dart';
@@ -159,7 +160,7 @@ void main() {
       );
     });
 
-    test('三次以上的轮次继续合并，思考按段串联', () {
+    test('三次以上的轮次继续合并，各轮思考各自成区', () {
       final view = visibleMessages(
         threadOf([
           user('u1', '多轮'),
@@ -172,12 +173,13 @@ void main() {
       );
 
       expect(idsOf(view), ['u1', 'm1']);
+      // 每轮的思考各自成区：中间隔着那一轮的正文，不再拼成一段。
       final thinking = view.last.parts
           .whereType<ReasoningPart>()
           .map((part) => part.publicText)
-          .join();
-      // 两轮思考之间补空行，两轮正文之间同样补一个（不留空行会连成一句话）。
-      expect(thinking, '想第一步\n\n想第二步');
+          .toList();
+      expect(thinking, ['想第一步', '想第二步']);
+      // 两轮正文之间补一个空行（不留空行会连成一句话）。
       expect(joinedText(view.last), '第一轮第二轮\n\n第三轮');
     });
 
@@ -488,6 +490,46 @@ void main() {
         expect(answerRect.contains(rect.center), isTrue);
         expect(rect.top, greaterThanOrEqualTo(answerRect.top));
       }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('每轮的思考各自成区，落在它那一轮的卡片之后', (tester) async {
+      final messages = visibleMessages(
+        threadOf([
+          user('u1', '看下文件'),
+          message(
+            id: 'm1',
+            runId: 'run-1',
+            thinking: '先想第一步',
+            text: '先读取文件',
+            extra: toolCall('tool-1'),
+          ),
+          toolResult('t1', 'tool-1', '三行内容'),
+          message(id: 'm2', runId: 'run-1', thinking: '再想第二步', text: '文件里有三行'),
+        ]),
+        const ChatState(),
+      );
+      await pumpTranscript(
+        tester,
+        messages,
+        records: {'tool-1': record('tool-1')},
+      );
+
+      // 两个思考区，不是一个：第二轮的思考不叠到第一轮上面去。
+      expect(find.byType(ThinkingPanel), findsNWidgets(2));
+      expect(find.text('先想第一步'), findsOneWidget);
+      expect(find.text('再想第二步'), findsOneWidget);
+      expect(find.byType(ToolCard), findsOneWidget);
+      // 顺序：第一轮思考 → 正文 → 卡片 → 第二轮思考 → 正文。
+      final firstThinking = tester.getRect(find.byType(ThinkingPanel).first);
+      final card = tester.getRect(find.byType(ToolCard));
+      final secondThinking = tester.getRect(find.byType(ThinkingPanel).last);
+      expect(firstThinking.bottom, lessThanOrEqualTo(card.top + 1));
+      expect(card.bottom, lessThanOrEqualTo(secondThinking.top + 1));
+      expect(
+        tester.getRect(find.byType(GptMarkdown).last).top,
+        greaterThanOrEqualTo(secondThinking.bottom - 1),
+      );
       expect(tester.takeException(), isNull);
     });
 

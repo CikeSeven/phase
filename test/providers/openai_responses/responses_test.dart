@@ -100,7 +100,95 @@ void main() {
   });
 
   group('buildResponsesPayload 多轮回填', () {
-    test('函数调用与结果作为顶层 item，公开思考不回传', () async {
+    test('推理 item 原样回放，位次在这一轮的正文与调用之前', () async {
+      final payload = await buildResponsesPayload(
+        request(
+          systemPrompt: '',
+          messages: const [
+            ResolvedMessage(role: ChatRole.user, parts: [ResolvedText('查天气')]),
+            ResolvedMessage(
+              role: ChatRole.assistant,
+              parts: [
+                ResolvedReasoning(
+                  '内部推理',
+                  providerData: {
+                    'item': {
+                      'type': 'reasoning',
+                      'id': 'rs_1',
+                      'summary': [
+                        {'type': 'summary_text', 'text': '内部推理'},
+                      ],
+                      'encrypted_content': 'cipher',
+                    },
+                  },
+                ),
+                ResolvedText('我查一下'),
+                ResolvedToolCall(
+                  callId: 'call_1',
+                  toolName: 'get_weather',
+                  arguments: {'city': '北京'},
+                ),
+              ],
+            ),
+            ResolvedMessage(
+              role: ChatRole.tool,
+              parts: [ResolvedToolResult(callId: 'call_1', content: '晴')],
+            ),
+          ],
+        ),
+      );
+      final input = (payload['input'] as List).cast<Map<String, dynamic>>();
+      // 服务端按 rs_* ↔ fc_* 校验配对：缺了推理 item 就报
+      // "function_call without required reasoning item"。
+      expect(input[1]['type'], 'reasoning');
+      expect(input[1]['id'], 'rs_1');
+      expect(input[1]['encrypted_content'], 'cipher');
+      expect(input[2]['role'], 'assistant');
+      expect(input[3]['type'], 'function_call');
+    });
+
+    test('跨模型的推理 item 不回放', () async {
+      final payload = await buildResponsesPayload(
+        request(
+          systemPrompt: '',
+          messages: const [
+            ResolvedMessage(
+              role: ChatRole.assistant,
+              sameModel: false,
+              parts: [
+                ResolvedReasoning(
+                  '内部推理',
+                  providerData: {
+                    'item': {'type': 'reasoning', 'id': 'rs_1'},
+                  },
+                ),
+                ResolvedText('回答'),
+              ],
+            ),
+          ],
+        ),
+      );
+      final input = (payload['input'] as List).cast<Map<String, dynamic>>();
+      // 推理 item 不回放，思考文本降级成正文，位置不变。
+      expect(input.single['role'], 'assistant');
+      expect(input.single['content'], [
+        {'type': 'output_text', 'text': '内部推理'},
+        {'type': 'output_text', 'text': '回答'},
+      ]);
+    });
+
+    test('索要加密推理时下发 include', () async {
+      final payload = await buildResponsesPayload(
+        request(),
+        requestEncryptedReasoning: true,
+      );
+      expect(payload['include'], ['reasoning.encrypted_content']);
+
+      final plain = await buildResponsesPayload(request());
+      expect(plain.containsKey('include'), isFalse);
+    });
+
+    test('函数调用与结果作为顶层 item，缺协议状态的思考不回传', () async {
       final payload = await buildResponsesPayload(
         request(
           systemPrompt: '',

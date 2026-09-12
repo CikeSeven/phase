@@ -14,10 +14,16 @@ import '../sse_transport.dart';
 /// systemPrompt 置首条 developer 消息；system 角色消息同样作为 developer。
 /// 推理等级映射为 `reasoning: {effort, summary: auto}`（off → effort none）；
 /// 模型不支持推理时不下发 reasoning 字段。
+///
+/// [requestEncryptedReasoning] 为 true 时索要 `reasoning.encrypted_content`：
+/// 推理 item 需要由客户端原样回放，加密载荷是把它带过服务端状态的唯一办法
+/// （pi 的做法；官方端点默认 store=false 语义下必须带）。网关不一定认识这个
+/// 参数，所以只在确认支持的端点上开启。
 Future<Map<String, dynamic>> buildResponsesPayload(
   ChatRequest request, {
   bool supportsImages = true,
   bool supportsReasoning = true,
+  bool requestEncryptedReasoning = false,
 }) async {
   final attachments = RequestAttachmentEncoder(supportsImages: supportsImages);
   final input = <Map<String, dynamic>>[
@@ -41,6 +47,7 @@ Future<Map<String, dynamic>> buildResponsesPayload(
       'reasoning': request.reasoningEffort == ReasoningEffort.off
           ? {'effort': 'none'}
           : {'effort': request.reasoningEffort.name, 'summary': 'auto'},
+    if (requestEncryptedReasoning) 'include': ['reasoning.encrypted_content'],
     if (request.temperature != null) 'temperature': request.temperature,
     if (request.maxOutputTokens != null)
       'max_output_tokens': request.maxOutputTokens,
@@ -63,6 +70,7 @@ Future<List<Map<String, dynamic>>> _responsesItems(
   RequestAttachmentEncoder attachments,
 ) async {
   final blocks = <Map<String, dynamic>>[];
+  final reasoning = <Map<String, dynamic>>[];
   for (final part in message.parts) {
     switch (part) {
       case ResolvedText(:final text):
@@ -80,10 +88,27 @@ Future<List<Map<String, dynamic>>> _responsesItems(
         } else if (payload.text case final text?) {
           blocks.add({'type': 'input_text', 'text': text});
         }
-      case ResolvedReasoning():
-        // 公开思考摘要不回传：Responses 的 reasoning item 需要服务端状态，
-        // P0 不请求服务端保存响应，因此不重建它。
-        break;
+      case ResolvedReasoning(:final text, :final providerData):
+        if (!message.sameModel) {
+          // 跨模型的思考就地降级成正文（pi 的 transform-messages 规则 2）：
+          // 协议状态不能再回传，内容本身不必丢。
+          if (text.trim().isNotEmpty) {
+            blocks.add({
+              'type': message.role == ChatRole.assistant
+                  ? 'output_text'
+                  : 'input_text',
+              'text': text,
+            });
+          }
+          break;
+        }
+        // 推理 item 原样回放（顶层 item），位次在这一轮的正文与调用之前。
+        final item = providerData?['item'];
+        if (item is Map<String, dynamic>) {
+          reasoning.add(item);
+        } else if (item is Map) {
+          reasoning.add(Map<String, dynamic>.from(item));
+        }
       case ResolvedToolCall():
       case ResolvedToolResult():
         // 函数调用与结果在下面按顶层 item 组织。
@@ -91,10 +116,11 @@ Future<List<Map<String, dynamic>>> _responsesItems(
     }
   }
 
-  final items = <Map<String, dynamic>>[];
+  final items = <Map<String, dynamic>>[...reasoning];
   if (message.role == ChatRole.system) {
     if (blocks.isEmpty) return items;
     return [
+      ...reasoning,
       {'role': 'developer', 'content': blocks},
     ];
   }
@@ -355,6 +381,12 @@ class _ResponsesStreamDecoder {
       _readParts(item, value['summary'], _ResponseChannel.summary);
       _readParts(item, value['content'], _ResponseChannel.reasoning);
       item.update(_ResponseChannel.reasoning, 0, value['text'], snapshot: true);
+      // 推理 item 要原样回传：服务端按 rs_* ↔ fc_* 校验配对，缺了它下一轮
+      // 带函数调用的请求会被判为「function_call 缺少配对的 reasoning item」。
+      final replay = _reasoningItem(value);
+      if (replay != null) {
+        _parts.reasoning(item, '', providerData: {'item': replay});
+      }
     } else if (value['type'] == 'message') {
       _readParts(item, value['content'], _ResponseChannel.content);
     } else if (value['type'] == 'function_call') {
@@ -497,6 +529,23 @@ class _ResponsesStreamDecoder {
       }
     }
     if (usage != null) _pendingUsage = usage;
+  }
+
+  /// 回放用的推理 item：只保留服务端认得的字段。
+  ///
+  /// 没有任何可回放内容的 item（无 id、无加密载荷）不留：回传一个空壳只会
+  /// 让端点报错。加密载荷只有请求了 `reasoning.encrypted_content` 才有。
+  static Map<String, dynamic>? _reasoningItem(Map<String, dynamic> value) {
+    final id = value['id'];
+    final encrypted = value['encrypted_content'];
+    if (id is! String && encrypted is! String) return null;
+    return {
+      'type': 'reasoning',
+      if (id is String) 'id': id,
+      if (value['summary'] is List) 'summary': value['summary'],
+      if (value['content'] is List) 'content': value['content'],
+      if (encrypted is String) 'encrypted_content': encrypted,
+    };
   }
 
   static int? _index(Object? value) =>

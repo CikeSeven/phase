@@ -43,6 +43,9 @@ ChatMessage _message({
 }
 
 /// Part 结构下的局部更新：正文/思考替换（空串表示移除）与状态切换。
+///
+/// 替换在**原位置**发生，新出现的思考插在正文之前：渲染按 Part 顺序分段，
+/// 追加到末尾会造出「正文在思考之前」这种真实消息里不存在的顺序。
 extension on ChatMessage {
   ChatMessage withParts({
     String? text,
@@ -50,19 +53,33 @@ extension on ChatMessage {
     MessageStatus? status,
   }) {
     final next = <MessagePart>[];
+    var insertedText = false;
+    var insertedThinking = false;
     for (final part in parts) {
       switch (part) {
         case TextPart():
-          if (text == null) next.add(part);
+          if (text == null) {
+            next.add(part);
+          } else if (!insertedText) {
+            next.add(TextPart(text: text));
+            insertedText = true;
+          }
         case ReasoningPart():
-          if (thinking == null) next.add(part);
+          if (thinking == null) {
+            next.add(part);
+          } else if (!insertedThinking) {
+            next.add(ReasoningPart(publicText: thinking));
+            insertedThinking = true;
+          }
         default:
           next.add(part);
       }
     }
-    if (text != null && text.isNotEmpty) next.add(TextPart(text: text));
-    if (thinking != null && thinking.isNotEmpty) {
-      next.add(ReasoningPart(publicText: thinking));
+    if (!insertedThinking && thinking != null && thinking.isNotEmpty) {
+      next.insert(0, ReasoningPart(publicText: thinking));
+    }
+    if (!insertedText && text != null && text.isNotEmpty) {
+      next.add(TextPart(text: text));
     }
     return copyWith(parts: next, status: status);
   }

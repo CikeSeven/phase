@@ -38,31 +38,55 @@ class MessageBubble extends StatelessWidget {
 
   bool get _isUser => message.role == ChatRole.user;
 
-  /// 公开思考文本；签名等协议状态不在 Part 里，也不会显示成思考。
-  String get thinkingText => [
-    for (final part in message.parts)
-      if (part is ReasoningPart) part.publicText,
-  ].join();
-
-  /// 正文与工具卡片按 Part 顺序分段：连续正文合成一段 Markdown，
+  /// 正文、思考与工具卡片按 Part 顺序分段：连续的同类内容合成一段，
   /// 工具调用各成一段（卡片只引用记录 id，不复制参数）。
+  ///
+  /// 工具循环每轮落一条助手消息，跨轮合并后各轮之间隔着工具调用，于是每轮的
+  /// 思考各自成区、落在它那一轮的卡片之后——不会全部叠到回答区顶部
+  /// （design 第二部分 §6.2；pi 的 assistant-message 同样按块顺序渲染）。
   List<_ContentSegment> _contentSegments() {
     final segments = <_ContentSegment>[];
-    final buffer = StringBuffer();
-    var hasText = false;
+    final text = StringBuffer();
+    final thinking = StringBuffer();
+    var pending = _SegmentKind.none;
+
+    void flushText() {
+      if (text.isEmpty) return;
+      segments.add(_TextSegment(text.toString()));
+      text.clear();
+    }
+
+    void flushThinking() {
+      if (thinking.isEmpty) return;
+      segments.add(_ThinkingSegment(thinking.toString()));
+      thinking.clear();
+    }
+
+    /// 按内容出现的先后收口：先出现的那一类先成段。
     void flush() {
-      if (!hasText) return;
-      segments.add(_TextSegment(buffer.toString()));
-      buffer.clear();
-      hasText = false;
+      switch (pending) {
+        case _SegmentKind.text:
+          flushText();
+        case _SegmentKind.thinking:
+          flushThinking();
+        case _SegmentKind.none:
+          break;
+      }
+      pending = _SegmentKind.none;
     }
 
     for (final part in message.parts) {
       switch (part) {
-        case TextPart(:final text):
-          if (text.isEmpty) break;
-          buffer.write(text);
-          hasText = true;
+        case TextPart(text: final partText):
+          if (partText.isEmpty) break;
+          if (pending != _SegmentKind.text) flush();
+          pending = _SegmentKind.text;
+          text.write(partText);
+        case ReasoningPart(:final publicText):
+          if (publicText.isEmpty) break;
+          if (pending != _SegmentKind.thinking) flush();
+          pending = _SegmentKind.thinking;
+          thinking.write(publicText);
         case ToolCallPart(:final toolCallId):
           flush();
           segments.add(_ToolSegment(toolCallId));
@@ -157,6 +181,16 @@ class MessageBubble extends StatelessWidget {
                     ),
                   );
                 }
+                final segments = _contentSegments();
+                final lastThinkingIndex = segments.lastIndexWhere(
+                  (segment) => segment is _ThinkingSegment,
+                );
+                // 思考区的稳定身份用「第几个思考区」，不用段序号：正文与思考
+                // 的先后一变，段序号就会跳，面板会重建、用户的折叠偏好丢失。
+                var thinkingOrdinal = 0;
+                // 正在接收增量的思考段：只有最后一段在思考中，前面几轮的
+                // 思考随它那一轮结束（工具卡片插进来）而收起。
+                final liveThinkingIndex = streaming ? lastThinkingIndex : -1;
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -187,23 +221,6 @@ class MessageBubble extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (thinkingText.isNotEmpty)
-                      Padding(
-                        key: ValueKey('thinking-${message.id}'),
-                        padding: const EdgeInsets.only(
-                          top: AppSpacing.s,
-                          bottom: AppSpacing.m,
-                        ),
-                        child: ThinkingPanel(
-                          reasoning: thinkingText,
-                          streaming: streaming,
-                          duration: message.thinkingDurationMs == null
-                              ? null
-                              : Duration(
-                                  milliseconds: message.thinkingDurationMs!,
-                                ),
-                        ),
-                      ),
                     Container(
                       key: const ValueKey('message-body'),
                       padding: isError
@@ -245,11 +262,10 @@ class MessageBubble extends StatelessWidget {
                             ),
                             const SizedBox(height: AppSpacing.s),
                           ],
-                          // 正文与工具卡片按 Part 顺序交错渲染：一轮回答里
-                          // 模型先说一句、调用工具、再接着说，顺序就是用户
-                          // 实际看到的顺序（design 第二部分 §6.2）。
-                          for (final (index, segment)
-                              in _contentSegments().indexed)
+                          // 正文、思考与工具卡片按 Part 顺序交错渲染：一轮
+                          // 回答里模型先想一段、说一句、调用工具、再接着说，
+                          // 顺序就是用户实际看到的顺序（design 第二部分 §6.2）。
+                          for (final (index, segment) in segments.indexed)
                             switch (segment) {
                               _TextSegment(:final text) => GptMarkdown(
                                 text,
@@ -264,6 +280,29 @@ class MessageBubble extends StatelessWidget {
                                           language: language,
                                           code: code,
                                         ),
+                              ),
+                              _ThinkingSegment(:final reasoning) => Padding(
+                                key: ValueKey(
+                                  'thinking-${message.id}-${thinkingOrdinal++}',
+                                ),
+                                padding: const EdgeInsets.only(
+                                  bottom: AppSpacing.m,
+                                ),
+                                child: ThinkingPanel(
+                                  reasoning: reasoning,
+                                  // 跨轮合并后只有最后一段还在接收增量：
+                                  // 前面的思考随它那一轮结束，自动收起。
+                                  streaming: index == liveThinkingIndex,
+                                  // 思考耗时是整个回答区的统计，挂在最后一段。
+                                  duration: index == lastThinkingIndex
+                                      ? message.thinkingDurationMs == null
+                                            ? null
+                                            : Duration(
+                                                milliseconds:
+                                                    message.thinkingDurationMs!,
+                                              )
+                                      : null,
+                                ),
                               ),
                               _ToolSegment(:final toolCallId) => ToolCallCard(
                                 toolCallId: toolCallId,
@@ -379,15 +418,23 @@ class _GenerationCursorState extends State<_GenerationCursor>
   }
 }
 
-/// 渲染分段：连续正文与单个工具调用。
+/// 渲染分段：连续的同类内容、或单个工具调用。
 sealed class _ContentSegment {
   const _ContentSegment();
 }
+
+enum _SegmentKind { none, text, thinking }
 
 class _TextSegment extends _ContentSegment {
   const _TextSegment(this.text);
 
   final String text;
+}
+
+class _ThinkingSegment extends _ContentSegment {
+  const _ThinkingSegment(this.reasoning);
+
+  final String reasoning;
 }
 
 class _ToolSegment extends _ContentSegment {

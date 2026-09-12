@@ -80,6 +80,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 流式增量写库的节流间隔：SSE chunk 远密于屏幕刷新。
   static const _flushInterval = Duration(milliseconds: 100);
 
+  /// 流式内容发布到界面的间隔：正文与思考都走这个节拍合批。
+  ///
+  /// 每个 chunk 都刷 UI，等于让整段内容按帧重排——实测每千字约 0.55ms/帧，
+  /// 几万字的思考就是每帧几十毫秒。合批之后刷新频率与内容长度无关
+  /// （kelivo 50ms、Operit 200ms 是同款做法）。
+  static const _publishInterval = Duration(milliseconds: 50);
+
   /// 回填给模型的工具结果上限（字节）；超出时截断并附截断标记。
   static const _maxToolResultBytes = 8 * 1024;
 
@@ -89,6 +96,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   StreamSubscription<ChatChunk>? _subscription;
   Completer<void>? _doneCompleter;
   Timer? _flushTimer;
+  Timer? _publishTimer;
   String? _streamingMessageId;
 
   /// 本轮助手消息 id：流式结束后仍可用于补写工具调用引用。
@@ -141,6 +149,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   ChatState build() {
     ref.onDispose(() {
       _flushTimer?.cancel();
+      _publishTimer?.cancel();
       unawaited(_subscription?.cancel());
       _doneCompleter?.complete();
     });
@@ -490,6 +499,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     } finally {
       _flushTimer?.cancel();
       _flushTimer = null;
+      _publishTimer?.cancel();
+      _publishTimer = null;
       _streamingMessageId = null;
       _run = null;
       _selection = null;
@@ -512,7 +523,11 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     }
     // 轮次在本轮模型调用前 +1；每次真实请求（含重试）另计尝试数。
     _run = await _runs!.beginTurn(run.id);
-    final messages = await _resolveHistory(thread.branch, state.attachments);
+    final messages = await _resolveHistory(
+      thread.branch,
+      state.attachments,
+      currentModelId: selection.model,
+    );
 
     final assistantMessage = ChatMessage(
       id: generateId(),
@@ -549,6 +564,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _streamError = null;
     _flushTimer?.cancel();
     _flushTimer = null;
+    _publishImmediately();
     _streamingMessageId = null;
     _subscription = null;
     _doneCompleter = null;
@@ -914,6 +930,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           toolName: part.toolName ?? '',
           arguments: parsed.arguments,
           argumentsError: parsed.error,
+          providerData: part.providerData,
         ),
       );
     }
@@ -1082,13 +1099,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             part.first.buffer
               ..clear()
               ..write(text);
-          case ReasoningPart(:final publicText):
+          case ReasoningPart(:final publicText, :final providerData):
             part.first.buffer
               ..clear()
               ..write(publicText);
-          case ToolCallPart(:final toolCallId):
+            part.first.providerData = providerData ?? part.first.providerData;
+          case ToolCallPart(:final toolCallId, :final providerData):
             // 协议收口的调用 id 是回填配对的依据。
             part.first.callId = toolCallId;
+            part.first.providerData = providerData ?? part.first.providerData;
           default:
             break;
         }
@@ -1134,8 +1153,22 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   }
 
   void _scheduleFlush() {
-    state = state.copyWith(streamingParts: _partsFromLive(_liveParts));
+    _publishTimer ??= Timer(_publishInterval, _publishNow);
     _flushTimer ??= Timer(_flushInterval, _flushNow);
+  }
+
+  /// 把累积的流式内容合批发布到界面；定时器停在这里，下一次增量再起。
+  void _publishNow() {
+    _publishTimer = null;
+    if (_liveParts.isEmpty) return;
+    state = state.copyWith(streamingParts: _partsFromLive(_liveParts));
+  }
+
+  /// 收口前把最后一批增量立即发布，界面不会停在半句话上。
+  void _publishImmediately() {
+    _publishTimer?.cancel();
+    _publishTimer = null;
+    _publishNow();
   }
 
   void _flushNow() {
@@ -1163,8 +1196,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 请求，结果未确认的调用整体略过，不留下孤立调用或孤立结果。
   Future<List<ResolvedMessage>> _resolveHistory(
     List<ChatMessage> messages,
-    Map<String, Attachment> attachments,
-  ) async {
+    Map<String, Attachment> attachments, {
+    required String currentModelId,
+  }) async {
     final records = await _recordsFor(messages);
     // 结果文本以结果消息为准：拒绝等状态只写进结果消息，记录里可能没有。
     final results = <String, ResolvedToolResult>{};
@@ -1188,13 +1222,27 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
     final resolved = <ResolvedMessage>[];
     for (final message in messages) {
+      // 被中断（停止生成）或出错收场的那一轮：已经产出的正文、已经执行的调用与
+      // 结果照常进上下文——用户看到的和模型知道的要对得上，否则模型不知道文件
+      // 已经写过、请求已经发过，下一轮可能重做一遍。
+      final interrupted =
+          message.role == ChatRole.assistant && _isInterrupted(message);
       final parts = <ResolvedPart>[];
+      // 有调用却没有结果的调用：补一条合成结果，而不是把调用删掉
+      // （pi transform-messages 规则 5）。删掉会让模型以为自己没调用过，
+      // 补上它才知道那次调用没有得到结果。
+      final missingResults = <ResolvedToolCall>[];
       for (final part in message.parts) {
         switch (part) {
           case TextPart(:final text):
             if (text.isNotEmpty) parts.add(ResolvedText(text));
           case ReasoningPart(:final publicText, :final providerData):
-            if (publicText.isNotEmpty) {
+            // 中断那一轮的思考是半截的：回放给模型会把它带回被打断的思路，
+            // 而半截思考既没有完整签名也不该当正文发回去。
+            if (interrupted) break;
+            // 只有协议状态的块（redacted thinking、只带回加密载荷的推理）也要
+            // 带上：它们没有可展示文本，但缺了下一轮请求会被判为配对缺失。
+            if (publicText.isNotEmpty || providerData != null) {
               parts.add(
                 ResolvedReasoning(publicText, providerData: providerData),
               );
@@ -1208,17 +1256,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           case ToolCallPart(:final toolCallId):
             final record = records[toolCallId];
             final callId = record?.providerCallId;
-            // 结果未确认（或记录缺失）的调用不进入请求：不能只有调用没有结果。
+            // 记录缺失（调用没落库）的调用不进入请求：没有 id 就没法配对。
             if (record == null || callId == null) break;
-            if (!results.containsKey(toolCallId)) break;
-            parts.add(
-              ResolvedToolCall(
-                callId: callId,
-                toolName: record.toolName,
-                arguments: record.arguments,
-                providerData: record.providerData,
-              ),
+            final call = ResolvedToolCall(
+              callId: callId,
+              toolName: record.toolName,
+              arguments: record.arguments,
+              providerData: record.providerData,
             );
+            parts.add(call);
+            if (!results.containsKey(toolCallId)) missingResults.add(call);
           case ToolResultPart(:final toolCallId):
             // 结果由所在消息自己回填（协议要求它与调用分属不同角色）。
             final result = results[toolCallId];
@@ -1229,10 +1276,43 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         }
       }
       if (parts.isEmpty) continue;
-      resolved.add(ResolvedMessage(role: message.role, parts: parts));
+      resolved.add(
+        ResolvedMessage(
+          role: message.role,
+          parts: parts,
+          // modelLabel 缺失说明这条消息来自更早的版本，按跨模型处理：宁可
+          // 不回传签名，也不要送回一个可能对不上的。
+          sameModel: message.modelLabel == currentModelId,
+        ),
+      );
+      if (missingResults.isNotEmpty) {
+        resolved.add(
+          ResolvedMessage(
+            role: ChatRole.tool,
+            sameModel: message.modelLabel == currentModelId,
+            parts: [
+              for (final call in missingResults)
+                ResolvedToolResult(
+                  callId: call.callId,
+                  content: _noResultText,
+                  isError: true,
+                ),
+            ],
+          ),
+        );
+      }
     }
     return resolved;
   }
+
+  /// 调用没有得到结果时的合成回执：如实说明，不假装成功。
+  static const _noResultText = '调用没有返回结果（本次运行未执行或已中断）';
+
+  /// 这一轮是否被中途打断（用户停止或出错收场）：它的思考块不完整，
+  /// 不进上下文；已产出的正文与已执行的调用照常保留。
+  static bool _isInterrupted(ChatMessage message) =>
+      message.status == MessageStatus.failed ||
+      message.status == MessageStatus.cancelled;
 
   /// 分支里引用到的工具记录：消息只存记录 id，参数与结果按 id 读回。
   Future<Map<String, ToolCallRecord>> _recordsFor(
@@ -1303,11 +1383,19 @@ class _LivePart {
   String? callId;
   String? toolName;
 
+  /// 协议块收口时带回来的状态：思考签名、加密推理、工具签名等。
+  /// 它必须落在消息里，否则下一轮无法原样回传（design 第五部分 §4.3）。
+  Map<String, dynamic>? providerData;
+
   MessagePart toPart() {
     final text = buffer.toString();
     return switch (kind) {
       PartKind.text => TextPart(text: text, partId: partId),
-      PartKind.reasoning => ReasoningPart(publicText: text, partId: partId),
+      PartKind.reasoning => ReasoningPart(
+        publicText: text,
+        partId: partId,
+        providerData: providerData,
+      ),
       // 工具调用以 ToolCallPart（引用记录 id）补进消息，协议块不落库。
       PartKind.toolCall ||
       PartKind.provider => TextPart(text: '', partId: partId),
@@ -1316,12 +1404,15 @@ class _LivePart {
 }
 
 /// 把流式缓冲转成消息内容块；空块不进入结果。
+///
+/// 只有协议状态的块（redacted thinking、只带回加密载荷的推理）也算内容：
+/// 它们没有可展示的文本，但缺了就没法回传。
 List<MessagePart> _partsFromLive(List<_LivePart> liveParts) {
   return [
     for (final part in liveParts)
       if (part.kind != PartKind.toolCall &&
           part.kind != PartKind.provider &&
-          part.buffer.isNotEmpty)
+          (part.buffer.isNotEmpty || part.providerData != null))
         part.toPart(),
   ];
 }
@@ -1522,32 +1613,18 @@ ChatMessage _mergeAnswers(ChatMessage head, ChatMessage tail) {
 
 /// 拼接两条消息的内容块，保持各自的 Part 顺序。
 ///
-/// 跨轮拼接时同类内容之间补一个空行：两轮正文直接相连会读成一句话，两轮思考
-/// 直接相连会读成一段。边界上夹着工具调用时不补——卡片本身就是分段，
-/// 再插空行会在回答区里多出一个空段落。
+/// 只在正文接正文时补一个空行：两轮正文直接相连会被渲染成一段。思考不补——
+/// 每轮思考各自成区，工具调用或正文天然把它们隔开。
 List<MessagePart> _mergeAnswerParts(ChatMessage head, ChatMessage tail) {
   final parts = [...head.parts];
-  final tailParts = [...tail.parts];
-  if (tailParts.isNotEmpty) {
-    if (parts.isNotEmpty &&
-        parts.last is TextPart &&
-        tailParts.first is TextPart) {
-      parts.add(const TextPart(text: '\n\n'));
-    }
-    // 思考分段渲染在同一个面板里，跨轮之间没有别的分隔可言。
-    final thinking = tailParts.indexWhere(
-      (part) => part is ReasoningPart && part.publicText.isNotEmpty,
-    );
-    if (thinking >= 0 && _hasThinking(head)) {
-      tailParts.insert(thinking, const ReasoningPart(publicText: '\n\n'));
-    }
+  if (tail.parts.isNotEmpty &&
+      parts.isNotEmpty &&
+      parts.last is TextPart &&
+      tail.parts.first is TextPart) {
+    parts.add(const TextPart(text: '\n\n'));
   }
-  return [...parts, ...tailParts];
+  return [...parts, ...tail.parts];
 }
-
-bool _hasThinking(ChatMessage message) => message.parts.any(
-  (part) => part is ReasoningPart && part.publicText.isNotEmpty,
-);
 
 /// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
 @Riverpod(keepAlive: true)

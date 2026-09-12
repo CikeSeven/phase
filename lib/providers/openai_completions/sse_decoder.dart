@@ -117,7 +117,9 @@ class _CompletionsStreamDecoder {
 
     // 协议字段给出的思考优先于正文里的 think 标签。
     final reasoning = _parseReasoning(delta);
-    if (reasoning != null) _parts.reasoning(0, reasoning);
+    if (reasoning != null) {
+      _parts.reasoning(0, reasoning.text, providerData: reasoning.providerData);
+    }
 
     final content = delta['content'];
     if (content is String && content.isNotEmpty) {
@@ -151,13 +153,25 @@ class _CompletionsStreamDecoder {
     }
   }
 
-  String? _parseReasoning(Map<String, dynamic> delta) {
+  /// 结构化推理明细，按 index 累积：回传时要原样送回去。
+  final _details = <int, Map<String, dynamic>>{};
+
+  /// 解析思考增量，并带回回传所需的来源信息。
+  ///
+  /// 来源字段名（`reasoning_content` 等）与结构化明细都要留给下一轮请求：
+  /// 前者决定回传时用哪个字段，后者本身就是协议要求的原样载荷。
+  ({String text, Map<String, dynamic>? providerData})? _parseReasoning(
+    Map<String, dynamic> delta,
+  ) {
     for (final field in ['reasoning_content', 'reasoning', 'reasoning_text']) {
       final text = delta[field];
-      if (text is String && text.isNotEmpty) return text;
+      if (text is String && text.isNotEmpty) {
+        return (text: text, providerData: {'field': field});
+      }
     }
     final details = delta['reasoning_details'];
     if (details is! List) return null;
+    _accumulateDetails(details);
     final reasoning = StringBuffer();
     for (final detail in details) {
       final text = switch (detail) {
@@ -168,7 +182,40 @@ class _CompletionsStreamDecoder {
       };
       if (text != null) reasoning.write(text);
     }
-    return reasoning.isEmpty ? null : reasoning.toString();
+    if (reasoning.isEmpty && _details.isEmpty) return null;
+    return (
+      text: reasoning.toString(),
+      providerData: {'details': _detailsInOrder()},
+    );
+  }
+
+  /// 明细按 index 合并：文本类字段追加，签名等整段字段覆盖。
+  void _accumulateDetails(List<Object?> details) {
+    for (final detail in details) {
+      if (detail is! Map) continue;
+      final entry = Map<String, dynamic>.from(detail);
+      final index = entry['index'];
+      final key = index is int ? index : _details.length;
+      final existing = _details[key];
+      if (existing == null) {
+        _details[key] = entry;
+        continue;
+      }
+      for (final field in ['text', 'summary', 'data']) {
+        final fragment = entry[field];
+        if (fragment is! String || fragment.isEmpty) continue;
+        final current = existing[field];
+        existing[field] = current is String ? '$current$fragment' : fragment;
+      }
+      for (final field in ['type', 'id', 'signature']) {
+        if (entry[field] != null) existing[field] = entry[field];
+      }
+    }
+  }
+
+  List<Map<String, dynamic>> _detailsInOrder() {
+    final keys = _details.keys.toList()..sort();
+    return [for (final key in keys) _details[key]!];
   }
 
   static TokenUsage? _parseUsage(Object? usage) {

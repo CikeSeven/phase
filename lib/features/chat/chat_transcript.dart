@@ -8,6 +8,23 @@ import '../../../data/models/chat_message.dart';
 import 'message_bubble.dart';
 import 'thinking_panel.dart';
 
+/// 一条消息的气泡缓存项：记录生成它时的输入，用于判断能否复用。
+class _BubbleEntry {
+  const _BubbleEntry({
+    required this.message,
+    required this.attachments,
+    required this.canRegenerate,
+    required this.onRegenerate,
+    required this.widget,
+  });
+
+  final ChatMessage message;
+  final Map<String, Attachment> attachments;
+  final bool canRegenerate;
+  final Future<void> Function()? onRegenerate;
+  final Widget widget;
+}
+
 /// 仓库消息的纯 UI 阅读区；用户回看时保持位置，靠近底部才跟随增量。
 class ChatTranscript extends StatefulWidget {
   const ChatTranscript({
@@ -79,6 +96,48 @@ class _ChatTranscriptState extends State<ChatTranscript> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// 消息气泡缓存：同一个消息对象与同一份附件索引直接复用上一次的 widget。
+  ///
+  /// 生成期间每次增量都会重建整个阅读区，没有缓存的话每条可见消息都要重新
+  /// 解析 Markdown（实测 2 万字约 19ms/帧）。Flutter 在 widget 实例完全相同时
+  /// 跳过该子树的重建，因此这里只需保证「消息没变 → 实例不变」。
+  final _bubbles = <String, _BubbleEntry>{};
+
+  Widget _bubble(int index) {
+    final message = widget.messages[index];
+    // 只有分支最后一条回答可以重新生成。
+    final canRegenerate =
+        widget.onRegenerate != null &&
+        !widget.isGenerating &&
+        index == widget.messages.length - 1;
+    final cached = _bubbles[message.id];
+    if (cached != null &&
+        identical(cached.message, message) &&
+        identical(cached.attachments, widget.attachments) &&
+        cached.canRegenerate == canRegenerate &&
+        cached.onRegenerate == widget.onRegenerate) {
+      return cached.widget;
+    }
+    if (_bubbles.length > widget.messages.length * 2) {
+      final live = {for (final item in widget.messages) item.id};
+      _bubbles.removeWhere((id, _) => !live.contains(id));
+    }
+    final widget_ = MessageBubble(
+      key: ValueKey(message.id),
+      message: message,
+      attachments: widget.attachments,
+      onRegenerate: canRegenerate ? widget.onRegenerate : null,
+    );
+    _bubbles[message.id] = _BubbleEntry(
+      message: message,
+      attachments: widget.attachments,
+      canRegenerate: canRegenerate,
+      onRegenerate: widget.onRegenerate,
+      widget: widget_,
+    );
+    return widget_;
   }
 
   void _scheduleReconcile() {
@@ -231,18 +290,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                                 ),
                                 itemCount: widget.messages.length,
                                 findChildIndexCallback: (key) => indices[key],
-                                itemBuilder: (context, index) => MessageBubble(
-                                  key: ValueKey(widget.messages[index].id),
-                                  message: widget.messages[index],
-                                  attachments: widget.attachments,
-                                  // 只有分支最后一条回答可以重新生成。
-                                  onRegenerate:
-                                      widget.onRegenerate != null &&
-                                          !widget.isGenerating &&
-                                          index == widget.messages.length - 1
-                                      ? widget.onRegenerate
-                                      : null,
-                                ),
+                                itemBuilder: (context, index) => _bubble(index),
                               ),
                             ),
                       ),

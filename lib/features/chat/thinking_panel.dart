@@ -48,6 +48,20 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   /// 展开内容的最大高度，超出部分内部滚动，不再无限撑开。
   static const _maxContentHeight = 260.0;
 
+  /// 超过这么多字才在流式期间只渲染尾部。
+  ///
+  /// 每帧重排的代价随文本长度线性增长（实测每千字约 0.55ms/帧，6 万字就是
+  /// 30ms 以上，直接掉帧）；短思考照旧全文渲染，长思考在流式期间只保留
+  /// 尾部一条，让每帧成本封顶。思考结束后恢复全文，回看不受影响。
+  static const _windowThreshold = 6000;
+  static const _streamingWindow = 2000;
+
+  String get _renderedReasoning {
+    final text = widget.reasoning;
+    if (!widget.streaming || text.length <= _windowThreshold) return text;
+    return '…${text.substring(text.length - _streamingWindow)}';
+  }
+
   final _headerKey = GlobalKey();
   final _innerController = ScrollController();
   late final DateTime _startedAt = DateTime.now();
@@ -237,7 +251,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                     controller: _innerController,
                     primary: false,
                     child: Text(
-                      widget.reasoning,
+                      _renderedReasoning,
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: brand.onLavenderContainer,
                         height: 1.5,

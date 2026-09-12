@@ -63,17 +63,24 @@ class ModelSelection extends _$ModelSelection {
     // 等待会话和助手就绪，避免把加载中的覆盖配置误判为未设置。
     final assistants = await ref.watch(assistantsProvider.future);
     final conversationId = active.conversationId;
-    final thread = conversationId == null
+    // 只订阅用到的两个字段：线程流在生成期间每落一次库就更新一次，
+    // 整条订阅会把模型选择反复重建（标题栏在模型名与加载态之间跳）。
+    final bound = conversationId == null
         ? null
-        : await ref.watch(conversationThreadProvider(conversationId).future);
+        : await ref.watch(
+            conversationThreadProvider(conversationId).selectAsync(
+              (thread) => (
+                thread?.conversation.assistantId,
+                thread?.conversation.modelSelectionOverride,
+              ),
+            ),
+          );
     final assistant = resolveAssistant(
       assistants,
       draftAssistantId: active.draftAssistantId,
-      boundAssistantId: thread?.conversation.assistantId,
+      boundAssistantId: bound?.$1,
     );
-    final override =
-        active.draftModelSelection ??
-        thread?.conversation.modelSelectionOverride;
+    final override = active.draftModelSelection ?? bound?.$2;
     var profile = profiles.first;
     for (final selection in [override, assistant?.defaultModelSelection]) {
       if (selection == null) continue;

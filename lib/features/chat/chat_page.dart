@@ -136,13 +136,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _rowGap +
         AppSpacing.xs * 2;
     final toolbarHeight = math.max(_defaultToolbarHeight, contentHeight);
+    // 已经有值就不再退回加载态：重新解析期间标题不闪。
     final modelLabel = selection.hasError
         ? '模型加载失败'
-        : selection.when(
-            data: (value) => value?.model ?? '未配置模型',
-            loading: () => '正在读取模型…',
-            error: (_, _) => '模型加载失败',
-          );
+        : selection.value?.model ?? (selection.isLoading ? '正在读取模型…' : '未配置模型');
     final current = selection.value;
     final assistantName =
         ref

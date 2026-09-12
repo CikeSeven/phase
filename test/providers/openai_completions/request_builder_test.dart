@@ -148,6 +148,92 @@ void main() {
     });
   });
 
+  group('思考回传（对齐 pi）', () {
+    const compat = OpenAiCompat(
+      thinkingFormat: ThinkingFormat.openai,
+      supportsDeveloperRole: true,
+    );
+    Future<Map<String, dynamic>> assistantMessage({
+      required List<ResolvedPart> parts,
+      bool sameModel = true,
+    }) async {
+      final payload = await buildCompletionsPayload(
+        request(
+          systemPrompt: '',
+          messages: [
+            ResolvedMessage(
+              role: ChatRole.assistant,
+              parts: parts,
+              sameModel: sameModel,
+            ),
+          ],
+        ),
+        compat: compat,
+      );
+      return ((payload['messages'] as List).cast<Map<String, dynamic>>())
+          .single;
+    }
+
+    test('带工具调用的一轮按来源字段回传 reasoning_content', () async {
+      final message = await assistantMessage(
+        parts: const [
+          ResolvedReasoning('先想', providerData: {'field': 'reasoning_content'}),
+          ResolvedToolCall(
+            callId: 'call_1',
+            toolName: 'get_weather',
+            arguments: {'city': '北京'},
+          ),
+        ],
+      );
+      expect(message['reasoning_content'], '先想');
+      expect(message['tool_calls'], hasLength(1));
+    });
+
+    test('普通轮次不回传：端点不认的字段会直接报错', () async {
+      final message = await assistantMessage(
+        parts: const [
+          ResolvedReasoning('先想', providerData: {'field': 'reasoning_content'}),
+          ResolvedText('答案'),
+        ],
+      );
+      expect(message.containsKey('reasoning_content'), isFalse);
+    });
+
+    test('结构化明细原样回传，带不带工具调用都一样', () async {
+      final message = await assistantMessage(
+        parts: const [
+          ResolvedReasoning(
+            '先想',
+            providerData: {
+              'details': [
+                {'type': 'reasoning.text', 'text': '先想', 'signature': 'sig'},
+              ],
+            },
+          ),
+          ResolvedText('答案'),
+        ],
+      );
+      expect(message['reasoning_details'], [
+        {'type': 'reasoning.text', 'text': '先想', 'signature': 'sig'},
+      ]);
+    });
+
+    test('跨模型不回传任何思考字段', () async {
+      final message = await assistantMessage(
+        sameModel: false,
+        parts: const [
+          ResolvedReasoning('先想', providerData: {'field': 'reasoning_content'}),
+          ResolvedToolCall(
+            callId: 'call_1',
+            toolName: 'get_weather',
+            arguments: {'city': '北京'},
+          ),
+        ],
+      );
+      expect(message.containsKey('reasoning_content'), isFalse);
+    });
+  });
+
   group('buildCompletionsPayload 其余字段', () {
     test('systemPrompt 置首条消息，supportsDeveloperRole 决定角色', () async {
       final payload = await buildCompletionsPayload(

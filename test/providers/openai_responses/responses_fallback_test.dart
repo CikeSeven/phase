@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/chat_chunk.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/message_part.dart';
 import 'package:phase/providers/openai_responses/responses_decoder.dart';
 
 void main() {
@@ -485,7 +486,22 @@ void main() {
     ]);
     expect(_reasoning(chunks), isEmpty);
     expect(_body(chunks), isEmpty);
-    expect(chunks.whereType<PartEnd>(), isEmpty);
+    // 没有公开思考，但推理 item 要留给下一轮原样回放（服务端按 rs_* 配对）。
+    final ends = chunks.whereType<PartEnd>().toList();
+    expect(ends, hasLength(1));
+    final part = ends.single.part;
+    expect(part, isA<ReasoningPart>());
+    expect((part as ReasoningPart).providerData?['item'], {
+      'type': 'reasoning',
+      'id': 'r1',
+      'summary': <Object?>[],
+      'content': [
+        {'type': 'encrypted_content', 'text': 'not-public'},
+        {'type': 'signature', 'text': 'not-text'},
+        {'type': 'reasoning_text', 'text': 42},
+      ],
+      'encrypted_content': 'not-public',
+    });
     expect(chunks.last, isA<ResponseEnd>());
     expect(_usage(chunks)?.outputTokens, 8);
     expect(_usage(chunks)?.reasoningTokens, 7);

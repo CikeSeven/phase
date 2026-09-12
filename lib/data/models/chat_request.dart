@@ -7,10 +7,20 @@ import 'tool_policy.dart';
 ///
 /// 这不是第二套持久化格式：它只描述"这一次请求要发什么"。
 class ResolvedMessage {
-  const ResolvedMessage({required this.role, required this.parts});
+  const ResolvedMessage({
+    required this.role,
+    required this.parts,
+    this.sameModel = true,
+  });
 
   final ChatRole role;
   final List<ResolvedPart> parts;
+
+  /// 这条消息是否由当前模型产生。
+  ///
+  /// 跨模型时协议状态（思考签名、加密推理）不再回传：签名只对生成它的模型
+  /// 有效，送回去会被判为非法（pi 的 transform-messages 同样按此分档）。
+  final bool sameModel;
 }
 
 /// 请求中的内容块：正文、思考、图片、工具调用与工具结果。

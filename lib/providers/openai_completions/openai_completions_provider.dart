@@ -24,6 +24,10 @@ import 'sse_decoder.dart';
 /// 图片按 [ResolvedImage.attachment] 的本地文件编码为 data URI；
 /// 工具调用回填 assistant.tool_calls，工具结果按调用 ID 配对为 role=tool 消息；
 /// 推理等级按 [OpenAiCompat.thinkingFormat] 映射。
+///
+/// 思考回传按 pi 的规则：有结构化明细（`reasoning_details`）就原样回传；
+/// 否则按来源字段名回传（如 `reasoning_content`），且只挂在带工具调用的
+/// 那一轮——多轮工具续跑需要它，普通轮次送回未知字段会被端点拒绝。
 Future<Map<String, dynamic>> buildCompletionsPayload(
   ChatRequest request, {
   required OpenAiCompat compat,
@@ -84,6 +88,7 @@ Future<List<Map<String, dynamic>>> _completionsMessages(
   final blocks = <Object>[];
   final calls = <ResolvedToolCall>[];
   final results = <ResolvedToolResult>[];
+  final thinkings = <ResolvedReasoning>[];
   for (final part in message.parts) {
     switch (part) {
       case ResolvedText(:final text):
@@ -96,11 +101,15 @@ Future<List<Map<String, dynamic>>> _completionsMessages(
       case ResolvedToolResult():
         results.add(part);
       case ResolvedReasoning():
-        // OpenAI 兼容协议没有回传思考的字段，思考块不进入请求。
-        break;
+        thinkings.add(part);
     }
   }
 
+  final reasoning = _reasoningFields(
+    message,
+    thinkings,
+    hasCalls: calls.isNotEmpty,
+  );
   final messages = <Map<String, dynamic>>[];
   if (blocks.isNotEmpty ||
       calls.isNotEmpty ||
@@ -108,6 +117,7 @@ Future<List<Map<String, dynamic>>> _completionsMessages(
     messages.add({
       'role': _roleFor(message.role, compat),
       'content': _completionsContent(blocks),
+      ...?reasoning,
       if (calls.isNotEmpty)
         'tool_calls': [
           for (final call in calls)
@@ -131,6 +141,46 @@ Future<List<Map<String, dynamic>>> _completionsMessages(
   }
   return messages;
 }
+
+/// 组装要回传的思考字段；没有可回传的内容时返回 null。
+///
+/// 结构化明细优先（OpenRouter 一类要求原样送回），其次是来源字段名；
+/// 跨模型一律不回传——签名与明细只对生成它的模型有效。
+Map<String, dynamic>? _reasoningFields(
+  ResolvedMessage message,
+  List<ResolvedReasoning> thinkings, {
+  required bool hasCalls,
+}) {
+  if (thinkings.isEmpty || !message.sameModel) return null;
+  for (final thinking in thinkings) {
+    final details = thinking.providerData?['details'];
+    if (details is List && details.isNotEmpty) {
+      return {'reasoning_details': details};
+    }
+  }
+  // 普通轮次不回传：只回 OpenAI 文档里没有的字段会被端点判为非法参数。
+  if (!hasCalls) return null;
+  for (final thinking in thinkings) {
+    final field = thinking.providerData?['field'];
+    if (field is! String || !_replayableReasoningFields.contains(field)) {
+      continue;
+    }
+    final text = thinkings
+        .map((entry) => entry.text)
+        .where((entry) => entry.isNotEmpty)
+        .join('\n');
+    if (text.isEmpty) continue;
+    return {field: text};
+  }
+  return null;
+}
+
+/// 端点认识、可以原样回传的思考字段名。
+const _replayableReasoningFields = {
+  'reasoning_content',
+  'reasoning',
+  'reasoning_text',
+};
 
 /// 没有附件时内容保持纯字符串，有附件时变为结构化数组。
 Object _completionsContent(List<Object> blocks) {
