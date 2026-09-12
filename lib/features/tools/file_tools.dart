@@ -11,7 +11,7 @@ const _defaultReadLines = 300;
 const _maxReadLines = 1000;
 
 /// 读取已导入的附件或本会话产物中的文本。
-class ReadFileTool implements Tool {
+class ReadFileTool extends Tool {
   const ReadFileTool();
 
   @override
@@ -144,7 +144,7 @@ class ReadFileTool implements Tool {
 }
 
 /// 把文本写成新产物：写入应用私有目录，产物作为附件登记。
-class WriteFileTool implements Tool {
+class WriteFileTool extends Tool {
   const WriteFileTool();
 
   /// 单次写入的内容上限，避免一次落一个超大文件。
@@ -266,7 +266,7 @@ class WriteFileTool implements Tool {
 }
 
 /// 列出当前会话可读的文件：已导入的附件与本会话产物。
-class ListFilesTool implements Tool {
+class ListFilesTool extends Tool {
   const ListFilesTool();
 
   @override

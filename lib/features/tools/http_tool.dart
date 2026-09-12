@@ -7,7 +7,7 @@ import 'tool.dart';
 ///
 /// 只做"取任务需要的数据"这一件事：不改方法、不跟随重定向之外的自动重试，
 /// 也不替模型解释网页内容；返回的正文按不可信数据处理。
-class HttpRequestTool implements Tool {
+class HttpRequestTool extends Tool {
   HttpRequestTool({
     required this.fetch,
     this.maxBytes = 512 * 1024,

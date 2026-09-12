@@ -73,3 +73,32 @@ final class UnknownFailure extends Failure {
   @override
   String get userMessage => '出现未知错误，请稍后再试';
 }
+
+/// 有限的 Android 执行业务错误分类，不暴露平台异常。
+enum ExecutionFailureCode {
+  permissionRequired,
+  unavailable,
+  targetChanged,
+  invalidArguments,
+  timeout,
+  executionFailed,
+  cancelled,
+  resultUnknown,
+}
+
+final class ExecutionFailure extends Failure {
+  const ExecutionFailure(this.code) : super('Android execution channel');
+  final ExecutionFailureCode code;
+
+  @override
+  String get userMessage => switch (code) {
+    ExecutionFailureCode.permissionRequired => '请开启任务通知或所需执行权限后重试',
+    ExecutionFailureCode.targetChanged => '操作目标已改变，请重新观察',
+    ExecutionFailureCode.invalidArguments => '执行请求无效',
+    ExecutionFailureCode.timeout => '执行通道响应超时，请核验任务状态',
+    ExecutionFailureCode.cancelled => '任务已停止',
+    ExecutionFailureCode.resultUnknown => '动作结果未确认，请核验实际状态',
+    ExecutionFailureCode.unavailable => '执行通道不可用，请返回相月后重试',
+    ExecutionFailureCode.executionFailed => 'Android 执行失败，请重试',
+  };
+}

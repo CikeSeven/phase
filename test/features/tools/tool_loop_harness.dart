@@ -31,11 +31,15 @@ import 'package:phase/data/repositories/tool_call_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/chat/model_selection.dart';
 import 'package:phase/features/tools/tool.dart';
+import 'package:phase/features/tools/tool_executor.dart';
+import 'package:phase/features/execution/channel_driver.dart';
+import 'package:phase/features/execution/execution_controller.dart';
 import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../support/fake_secure_storage.dart';
+import '../../support/fake_channel_driver.dart';
 
 /// 一段文本回答的事件序列。
 Stream<ChatChunk> textTurn(String text, {String partId = 'text_0'}) {
@@ -94,9 +98,10 @@ Stream<ChatChunk> multiToolTurn(
 }
 
 /// 记录每次执行的假工具：验证「是否真的被派发」与执行顺序。
-class RecordingTool implements Tool {
+class RecordingTool extends Tool {
   RecordingTool({
     required this.name,
+    this.channel = ExecutionChannel.app,
     this.policy = ToolPolicy.allow,
     this.outcome = const ToolOutcome.success('已执行'),
     this.schema = const {
@@ -108,6 +113,9 @@ class RecordingTool implements Tool {
 
   @override
   final String name;
+
+  @override
+  final ExecutionChannel channel;
 
   final ToolPolicy policy;
 
@@ -252,6 +260,11 @@ class ToolLoopHarness {
     }
     final container = ProviderContainer(
       overrides: [
+        channelDriverProvider.overrideWith((ref) {
+          final driver = FakeChannelDriver();
+          ref.onDispose(() => unawaited(driver.dispose()));
+          return driver;
+        }),
         sharedPreferencesProvider.overrideWith((ref) => preferences),
         appDatabaseProvider.overrideWith((ref) => database),
         secureKeyStorageProvider.overrideWith((ref) => SecureKeyStorage(keys)),
@@ -290,6 +303,27 @@ class ToolLoopHarness {
 
   ChatController controller() =>
       container.read(chatControllerProvider.notifier);
+
+  /// 测试展示端消费真实待确认状态，决定仍提交给应用级控制器。
+  set onConfirmation(
+    Future<ToolDecision> Function(ToolConfirmationRequest) handler,
+  ) {
+    final subscription = container.listen(executionControllerProvider, (
+      previous,
+      next,
+    ) {
+      final request = next.confirmation;
+      if (request == null || identical(previous?.confirmation, request)) return;
+      unawaited(
+        handler(request).then((decision) {
+          container
+              .read(executionControllerProvider.notifier)
+              .decide(request.record.runId, request.record.id, decision);
+        }),
+      );
+    });
+    addTearDown(subscription.close);
+  }
 
   ChatState state() => container.read(chatControllerProvider);
 

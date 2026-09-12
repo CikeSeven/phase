@@ -68,7 +68,7 @@ void main() {
       ToolCallStatus.awaitingConfirmation,
     ], expiresAt: expiry);
     final confirmed = <String>[];
-    h.controller().onToolConfirmation = (request) async {
+    h.onConfirmation = (request) async {
       confirmed.add(request.record.id);
       if (request.record.id == 'record-2') {
         expect(

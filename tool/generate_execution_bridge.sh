@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+dart run pigeon --input pigeons/execution_api.dart
+dart format lib/features/execution/execution_api.g.dart
+# Pigeon 的 Kotlin 输出带行尾空格；统一由生成入口归一化，不手改生成物。
+sed -i 's/[[:blank:]]*$//' android/app/src/main/kotlin/app/xiangyue/phase/bridge/ExecutionApi.g.kt

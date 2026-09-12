@@ -14,10 +14,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_top_bar.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/reasoning_effort.dart';
-import '../../../data/models/tool_call_record.dart';
-import '../../../data/repositories/tool_call_repository.dart';
 import '../assistants/assistant_picker_sheet.dart';
-import '../tools/tool_executor.dart';
 import 'chat_controller.dart';
 import 'chat_empty_state.dart';
 import 'chat_input_bar.dart';
@@ -26,7 +23,6 @@ import 'chat_transcript.dart';
 import 'conversation_drawer.dart';
 import 'model_picker_sheet.dart';
 import 'model_selection.dart';
-import 'tool_confirmation_sheet.dart';
 
 /// 聊天页的玻璃顶栏、阅读区、输入栏与会话侧栏。
 class ChatPage extends ConsumerStatefulWidget {
@@ -45,70 +41,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerOpen = false;
   double _composerExtent = 0;
-
-  /// 工具确认入口挂在聊天页上：一次运行开始前控制器就读取它。
-  late final ChatController _chatController;
-
-  /// 同一时间只有一个确认面板。
-  Completer<void>? _confirmationClosed;
-
-  @override
-  void initState() {
-    super.initState();
-    _chatController = ref.read(chatControllerProvider.notifier);
-    _chatController.onToolConfirmation = _confirmToolCall;
-  }
-
-  @override
-  void dispose() {
-    // 页面销毁后不再持有确认入口：没有界面时执行器按超时拒绝处理。
-    _chatController.onToolConfirmation = null;
-    super.dispose();
-  }
-
-  /// 工具确认：展示本次动作的真实参数，由用户决定。
-  ///
-  /// 只在记录仍处于等待确认、且请求尚未过期时展示面板；已经结束或过期的
-  /// 请求直接按拒绝返回，不补弹第二个面板，也不复用上一次的批准。
-  Future<ToolDecision> _confirmToolCall(ToolConfirmationRequest request) async {
-    if (!mounted) return ToolDecision.expired;
-    // 上次确认可能刚超时、面板还在退出；等它关闭，而不是拒绝下一次动作。
-    await _confirmationClosed?.future;
-    if (!mounted) return ToolDecision.expired;
-    final ToolCallRecord record;
-    try {
-      final toolCalls = await ref.read(toolCallRepositoryProvider.future);
-      record = await toolCalls.getById(request.record.id);
-    } on Failure {
-      return ToolDecision.rejected;
-    }
-    if (!mounted) return ToolDecision.expired;
-    // 记录已不是等待确认（已决定、已取消或记录丢失）：这次请求不再生效。
-    if (record.status != ToolCallStatus.awaitingConfirmation) {
-      return ToolDecision.rejected;
-    }
-    if (!request.expiresAt.isAfter(DateTime.now())) return ToolDecision.expired;
-    final closed = Completer<void>();
-    _confirmationClosed = closed;
-    try {
-      final outcome = await showToolConfirmationSheet(context, request);
-      switch (outcome) {
-        case ToolConfirmationOutcome.allowOnce:
-          return ToolDecision.approved;
-        case ToolConfirmationOutcome.reject:
-          return ToolDecision.rejected;
-        case ToolConfirmationOutcome.stopTask:
-          // 停止整个任务：本次调用不执行，循环按取消收口。
-          _chatController.stop();
-          return ToolDecision.rejected;
-        case ToolConfirmationOutcome.expired:
-          return ToolDecision.expired;
-      }
-    } finally {
-      if (identical(_confirmationClosed, closed)) _confirmationClosed = null;
-      closed.complete();
-    }
-  }
 
   void _openDrawer() {
     _scaffoldKey.currentState?.openDrawer();

@@ -266,7 +266,7 @@ void main() {
       ready.complete();
     });
     final h = await ToolLoopHarness.create();
-    h.controller().onToolConfirmation = (_) async => ToolDecision.approved;
+    h.onConfirmation = (_) async => ToolDecision.approved;
     h.provider.turns.add(
       toolTurn(
         callId: 'get',
@@ -408,7 +408,7 @@ void main() {
       received.complete(request);
     });
     final h = await ToolLoopHarness.create();
-    h.controller().onToolConfirmation = (_) async => ToolDecision.approved;
+    h.onConfirmation = (_) async => ToolDecision.approved;
     h.provider.turns.add(
       toolTurn(
         callId: 'call_1',
@@ -444,7 +444,7 @@ void main() {
           throw const UnknownFailure('injected artifact persistence failure');
         },
       );
-      h.controller().onToolConfirmation = (_) async => ToolDecision.approved;
+      h.onConfirmation = (_) async => ToolDecision.approved;
       h.provider.turns.addAll([
         toolTurn(
           callId: 'call_1',
@@ -532,7 +532,7 @@ void main() {
     final echo = RecordingTool(name: 'echo', policy: ToolPolicy.ask);
     final h = await ToolLoopHarness.create(registry: ToolRegistry([echo]));
     final gate = Completer<ToolDecision>();
-    h.controller().onToolConfirmation = (_) => gate.future;
+    h.onConfirmation = (_) => gate.future;
     h.provider.turns.addAll([
       toolTurn(
         callId: 'call_1',

@@ -70,6 +70,7 @@ dev_dependencies:
   json_serializable: ^6.14.1
   drift_dev: ^2.34.6
   riverpod_lint: ^3.1.9
+  pigeon: ^28.1.0
 
 # 数据库加密：把 sqlite3 的构建钩子切到 SQLite3MultipleCiphers，
 # 由 sqlite3 包在构建期自带编译，取代已停止维护的 sqlcipher_flutter_libs。

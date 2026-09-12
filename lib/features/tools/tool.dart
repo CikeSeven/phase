@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_request.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/tool_call_record.dart';
 
 /// 工具需要的存储能力：读会话附件、定位产物目录、登记产物。
 abstract interface class ToolStorage {
@@ -121,6 +122,10 @@ typedef ToolProgress = void Function(String message);
 
 /// 一个可被模型调用的工具。
 abstract class Tool {
+  const Tool();
+
+  ExecutionChannel get channel => ExecutionChannel.app;
+
   String get name;
   String get description;
 
@@ -223,7 +228,7 @@ class ToolArgumentException implements Exception {
 }
 
 /// 当前系统时间与设备信息。
-class SystemInfoTool implements Tool {
+class SystemInfoTool extends Tool {
   const SystemInfoTool();
 
   @override

@@ -7,7 +7,9 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/error/failure.dart';
 import '../tools/run_recovery_controller.dart';
+import '../execution/execution_controller.dart';
 import 'chat_controller.dart';
+import 'tool_confirmation_host.dart';
 
 /// 切换查看位置后仍能回到根任务；启动失败与中断任务都有可达入口。
 class ChatRunBanner extends ConsumerWidget {
@@ -42,7 +44,10 @@ class ChatRunBanner extends ConsumerWidget {
         chat.runningConversationId != null &&
         chat.runningConversationId != viewed;
     final count = recovery.value?.length ?? 0;
-    if (!runningElsewhere && count == 0 && !recovery.hasError) {
+    final pending = ref.watch(executionControllerProvider).confirmation;
+    final reopen = ToolConfirmationHost.reopenOf(context);
+    final canConfirm = pending != null && reopen != null;
+    if (!runningElsewhere && count == 0 && !recovery.hasError && !canConfirm) {
       return const SizedBox.shrink();
     }
     return Center(
@@ -54,6 +59,12 @@ class ChatRunBanner extends ConsumerWidget {
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.xs,
             children: [
+              if (canConfirm)
+                TextButton(
+                  key: const ValueKey('reopen-tool-confirmation'),
+                  onPressed: reopen,
+                  child: const Text('查看待确认动作'),
+                ),
               if (runningElsewhere)
                 TextButton(
                   key: const ValueKey('return-to-running-chat'),

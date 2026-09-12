@@ -23,8 +23,7 @@ void main() {
       bytes: utf8.encode('笔记正文'),
     );
     // write_file 默认 ask：确认入口批准这次写入。
-    harness.controller().onToolConfirmation = (request) async =>
-        ToolDecision.approved;
+    harness.onConfirmation = (request) async => ToolDecision.approved;
     harness.provider.turns.addAll([
       toolTurn(
         callId: 'call_1',
@@ -92,8 +91,7 @@ void main() {
         'phase-escape-${DateTime.now().microsecondsSinceEpoch}.md',
       ),
     );
-    harness.controller().onToolConfirmation = (request) async =>
-        ToolDecision.approved;
+    harness.onConfirmation = (request) async => ToolDecision.approved;
     harness.provider.turns.addAll([
       toolTurn(
         callId: 'call_1',

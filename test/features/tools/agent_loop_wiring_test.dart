@@ -168,7 +168,7 @@ void main() {
       registry: ToolRegistry([risky]),
     );
     final asked = <ToolConfirmationRequest>[];
-    harness.controller().onToolConfirmation = (request) async {
+    harness.onConfirmation = (request) async {
       asked.add(request);
       return ToolDecision.rejected;
     };
@@ -211,7 +211,7 @@ void main() {
     final harness = await ToolLoopHarness.create(
       registry: ToolRegistry([slow]),
     );
-    harness.controller().onToolConfirmation = (request) async {
+    harness.onConfirmation = (request) async {
       // 面板展示的摘要来自工具自己的动作描述。
       expect(request.summary, contains('slow'));
       return ToolDecision.approved;
@@ -252,8 +252,7 @@ void main() {
     final harness = await ToolLoopHarness.create(
       registry: ToolRegistry([risky]),
     );
-    harness.controller().onToolConfirmation = (request) async =>
-        ToolDecision.rejected;
+    harness.onConfirmation = (request) async => ToolDecision.rejected;
     // 第二轮挂住：在拒绝之后、收口之前读取运行状态。
     final next = StreamController<ChatChunk>();
     harness.provider.turns.addAll([
@@ -355,8 +354,7 @@ void main() {
       registry: ToolRegistry([risky]),
     );
     // 界面一直不给出决定：确认在停止时才结束。
-    harness.controller().onToolConfirmation = (request) =>
-        Completer<ToolDecision>().future;
+    harness.onConfirmation = (request) => Completer<ToolDecision>().future;
     harness.provider.turns.add(
       toolTurn(callId: 'call_1', toolName: 'risky', arguments: '{}'),
     );

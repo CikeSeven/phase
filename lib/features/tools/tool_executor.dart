@@ -98,6 +98,7 @@ class ToolExecutor {
     required this.toolCalls,
     this.runs,
     this.onConfirmationRequired,
+    this.prepareChannel,
     this.confirmationTimeout = ToolCallRepository.confirmationTimeout,
   });
 
@@ -112,6 +113,9 @@ class ToolExecutor {
   onConfirmationRequired;
 
   final Duration confirmationTimeout;
+
+  /// 策略和参数有效后才准备平台宿主；禁止的调用不触发服务或权限交互。
+  final Future<void> Function(Tool tool)? prepareChannel;
 
   /// 执行一次工具调用；返回最终记录状态与工具输出。
   Future<ToolExecutionResult> execute(
@@ -183,6 +187,20 @@ class ToolExecutor {
       tool,
       status: ToolCallStatus.prepared,
     );
+    if (!cancellation.isCancelled) {
+      try {
+        await prepareChannel?.call(tool);
+      } on Failure catch (failure) {
+        await toolCalls.markFailed(
+          record.id,
+          result: failure.userMessage,
+          errorCode: failure is ExecutionFailure
+              ? failure.code.name
+              : 'channelUnavailable',
+        );
+        rethrow;
+      }
+    }
     if (policy == ToolPolicy.ask) {
       final decision = await _confirm(record, tool, cancellation);
       if (decision == null) {

@@ -12,7 +12,10 @@ import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/core/widgets/app_sheet.dart';
 import 'package:phase/features/chat/chat_page.dart';
+import 'package:phase/features/chat/tool_confirmation_host.dart';
+import 'package:phase/features/chat/tool_confirmation_sheet.dart';
 import 'package:phase/features/tools/tool_card.dart';
+import 'package:phase/features/execution/execution_controller.dart';
 
 import '../tools/tool_loop_harness.dart';
 
@@ -56,7 +59,10 @@ void main() {
           routerConfig: router,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(disableAnimations: true),
-            child: child!,
+            child: ToolConfirmationHost(
+              navigatorKey: router.routerDelegate.navigatorKey,
+              child: child!,
+            ),
           ),
         ),
       ),
@@ -98,6 +104,94 @@ void main() {
       ),
     );
   }
+
+  testWidgets('前后台移交及关闭重开保持同一确认与原期限，不提前执行', (tester) async {
+    final harness = await pumpChat(tester);
+    harness.provider.turns.addAll([
+      toolTurn(
+        callId: 'call_1',
+        toolName: 'write_file',
+        arguments: writeArguments,
+      ),
+      textTurn('保存完成'),
+    ]);
+    await send(tester, '保存摘要');
+    await waitForPanel(tester);
+    final pending = harness.container
+        .read(executionControllerProvider)
+        .confirmation!;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    await _settle(tester);
+    expect(find.byKey(const ValueKey('tool-confirmation-body')), findsNothing);
+    expect(artifactFile(harness).existsSync(), isFalse);
+    // paused 后不再绘帧，后台渲染树不表示面板仍然可见。
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    expect(
+      harness.container.read(executionControllerProvider).confirmation,
+      same(pending),
+    );
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await waitForPanel(tester);
+    expect(
+      tester
+          .widget<ToolConfirmationSheet>(find.byType(ToolConfirmationSheet))
+          .request
+          .expiresAt,
+      pending.expiresAt,
+    );
+    final navigator = Navigator.of(
+      tester.element(find.byType(ToolConfirmationSheet)),
+    );
+    navigator.pop();
+    await _settle(tester);
+    expect(
+      harness.container.read(executionControllerProvider).confirmation,
+      same(pending),
+    );
+    await tester.tap(find.byKey(const ValueKey('reopen-tool-confirmation')));
+    await waitForPanel(tester);
+    expect(
+      tester
+          .widget<ToolConfirmationSheet>(find.byType(ToolConfirmationSheet))
+          .request
+          .expiresAt,
+      pending.expiresAt,
+    );
+    await tester.tap(find.byKey(const ValueKey('tool-confirm-allow')));
+    await _until(tester, () => !harness.state().isGenerating, reason: '运行未结束');
+    expect(artifactFile(harness).existsSync(), isTrue);
+    expect((await harness.recordsByCall()).values, hasLength(1));
+  });
+
+  testWidgets('应用级确认在设置路由仍可操作，返回聊天保留执行结果', (tester) async {
+    final harness = await pumpChat(tester);
+    final router = GoRouter.of(tester.element(find.byType(ChatPage)));
+    unawaited(router.push('/settings'));
+    await _settle(tester);
+    harness.provider.turns.addAll([
+      toolTurn(
+        callId: 'call_1',
+        toolName: 'write_file',
+        arguments: writeArguments,
+      ),
+      textTurn('已拒绝保存'),
+    ]);
+    unawaited(harness.controller().send('保存摘要'));
+    await waitForPanel(tester);
+    await tester.tap(find.byKey(const ValueKey('tool-confirm-reject')));
+    await _until(tester, () => !harness.state().isGenerating, reason: '运行未结束');
+    expect(artifactFile(harness).existsSync(), isFalse);
+    router.pop();
+    await _settle(tester);
+    expect(
+      (await harness.recordsByCall())['call_1']!.status,
+      ToolCallStatus.rejected,
+    );
+    expect(find.byType(ChatPage), findsOneWidget);
+  });
 
   testWidgets('确认面板展示本次写入的真实参数，批准后落盘并显示工具卡片', (tester) async {
     final harness = await pumpChat(tester);

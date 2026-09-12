@@ -21,6 +21,7 @@ enum RunFinishReason {
   modelError,
   emptyResponse,
   storageError,
+  executionError,
 }
 
 /// 运行使用的连接快照：编辑服务商不影响已开始的运行，密钥不在此保存。

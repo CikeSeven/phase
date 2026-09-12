@@ -7,6 +7,7 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/settings/theme_mode_controller.dart';
 import 'features/tools/run_recovery_controller.dart';
+import 'features/chat/tool_confirmation_host.dart';
 
 /// 应用根组件：装配主题与路由。
 class PhaseApp extends ConsumerStatefulWidget {
@@ -43,6 +44,10 @@ class _PhaseAppState extends ConsumerState<PhaseApp> {
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) => ToolConfirmationHost(
+        navigatorKey: router.routerDelegate.navigatorKey,
+        child: child!,
+      ),
     );
   }
 }

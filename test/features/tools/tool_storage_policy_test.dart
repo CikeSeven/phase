@@ -16,7 +16,7 @@ void main() {
   for (final deleteOriginal in [true, false]) {
     test('复制工具会话重映射运行、结果、产物，删除${deleteOriginal ? '原件' : '副本'}不影响另一份', () async {
       final h = await ToolLoopHarness.create();
-      h.controller().onToolConfirmation = (_) async => ToolDecision.approved;
+      h.onConfirmation = (_) async => ToolDecision.approved;
       h.provider.turns.addAll([
         toolTurn(
           callId: 'write',
@@ -62,7 +62,7 @@ void main() {
 
   test('复制工具记录失败时回滚副本及独立文件，不影响原件', () async {
     final h = await ToolLoopHarness.create();
-    h.controller().onToolConfirmation = (_) async => ToolDecision.approved;
+    h.onConfirmation = (_) async => ToolDecision.approved;
     h.provider.turns.addAll([
       toolTurn(
         callId: 'write',

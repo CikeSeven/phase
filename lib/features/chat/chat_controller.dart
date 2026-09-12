@@ -39,6 +39,7 @@ import '../tools/run_recovery_controller.dart';
 import '../tools/tool.dart';
 import '../tools/tool_executor.dart';
 import '../tools/tool_registry.dart';
+import '../execution/execution_controller.dart';
 import 'model_selection.dart';
 
 part 'chat_controller.g.dart';
@@ -127,13 +128,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   DateTime? _thinkingStartedAt;
   DateTime? _firstTextAt;
   bool _stoppedManually = false;
-
-  /// 界面注册的工具确认入口（S4 的确认面板接入这里）。
-  ///
-  /// 未注册时执行器按超时拒绝处理，不把动作当成已批准。回调里不显示、
-  /// 不记录参数以外的内容；接口只接收摘要与期限。
-  Future<ToolDecision> Function(ToolConfirmationRequest request)?
-  onToolConfirmation;
 
   /// 当前运行：一次发送（或重新生成）对应一个 AgentRun，配置在开始时固定。
   AgentRun? _run;
@@ -550,14 +544,18 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final recovery = ref.read(runRecoveryControllerProvider.notifier);
 
     final registry = ref.read(toolRegistryProvider);
+    final execution = ref.read(executionControllerProvider.notifier);
     final executor = ToolExecutor(
       registry: registry,
       toolCalls: toolCalls,
       runs: runs,
+      prepareChannel: (tool) async {
+        if (tool.channel != ExecutionChannel.app) {
+          await execution.ensureDeviceHost(run.id);
+        }
+      },
     );
-    if (onToolConfirmation != null) {
-      executor.onConfirmationRequired = _confirmToolCall;
-    }
+    executor.onConfirmationRequired = _confirmToolCall;
 
     _run = run;
     _selection = selection;
@@ -572,6 +570,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _turnTailId = null;
     recovery.runStarted(run.id);
     try {
+      execution.beginRun(run.id, stop: stop);
       _runAttachments = await _attachmentIndex(run.conversationId, const []);
       state = state.copyWith(
         isGenerating: true,
@@ -586,6 +585,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
       if (resuming && !await _restorePendingTools()) return;
       await AgentLoop(this, maxTurns: run.maxTurns - run.turnCount).run();
+    } on ExecutionFailure {
+      await _finishRun(RunStatus.failed, RunFinishReason.executionError);
+      rethrow;
     } on Failure {
       // 落库失败：运行按存储失败收口后再交给界面提示，不留永远 running 的运行。
       try {
@@ -601,6 +603,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _publishTimer = null;
       _streamingMessageId = null;
       _cancellation?.cancel();
+      try {
+        await execution.endRun(run.id);
+      } on Failure {
+        // 控制器保留可见错误；不让服务清理失败跳过本地资源与运行收尾。
+        AppLogger.warning('Android 任务服务未确认结束');
+      }
       await _subscription?.cancel();
       _subscription = null;
       _doneCompleter = null;
@@ -880,7 +888,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           target: _registry!
               .byName(call.toolName)
               ?.describeAction(call.arguments),
-          channel: ExecutionChannel.app,
+          channel:
+              _registry!.byName(call.toolName)?.channel ?? ExecutionChannel.app,
           defaultPolicy:
               _registry!.byName(call.toolName)?.defaultPolicy ??
               ToolPolicy.deny,
@@ -928,13 +937,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final repository = _repository!;
 
     if (call.recordId == null) throw const OperationFailure('调用尚未持久化，不能执行');
+    final channel =
+        _registry!.byName(call.toolName)?.channel ?? ExecutionChannel.app;
     final executed = await _executor!.execute(
       ToolExecutionRequest(
         runId: run.id,
         assistantMessageId: turn.messageId,
         toolName: call.toolName,
         arguments: call.arguments,
-        channel: ExecutionChannel.app,
+        channel: channel,
         conversationId: run.conversationId,
         attachments: await _storage!.attachments(run.conversationId),
         storage: _storage!,
@@ -1052,36 +1063,18 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
   /// 请求用户确认：等待期间运行记 awaitingConfirmation 与待确认调用。
   ///
-  /// 没有界面、到点或停止都不把动作当成已批准：前两者按拒绝，停止按取消
-  /// （执行器在回调返回后统一按取消收口）。
+  /// 应用级控制器持有待确认请求；页面销毁/移交不改变决定或原期限。
+  /// 到期按拒绝，停止由执行器按取消收口。
   Future<ToolDecision> _confirmToolCall(ToolConfirmationRequest request) async {
     final run = _run;
     if (run != null) {
       _run = await _runs!.awaitConfirmation(run.id, request.record.id);
     }
-    final handler = onToolConfirmation;
     final cancellation = _cancellation;
-    if (handler == null || cancellation == null) return ToolDecision.expired;
-
-    final remaining = request.expiresAt.difference(DateTime.now());
-    final expired = Completer<ToolDecision>();
-    final timer = Timer(
-      remaining.isNegative ? Duration.zero : remaining,
-      () => expired.complete(ToolDecision.expired),
-    );
-    try {
-      final decision = await Future.any([
-        handler(request).catchError((Object error, StackTrace stackTrace) {
-          AppLogger.error('工具确认失败', error, stackTrace);
-          return ToolDecision.expired;
-        }),
-        expired.future,
-        cancellation.whenCancelled.then((_) => ToolDecision.expired),
-      ]);
-      return decision;
-    } finally {
-      timer.cancel();
-    }
+    if (cancellation == null) return ToolDecision.expired;
+    return ref
+        .read(executionControllerProvider.notifier)
+        .confirm(request, cancellation);
   }
 
   /// 停止生成：结束本轮模型请求与正在进行的工具执行。

@@ -94,6 +94,15 @@
 
 ## 6. S4：Android 执行
 
+### 分批实施
+
+1. **S4.1 桥接契约**：Pigeon 请求/结果/进度与能力、确认、取消；Dart ChannelDriver 和 Kotlin 执行协调器。
+2. **S4.2 运行宿主与控制**：应用级缓存引擎、ExecutionService、通知停止；确认状态与聊天页面解耦。
+3. **S4.3 SAF 文件**：用户授权范围、URI 访问、文件工具与附件/产物关联。
+4. **S4.4 无障碍观察**：权限引导、固定测试 App、目标窗口与快照。
+5. **S4.5 动作与原生面板**：设备动作队列、点击/滚动/输入、Accessibility overlay、结果观察。
+6. **S4.6 真机闭环**：目标搜索、Activity/服务/进程生命周期、权限变化与底层取消验收。
+
 ### 实现
 
 - 定义 Pigeon 请求/结果/进度，Dart/Kotlin 使用同一应用侧 toolCallId。
@@ -134,7 +143,7 @@ P1/P2 按使用需求逐项实施，不先给初版塞入空实现、镜像存�
 
 ## 9. 工程检查
 
-依赖变化时运行 `flutter pub get`，生成输入变化时运行 `dart run build_runner build`。Dart 代码改动执行：
+依赖变化时运行 `flutter pub get`，生成输入变化时运行 `dart run build_runner build`；Pigeon 定义变化时运行 `bash tool/generate_execution_bridge.sh`，原生执行代码变化时另运行 `cd android && ./gradlew :app:testDebugUnitTest`。Dart 代码改动执行：
 
 ```bash
 dart format --output=none --set-exit-if-changed lib test
@@ -193,3 +202,16 @@ adb -s "$DEVICE" shell am start -W -n app.xiangyue.phase/.MainActivity
 - 界面与策略：等待确认/执行期间的工具卡片不再被旧流式正文覆盖；助手支持真实三档工具策略的加载、草稿、取消、保存及失败重试，空范围为全部禁止；执行记录页接入会话菜单。
 - 已执行检查：格式检查、`flutter analyze --no-pub`、完整 `flutter test --no-pub`（548 通过、4 跳过）及 `git diff --check`；生成物通过 `dart run build_runner build` 更新。测试使用临时数据库、假凭据、本地 HTTP 与真实协议适配器，覆盖恢复核验的浅深主题和 320dp 两倍字号交互。
 - 未执行：真机安装/操作、Profile 性能、真实模型网关验收；未新增依赖，未改 Android 平台配置。
+
+## 13. S4.1 / S4.2 执行记录（2026-09-13）
+
+已落地的代码与回归：
+
+- **类型化桥接**：`pigeons/execution_api.dart` 统一请求、结果、进度、目标、产物、能力与确认决定；生成 Dart/Kotlin 接口。请求携带 runId 和应用侧 toolCallId，不使用 Provider 调用 ID 充当原生任务编号。生成入口为 `bash tool/generate_execution_bridge.sh`，重复生成后的文件校验一致。
+- **Dart 通道**：`lib/features/execution/channel_driver.dart` 固定派发参数，限制请求/进度大小，按调用 ID 和 sequence 丢弃重复/迟到进度；终态仅来自命令 Future。取消传到原生，回调丢失、错配或派发后无法确认取消的结果保留 unknown；平台异常映射为安全的 `ExecutionFailure`。
+- **Android 宿主**：`PhaseApplication` 持有单个 `ExecutionRuntime` / 缓存 FlutterEngine，Activity 只挂接且不销毁引擎。设备工具通过 ToolExecutor 的通道准备入口启动 `ExecutionService`，根任务结束释放；普通聊天、私有文件和 HTTP 不启动设备服务。工具记录改用工具实际声明的通道。
+- **服务控制**：服务声明为非导出、`specialUse` 类型，带任务通知、返回相月及按 runId 隔离的停止入口；启动要求 Activity 在前台且任务通知可用，不通过后台偷启绕过限制。服务不粘性重启，不创建第二个 Loop 或 Kotlin 业务数据库；原生先锁定停止状态再通知 Dart，服务意外结束也回到根任务取消。主 Manifest 补齐通知/前台服务声明与正式联网权限，保留 compileSdk 37 和预测返回。
+- **统一确认**：`ExecutionController` 持有待确认动作与原期限；`ToolConfirmationHost` 在应用路由之上展示 Flutter 面板，关闭后可从聊天任务条重开。前后台/路由切换不批准、不重置期限；原生决定回到同一执行器，旧调用、重复及过期决定无效。服务准备失败保存 `executionError`，不冒充存储失败，也不阻塞下一次发送。
+- **依赖**：新增 Pigeon 开发依赖并同步 pubspec/lockfile；Android 显式引入生成接口所需的 Kotlin 协程，以及仅用于 JVM 测试的 JUnit。
+- **已执行检查**：Dart 格式检查、`flutter analyze --no-pub`、完整 `flutter test --no-pub`（566 通过、4 跳过）、Kotlin JVM 测试（6 通过）、Profile APK 构建及合并 Manifest 核对；`git diff --check` 通过。Kotlin 接口修改后曾遇到增量编译残留的旧 SAM 字节码，使用 `./gradlew :app:testDebugUnitTest --rerun-tasks -Pkotlin.incremental=false` 全量重编译复验通过，未修改项目增量编译设置。
+- **尚未实现/验收**：SAF、无障碍权限引导/观察/动作、设备动作队列和原生 Accessibility overlay 面板留在 S4.3–S4.5。当前原生动作注册表为空，能力列表不宣称这些动作可用，调用返回 unavailable；原生确认只接通数据与决定契约，不能视为原生面板已完成。通知授权尚无应用内引导；通知未允许时明确拒绝启动服务。未安装或操作真机，Activity 重建、真实通知停止、系统服务/进程终止、线程资源和 Profile 性能仍需后续设备验收；测试不调用真实模型网关。

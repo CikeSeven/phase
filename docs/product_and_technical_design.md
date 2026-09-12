@@ -490,6 +490,7 @@ UI 自动化会让相月离开前台，因此 FlutterEngine 的生命周期不�
 
 ```text
 ExecutionRequest
+  runId
   toolCallId
   action
   arguments
@@ -514,10 +515,13 @@ ExecutionProgress
 |---|---|---|
 | execute | Dart → Kotlin，异步结果 | 接收已确定的动作，返回唯一终态 |
 | cancel | Dart → Kotlin | 取消指定 toolCallId |
+| startRun / endRun | Dart → Kotlin | 获取/释放当前根任务的设备执行宿主；按 runId 隔离旧请求 |
+| setConfirmation | Dart → Kotlin | 设置或清除原生待展示请求，沿用固定参数与原截止时间 |
 | queryCapabilities | Dart → Kotlin | 查询本机通道能力与授权状态 |
 | progress | Kotlin → Dart，事件流 | 执行阶段、进度和受限大小的命令输出 |
 | capabilityChanged | Kotlin → Dart | 服务连接、授权和可用状态变化 |
 | confirmationDecision | Kotlin → Dart | 原生任务确认面板的用户决定 |
+| stopRequested | Kotlin → Dart | 通知停止或服务意外结束，回到同一根任务的取消入口 |
 
 命令结果 Future 是终态入口，事件流只传进度，不让同一终态从多个入口重复结束任务。接收顺序以 toolCallId 和 sequence 组织。
 
@@ -1129,7 +1133,8 @@ lib/
     chat/                     # 聊天、消息/工具卡片与输入
     assistants/               # 助手配置
     providers_config/         # 服务商与模型配置
-    execution/                # Loop、工具注册/执行、通道与运行 UI
+    tools/                    # Loop、工具注册/执行、工具记录与中断恢复
+    execution/                # Android 桥接、通道与应用级任务控制
     settings/                 # 外观与数据管理
 pigeons/                      # Android 桥接定义
 android/app/src/main/kotlin/app/xiangyue/phase/
