@@ -94,6 +94,10 @@ void main() {
     for (final part in merged.parts.whereType<TextPart>()) part.text,
   ];
 
+  /// 拼接后的正文：合并会在两轮之间插入段落分隔，逐段断言容易绑死实现细节。
+  String joinedText(ChatMessage merged) =>
+      merged.parts.whereType<TextPart>().map((part) => part.text).join().trim();
+
   List<String> idsOf(List<ChatMessage> messages) => [
     for (final item in messages) item.id,
   ];
@@ -139,7 +143,7 @@ void main() {
       // 合并消息沿用首条身份：流式新增一轮不重建气泡。
       expect(merged.id, 'm1');
       // 两轮正文留出空行，不连成一段；两次调用的引用都还在。
-      expect(textsOf(merged), ['先读取文件', '\n\n', '文件里有三行']);
+      expect(joinedText(merged), '先读取文件文件里有三行');
       final toolCallIds = [
         for (final part in merged.parts.whereType<ToolCallPart>())
           part.toolCallId,
@@ -172,8 +176,9 @@ void main() {
           .whereType<ReasoningPart>()
           .map((part) => part.publicText)
           .join();
+      // 两轮思考之间补空行，两轮正文之间同样补一个（不留空行会连成一句话）。
       expect(thinking, '想第一步\n\n想第二步');
-      expect(textsOf(view.last), ['第一轮', '\n\n', '第二轮', '\n\n', '第三轮']);
+      expect(joinedText(view.last), '第一轮第二轮\n\n第三轮');
     });
 
     test('状态取最后一次，任一轮流式则按流式展示', () {
@@ -293,7 +298,7 @@ void main() {
         const ChatState(),
       );
       expect(idsOf(legacy), ['l1']);
-      expect(textsOf(legacy.single), ['老回答上半段', '\n\n', '老回答下半段']);
+      expect(joinedText(legacy.single), '老回答上半段\n\n老回答下半段');
 
       final mixed = visibleMessages(
         threadOf([
@@ -355,7 +360,7 @@ void main() {
       expect(idsOf(view), ['u1', 'm1']);
       final merged = view.last;
       expect(merged.status, MessageStatus.streaming);
-      expect(textsOf(merged), ['先读取文件', '\n\n', '正在总结']);
+      expect(joinedText(merged), '先读取文件正在总结');
       expect(merged.parts.last, isA<ToolCallPart>());
     });
   });
@@ -436,16 +441,37 @@ void main() {
           .widgetList<MessageBubble>(find.byType(MessageBubble))
           .toList();
       expect(bubbles, hasLength(2));
-      expect(find.byType(GptMarkdown), findsOneWidget);
       // 一个回答区只有一个操作入口，不与用户气泡凑成两个。
       expect(find.byTooltip('消息操作'), findsOneWidget);
 
       final answer = bubbles.last.message;
-      expect(textsOf(answer), ['先读取文件', '\n\n', '文件里有三行']);
-      expect(
-        tester.widgetList<GptMarkdown>(find.byType(GptMarkdown)).single.data,
-        '先读取文件\n\n文件里有三行',
+      expect(joinedText(answer), '先读取文件文件里有三行');
+      // 正文按 Part 顺序交错：两段正文各自渲染，工具卡片插在中间。
+      final markdowns = tester
+          .widgetList<GptMarkdown>(find.byType(GptMarkdown))
+          .toList();
+      expect(markdowns, hasLength(2));
+      expect(markdowns.first.data, '先读取文件');
+      expect(markdowns.last.data, '文件里有三行');
+      // 回答区内部按 Part 顺序：正文 → 该轮调用 → 下一轮正文 → 该轮调用。
+      final markdownInAnswer = find.descendant(
+        of: find.byType(MessageBubble).last,
+        matching: find.byType(GptMarkdown),
       );
+      final cardsInAnswer = find.descendant(
+        of: find.byType(MessageBubble).last,
+        matching: find.byType(ToolCard),
+      );
+      expect(markdownInAnswer, findsNWidgets(2));
+      expect(cardsInAnswer, findsNWidgets(2));
+      final firstText = tester.getRect(markdownInAnswer.at(0));
+      final secondText = tester.getRect(markdownInAnswer.at(1));
+      final firstCard = tester.getRect(cardsInAnswer.at(0));
+      final secondCard = tester.getRect(cardsInAnswer.at(1));
+      // 第一张卡片夹在两段正文之间，第二张跟在第二段正文之后。
+      expect(firstCard.top, greaterThanOrEqualTo(firstText.bottom - 1));
+      expect(firstCard.bottom, lessThanOrEqualTo(secondText.top + 1));
+      expect(secondCard.top, greaterThanOrEqualTo(secondText.bottom - 1));
 
       // 两次调用都渲染成卡片，且都在回答区内。
       expect(find.byType(ToolCallCard), findsNWidgets(2));
@@ -501,10 +527,16 @@ void main() {
     });
 
     testWidgets('流式中的增量并入同一回答区，光标只有一个', (tester) async {
+      // 第二轮是因为第一轮调用了工具才出现的，分支照实建。
       final messages = visibleMessages(
         threadOf([
           user('u1', '看下文件'),
-          message(id: 'm1', runId: 'run-1', text: '先读取文件'),
+          message(
+            id: 'm1',
+            runId: 'run-1',
+            text: '先读取文件',
+            extra: toolCall('tool-1'),
+          ),
           toolResult('t1', 'tool-1', '三行内容'),
           message(id: 'm2', runId: 'run-1'),
         ]),
@@ -513,7 +545,11 @@ void main() {
           streamingParts: [TextPart(text: '正在总结')],
         ),
       );
-      await pumpTranscript(tester, messages);
+      await pumpTranscript(
+        tester,
+        messages,
+        records: {'tool-1': record('tool-1')},
+      );
 
       expect(find.byType(MessageBubble), findsNWidgets(2));
       final answer = tester
@@ -521,7 +557,15 @@ void main() {
           .last
           .message;
       expect(answer.status, MessageStatus.streaming);
-      expect(textsOf(answer), ['先读取文件', '\n\n', '正在总结']);
+      expect(joinedText(answer), '先读取文件正在总结');
+      // 卡片留在回答区里，光标跟在最后一段正文后面，整条回答只有一个。
+      expect(find.byType(ToolCard), findsOneWidget);
+      expect(
+        tester.getRect(find.byType(ToolCard)).top,
+        greaterThanOrEqualTo(
+          tester.getRect(find.byType(GptMarkdown).first).bottom - 1,
+        ),
+      );
       expect(find.byKey(const ValueKey('generation-cursor')), findsOneWidget);
     });
   });
@@ -589,20 +633,24 @@ void main() {
           .toList();
       expect(bubbles, hasLength(2));
       expect(find.byType(ToolCard), findsOneWidget);
-      expect(find.byType(GptMarkdown), findsOneWidget);
       expect(find.byTooltip('消息操作'), findsOneWidget);
       final answer = bubbles.last.message;
-      expect(textsOf(answer), ['先调用工具', '\n\n', '工具执行完了']);
+      expect(joinedText(answer), '先调用工具工具执行完了');
       expect(answer.parts.whereType<ToolCallPart>(), hasLength(1));
-      expect(
-        tester.widgetList<GptMarkdown>(find.byType(GptMarkdown)).single.data,
-        '先调用工具\n\n工具执行完了',
-      );
+      // 两轮正文各自是一段 Markdown，卡片夹在中间——不是全部堆在回答区末尾。
+      final markdowns = tester
+          .widgetList<GptMarkdown>(find.byType(GptMarkdown))
+          .toList();
+      expect(markdowns, hasLength(2));
+      expect(markdowns.first.data, '先调用工具');
+      expect(markdowns.last.data, '工具执行完了');
       final answerRect = tester.getRect(find.byType(MessageBubble).last);
-      expect(
-        answerRect.contains(tester.getRect(find.byType(ToolCard)).center),
-        isTrue,
-      );
+      final card = tester.getRect(find.byType(ToolCard));
+      expect(answerRect.contains(card.center), isTrue);
+      final firstText = tester.getRect(find.byType(GptMarkdown).first);
+      final lastText = tester.getRect(find.byType(GptMarkdown).last);
+      expect(card.top, greaterThanOrEqualTo(firstText.bottom - 1));
+      expect(card.bottom, lessThanOrEqualTo(lastText.top + 1));
 
       // 数据层不变：一次运行仍是一轮一条消息，工具结果消息留在分支里回填。
       final branch = await harness.branch();

@@ -1522,20 +1522,28 @@ ChatMessage _mergeAnswers(ChatMessage head, ChatMessage tail) {
 
 /// 拼接两条消息的内容块，保持各自的 Part 顺序。
 ///
-/// 两轮正文（或两段思考）之间补一个空行：Markdown 与思考面板都按 Part
-/// 串联展示，不留空行会把两轮内容连成一段。
+/// 跨轮拼接时同类内容之间补一个空行：两轮正文直接相连会读成一句话，两轮思考
+/// 直接相连会读成一段。边界上夹着工具调用时不补——卡片本身就是分段，
+/// 再插空行会在回答区里多出一个空段落。
 List<MessagePart> _mergeAnswerParts(ChatMessage head, ChatMessage tail) {
-  return [
-    ...head.parts,
-    if (_hasText(head) && _hasText(tail)) const TextPart(text: '\n\n'),
-    if (_hasThinking(head) && _hasThinking(tail))
-      const ReasoningPart(publicText: '\n\n'),
-    ...tail.parts,
-  ];
+  final parts = [...head.parts];
+  final tailParts = [...tail.parts];
+  if (tailParts.isNotEmpty) {
+    if (parts.isNotEmpty &&
+        parts.last is TextPart &&
+        tailParts.first is TextPart) {
+      parts.add(const TextPart(text: '\n\n'));
+    }
+    // 思考分段渲染在同一个面板里，跨轮之间没有别的分隔可言。
+    final thinking = tailParts.indexWhere(
+      (part) => part is ReasoningPart && part.publicText.isNotEmpty,
+    );
+    if (thinking >= 0 && _hasThinking(head)) {
+      tailParts.insert(thinking, const ReasoningPart(publicText: '\n\n'));
+    }
+  }
+  return [...parts, ...tailParts];
 }
-
-bool _hasText(ChatMessage message) =>
-    message.parts.any((part) => part is TextPart && part.text.isNotEmpty);
 
 bool _hasThinking(ChatMessage message) => message.parts.any(
   (part) => part is ReasoningPart && part.publicText.isNotEmpty,

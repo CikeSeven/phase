@@ -44,6 +44,36 @@ class MessageBubble extends StatelessWidget {
       if (part is ReasoningPart) part.publicText,
   ].join();
 
+  /// 正文与工具卡片按 Part 顺序分段：连续正文合成一段 Markdown，
+  /// 工具调用各成一段（卡片只引用记录 id，不复制参数）。
+  List<_ContentSegment> _contentSegments() {
+    final segments = <_ContentSegment>[];
+    final buffer = StringBuffer();
+    var hasText = false;
+    void flush() {
+      if (!hasText) return;
+      segments.add(_TextSegment(buffer.toString()));
+      buffer.clear();
+      hasText = false;
+    }
+
+    for (final part in message.parts) {
+      switch (part) {
+        case TextPart(:final text):
+          if (text.isEmpty) break;
+          buffer.write(text);
+          hasText = true;
+        case ToolCallPart(:final toolCallId):
+          flush();
+          segments.add(_ToolSegment(toolCallId));
+        default:
+          break;
+      }
+    }
+    flush();
+    return segments;
+  }
+
   /// 用户消息的附件与正文；助手消息的正文与思考分开渲染。
   List<Attachment> get _messageAttachments => [
     for (final part in message.parts)
@@ -215,25 +245,34 @@ class MessageBubble extends StatelessWidget {
                             ),
                             const SizedBox(height: AppSpacing.s),
                           ],
-                          GptMarkdown(
-                            message.text,
-                            key: const ValueKey('message-markdown'),
-                            style: textStyle,
-                            isStreaming: streaming,
-                            codeBuilder: (context, language, code, closed) =>
-                                ChatCodeBlock(language: language, code: code),
-                          ),
+                          // 正文与工具卡片按 Part 顺序交错渲染：一轮回答里
+                          // 模型先说一句、调用工具、再接着说，顺序就是用户
+                          // 实际看到的顺序（design 第二部分 §6.2）。
+                          for (final (index, segment)
+                              in _contentSegments().indexed)
+                            switch (segment) {
+                              _TextSegment(:final text) => GptMarkdown(
+                                text,
+                                key: index == 0
+                                    ? const ValueKey('message-markdown')
+                                    : null,
+                                style: textStyle,
+                                isStreaming: streaming,
+                                codeBuilder:
+                                    (context, language, code, closed) =>
+                                        ChatCodeBlock(
+                                          language: language,
+                                          code: code,
+                                        ),
+                              ),
+                              _ToolSegment(:final toolCallId) => ToolCallCard(
+                                toolCallId: toolCallId,
+                                attachments: attachments,
+                              ),
+                            },
                         ],
                       ),
                     ),
-                    // 工具卡片按 Part 顺序接在正文之后：只引用记录 id，
-                    // 记录从仓储读回，卡片上不出现模型的原始参数 JSON。
-                    for (final part in message.parts)
-                      if (part is ToolCallPart)
-                        ToolCallCard(
-                          toolCallId: part.toolCallId,
-                          attachments: attachments,
-                        ),
                     if (streaming)
                       Align(
                         key: const ValueKey('generation-cursor'),
@@ -338,4 +377,21 @@ class _GenerationCursorState extends State<_GenerationCursor>
       ),
     );
   }
+}
+
+/// 渲染分段：连续正文与单个工具调用。
+sealed class _ContentSegment {
+  const _ContentSegment();
+}
+
+class _TextSegment extends _ContentSegment {
+  const _TextSegment(this.text);
+
+  final String text;
+}
+
+class _ToolSegment extends _ContentSegment {
+  const _ToolSegment(this.toolCallId);
+
+  final String toolCallId;
 }
