@@ -1,33 +1,29 @@
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
+
+import 'key_store.dart';
 
 part 'secure_key_storage.g.dart';
 
-/// API Key 的唯一存取通道（AGENTS.md §5 密钥安全）。
+/// 密钥的唯一存取通道（AGENTS.md §5）。
 ///
-/// 密钥只允许存这里：不进普通持久化、不进日志、不进数据模型。
+/// 目前存取 API Key（按服务商配置 id）与数据库密钥；密钥不进普通持久化、
+/// 不进日志、不进数据模型。读取失败直接报错，不自动清空整个密钥库。
 class SecureKeyStorage {
-  SecureKeyStorage([FlutterSecureStorage? storage])
-    : _storage = storage ?? const FlutterSecureStorage();
+  const SecureKeyStorage([this._store = const SecureKeyStore()]);
 
-  final FlutterSecureStorage _storage;
+  final KeyStore _store;
 
-  String _keyFor(String providerProfileId) => 'api_key_$providerProfileId';
+  String _keyFor(String profileId) => 'api_key_$profileId';
 
-  Future<String?> readApiKey(String providerProfileId) {
-    return _storage.read(key: _keyFor(providerProfileId));
-  }
+  Future<String?> read(String profileId) => _store.read(_keyFor(profileId));
 
-  Future<void> writeApiKey(String providerProfileId, String apiKey) {
-    return _storage.write(key: _keyFor(providerProfileId), value: apiKey);
-  }
+  Future<void> write(String profileId, String apiKey) =>
+      _store.write(_keyFor(profileId), apiKey);
 
-  Future<void> deleteApiKey(String providerProfileId) {
-    return _storage.delete(key: _keyFor(providerProfileId));
-  }
+  Future<void> delete(String profileId) => _store.delete(_keyFor(profileId));
 }
 
 @Riverpod(keepAlive: true)
 SecureKeyStorage secureKeyStorage(Ref ref) {
-  return SecureKeyStorage();
+  return const SecureKeyStorage();
 }

@@ -3,6 +3,7 @@ import 'package:flutter/rendering.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
 import 'message_bubble.dart';
 import 'thinking_panel.dart';
@@ -13,11 +14,15 @@ class ChatTranscript extends StatefulWidget {
     required this.conversationId,
     required this.messages,
     super.key,
+    this.attachments = const {},
     this.bottomPadding = 0,
   });
 
   final String conversationId;
   final List<ChatMessage> messages;
+
+  /// 会话附件索引，随消息的 Part 引用还原成文件。
+  final Map<String, Attachment> attachments;
 
   /// 预留给悬浮输入栏的高度，末条消息可滚出遮挡区。
   final double bottomPadding;
@@ -158,7 +163,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
     final colors = Theme.of(context).colorScheme;
     final indices = {
       for (var index = 0; index < widget.messages.length; index++)
-        ValueKey(widget.messages[index].id ?? 'message-$index'): index,
+        ValueKey(widget.messages[index].id): index,
     };
     return Center(
       child: ConstrainedBox(
@@ -200,10 +205,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                                 itemCount: widget.messages.length,
                                 findChildIndexCallback: (key) => indices[key],
                                 itemBuilder: (context, index) => MessageBubble(
-                                  key: ValueKey(
-                                    widget.messages[index].id ??
-                                        'message-$index',
-                                  ),
+                                  key: ValueKey(widget.messages[index].id),
                                   message: widget.messages[index],
                                 ),
                               ),

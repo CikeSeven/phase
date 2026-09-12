@@ -394,15 +394,15 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                     ),
                     MenuItemButton(
                       leadingIcon: const Icon(Symbols.push_pin),
-                      onPressed: () => _runGuarded(
-                        context,
-                        () => ref
-                            .read(conversationRepositoryProvider)
-                            .setPinned(
-                              conversation.id,
-                              pinned: !conversation.pinned,
-                            ),
-                      ),
+                      onPressed: () => _runGuarded(context, () async {
+                        final repository = await ref.read(
+                          conversationRepositoryProvider.future,
+                        );
+                        await repository.setPinned(
+                          conversation.id,
+                          pinned: !conversation.pinned,
+                        );
+                      }),
                       child: Text(conversation.pinned ? '取消置顶' : '置顶'),
                     ),
                     MenuItemButton(
@@ -433,12 +433,10 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
           _RenameConversationDialog(title: conversation.title),
     );
     if (newTitle == null || !context.mounted) return;
-    await _runGuarded(
-      context,
-      () => ref
-          .read(conversationRepositoryProvider)
-          .renameConversation(conversation.id, newTitle),
-    );
+    await _runGuarded(context, () async {
+      final repository = await ref.read(conversationRepositoryProvider.future);
+      await repository.renameConversation(conversation.id, newTitle);
+    });
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
@@ -475,12 +473,10 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
       },
     );
     if (confirmed != true || !context.mounted) return;
-    final deleted = await _runGuarded(
-      context,
-      () => ref
-          .read(conversationRepositoryProvider)
-          .deleteConversation(conversation.id),
-    );
+    final deleted = await _runGuarded(context, () async {
+      final repository = await ref.read(conversationRepositoryProvider.future);
+      await repository.deleteConversation(conversation.id);
+    });
     if (deleted) widget.onDeleted();
   }
 

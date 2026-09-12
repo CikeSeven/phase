@@ -57,6 +57,11 @@ void main() {
 
       await searchModels(tester, 'model-219');
       await tapProviderControl(tester, keyed('enabled-model-219'));
+      // 工具能力默认开启，点击后关闭。
+      expect(
+        tester.widget<CapabilityChip>(keyed('tools-model-219')).selected,
+        isTrue,
+      );
       await tapProviderControl(tester, keyed('tools-model-219'));
       expect(
         tester.widget<CapabilityChip>(keyed('tools-model-219')).selected,
@@ -96,11 +101,12 @@ void main() {
         saved.models.singleWhere((model) => model.id == longId).enabled,
         isFalse,
       );
+      // 推理能力默认关闭，只有显式声明支持的模型才下发推理参数。
       expect(
         saved.models
             .singleWhere((model) => model.id == longId)
             .supportsReasoning,
-        isTrue,
+        isFalse,
       );
       expect(
         saved.models.singleWhere((model) => model.id == 'model-219').enabled,

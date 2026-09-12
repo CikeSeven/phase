@@ -1,13 +1,14 @@
 import 'package:dio/dio.dart';
 
 import '../../data/datasources/remote/dio_client.dart';
-import '../../data/models/ai_model.dart';
+import '../../data/models/api_protocol.dart';
 import '../../data/models/chat_chunk.dart';
 import '../../data/models/chat_request.dart';
+import '../../data/models/profile_model.dart';
 import '../../data/models/provider_profile.dart';
 import '../ai_provider.dart';
-import '../dio_failure_mapper.dart';
 import '../attachment_encoder.dart';
+import '../dio_failure_mapper.dart';
 import '../sse_transport.dart';
 import 'anthropic_decoder.dart';
 
@@ -34,45 +35,35 @@ class AnthropicMessagesProvider implements AiProvider {
   static const _anthropicVersion = '2023-06-01';
 
   @override
-  String get id => _profile.id;
+  ApiProtocol get protocol => ApiProtocol.anthropicMessages;
 
-  @override
-  ProviderCapabilities get capabilities =>
-      const ProviderCapabilities(supportsStreaming: true);
-
-  Map<String, String> get _authHeaders => {
-    'x-api-key': _apiKey,
+  /// 免 Key 服务商只发送协议版本头。
+  Map<String, String> get _headers => {
+    if (_profile.requiresKey) 'x-api-key': _apiKey,
     'anthropic-version': _anthropicVersion,
   };
 
-  Uri _resolve(String path) {
-    final base = _profile.baseUrl.endsWith('/')
-        ? _profile.baseUrl
-        : '${_profile.baseUrl}/';
-    return Uri.parse(base).resolve(path);
-  }
-
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) async* {
-    final attachments = await encodeRequestAttachments(
-      request,
-      supportsImages: modelSupportsImages(_profile, request.model),
-    );
     yield* postSseStream(
       dio: _dio,
-      uri: _resolve('v1/messages'),
-      payload: buildAnthropicPayload(request, attachments: attachments),
-      headers: _authHeaders,
+      uri: resolveEndpoint(_profile.baseUrl, 'v1/messages'),
+      payload: await buildAnthropicPayload(
+        request,
+        supportsImages: modelSupportsImages(_profile, request.modelId),
+        supportsReasoning: modelSupportsReasoning(_profile, request.modelId),
+      ),
+      headers: _headers,
       decode: AnthropicSseDecoder.decode,
     );
   }
 
   @override
-  Future<List<AiModel>> listModels() async {
+  Future<List<ProfileModel>> listModels() async {
     try {
       final response = await _dio.getUri<Map<String, dynamic>>(
-        _resolve('v1/models'),
-        options: Options(headers: _authHeaders),
+        resolveEndpoint(_profile.baseUrl, 'v1/models'),
+        options: Options(headers: _headers),
       );
       final data = response.data?['data'];
       if (data is! List) {
@@ -81,7 +72,7 @@ class AnthropicMessagesProvider implements AiProvider {
       return [
         for (final item in data)
           if (item is Map<String, dynamic> && item['id'] is String)
-            AiModel(
+            ProfileModel(
               id: item['id'] as String,
               displayName: item['display_name'] is String
                   ? item['display_name'] as String
@@ -89,12 +80,7 @@ class AnthropicMessagesProvider implements AiProvider {
             ),
       ];
     } on DioException catch (e) {
-      throw mapDioExceptionToFailure(e);
+      throw mapDioExceptionToProviderError(e);
     }
-  }
-
-  @override
-  Future<void> validateKey() async {
-    await listModels();
   }
 }

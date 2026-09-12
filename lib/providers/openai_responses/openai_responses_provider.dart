@@ -1,13 +1,14 @@
 import 'package:dio/dio.dart';
 
 import '../../data/datasources/remote/dio_client.dart';
-import '../../data/models/ai_model.dart';
+import '../../data/models/api_protocol.dart';
 import '../../data/models/chat_chunk.dart';
 import '../../data/models/chat_request.dart';
+import '../../data/models/profile_model.dart';
 import '../../data/models/provider_profile.dart';
 import '../ai_provider.dart';
-import '../dio_failure_mapper.dart';
 import '../attachment_encoder.dart';
+import '../dio_failure_mapper.dart';
 import '../sse_transport.dart';
 import 'responses_decoder.dart';
 
@@ -32,42 +33,33 @@ class OpenAiResponsesProvider implements AiProvider {
   final Dio _dio;
 
   @override
-  String get id => _profile.id;
+  ApiProtocol get protocol => ApiProtocol.openaiResponses;
 
-  @override
-  ProviderCapabilities get capabilities =>
-      const ProviderCapabilities(supportsStreaming: true);
-
-  Map<String, String> get _authHeaders => {'Authorization': 'Bearer $_apiKey'};
-
-  Uri _resolve(String path) {
-    final base = _profile.baseUrl.endsWith('/')
-        ? _profile.baseUrl
-        : '${_profile.baseUrl}/';
-    return Uri.parse(base).resolve(path);
-  }
+  /// 免 Key 服务商不发送鉴权头。
+  Map<String, String> get _headers =>
+      _profile.requiresKey ? {'Authorization': 'Bearer $_apiKey'} : const {};
 
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) async* {
-    final attachments = await encodeRequestAttachments(
-      request,
-      supportsImages: modelSupportsImages(_profile, request.model),
-    );
     yield* postSseStream(
       dio: _dio,
-      uri: _resolve('responses'),
-      payload: buildResponsesPayload(request, attachments: attachments),
-      headers: _authHeaders,
+      uri: resolveEndpoint(_profile.baseUrl, 'responses'),
+      payload: await buildResponsesPayload(
+        request,
+        supportsImages: modelSupportsImages(_profile, request.modelId),
+        supportsReasoning: modelSupportsReasoning(_profile, request.modelId),
+      ),
+      headers: _headers,
       decode: ResponsesSseDecoder.decode,
     );
   }
 
   @override
-  Future<List<AiModel>> listModels() async {
+  Future<List<ProfileModel>> listModels() async {
     try {
       final response = await _dio.getUri<Map<String, dynamic>>(
-        _resolve('models'),
-        options: Options(headers: _authHeaders),
+        resolveEndpoint(_profile.baseUrl, 'models'),
+        options: Options(headers: _headers),
       );
       final data = response.data?['data'];
       if (data is! List) {
@@ -76,15 +68,10 @@ class OpenAiResponsesProvider implements AiProvider {
       return [
         for (final item in data)
           if (item is Map<String, dynamic> && item['id'] is String)
-            AiModel(id: item['id'] as String),
+            ProfileModel(id: item['id'] as String),
       ];
     } on DioException catch (e) {
-      throw mapDioExceptionToFailure(e);
+      throw mapDioExceptionToProviderError(e);
     }
-  }
-
-  @override
-  Future<void> validateKey() async {
-    await listModels();
   }
 }

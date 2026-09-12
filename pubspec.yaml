@@ -38,7 +38,7 @@ dependencies:
   dio: ^5.11.1
   go_router: ^18.0.1
   drift: ^2.34.4
-  drift_flutter: ^0.3.1
+  sqlite3: ^3.5.2
   shared_preferences: ^2.5.5
   flutter_secure_storage: ^11.0.0
   json_annotation: ^4.12.0
@@ -68,7 +68,13 @@ dev_dependencies:
   json_serializable: ^6.14.1
   drift_dev: ^2.34.6
   riverpod_lint: ^3.1.9
-  sqlite3: ^3.5.2
+
+# 数据库加密：把 sqlite3 的构建钩子切到 SQLite3MultipleCiphers，
+# 由 sqlite3 包在构建期自带编译，取代已停止维护的 sqlcipher_flutter_libs。
+hooks:
+  user_defines:
+    sqlite3:
+      source: sqlite3mc
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

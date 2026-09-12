@@ -1,49 +1,94 @@
-import 'package:json_annotation/json_annotation.dart';
+import '../../core/error/provider_error.dart';
+import 'chat_message.dart';
+import 'message_part.dart';
 
-part 'chat_chunk.g.dart';
+/// 一次响应中内容块的种类；增量事件按 [ChatChunk.partId] 归并。
+enum PartKind { text, reasoning, toolCall, provider }
 
-/// 一次流式响应中的增量事件（各厂商协议适配后统一输出此类型）。
-@JsonSerializable()
-class ChatChunk {
-  const ChatChunk({
-    required this.delta,
-    this.reasoningDelta,
-    this.done = false,
-    this.usage,
-    this.errorMessage,
-  });
-
-  /// 本次新增的文本片段（追加到气泡内容末尾）。
-  final String delta;
-
-  /// 本次新增的思考（reasoning）片段；推理模型才有，普通模型为 null。
-  final String? reasoningDelta;
-
-  /// 是否为本次响应的最后一个事件。
-  final bool done;
-
-  /// token 用量，通常在最后一个事件中出现。
-  final TokenUsage? usage;
-
-  /// 带内错误（HTTP 200 的 SSE 流里夹带的 `{"error": ...}` 事件）。
-  final String? errorMessage;
-
-  factory ChatChunk.fromJson(Map<String, dynamic> json) =>
-      _$ChatChunkFromJson(json);
-
-  Map<String, dynamic> toJson() => _$ChatChunkToJson(this);
+/// 流式响应事件（design 第五部分 §4.3）。
+///
+/// 适配器只产生这里定义的事件；增量与完成快照归并在同一 partId 上，
+/// 完整快照不会作为增量重复追加。
+sealed class ChatChunk {
+  const ChatChunk();
 }
 
-@JsonSerializable()
-class TokenUsage {
-  const TokenUsage({this.promptTokens, this.completionTokens, this.totalTokens});
+/// 开始一个内容块；[partId] 在本次响应内稳定。
+class PartStart extends ChatChunk {
+  const PartStart({
+    required this.partId,
+    required this.kind,
+    this.initialContent,
+  });
 
-  final int? promptTokens;
-  final int? completionTokens;
-  final int? totalTokens;
+  final String partId;
+  final PartKind kind;
 
-  factory TokenUsage.fromJson(Map<String, dynamic> json) =>
-      _$TokenUsageFromJson(json);
+  /// 块的首段内容；没有时为 null。
+  final String? initialContent;
+}
 
-  Map<String, dynamic> toJson() => _$TokenUsageToJson(this);
+/// 正文增量。
+class TextDelta extends ChatChunk {
+  const TextDelta({required this.partId, required this.text});
+
+  final String partId;
+  final String text;
+}
+
+/// 公开思考增量。
+class ReasoningDelta extends ChatChunk {
+  const ReasoningDelta({required this.partId, required this.text});
+
+  final String partId;
+  final String text;
+}
+
+/// 工具调用增量：只组装，不执行。
+class ToolCallDelta extends ChatChunk {
+  const ToolCallDelta({
+    required this.partId,
+    this.callId,
+    this.toolName,
+    this.argumentsFragment,
+  });
+
+  final String partId;
+
+  /// Provider 侧调用 id；跨分片可能重复出现，以最后一次非空值为准。
+  final String? callId;
+  final String? toolName;
+
+  /// 参数 JSON 的片段；只追加到当前调用缓冲，不逐段重新解析。
+  final String? argumentsFragment;
+}
+
+/// 结束一个内容块；[part] 为完整块，协议状态一并带上。
+class PartEnd extends ChatChunk {
+  const PartEnd({required this.partId, required this.part});
+
+  final String partId;
+  final MessagePart part;
+}
+
+/// 本次调用的用量。
+class UsageChunk extends ChatChunk {
+  const UsageChunk({required this.usage});
+
+  final TokenUsage usage;
+}
+
+/// 响应正常结束。
+class ResponseEnd extends ChatChunk {
+  const ResponseEnd({this.hasVisibleContent = true});
+
+  /// 是否产生了可见内容；全空响应由运行层记为失败。
+  final bool hasVisibleContent;
+}
+
+/// 流内错误（如 HTTP 200 的 SSE 中夹带的错误事件）。
+class ResponseError extends ChatChunk {
+  const ResponseError({required this.error});
+
+  final ProviderError error;
 }

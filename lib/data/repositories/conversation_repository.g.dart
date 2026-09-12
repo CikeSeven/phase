@@ -15,11 +15,13 @@ final conversationRepositoryProvider = ConversationRepositoryProvider._();
 final class ConversationRepositoryProvider
     extends
         $FunctionalProvider<
+          AsyncValue<ConversationRepository>,
           ConversationRepository,
-          ConversationRepository,
-          ConversationRepository
+          FutureOr<ConversationRepository>
         >
-    with $Provider<ConversationRepository> {
+    with
+        $FutureModifier<ConversationRepository>,
+        $FutureProvider<ConversationRepository> {
   ConversationRepositoryProvider._()
     : super(
         from: null,
@@ -36,23 +38,15 @@ final class ConversationRepositoryProvider
 
   @$internal
   @override
-  $ProviderElement<ConversationRepository> $createElement(
+  $FutureProviderElement<ConversationRepository> $createElement(
     $ProviderPointer pointer,
-  ) => $ProviderElement(pointer);
+  ) => $FutureProviderElement(pointer);
 
   @override
-  ConversationRepository create(Ref ref) {
+  FutureOr<ConversationRepository> create(Ref ref) {
     return conversationRepository(ref);
-  }
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(ConversationRepository value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<ConversationRepository>(value),
-    );
   }
 }
 
 String _$conversationRepositoryHash() =>
-    r'13f794bcd3feea9793d5cf6142288c3ce1be48d4';
+    r'5f720248eb2adcf4591189b61dee7a4e3f9589bf';

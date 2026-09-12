@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/message_part.dart';
 import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/message_bubble.dart';
 import 'package:phase/features/chat/thinking_panel.dart';
@@ -10,13 +11,64 @@ import 'package:phase/features/chat/thinking_panel.dart';
 List<ChatMessage> _history({int count = 36, String prefix = 'a'}) {
   return List.generate(
     count,
-    (index) => ChatMessage(
+    (index) => _message(
       id: '$prefix-$index',
       role: index.isEven ? ChatRole.user : ChatRole.assistant,
-      content: '第 $index 条消息\n${'用于回看历史的内容。' * (index % 4 + 1)}',
-      modelName: 'reading-model',
+      text: '第 $index 条消息\n${'用于回看历史的内容。' * (index % 4 + 1)}',
     ),
   );
+}
+
+/// Part 结构下的消息构造；正文与思考各归一个 Part。
+ChatMessage _message({
+  required String id,
+  ChatRole role = ChatRole.assistant,
+  String text = '',
+  String? thinking,
+  MessageStatus status = MessageStatus.completed,
+  String? modelLabel,
+}) {
+  return ChatMessage(
+    id: id,
+    conversationId: 'first',
+    role: role,
+    status: status,
+    modelLabel: modelLabel,
+    parts: [
+      if (thinking != null) ReasoningPart(publicText: thinking),
+      if (text.isNotEmpty) TextPart(text: text),
+    ],
+    createdAt: DateTime(2026),
+  );
+}
+
+/// Part 结构下的局部更新：正文/思考替换（空串表示移除）与状态切换。
+extension on ChatMessage {
+  ChatMessage withParts({
+    String? text,
+    String? thinking,
+    MessageStatus? status,
+  }) {
+    final next = <MessagePart>[];
+    for (final part in parts) {
+      switch (part) {
+        case TextPart():
+          if (text == null) next.add(part);
+        case ReasoningPart():
+          if (thinking == null) next.add(part);
+        default:
+          next.add(part);
+      }
+    }
+    if (text != null && text.isNotEmpty) next.add(TextPart(text: text));
+    if (thinking != null && thinking.isNotEmpty) {
+      next.add(ReasoningPart(publicText: thinking));
+    }
+    return copyWith(parts: next, status: status);
+  }
+
+  String get thinkingText =>
+      parts.whereType<ReasoningPart>().map((part) => part.publicText).join();
 }
 
 void main() {
@@ -75,18 +127,17 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final history = _history();
-    const reply = ChatMessage(
+    final reply = _message(
       id: 'reply',
-      role: ChatRole.assistant,
-      content: '答案开始',
-      status: ChatMessageStatus.streaming,
-      modelName: 'streaming-model',
+      text: '答案开始',
+      status: MessageStatus.streaming,
+      modelLabel: 'streaming-model',
     );
     await pumpTranscript(tester, [...history, reply]);
     final replyElement = tester.element(find.byKey(const ValueKey('reply')));
     final firstBottom = position(tester).pixels;
 
-    final longer = reply.copyWith(content: '答案开始\n${'新的正文段落。\n' * 8}');
+    final longer = reply.withParts(text: '答案开始\n${'新的正文段落。\n' * 8}');
     await pumpTranscript(tester, [...history, longer]);
     expect(position(tester).pixels, greaterThan(firstBottom));
     expect(position(tester).extentAfter, lessThan(1));
@@ -104,7 +155,7 @@ void main() {
     expect(position(tester).extentAfter, greaterThan(96));
     expect(find.byTooltip('回到底部'), findsOneWidget);
 
-    final muchLonger = reply.copyWith(content: '${'不应打断历史阅读。\n' * 30}末尾');
+    final muchLonger = reply.withParts(text: '${'不应打断历史阅读。\n' * 30}末尾');
     await pumpTranscript(tester, [...history, muchLonger]);
     expect(position(tester).pixels, closeTo(readingOffset, 0.5));
     expect(find.byTooltip('回到底部'), findsOneWidget);
@@ -116,7 +167,11 @@ void main() {
 
     await pumpTranscript(tester, [
       ...history,
-      muchLonger.copyWith(content: '${muchLonger.content}\n继续生成\n再增加两行'),
+      muchLonger.withParts(
+        text:
+            '${muchLonger.parts.whereType<TextPart>().map((p) => p.text).join()}'
+            '\n继续生成\n再增加两行',
+      ),
     ]);
     expect(position(tester).extentAfter, lessThan(1));
     expect(tester.takeException(), isNull);
@@ -132,11 +187,7 @@ void main() {
     final messages = _history();
     await pumpTranscript(tester, [
       ...messages,
-      const ChatMessage(
-        id: 'new',
-        role: ChatRole.assistant,
-        content: '紧接着的回复\n第二行',
-      ),
+      _message(id: 'new', role: ChatRole.assistant, text: '紧接着的回复\n第二行'),
     ]);
     expect(position(tester).extentAfter, lessThan(1));
   });
@@ -147,23 +198,23 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final history = _history();
-    final reply = ChatMessage(
+    final reply = _message(
       id: 'reasoning',
       role: ChatRole.assistant,
-      content: '答案',
-      reasoning: '很长的推演过程。\n' * 24,
-      status: ChatMessageStatus.streaming,
+      text: '答案',
+      thinking: '很长的推演过程。\n' * 24,
+      status: MessageStatus.streaming,
     );
     await pumpTranscript(tester, [...history, reply], scale: 1.3);
     final panelState = tester.state(find.byType(ThinkingPanel));
 
     await pumpTranscript(tester, [
       ...history,
-      reply.copyWith(status: ChatMessageStatus.done),
+      reply.withParts(status: MessageStatus.completed),
     ], scale: 1.3);
     expect(find.text('已思考'), findsOneWidget);
     // 无手动操作时思考结束自动收起，内容不再展示。
-    expect(find.text(reply.reasoning!), findsNothing);
+    expect(find.text(reply.thinkingText), findsNothing);
     expect(tester.state(find.byType(ThinkingPanel)), same(panelState));
     expect(position(tester).outOfRange, isFalse);
     expect(position(tester).extentAfter, lessThan(1));
@@ -172,12 +223,12 @@ void main() {
 
   testWidgets('回看时下方思考完成自动收起，但阅读位置不被打断', (tester) async {
     final history = _history(count: 50);
-    final reply = ChatMessage(
+    final reply = _message(
       id: 'reasoning',
       role: ChatRole.assistant,
-      content: '答案',
-      reasoning: '思考过程\n' * 12,
-      status: ChatMessageStatus.streaming,
+      text: '答案',
+      thinking: '思考过程\n' * 12,
+      status: MessageStatus.streaming,
     );
     await pumpTranscript(tester, [...history, reply]);
     await tester.drag(
@@ -188,11 +239,11 @@ void main() {
 
     await pumpTranscript(tester, [
       ...history,
-      reply.copyWith(status: ChatMessageStatus.done),
+      reply.withParts(status: MessageStatus.completed),
     ]);
     // 收起的是列表末端内容：滚动范围随内容收窄，位置自然落到新末端，
     // 不发生动画式强拉（按钮不再出现=没有更多未读内容），内容已收起。
-    expect(find.text(reply.reasoning!), findsNothing);
+    expect(find.text(reply.thinkingText), findsNothing);
     expect(position(tester).pixels, position(tester).maxScrollExtent);
     expect(position(tester).outOfRange, isFalse);
     expect(tester.takeException(), isNull);
@@ -207,12 +258,12 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final history = _history();
-      const reply = ChatMessage(
+      final reply = _message(
         id: 'manual',
         role: ChatRole.assistant,
-        content: '正文答案',
-        reasoning: '手动状态应保留的思考原文',
-        status: ChatMessageStatus.streaming,
+        text: '正文答案',
+        thinking: '手动状态应保留的思考原文',
+        status: MessageStatus.streaming,
       );
       await pumpTranscript(tester, [...history, reply]);
       await tester.tap(find.textContaining('思考中…'));
@@ -223,7 +274,7 @@ void main() {
       }
       final thinkingState = tester.state(find.byType(ThinkingPanel));
       expect(
-        find.text(reply.reasoning!),
+        find.text(reply.thinkingText),
         expanded ? findsOneWidget : findsNothing,
       );
 
@@ -233,17 +284,17 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byTooltip('回到底部'), findsOneWidget);
-      final updated = reply.copyWith(
-        content: '完整正文答案',
-        reasoning: '第一步分析\n第二步验证\n完整推演结论',
-        status: ChatMessageStatus.done,
+      final updated = reply.withParts(
+        text: '完整正文答案',
+        thinking: '第一步分析\n第二步验证\n完整推演结论',
+        status: MessageStatus.completed,
       );
       await pumpTranscript(tester, [...history, updated]);
       await tester.tap(find.byTooltip('回到底部'));
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(ThinkingPanel)), same(thinkingState));
       expect(
-        find.text(updated.reasoning!),
+        find.text(updated.thinkingText),
         expanded ? findsOneWidget : findsNothing,
       );
       expect(find.text('已思考'), findsOneWidget);
@@ -259,12 +310,12 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
       final history = _history();
-      const reply = ChatMessage(
+      final reply = _message(
         id: 'long-reasoning',
         role: ChatRole.assistant,
-        content: '短答',
-        reasoning: '简短思考',
-        status: ChatMessageStatus.streaming,
+        text: '短答',
+        thinking: '简短思考',
+        status: MessageStatus.streaming,
       );
       final longReasoning = List.generate(
         300,
@@ -273,9 +324,9 @@ void main() {
       await pumpTranscript(tester, [...history, reply], scale: 1.3);
       await tester.tap(find.textContaining('思考中…'));
       await tester.pumpAndSettle();
-      final updated = reply.copyWith(
-        reasoning: longReasoning,
-        status: ChatMessageStatus.done,
+      final updated = reply.withParts(
+        thinking: longReasoning,
+        status: MessageStatus.completed,
       );
       await pumpTranscript(tester, [...history, updated], scale: 1.3);
       expect(position(tester).extentAfter, lessThan(1));
@@ -315,7 +366,7 @@ void main() {
 
       await pumpTranscript(tester, [
         ...history,
-        updated.copyWith(content: '新的正文增量\n不应打断阅读'),
+        updated.withParts(text: '新的正文增量\n不应打断阅读'),
       ], scale: 1.3);
       expect(tester.getTopLeft(header).dy, closeTo(before, 0.5));
       await tester.tap(header);

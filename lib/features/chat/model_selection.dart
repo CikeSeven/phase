@@ -58,23 +58,27 @@ class ModelSelection extends _$ModelSelection {
         lastModel.isNotEmpty) {
       model = lastModel;
     } else {
-      // 回退跳过未启用的模型。
-      final enabled = profile.modelCandidates
-          .where((candidate) => candidate.enabled)
-          .toList();
+      // 回退顺序：启用的默认模型 → 第一个启用的模型 → 列表外的默认模型
+      // （默认模型被停用时不再直接采用它）。
+      final enabled = profile.enabledModels;
       final fallback = profile.defaultModel;
-      model = fallback != null && enabled.any((entry) => entry.id == fallback)
-          ? fallback
-          : (enabled.isEmpty ? null : enabled.first.id);
+      if (fallback != null && enabled.any((entry) => entry.id == fallback)) {
+        model = fallback;
+      } else if (enabled.isNotEmpty) {
+        model = enabled.first.id;
+      } else {
+        model = (fallback != null && fallback.isNotEmpty) ? fallback : null;
+      }
     }
     if (model == null) {
       return null;
     }
 
-    // 未登记能力的模型默认支持推理/图片，是否合规交给服务商服务器判断。
+    // 已登记模型以配置的能力为准；未登记的（手输或列表外）模型保留
+    // 原型的宽松默认：默认支持，是否合规交给服务商服务器判断。
     var supportsReasoning = true;
     var supportsImages = true;
-    for (final candidate in profile.modelCandidates) {
+    for (final candidate in profile.models) {
       if (candidate.id == model) {
         supportsReasoning = candidate.supportsReasoning;
         supportsImages = candidate.supportsImages;

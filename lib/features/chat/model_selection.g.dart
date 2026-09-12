@@ -36,7 +36,6 @@ final class ModelSelectionProvider
           ModelSelectionProvider.$allTransitiveDependencies1,
           ModelSelectionProvider.$allTransitiveDependencies2,
           ModelSelectionProvider.$allTransitiveDependencies3,
-          ModelSelectionProvider.$allTransitiveDependencies4,
         },
       );
 
@@ -46,8 +45,6 @@ final class ModelSelectionProvider
   static final $allTransitiveDependencies2 = providerProfilesProvider;
   static final $allTransitiveDependencies3 =
       ProviderProfilesProvider.$allTransitiveDependencies0;
-  static final $allTransitiveDependencies4 =
-      ProviderProfilesProvider.$allTransitiveDependencies3;
 
   @override
   String debugGetCreateSourceHash() => _$modelSelectionHash();
@@ -57,7 +54,7 @@ final class ModelSelectionProvider
   ModelSelection create() => ModelSelection();
 }
 
-String _$modelSelectionHash() => r'0cbaad52032dad33fe4d86ddf7fbc9fed8a98d61';
+String _$modelSelectionHash() => r'e3227ed5feda4560c101450180544636756dcb9d';
 
 /// 模型选择：优先「最近使用」（shared_preferences），
 /// 否则回退到第一个服务商的默认模型 / 候选模型第一个。

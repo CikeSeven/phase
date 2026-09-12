@@ -1,89 +1,94 @@
-import 'package:json_annotation/json_annotation.dart';
+import 'dart:convert';
 
 import 'api_protocol.dart';
 import 'openai_compat.dart';
 import 'profile_model.dart';
 
-part 'provider_profile.g.dart';
-
-/// 一个服务商配置。
+/// 一个服务商配置；API Key 不在本模型中，按 [id] 交给 SecureKeyStorage。
 ///
-/// 协议与服务商正交：protocol 决定报文格式，presetId 记录创建时用的预设。
-/// 安全纪律：API Key 不在本模型中，单独经 flutter_secure_storage 按
-/// profile id 存取（见 secure_key_storage.dart）。
-@JsonSerializable(explicitToJson: true)
+/// [protocol] 由用户明确选择，创建后不因域名、模型名或请求失败自动切换。
 class ProviderProfile {
   const ProviderProfile({
     required this.id,
     required this.name,
+    required this.protocol,
     required this.baseUrl,
-    this.protocol = ApiProtocol.openaiCompletions,
+    this.requiresKey = true,
     this.presetId = 'custom',
     this.models = const [],
     this.defaultModel,
     this.compatOverrides,
-    this.createdAt,
+    required this.createdAt,
   });
 
   final String id;
-
-  /// 用户起的名字（如「DeepSeek 官方」）。
   final String name;
+  final ApiProtocol protocol;
 
   /// 如 `https://api.openai.com/v1`。
   final String baseUrl;
 
-  /// 报文协议。
-  final ApiProtocol protocol;
+  /// 是否需要鉴权；免 Key 服务商在请求中不发送鉴权头。
+  final bool requiresKey;
 
-  /// 创建时选用的预设 id（custom 表示完全自定义）。
+  /// 创建时选用的预设 id；预设只用于填写创建表单，不参与运行期判断。
   final String presetId;
 
-  /// 用户维护的模型列表（可手动添加，或由 listModels 拉取填充）。
+  /// 用户维护的模型列表；启用的模型才进入聊天选择列表。
   final List<ProfileModel> models;
 
-  /// 默认使用的模型 id；为空时上层回退到 [modelCandidates] 第一个。
+  /// 该服务商默认使用的模型 id；为空时由上层回退到启用的第一个模型。
   final String? defaultModel;
 
-  /// OpenAI 兼容协议的差异覆盖；为 null 时按 baseUrl 嗅探。
-  /// 仅 protocol 为 openaiCompletions 时有意义。
+  /// OpenAI 兼容协议的差异声明；null 时用 [OpenAiCompat] 的默认值。
   final OpenAiCompat? compatOverrides;
 
-  final DateTime? createdAt;
+  final DateTime createdAt;
 
-  /// 可选模型候选：默认模型优先，与 [models] 合并去重。
-  List<ProfileModel> get modelCandidates {
-    final result = [...models];
-    final fallback = defaultModel;
-    if (fallback != null && result.every((m) => m.id != fallback)) {
-      result.insert(0, ProfileModel(id: fallback));
-    }
-    return result;
-  }
+  List<ProfileModel> get enabledModels => [
+    for (final model in models)
+      if (model.enabled) model,
+  ];
 
   ProviderProfile copyWith({
     String? name,
-    String? baseUrl,
     ApiProtocol? protocol,
+    String? baseUrl,
+    bool? requiresKey,
     String? presetId,
     List<ProfileModel>? models,
     String? defaultModel,
+    OpenAiCompat? compatOverrides,
   }) {
     return ProviderProfile(
       id: id,
       name: name ?? this.name,
-      baseUrl: baseUrl ?? this.baseUrl,
       protocol: protocol ?? this.protocol,
+      baseUrl: baseUrl ?? this.baseUrl,
+      requiresKey: requiresKey ?? this.requiresKey,
       presetId: presetId ?? this.presetId,
       models: models ?? this.models,
       defaultModel: defaultModel ?? this.defaultModel,
-      compatOverrides: compatOverrides,
+      compatOverrides: compatOverrides ?? this.compatOverrides,
       createdAt: createdAt,
     );
   }
-
-  factory ProviderProfile.fromJson(Map<String, dynamic> json) =>
-      _$ProviderProfileFromJson(json);
-
-  Map<String, dynamic> toJson() => _$ProviderProfileToJson(this);
 }
+
+/// 解码 models 列的 JSON；结构损坏时按空列表处理并保留可用的其他配置。
+List<ProfileModel> decodeProfileModels(String? json) {
+  if (json == null || json.isEmpty) return const [];
+  try {
+    final decoded = jsonDecode(json);
+    if (decoded is! List) return const [];
+    return [
+      for (final item in decoded)
+        if (item is Map<String, dynamic>) ProfileModel.fromJson(item),
+    ];
+  } on FormatException {
+    return const [];
+  }
+}
+
+String encodeProfileModels(List<ProfileModel> models) =>
+    jsonEncode([for (final model in models) model.toJson()]);

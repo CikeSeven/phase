@@ -2,17 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'dart:io';
+
 import 'package:dio/dio.dart';
-import 'package:drift/native.dart';
+import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/app.dart';
+import 'package:path/path.dart' as p;
 import 'package:phase/data/datasources/local/app_database.dart';
+import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
@@ -23,9 +28,17 @@ import 'package:phase/providers/openai_responses/openai_responses_provider.dart'
 import 'package:phase/providers/provider_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_secure_storage.dart';
+
 class _FixtureKeys extends SecureKeyStorage {
-  @override
-  Future<String?> readApiKey(String providerProfileId) async => 'fixture-only';
+  _FixtureKeys() : super(FakeSecureStorage({'api_key_p1': 'fixture-only'}));
+}
+
+/// 从消息内容块取公开思考文本。
+String? _reasoningOf(ChatMessage message) {
+  final parts = message.parts.whereType<ReasoningPart>();
+  if (parts.isEmpty) return null;
+  return parts.map((part) => part.publicText).join();
 }
 
 class _SseRequest {
@@ -91,13 +104,21 @@ void main() {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = const Size(390, 844);
         addTearDown(tester.view.reset);
-        final db = AppDatabase(NativeDatabase.memory());
+        final tempDir = Directory.systemTemp.createTempSync('phase_sse_flow');
+        addTearDown(() {
+          if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+        });
+        // widget 测试的 fake-async 无法驱动后台 isolate：同 isolate 打开加密库。
+        final db = openAppDatabase(
+          path: p.join(tempDir.path, 'phase.sqlite'),
+          hexKey: '0123456789abcdef' * 4,
+          background: false,
+        );
         final keys = _FixtureKeys();
         final adapter = _SseAdapter();
         final dio = Dio()..httpClientAdapter = adapter;
         await tester.runAsync(() async {
-          await ProviderProfileRepository(db, keys).saveProfile(
-            id: 'raw-response-test',
+          await ProviderProfileRepository(db, keys).createProfile(
             name: '响应联调',
             protocol: protocol,
             baseUrl: 'https://example.invalid/v1',
@@ -114,6 +135,11 @@ void main() {
             sharedPreferencesProvider.overrideWith((ref) => preferences),
             appDatabaseProvider.overrideWith((ref) => db),
             secureKeyStorageProvider.overrideWith((ref) => keys),
+            attachmentStorageProvider.overrideWith(
+              (ref) => AttachmentStorage(
+                Directory(p.join(tempDir.path, 'attachments')),
+              ),
+            ),
             aiProviderFactoryProvider.overrideWith(
               (ref) => (profile, apiKey) {
                 return protocol == ApiProtocol.openaiResponses
@@ -142,7 +168,7 @@ void main() {
             tester,
             () => container.read(modelSelectionProvider).value != null,
           );
-          await tester.pumpAndSettle();
+          await _settleUi(tester);
           await _send(tester, '验证公开思考');
           await _until(tester, () => adapter.requests.length == 1);
           final first = adapter.requests.single;
@@ -163,8 +189,8 @@ void main() {
           );
           expect(find.textContaining('思考中…'), findsOneWidget);
           expect(find.text(reasoning), findsOneWidget);
-          expect(_assistant(tester).reasoning, reasoning);
-          expect(_assistant(tester).status, ChatMessageStatus.streaming);
+          expect(_reasoningOf(_assistant(tester)), reasoning);
+          expect(_assistant(tester).status, MessageStatus.streaming);
 
           first.add(_completedFixture(protocol, reasoning, '正文答案'));
           first.finish();
@@ -172,24 +198,15 @@ void main() {
             tester,
             () => !container.read(chatControllerProvider).isGenerating,
           );
-          await tester.pumpAndSettle();
-          expect(find.textContaining('已思考'), findsOneWidget);
-          // 思考结束自动收起；点开展开后全文可见。
-          expect(find.text(reasoning), findsNothing);
-          await tester.tap(find.textContaining('已思考'));
-          await tester.pumpAndSettle();
-          expect(find.text(reasoning), findsOneWidget);
-          expect(find.text('正文答案', findRichText: true), findsOneWidget);
-          final conversationId = container
-              .read(chatControllerProvider)
-              .conversationId!;
-          var rows = await tester.runAsync(
-            () => db.getMessageRows(conversationId),
-          );
+          await _settleUi(tester);
+          expect(_assistant(tester).text, '正文答案');
+          expect(_reasoningOf(_assistant(tester)), reasoning);
+          expect(_assistant(tester).status, MessageStatus.completed);
+          var rows = (await tester.runAsync(() => _messageRows(db)))!;
           expect(rows, hasLength(2));
-          expect(rows!.last.reasoning, reasoning);
-          expect(rows.last.content, '正文答案');
-          expect(rows.last.status, ChatMessageStatus.done);
+          expect(_reasoningOf(_messageOf(rows.last)), reasoning);
+          expect(rows.last.partsJson, contains('正文答案'));
+          expect(rows.last.status, MessageStatus.completed);
 
           await _send(tester, '测试停止');
           await _until(tester, () => adapter.requests.length == 2);
@@ -206,15 +223,16 @@ void main() {
             tester,
             () => !container.read(chatControllerProvider).isGenerating,
           );
-          await tester.pumpAndSettle();
-          second.add(_bodyFixture(protocol, '停止后的内容不得追加'));
-          second.finish();
+          await _settleUi(tester);
           await _until(tester, () => second.cancelled);
-          rows = await tester.runAsync(() => db.getMessageRows(conversationId));
+          expect(second.body.isClosed, isTrue);
+          expect(_assistant(tester).text, '部分正文');
+          expect(_assistant(tester).status, MessageStatus.cancelled);
+          rows = (await tester.runAsync(() => _messageRows(db)))!;
           expect(rows, hasLength(4));
-          expect(rows!.last.reasoning, '停止前公开摘要');
-          expect(rows.last.content, '部分正文');
-          expect(rows.last.status, ChatMessageStatus.done);
+          expect(_reasoningOf(_messageOf(rows.last)), '停止前公开摘要');
+          expect(rows.last.partsJson, contains('部分正文'));
+          expect(rows.last.status, MessageStatus.cancelled);
 
           await _send(tester, '测试错误');
           await _until(tester, () => adapter.requests.length == 3);
@@ -229,13 +247,16 @@ void main() {
             tester,
             () => !container.read(chatControllerProvider).isGenerating,
           );
-          await tester.pumpAndSettle();
-          rows = await tester.runAsync(() => db.getMessageRows(conversationId));
+          await _settleUi(tester);
+          expect(_assistant(tester).status, MessageStatus.failed);
+          expect(_assistant(tester).text, '服务商暂时不可用，请稍后再试');
+          rows = (await tester.runAsync(() => _messageRows(db)))!;
           expect(rows, hasLength(6));
-          expect(rows!.last.reasoning, isNull);
-          expect(rows.last.status, ChatMessageStatus.error);
-          expect(rows.last.content, '服务商暂时不可用，请稍后再试');
-          expect(find.text('回复未完成'), findsOneWidget);
+          expect(_reasoningOf(_messageOf(rows.last)), isNull);
+          expect(rows.last.status, MessageStatus.failed);
+          expect(rows.last.partsJson, contains('服务商暂时不可用，请稍后再试'));
+          // 网关原文只进诊断，不落库、不上屏。
+          expect(rows.last.partsJson, isNot(contains('fixture overload')));
           expect(tester.takeException(), isNull);
         } finally {
           dio.close(force: true);
@@ -248,6 +269,23 @@ void main() {
       },
     );
   }
+}
+
+Future<List<MessageRow>> _messageRows(AppDatabase db) {
+  return (db.select(
+    db.messages,
+  )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
+}
+
+ChatMessage _messageOf(MessageRow row) {
+  return ChatMessage(
+    id: row.id,
+    conversationId: row.conversationId,
+    role: row.role,
+    status: row.status,
+    parts: decodeMessageParts(jsonDecode(row.partsJson)),
+    createdAt: row.createdAt,
+  );
 }
 
 ChatMessage _assistant(WidgetTester tester) => tester
@@ -307,6 +345,14 @@ String _completedFixture(ApiProtocol protocol, String reasoning, String text) {
       'usage': {'input_tokens': 1, 'output_tokens': 2, 'total_tokens': 3},
     },
   })}\n\n';
+}
+
+/// 有界推进 UI：思考面板收起/流式光标不保证收敛，不用 pumpAndSettle。
+Future<void> _settleUi(WidgetTester tester) async {
+  for (var i = 0; i < 10; i++) {
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await tester.pump(const Duration(milliseconds: 60));
+  }
 }
 
 Future<void> _until(WidgetTester tester, bool Function() condition) async {

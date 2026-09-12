@@ -2,12 +2,12 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
-import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:phase/app.dart';
 import 'package:phase/core/router/app_router.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
@@ -16,6 +16,7 @@ import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
@@ -23,12 +24,13 @@ import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/model_picker_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/fake_secure_storage.dart';
+
 const _capture = bool.fromEnvironment('CAPTURE_UI');
 const _captureKey = ValueKey('ui-preview-capture');
 
 class _PreviewKeyStorage extends SecureKeyStorage {
-  @override
-  Future<String?> readApiKey(String providerProfileId) async => null;
+  _PreviewKeyStorage() : super(FakeSecureStorage());
 }
 
 void main() {
@@ -69,13 +71,20 @@ void main() {
       addTearDown(tester.view.reset);
       addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
 
-      final db = AppDatabase(NativeDatabase.memory());
+      final tempDir = Directory.systemTemp.createTempSync('phase_ui_preview');
+      addTearDown(() {
+        if (tempDir.existsSync()) tempDir.deleteSync(recursive: true);
+      });
+      final db = openAppDatabase(
+        path: p.join(tempDir.path, 'phase.sqlite'),
+        hexKey: '0123456789abcdef' * 4,
+        background: false,
+      );
       final keys = _PreviewKeyStorage();
       final profiles = ProviderProfileRepository(db, keys);
       final conversations = ConversationRepository(db);
       await tester.runAsync(() async {
-        await profiles.saveProfile(
-          id: 'preview-gateway',
+        await profiles.createProfile(
           name: '开发网关',
           baseUrl: 'https://preview.invalid/v1',
           protocol: ApiProtocol.openaiResponses,
@@ -86,11 +95,11 @@ void main() {
             ProfileModel(id: 'long-context-reasoning', supportsReasoning: true),
           ],
         );
-        await profiles.saveProfile(
-          id: 'preview-local',
+        await profiles.createProfile(
           name: '本地模型',
           baseUrl: 'http://localhost:11434/v1',
           presetId: 'ollama',
+          requiresKey: false,
           defaultModel: 'local-chat',
           models: const [ProfileModel(id: 'local-chat')],
         );
@@ -99,40 +108,67 @@ void main() {
         );
         await conversations.setPinned(conversation.id, pinned: true);
         await conversations.appendMessage(
-          conversationId: conversation.id,
-          role: ChatRole.user,
-          content: '今天想完成三件事：整理读书笔记、推进小工具原型、写一份周末出行计划。',
+          ChatMessage(
+            id: 'preview-m1',
+            conversationId: conversation.id,
+            role: ChatRole.user,
+            parts: const [TextPart(text: '今天想完成三件事：整理读书笔记、推进小工具原型、写一份周末出行计划。')],
+            createdAt: DateTime.now(),
+          ),
         );
         await conversations.appendMessage(
-          conversationId: conversation.id,
-          role: ChatRole.assistant,
-          content: '可以先确定优先顺序，再为每件事留一个明确的时间段。先从最需要专注的小工具原型开始。',
-          modelName: 'gpt-5.6-sol',
+          ChatMessage(
+            id: 'preview-m2',
+            conversationId: conversation.id,
+            role: ChatRole.assistant,
+            parts: const [
+              TextPart(text: '可以先确定优先顺序，再为每件事留一个明确的时间段。先从最需要专注的小工具原型开始。'),
+            ],
+            modelLabel: 'gpt-5.6-sol',
+            createdAt: DateTime.now(),
+          ),
         );
         await conversations.appendMessage(
-          conversationId: conversation.id,
-          role: ChatRole.user,
-          content: '我有一些零散的想法，帮我整理成今天的行动计划。',
+          ChatMessage(
+            id: 'preview-m3',
+            conversationId: conversation.id,
+            parentId: 'preview-m2',
+            role: ChatRole.user,
+            parts: const [TextPart(text: '我有一些零散的想法，帮我整理成今天的行动计划。')],
+            createdAt: DateTime.now(),
+          ),
         );
         final reply = await conversations.appendMessage(
-          conversationId: conversation.id,
-          role: ChatRole.assistant,
-          content: '',
-          modelName: 'gpt-5.6-sol',
+          ChatMessage(
+            id: 'preview-m4',
+            conversationId: conversation.id,
+            parentId: 'preview-m3',
+            role: ChatRole.assistant,
+            parts: const [],
+            modelLabel: 'gpt-5.6-sol',
+            createdAt: DateTime.now(),
+          ),
         );
-        await conversations.updateMessageContent(
-          reply.id!,
-          content:
-              '## 先做最重要的一件事\n\n'
-              '把想法变成行动，可以分成三个小步骤：\n\n'
-              '1. **明确目标**：写下今天最想完成的结果。\n'
-              '2. **缩小任务**：拆成半小时就能推进的一步。\n'
-              '3. **留出余量**：给休息和新的想法留一点空间。\n\n'
-              '> 不必一次做完所有事，先让第一步发生。',
-          reasoning:
-              '先区分目标与任务，再按优先级安排。'
-              '用户希望计划容易执行，因此应保留弹性，避免安排过满。',
-          status: ChatMessageStatus.done,
+        await conversations.updateMessage(
+          messageId: reply.id,
+          parts: const [
+            ReasoningPart(
+              publicText:
+                  '先区分目标与任务，再按优先级安排。'
+                  '用户希望计划容易执行，因此应保留弹性，避免安排过满。',
+            ),
+            TextPart(
+              text:
+                  '## 先做最重要的一件事\n\n'
+                  '把想法变成行动，可以分成三个小步骤：\n\n'
+                  '1. **明确目标**：写下今天最想完成的结果。\n'
+                  '2. **缩小任务**：拆成半小时就能推进的一步。\n'
+                  '3. **留出余量**：给休息和新的想法留一点空间。\n\n'
+                  '> 不必一次做完所有事，先让第一步发生。',
+            ),
+          ],
+          status: MessageStatus.completed,
+          thinkingDurationMs: 2400,
         );
         await conversations.createConversation(title: '读一本书的笔记');
         await conversations.createConversation(title: '一个小工具的设计草稿');

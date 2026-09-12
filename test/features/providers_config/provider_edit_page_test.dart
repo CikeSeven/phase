@@ -4,10 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
-import 'package:phase/data/models/ai_model.dart';
+import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/openai_compat.dart';
-import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/features/providers_config/provider_preset_sheet.dart';
 import 'package:phase/features/providers_config/provider_ui.dart';
 import 'package:phase/features/providers_config/providers_page.dart';
@@ -23,9 +22,9 @@ void main() {
 
   testWidgets('新增、搜索、添加校验、推理、默认、可见移除与获取模型都写回真实仓库', (tester) async {
     harness.provider.listModelsHandler = () async => const [
-      AiModel(id: 'remote-chat'),
-      AiModel(id: 'remote-chat'),
-      AiModel(id: 'Remote-Chat'),
+      ProfileModel(id: 'remote-chat'),
+      ProfileModel(id: 'remote-chat'),
+      ProfileModel(id: 'Remote-Chat'),
     ];
     await harness.pump(tester);
     expect(find.text('暂无服务商'), findsOneWidget);
@@ -146,9 +145,9 @@ void main() {
       apiKey: 'fake-old-key',
     );
     harness.provider.listModelsHandler = () async => const [
-      AiModel(id: 'gpt-5'),
-      AiModel(id: 'remote-r1'),
-      AiModel(id: 'remote-r1'),
+      ProfileModel(id: 'gpt-5'),
+      ProfileModel(id: 'remote-r1'),
+      ProfileModel(id: 'remote-r1'),
     ];
     await harness.pump(tester);
     await tapProviderControl(tester, keyed('provider-p1'));
@@ -191,12 +190,12 @@ void main() {
         'remote-r1',
       ]),
     );
-    // 存量数据经一次性迁移统一翻为支持推理。
+    // 显式能力设置优先：配置里关掉推理的模型保存后保持关闭。
     expect(
       saved.models
           .singleWhere((model) => model.id == 'gpt-5')
           .supportsReasoning,
-      isTrue,
+      isFalse,
     );
     expect(
       saved.models
@@ -269,7 +268,7 @@ void main() {
       apiKey: 'fake-other-provider-key',
     );
     harness.provider.listModelsHandler = () async => const [
-      AiModel(id: 'local'),
+      ProfileModel(id: 'local'),
     ];
     await harness.pump(tester);
     await tapProviderControl(tester, keyed('provider-p1'));
@@ -302,8 +301,8 @@ void main() {
         apiKey: 'fake-original-key',
         models: const [ProfileModel(id: 'manual')],
       );
-      final oldRequest = Completer<List<AiModel>>();
-      final newRequest = Completer<List<AiModel>>();
+      final oldRequest = Completer<List<ProfileModel>>();
+      final newRequest = Completer<List<ProfileModel>>();
       harness.provider.listModelsHandler = () =>
           harness.provider.listModelsCount == 1
           ? oldRequest.future
@@ -339,7 +338,7 @@ void main() {
       if (field == 'Key') {
         oldRequest.completeError(const NetworkFailure('stale failure'));
       } else {
-        oldRequest.complete(const [AiModel(id: 'stale-remote')]);
+        oldRequest.complete(const [ProfileModel(id: 'stale-remote')]);
       }
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.textContaining('已获取'), findsNothing);
@@ -348,7 +347,7 @@ void main() {
         tester.widget<FilledButton>(keyed('test-provider')).onPressed,
         isNull,
       );
-      newRequest.complete(const [AiModel(id: 'fresh-remote')]);
+      newRequest.complete(const [ProfileModel(id: 'fresh-remote')]);
       await settleProviderUi(tester);
       expect(find.text('已获取 1 个模型'), findsOneWidget);
       await fillProviderField(tester, keyed('provider-name'), '最新草稿');

@@ -3,10 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
-import 'package:phase/data/models/ai_model.dart';
+import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/openai_compat.dart';
-import 'package:phase/data/models/profile_model.dart';
 
 import 'provider_test_harness.dart';
 
@@ -74,7 +73,7 @@ void main() {
 
   testWidgets('添加弹窗期间完成拉取仍做实时重复校验，并保留随后添加的模型', (tester) async {
     await harness.seed(tester, models: const [ProfileModel(id: 'seeded')]);
-    final request = Completer<List<AiModel>>();
+    final request = Completer<List<ProfileModel>>();
     harness.provider.listModelsHandler = () => request.future;
     await harness.pump(tester);
     await tapProviderControl(tester, keyed('provider-p1'));
@@ -84,7 +83,7 @@ void main() {
       keyed('add-provider-model'),
       settle: false,
     );
-    request.complete(const [AiModel(id: 'race-id')]);
+    request.complete(const [ProfileModel(id: 'race-id')]);
     await settleProviderUi(tester);
     await fillProviderField(tester, keyed('new-model-id'), 'race-id');
     await tapProviderControl(tester, keyed('confirm-add-model'));
@@ -114,13 +113,13 @@ void main() {
 
   testWidgets('请求期间保存只写入当时草稿，返回页面后到达的结果不再更新', (tester) async {
     await harness.seed(tester, models: const [ProfileModel(id: 'manual')]);
-    final request = Completer<List<AiModel>>();
+    final request = Completer<List<ProfileModel>>();
     harness.provider.listModelsHandler = () => request.future;
     await harness.pump(tester);
     await tapProviderControl(tester, keyed('provider-p1'));
     await tapProviderControl(tester, keyed('test-provider'), settle: false);
     await tapProviderControl(tester, keyed('save-provider'));
-    request.complete(const [AiModel(id: 'late-model')]);
+    request.complete(const [ProfileModel(id: 'late-model')]);
     await settleProviderUi(tester);
     expect(tester.takeException(), isNull);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!

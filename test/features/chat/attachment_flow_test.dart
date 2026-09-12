@@ -1,216 +1,105 @@
-import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path/path.dart' as p;
 import 'package:phase/core/theme/app_theme.dart';
+import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
-import 'package:phase/data/models/ai_model.dart';
-import 'package:phase/data/models/chat_attachment.dart';
+import 'package:phase/data/models/api_protocol.dart';
+import 'package:phase/data/models/attachment.dart';
 import 'package:phase/data/models/chat_chunk.dart';
-import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/chat_request.dart';
-import 'package:phase/data/models/conversation.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
-import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
-import 'package:phase/features/chat/attachment_chips.dart';
 import 'package:phase/features/chat/attachment_picker.dart';
 import 'package:phase/features/chat/chat_page.dart';
 import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/fake_secure_storage.dart';
+
+/// 预制附件的选择器：返回测试临时目录里的文件，不触发平台选择器。
+///
+/// 附件落库、请求组装与消息引用由 chat_controller_test 与 attachment_test
+/// 覆盖；这里只验证界面交互（入口、拦截、附件条）。
 class _FakePicker implements AttachmentPicker {
-  ChatAttachment? next;
+  Attachment? next;
   int imageCalls = 0;
   int fileCalls = 0;
 
   @override
-  Future<List<ChatAttachment>> pickImages() async {
+  Future<List<Attachment>> pickImages() async {
     imageCalls++;
     return [?next];
   }
 
   @override
-  Future<ChatAttachment?> pickCameraImage() async {
+  Future<Attachment?> pickCameraImage() async {
     imageCalls++;
     return next;
   }
 
   @override
-  Future<List<ChatAttachment>> pickFiles() async {
+  Future<List<Attachment>> pickFiles() async {
     fileCalls++;
     return [?next];
   }
 }
 
-class _MemoryConversations implements ConversationRepository {
-  final conversations = <Conversation>[];
-  final messages = <String, List<ChatMessage>>{};
-  final _changes = StreamController<void>.broadcast(sync: true);
-  int _messageSequence = 0;
-
-  @override
-  AttachmentStorage? get attachments => null;
-
-  void _notify() => _changes.add(null);
-
-  @override
-  Stream<List<Conversation>> watchConversations() async* {
-    yield [...conversations];
-    await for (final _ in _changes.stream) {
-      yield [...conversations];
-    }
-  }
-
-  @override
-  Stream<List<ChatMessage>> watchMessages(String conversationId) async* {
-    yield [...?messages[conversationId]];
-    await for (final _ in _changes.stream) {
-      yield [...?messages[conversationId]];
-    }
-  }
-
-  @override
-  Future<List<ChatMessage>> getMessages(String conversationId) async => [
-    ...?messages[conversationId],
-  ];
-
-  @override
-  Future<Conversation> createConversation({String title = '新会话'}) async {
-    final conversation = Conversation(
-      id: 'c-${conversations.length}',
-      title: title,
-      pinned: false,
-      createdAt: DateTime(2026),
-      updatedAt: DateTime(2026),
-    );
-    conversations.add(conversation);
-    _notify();
-    return conversation;
-  }
-
-  @override
-  Future<ChatMessage> appendMessage({
-    required String conversationId,
-    required ChatRole role,
-    required String content,
-    ChatMessageStatus status = ChatMessageStatus.done,
-    String? modelName,
-    List<ChatAttachment> attachments = const [],
-  }) async {
-    final message = ChatMessage(
-      id: 'm-${_messageSequence++}',
-      role: role,
-      content: content,
-      status: status,
-      modelName: modelName,
-      attachments: attachments,
-    );
-    messages.putIfAbsent(conversationId, () => []).add(message);
-    _notify();
-    return message;
-  }
-
-  @override
-  Future<void> updateMessageContent(
-    String id, {
-    required String content,
-    required String? reasoning,
-    required ChatMessageStatus status,
-    Duration? thinkingDuration,
-  }) async {
-    for (final entries in messages.values) {
-      final index = entries.indexWhere((message) => message.id == id);
-      if (index < 0) continue;
-      final old = entries[index];
-      entries[index] = ChatMessage(
-        id: id,
-        role: old.role,
-        content: content,
-        reasoning: reasoning,
-        modelName: old.modelName,
-        attachments: old.attachments,
-        thinkingDuration: thinkingDuration ?? old.thinkingDuration,
-        status: status,
-      );
-    }
-    _notify();
-  }
-
-  @override
-  Future<void> renameConversation(String id, String title) async {}
-
-  @override
-  Future<void> setPinned(String id, {required bool pinned}) async {}
-
-  @override
-  Future<void> deleteConversation(String id) async {}
-
-  Future<void> close() => _changes.close();
-}
-
-class _StreamingAi implements AiProvider {
-  final chunks = StreamController<ChatChunk>.broadcast();
+class _IdleAi implements AiProvider {
   final requests = <ChatRequest>[];
 
   @override
-  String get id => 'fake';
+  ApiProtocol get protocol => ApiProtocol.openaiCompletions;
 
   @override
-  ProviderCapabilities get capabilities => const ProviderCapabilities();
+  Future<List<ProfileModel>> listModels() async => const [];
 
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) {
     requests.add(request);
-    return chunks.stream;
+    return const Stream<ChatChunk>.empty();
   }
-
-  @override
-  Future<List<AiModel>> listModels() async => [];
-
-  @override
-  Future<void> validateKey() async {}
-}
-
-class _MemoryKeys extends SecureKeyStorage {
-  @override
-  Future<String?> readApiKey(String providerProfileId) async => null;
 }
 
 void main() {
   late Directory temp;
-  late ChatAttachment image;
+  late AppDatabase db;
+  late AttachmentStorage storage;
   late _FakePicker picker;
-  late _MemoryConversations repository;
-  late _StreamingAi ai;
+  late _IdleAi ai;
 
   setUp(() {
-    temp = Directory.systemTemp.createTempSync('phase-attach-flow');
-    File('${temp.path}/a.png').writeAsBytesSync([137, 80, 78, 71]);
-    image = ChatAttachment(
-      id: 'att-1',
-      type: ChatAttachmentType.image,
-      name: 'a.png',
-      mimeType: 'image/png',
-      path: '${temp.path}/a.png',
-      size: 4,
+    temp = Directory.systemTemp.createTempSync('phase_attach_flow');
+    db = openAppDatabase(
+      path: p.join(temp.path, 'phase.sqlite'),
+      hexKey: '0123456789abcdef' * 4,
+      background: false,
     );
-    picker = _FakePicker()..next = image;
-    repository = _MemoryConversations();
-    ai = _StreamingAi();
+    storage = AttachmentStorage(Directory(p.join(temp.path, 'files')));
+    picker = _FakePicker();
+    ai = _IdleAi();
     addTearDown(() async {
-      await repository.close();
-      await ai.chunks.close();
+      await db.close();
       if (temp.existsSync()) temp.deleteSync(recursive: true);
     });
   });
+
+  Future<Attachment> makeAttachment(AttachmentKind kind, String name) {
+    return storage.save(
+      name: name,
+      mimeType: kind == AttachmentKind.image ? 'image/png' : 'text/plain',
+      kind: kind,
+      bytes: const [1, 2, 3, 4],
+    );
+  }
 
   Future<void> pumpChat(
     WidgetTester tester, {
@@ -232,21 +121,26 @@ void main() {
       ProviderScope(
         overrides: [
           sharedPreferencesProvider.overrideWith((ref) => preferences),
-          conversationRepositoryProvider.overrideWith((ref) => repository),
+          appDatabaseProvider.overrideWith((ref) => db),
+          secureKeyStorageProvider.overrideWith(
+            (ref) => SecureKeyStorage(FakeSecureStorage()),
+          ),
+          attachmentStorageProvider.overrideWith((ref) => storage),
           providerProfilesProvider.overrideWith(
             (ref) => Stream.value([
               ProviderProfile(
                 id: 'p',
                 name: '服务商',
+                protocol: ApiProtocol.openaiCompletions,
                 baseUrl: 'https://example.com/v1',
                 defaultModel: 'model-x',
                 models: [
                   ProfileModel(id: 'model-x', supportsImages: supportsImages),
                 ],
+                createdAt: DateTime(2026),
               ),
             ]),
           ),
-          secureKeyStorageProvider.overrideWith((ref) => _MemoryKeys()),
           aiProviderFactoryProvider.overrideWith(
             (ref) =>
                 (_, _) => ai,
@@ -256,7 +150,6 @@ void main() {
         child: MaterialApp.router(
           theme: AppTheme.light(),
           routerConfig: router,
-          // 流式光标动画默认静止，否则 pumpAndSettle 永不稳定。
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(disableAnimations: true),
             child: child!,
@@ -267,47 +160,53 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('相册选图 → 附件条 → 发送后附件随消息入请求并展示在气泡', (tester) async {
+  testWidgets('相册选图后出现附件条，可移除', (tester) async {
+    await tester.runAsync(() async {
+      picker.next = await makeAttachment(AttachmentKind.image, 'a.png');
+    });
     await pumpChat(tester);
     await tester.tap(find.byTooltip('附件'));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('attach-gallery')));
     await tester.pumpAndSettle();
+
     expect(picker.imageCalls, 1);
     expect(find.byKey(const ValueKey('attachment-chips')), findsOneWidget);
-
-    await tester.enterText(
-      find.byKey(const ValueKey('chat-message-input')),
-      '这是什么',
+    expect(
+      find.byKey(ValueKey('attachment-${picker.next!.id}')),
+      findsOneWidget,
     );
-    await tester.tap(find.byTooltip('发送'));
+
+    await tester.tap(find.byTooltip('移除附件'));
     await tester.pumpAndSettle();
-
-    final sent = ai.requests.single.messages.firstWhere(
-      (message) => message.role == ChatRole.user,
-    );
-    expect(sent.content, '这是什么');
-    expect(sent.attachments.single.id, 'att-1');
-    // 发送成功后附件条清空。
     expect(find.byKey(const ValueKey('attachment-chips')), findsNothing);
-    // 气泡展示附件（图片缩略图）。
-    expect(find.byType(MessageAttachments), findsOneWidget);
   });
 
-  testWidgets('仅附件无文本也可发送，会话标题取附件名', (tester) async {
+  testWidgets('选择文件后只出现附件条，不进入文本输入框', (tester) async {
+    await tester.runAsync(() async {
+      picker.next = await makeAttachment(AttachmentKind.text, 'note.txt');
+    });
     await pumpChat(tester);
     await tester.tap(find.byTooltip('附件'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('attach-gallery')));
+    await tester.tap(find.byKey(const ValueKey('attach-file')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('发送'));
-    await tester.pumpAndSettle();
-    expect(ai.requests.single.messages.last.role, ChatRole.user);
-    expect(ai.requests.single.messages.last.attachments, isNotEmpty);
-    expect(repository.conversations.single.title, '附件：a.png');
+
+    expect(picker.fileCalls, 1);
+    expect(find.byKey(const ValueKey('attachment-chips')), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('chat-message-input')))
+          .controller!
+          .text,
+      isEmpty,
+    );
   });
 
   testWidgets('模型未标记支持图片时拦截图片入口，文件入口不受影响', (tester) async {
+    await tester.runAsync(() async {
+      picker.next = await makeAttachment(AttachmentKind.text, 'note.txt');
+    });
     await pumpChat(tester, supportsImages: false);
     await tester.tap(find.byTooltip('附件'));
     await tester.pumpAndSettle();

@@ -10,9 +10,7 @@ Future<void> main() async {
   final preferences = await SharedPreferences.getInstance();
   runApp(
     ProviderScope(
-      overrides: [
-        sharedPreferencesProvider.overrideWith((ref) => preferences),
-      ],
+      overrides: [sharedPreferencesProvider.overrideWith((ref) => preferences)],
       child: const PhaseApp(),
     ),
   );

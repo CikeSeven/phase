@@ -1,16 +1,96 @@
+import 'dart:io';
+
 import 'package:drift/drift.dart';
-import 'package:drift_flutter/drift_flutter.dart';
+import 'package:drift/native.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/error/failure.dart';
+import '../../../core/utils/logger.dart';
+import '../../models/agent_run.dart';
 import '../../models/chat_message.dart';
+import '../../models/tool_call_record.dart';
+import '../../models/tool_policy.dart';
+import 'database_key.dart';
+import 'key_store.dart';
 
 part 'app_database.g.dart';
 
-/// 会话表。数据类命名为 ConversationRow，与 data/models 的 Conversation 区分。
+/// 服务商配置；API Key 不入库，按 id 存 SecureKeyStorage。
+@DataClassName('ProviderProfileRow')
+class ProviderProfiles extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text().withLength(min: 1, max: 100)();
+  TextColumn get protocol => text()();
+  TextColumn get baseUrl => text()();
+  BoolColumn get requiresKey => boolean().withDefault(const Constant(true))();
+
+  /// 创建时选用的预设 id；只用于回填表单。
+  TextColumn get presetId => text().withDefault(const Constant('custom'))();
+
+  /// 该服务商默认使用的模型 id；为空时回退到启用的第一个模型。
+  TextColumn get defaultModel => text().nullable()();
+
+  /// OpenAI 兼容协议的差异声明（OpenAiCompat JSON）。
+  TextColumn get compatJson => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// 服务商下的模型配置；profile 删除时级联删除。
+@DataClassName('ModelRow')
+class Models extends Table {
+  TextColumn get profileId =>
+      text().references(ProviderProfiles, #id, onDelete: KeyAction.cascade)();
+  TextColumn get modelId => text()();
+  TextColumn get displayName => text().nullable()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  BoolColumn get supportsReasoning =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get supportsTools =>
+      boolean().withDefault(const Constant(false))();
+  BoolColumn get supportsImages =>
+      boolean().withDefault(const Constant(false))();
+  IntColumn get contextWindow => integer().nullable()();
+  IntColumn get maxOutputTokens => integer().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {profileId, modelId};
+}
+
+/// 助手；删除助手不删除已有会话。
+@DataClassName('AssistantRow')
+class Assistants extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text().withLength(min: 1, max: 100)();
+  TextColumn get systemPrompt => text().withDefault(const Constant(''))();
+
+  /// ModelSelection 的 JSON；未设置默认模型时为 null。
+  TextColumn get defaultSelectionJson => text().nullable()();
+
+  /// 工具名 → 策略 的 JSON 对象。
+  TextColumn get toolPolicyJson => text().withDefault(const Constant('{}'))();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// 会话；currentMessageId 指向当前分支末尾。
 @DataClassName('ConversationRow')
 class Conversations extends Table {
   TextColumn get id => text()();
+
+  /// 助手被删除后置空，会话保留并允许重新选择助手。
+  TextColumn get assistantId => text().nullable()();
   TextColumn get title => text().withLength(min: 0, max: 200)();
+  TextColumn get currentMessageId => text().nullable()();
+
+  /// ModelSelection 的 JSON；为空时用助手默认值。
+  TextColumn get selectionJson => text().nullable()();
   BoolColumn get pinned => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -19,24 +99,23 @@ class Conversations extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// 消息表。
+/// 消息；父子指针构成消息树，parts_json 保存有序内容块。
 @DataClassName('MessageRow')
 class Messages extends Table {
   TextColumn get id => text()();
   TextColumn get conversationId =>
       text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+
+  /// 消息树父指针；null 表示本会话第一条消息。
+  TextColumn get parentId => text().nullable()();
+  TextColumn get runId => text().nullable()();
   TextColumn get role => textEnum<ChatRole>()();
-  TextColumn get content => text()();
-  TextColumn get status => textEnum<ChatMessageStatus>()();
-  TextColumn get modelName => text().nullable()();
+  TextColumn get status => textEnum<MessageStatus>()();
+  TextColumn get partsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get modelLabel => text().nullable()();
 
-  /// 推理模型的思考内容；非推理模型为 null。
-  TextColumn get reasoning => text().nullable()();
-
-  /// 附件列表的 JSON 编码（`List<ChatAttachment>`，v5 起；老数据默认空）。
-  TextColumn get attachmentsJson => text().withDefault(const Constant('[]'))();
-
-  /// 思考耗时（毫秒，v6 起；非推理或老数据为 null）。
+  /// TokenUsage 的 JSON；接口未提供用量时为 null。
+  TextColumn get usageJson => text().nullable()();
   IntColumn get thinkingDurationMs => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
@@ -44,170 +123,197 @@ class Messages extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// 服务商配置表。API Key 不入库，存 flutter_secure_storage。
-@DataClassName('ProviderProfileRow')
-class ProviderProfiles extends Table {
+/// 附件索引；二进制在 AttachmentStorage，抽取文本另有文件。
+@DataClassName('AttachmentRow')
+class Attachments extends Table {
   TextColumn get id => text()();
-  TextColumn get name => text().withLength(min: 1, max: 100)();
-  TextColumn get baseUrl => text()();
-
-  /// 报文协议（ApiProtocol.name，v4 起；老数据默认 openaiCompletions）。
-  TextColumn get protocol =>
-      text().withDefault(const Constant('openaiCompletions'))();
-
-  /// 创建时选用的预设 id（v4 起；老数据默认 custom）。
-  TextColumn get presetId => text().withDefault(const Constant('custom'))();
-
-  /// 模型列表的 JSON 编码（`List<ProfileModel>`，兼容老的字符串列表）。
-  TextColumn get modelsJson => text().withDefault(const Constant('[]'))();
-
-  /// 该服务商下默认使用的模型；未设置时由上层回退到候选模型第一个。
-  TextColumn get defaultModel => text().nullable()();
-
-  /// OpenAI 兼容协议的差异覆盖（OpenAiCompat JSON）；null 时按 baseUrl 嗅探。
-  TextColumn get compatJson => text().nullable()();
+  TextColumn get conversationId =>
+      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get kind => text()();
+  TextColumn get name => text()();
+  TextColumn get mimeType => text()();
+  IntColumn get size => integer()();
+  TextColumn get localPath => text()();
+  TextColumn get sha256 => text().nullable()();
+  TextColumn get extractedTextPath => text().nullable()();
+  IntColumn get width => integer().nullable()();
+  IntColumn get height => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
   Set<Column> get primaryKey => {id};
 }
 
-/// 应用数据库，由 drift_flutter 负责各平台 sqlite 初始化。
-@DriftDatabase(tables: [Conversations, Messages, ProviderProfiles])
-class AppDatabase extends _$AppDatabase {
-  AppDatabase([QueryExecutor? executor])
-    : super(executor ?? driftDatabase(name: 'phase'));
+/// 运行；保存循环位置与计数，供中断后按已存状态恢复。
+@DataClassName('AgentRunRow')
+class AgentRuns extends Table {
+  TextColumn get id => text()();
+  TextColumn get conversationId =>
+      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get assistantId => text().nullable()();
+  TextColumn get inputMessageId => text()();
+  TextColumn get currentMessageId => text().nullable()();
+  TextColumn get activeToolCallId => text().nullable()();
+
+  /// RunConfiguration 的 JSON；密钥不在其中。
+  TextColumn get configurationJson => text()();
+  TextColumn get status => textEnum<RunStatus>()();
+  TextColumn get finishReason => textEnum<RunFinishReason>().nullable()();
+  IntColumn get turnCount => integer().withDefault(const Constant(0))();
+  IntColumn get modelAttemptCount => integer().withDefault(const Constant(0))();
+  IntColumn get maxTurns => integer()();
+
+  /// TokenUsage 的 JSON；未收口时为 null。
+  TextColumn get usageJson => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get finishedAt => dateTime().nullable()();
 
   @override
-  int get schemaVersion => 6;
+  Set<Column> get primaryKey => {id};
+}
+
+/// 工具调用记录：参数、用户决定与结果的唯一业务事实来源。
+@DataClassName('ToolCallRow')
+class ToolCalls extends Table {
+  TextColumn get id => text()();
+  TextColumn get runId =>
+      text().references(AgentRuns, #id, onDelete: KeyAction.cascade)();
+  TextColumn get assistantMessageId => text()();
+  TextColumn get resultMessageId => text().nullable()();
+
+  /// 模型协议自己的调用 id，仅用于结果回填。
+  TextColumn get providerCallId => text().nullable()();
+  TextColumn get toolName => text()();
+  TextColumn get argumentsJson => text()();
+  TextColumn get providerDataJson => text().nullable()();
+  TextColumn get target => text().nullable()();
+  TextColumn get channel => textEnum<ExecutionChannel>()();
+  TextColumn get defaultPolicy => textEnum<ToolPolicy>()();
+  TextColumn get status => textEnum<ToolCallStatus>()();
+  TextColumn get decision => textEnum<ToolDecision>().nullable()();
+  DateTimeColumn get confirmationRequestedAt => dateTime().nullable()();
+  DateTimeColumn get confirmationExpiresAt => dateTime().nullable()();
+  DateTimeColumn get decidedAt => dateTime().nullable()();
+  TextColumn get result => text().nullable()();
+
+  /// 产物附件 id 列表的 JSON。
+  TextColumn get artifactsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get errorCode => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get startedAt => dateTime().nullable()();
+  DateTimeColumn get finishedAt => dateTime().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// 应用数据库（初版 schema 1）。
+///
+/// 数据库从创建时加密；schema 变更随初版演进，不保留开发期旧 schema 的
+/// 升级链（见 AGENTS.md §5）。
+@DriftDatabase(
+  tables: [
+    ProviderProfiles,
+    Models,
+    Assistants,
+    Conversations,
+    Messages,
+    Attachments,
+    AgentRuns,
+    ToolCalls,
+  ],
+)
+class AppDatabase extends _$AppDatabase {
+  AppDatabase(super.executor);
+
+  @override
+  int get schemaVersion => 1;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onUpgrade: (migrator, from, to) async {
-      if (from < 2) {
-        await migrator.addColumn(
-          providerProfiles,
-          providerProfiles.defaultModel,
-        );
-      }
-      if (from < 3) {
-        await migrator.addColumn(messages, messages.reasoning);
-      }
-      if (from < 4) {
-        await migrator.addColumn(providerProfiles, providerProfiles.protocol);
-        await migrator.addColumn(providerProfiles, providerProfiles.presetId);
-        await migrator.addColumn(providerProfiles, providerProfiles.compatJson);
-      }
-      if (from < 5) {
-        await migrator.addColumn(messages, messages.attachmentsJson);
-      }
-      if (from < 6) {
-        await migrator.addColumn(messages, messages.thinkingDurationMs);
-      }
+    beforeOpen: (details) async {
+      // 索引围绕实际查询建立；drift 的引用约束需要显式打开。
+      await customStatement('PRAGMA foreign_keys = ON');
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_conversations_pinned_updated '
+        'ON conversations (pinned DESC, updated_at DESC)',
+      );
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_messages_conversation '
+        'ON messages (conversation_id, created_at)',
+      );
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_messages_parent ON messages (parent_id)',
+      );
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_messages_run ON messages (run_id)',
+      );
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_tool_calls_run ON tool_calls (run_id)',
+      );
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_tool_calls_status '
+        'ON tool_calls (status)',
+      );
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_tool_calls_created '
+        'ON tool_calls (created_at)',
+      );
+      await customStatement(
+        'CREATE INDEX IF NOT EXISTS idx_agent_runs_conversation '
+        'ON agent_runs (conversation_id, status)',
+      );
     },
   );
 
-  // --- 会话 ---
-
-  /// 置顶优先，其余按更新时间倒序。
-  Stream<List<ConversationRow>> watchConversationRows() {
-    return (select(conversations)..orderBy([
-          (t) => OrderingTerm.desc(t.pinned),
-          (t) => OrderingTerm.desc(t.updatedAt),
-        ]))
-        .watch();
-  }
-
-  Future<void> insertConversation(ConversationsCompanion companion) {
-    return into(conversations).insert(companion);
-  }
-
-  Future<int> updateConversationFields(
-    String id,
-    ConversationsCompanion fields,
-  ) {
-    return (update(conversations)..where((t) => t.id.equals(id))).write(fields);
-  }
-
-  /// 连带删除会话下所有消息。
-  Future<void> deleteConversationCascade(String id) {
-    return transaction(() async {
-      await (delete(messages)..where((t) => t.conversationId.equals(id))).go();
-      await (delete(conversations)..where((t) => t.id.equals(id))).go();
-    });
-  }
-
-  // --- 消息 ---
-
-  Stream<List<MessageRow>> watchMessageRows(String conversationId) {
-    return (select(messages)
-          ..where((t) => t.conversationId.equals(conversationId))
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-        .watch();
-  }
-
-  Future<void> insertMessage(MessagesCompanion companion) {
-    return into(messages).insert(companion);
-  }
-
-  Future<List<MessageRow>> getMessageRows(String conversationId) {
-    return (select(messages)
-          ..where((t) => t.conversationId.equals(conversationId))
-          ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
-        .get();
-  }
-
-  Future<int> updateMessageContent(
-    String id, {
-    required String content,
-    required String? reasoning,
-    required ChatMessageStatus status,
-    Duration? thinkingDuration,
-  }) {
-    return (update(messages)..where((t) => t.id.equals(id))).write(
-      MessagesCompanion(
-        content: Value(content),
-        reasoning: Value(reasoning),
-        status: Value(status),
-        thinkingDurationMs: thinkingDuration == null
-            ? const Value.absent()
-            : Value(thinkingDuration.inMilliseconds),
-      ),
-    );
-  }
-
-  // --- 服务商配置 ---
-
-  Stream<List<ProviderProfileRow>> watchProviderProfileRows() {
-    return (select(
-      providerProfiles,
-    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).watch();
-  }
-
-  Future<List<ProviderProfileRow>> getProviderProfileRows() {
-    return (select(
-      providerProfiles,
-    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
-  }
-
-  Future<ProviderProfileRow?> getProviderProfileRow(String id) {
-    return (select(
-      providerProfiles,
-    )..where((t) => t.id.equals(id))).getSingleOrNull();
-  }
-
-  Future<void> upsertProviderProfile(ProviderProfilesCompanion companion) {
-    return into(providerProfiles).insertOnConflictUpdate(companion);
-  }
-
-  Future<int> deleteProviderProfileRow(String id) {
-    return (delete(providerProfiles)..where((t) => t.id.equals(id))).go();
+  /// 校验实际链接的 SQLite 支持加密；上游 sqlite3 没有 cipher pragma。
+  Future<void> assertEncryptionAvailable() async {
+    final rows = await customSelect('PRAGMA cipher;').get();
+    if (rows.isEmpty) {
+      throw StateError('数据库未启用加密：PRAGMA cipher 无结果');
+    }
   }
 }
 
+/// 打开设备上的加密数据库；密钥由 [DatabaseKey] 提供。
+///
+/// [background] 为 true 时在后台 isolate 打开与执行 PRAGMA（生产路径，
+/// 不阻塞首帧）；widget 测试的 fake-async 环境无法驱动后台 isolate，
+/// 此时传 false 在同 isolate 打开。
+AppDatabase openAppDatabase({
+  required String path,
+  required String hexKey,
+  bool background = true,
+  bool logStatements = false,
+}) {
+  final file = File(path);
+  // ignore: prefer_function_declarations_over_variables
+  final setup = (rawDb) => rawDb.execute(sqliteKeyPragma(hexKey));
+
+  final executor = background
+      ? NativeDatabase.createInBackground(
+          file,
+          setup: setup,
+          logStatements: logStatements,
+        )
+      : NativeDatabase(file, setup: setup, logStatements: logStatements);
+  return AppDatabase(executor);
+}
+
 @Riverpod(keepAlive: true)
-AppDatabase appDatabase(Ref ref) {
-  final database = AppDatabase();
-  ref.onDispose(database.close);
-  return database;
+Future<AppDatabase> appDatabase(Ref ref) async {
+  try {
+    final hexKey = await const DatabaseKey(SecureKeyStore()).readOrCreate();
+    final directory = await getApplicationDocumentsDirectory();
+    final database = openAppDatabase(
+      path: p.join(directory.path, 'phase.sqlite'),
+      hexKey: hexKey,
+    );
+    await database.assertEncryptionAvailable();
+    ref.onDispose(database.close);
+    return database;
+  } on Exception catch (e, st) {
+    AppLogger.error('打开数据库失败', e, st);
+    throw UnknownFailure('打开数据库失败', cause: e);
+  }
 }

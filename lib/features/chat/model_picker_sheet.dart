@@ -131,7 +131,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final entries = <_PickerEntry>[];
     for (final profile in profiles) {
       final models = <String, ProfileModel>{};
-      for (final model in profile.modelCandidates) {
+      for (final model in profile.enabledModels) {
         // 只有编辑页勾选启用的模型才进入选择列表。
         if (model.enabled) models.putIfAbsent(model.id, () => model);
       }
@@ -140,10 +140,13 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       if (initial != null &&
           initial.profile.id == profile.id &&
           !models.containsKey(initial.model)) {
+        // 当前选择不在启用列表里（手输模型或已被取消勾选）：保留为可确认项，
+        // 沿用它在本次选择中的能力标记。
         manualModel = initial.model;
         models[initial.model] = ProfileModel(
           id: initial.model,
           supportsReasoning: initial.supportsReasoning,
+          supportsImages: initial.supportsImages,
         );
       }
       if (models.isEmpty) {

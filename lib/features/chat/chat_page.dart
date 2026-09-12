@@ -11,6 +11,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_background.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_top_bar.dart';
+import '../../../data/models/chat_message.dart';
 import '../../../data/models/reasoning_effort.dart';
 import 'chat_controller.dart';
 import 'chat_empty_state.dart';
@@ -244,31 +245,38 @@ class _ConversationMessages extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ref
-        .watch(chatMessagesProvider(conversationId))
-        .when(
-          data: (messages) => messages.isEmpty
-              ? ChatEmptyState(bottomPadding: bottomPadding)
-              : ChatTranscript(
-                  key: ValueKey(conversationId),
-                  conversationId: conversationId,
-                  messages: messages,
-                  bottomPadding: bottomPadding,
-                ),
-          loading: () => const Center(
-            child: CircularProgressIndicator(semanticsLabel: '正在读取会话'),
-          ),
-          error: (error, _) => AppEmptyState(
-            icon: Symbols.error,
-            title: '暂时无法读取消息',
-            message: error is Failure ? error.userMessage : '加载消息失败，请重试',
-            action: FilledButton.tonal(
-              onPressed: () =>
-                  ref.invalidate(chatMessagesProvider(conversationId)),
-              child: const Text('重试'),
-            ),
-          ),
+    final thread = ref.watch(conversationThreadProvider(conversationId));
+    final state = ref.watch(chatControllerProvider);
+    return thread.when(
+      data: (value) {
+        final messages = value == null
+            ? const <ChatMessage>[]
+            : visibleMessages(value, state);
+        if (messages.isEmpty) {
+          return ChatEmptyState(bottomPadding: bottomPadding);
+        }
+        return ChatTranscript(
+          key: ValueKey(conversationId),
+          conversationId: conversationId,
+          messages: messages,
+          attachments: state.attachments,
+          bottomPadding: bottomPadding,
         );
+      },
+      loading: () => const Center(
+        child: CircularProgressIndicator(semanticsLabel: '正在读取会话'),
+      ),
+      error: (error, _) => AppEmptyState(
+        icon: Symbols.error,
+        title: '暂时无法读取消息',
+        message: error is Failure ? error.userMessage : '加载消息失败，请重试',
+        action: FilledButton.tonal(
+          onPressed: () =>
+              ref.invalidate(conversationThreadProvider(conversationId)),
+          child: const Text('重试'),
+        ),
+      ),
+    );
   }
 }
 

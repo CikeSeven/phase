@@ -13,6 +13,7 @@ import 'package:phase/core/theme/frosted_surface.dart';
 import 'package:phase/core/widgets/app_card.dart';
 import 'package:phase/core/widgets/app_sheet.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
+import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/data/models/reasoning_effort.dart';
@@ -21,21 +22,25 @@ import 'package:phase/features/chat/model_picker_sheet.dart';
 import 'package:phase/features/chat/model_selection.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _profiles = [
+final _profiles = [
   ProviderProfile(
     id: 'daily',
     name: '日常',
+    protocol: ApiProtocol.openaiCompletions,
     baseUrl: 'https://example.com/v1',
-    models: [
-      ProfileModel(id: 'chat-basic', supportsReasoning: false),
+    models: const [
+      ProfileModel(id: 'chat-basic'),
       ProfileModel(id: 'think-model', supportsReasoning: true),
     ],
+    createdAt: DateTime(2026),
   ),
   ProviderProfile(
     id: 'workspace',
     name: '工作空间',
+    protocol: ApiProtocol.openaiCompletions,
     baseUrl: 'https://example.com/v1',
-    models: [ProfileModel(id: 'think-model', supportsReasoning: true)],
+    models: const [ProfileModel(id: 'think-model', supportsReasoning: true)],
+    createdAt: DateTime(2026),
   ),
 ];
 
@@ -132,8 +137,10 @@ void main() {
   testWidgets('推理等级统一为全部五个，不按模型收窄', (tester) async {
     final host = await _pumpHost(
       tester,
-      profiles: const [
+      profiles: [
         ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'daily',
           name: '日常',
           baseUrl: 'https://example.com/v1',
@@ -172,8 +179,10 @@ void main() {
   testWidgets('标题右侧的当前模型名在空间足够时不提前截断', (tester) async {
     await _pumpHost(
       tester,
-      profiles: const [
+      profiles: [
         ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'daily',
           name: '日常',
           baseUrl: 'https://example.com/v1',
@@ -201,8 +210,10 @@ void main() {
   testWidgets('未勾选启用的模型不出现在选择列表，标签计数同步', (tester) async {
     await _pumpHost(
       tester,
-      profiles: const [
+      profiles: [
         ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'daily',
           name: '日常',
           baseUrl: 'https://example.com/v1',
@@ -232,8 +243,10 @@ void main() {
   testWidgets('默认模型被停用时，派生选择回退到第一个启用的模型', (tester) async {
     final host = await _pumpHost(
       tester,
-      profiles: const [
+      profiles: [
         ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'daily',
           name: '日常',
           baseUrl: 'https://example.com/v1',
@@ -257,6 +270,8 @@ void main() {
       tester,
       profiles: [
         ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'daily',
           name: '日常',
           baseUrl: 'https://example.com/v1',
@@ -266,7 +281,9 @@ void main() {
               ProfileModel(id: 'daily-${i.toString().padLeft(3, '0')}'),
           ],
         ),
-        const ProviderProfile(
+        ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'workspace',
           name: '工作空间',
           baseUrl: 'https://example.com/v1',
@@ -349,8 +366,10 @@ void main() {
     const manualId = 'manual-reasoner-not-in-remote-list';
     final host = await _pumpHost(
       tester,
-      profiles: const [
+      profiles: [
         ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'manual',
           name: '手动配置',
           baseUrl: 'https://example.com/v1',
@@ -379,6 +398,8 @@ void main() {
       tester,
       profiles: [
         ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'many',
           name: '模型仓库',
           baseUrl: 'https://example.com/v1',
@@ -388,7 +409,9 @@ void main() {
                 ProfileModel(id: 'model-${index.toString().padLeft(3, '0')}'),
           ),
         ),
-        const ProviderProfile(
+        ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'provider-research',
           name: '研究空间',
           baseUrl: 'https://example.com/v1',
@@ -498,8 +521,10 @@ void main() {
   testWidgets('单个服务商无模型时直接进入该服务商编辑页', (tester) async {
     final host = await _pumpHost(
       tester,
-      profiles: const [
+      profiles: [
         ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'empty-profile',
           name: '等待配置模型的服务商',
           baseUrl: 'https://example.com/v1',
@@ -614,6 +639,8 @@ void main() {
         dark: scenario.dark,
         profiles: [
           ProviderProfile(
+            protocol: ApiProtocol.openaiCompletions,
+            createdAt: DateTime(2026),
             id: 'long-provider-id-${'identifier-' * 8}',
             name: '需要完整区分的超长服务商名称与工作空间名称',
             baseUrl: 'https://example.com/v1',
@@ -739,7 +766,7 @@ Future<
 >
 _pumpHost(
   WidgetTester tester, {
-  List<ProviderProfile> profiles = _profiles,
+  List<ProviderProfile>? profiles,
   Map<String, Object> values = _initialValues,
   Stream<List<ProviderProfile>> Function()? profileStream,
   SettingsStorage Function(SharedPreferences)? settings,
@@ -785,7 +812,7 @@ _pumpHost(
       overrides: [
         sharedPreferencesProvider.overrideWith((ref) => preferences),
         providerProfilesProvider.overrideWith(
-          (ref) => profileStream?.call() ?? Stream.value(profiles),
+          (ref) => profileStream?.call() ?? Stream.value(profiles ?? _profiles),
         ),
         if (storage != null)
           settingsStorageProvider.overrideWith((ref) => storage),

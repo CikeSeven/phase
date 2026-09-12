@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:dio/dio.dart';
 
-import '../core/error/failure.dart';
+import '../core/error/provider_error.dart';
 import '../data/models/chat_chunk.dart';
 import 'dio_failure_mapper.dart';
 
@@ -57,10 +57,23 @@ _SsePayloadState _ssePayloadState(String data) {
   }
 }
 
+/// 拼接 baseUrl 与协议子路径；baseUrl 为空是明确的配置错误，
+/// 直接给出可展示的原因，不发出注定失败的请求。
+Uri resolveEndpoint(String baseUrl, String path) {
+  if (baseUrl.isEmpty) {
+    throw const ProviderError(ProviderErrorCategory.config, '未填写服务商地址');
+  }
+  final base = baseUrl.endsWith('/') ? baseUrl : '$baseUrl/';
+  return Uri.parse(base).resolve(path);
+}
+
 /// 各协议共用的 SSE POST 传输：鉴权头、流式响应、取消桥接、错误映射。
 ///
 /// 手写 controller 是为了把「订阅取消」桥接到 dio 的 CancelToken，
 /// 保证停止生成即时生效（AGENTS.md §4 取消语义）。
+///
+/// 请求层错误（HTTP 状态、网络、取消）以 [ProviderError] 抛出；
+/// 流内的协议错误由解码器转成 ResponseError 事件，不经过这里。
 Stream<ChatChunk> postSseStream({
   required Dio dio,
   required Uri uri,
@@ -70,6 +83,7 @@ Stream<ChatChunk> postSseStream({
 }) {
   final cancelToken = CancelToken();
   final controller = StreamController<ChatChunk>();
+  StreamSubscription<ChatChunk>? responseSubscription;
 
   controller.onListen = () async {
     try {
@@ -81,22 +95,38 @@ Stream<ChatChunk> postSseStream({
       );
       final body = response.data;
       if (body == null) {
-        throw const ServerFailure('响应体为空');
+        if (!controller.isClosed) {
+          controller.addError(
+            const ProviderError(ProviderErrorCategory.providerError, '响应体为空'),
+          );
+          await controller.close();
+        }
+      } else {
+        responseSubscription = decode(body.stream).listen(
+          controller.add,
+          onError: controller.addError,
+          onDone: controller.close,
+        );
+        if (controller.isPaused) responseSubscription!.pause();
       }
-      // 协议错误事件由 decode 以 Failure 形式抛出，addStream 原样转发。
-      await controller.addStream(decode(body.stream));
     } on DioException catch (e) {
       if (!controller.isClosed) {
-        controller.addError(mapDioExceptionToFailure(e));
+        controller.addError(mapDioExceptionToProviderError(e));
+        await controller.close();
       }
-    }
-    if (!controller.isClosed) {
-      await controller.close();
     }
   };
 
-  controller.onCancel = () {
+  controller.onPause = () => responseSubscription?.pause();
+  controller.onResume = () => responseSubscription?.resume();
+  controller.onCancel = () async {
+    // 先中断网络，再等待解码流退出；addStream 会把这两个步骤倒置。
     cancelToken.cancel('用户停止生成');
+    try {
+      await responseSubscription?.cancel();
+    } on DioException catch (e) {
+      if (!CancelToken.isCancel(e)) rethrow;
+    }
   };
 
   return controller.stream;

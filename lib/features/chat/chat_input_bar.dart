@@ -7,7 +7,7 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/frosted_surface.dart';
-import '../../../data/models/chat_attachment.dart';
+import '../../../data/models/attachment.dart';
 import 'attachment_chips.dart';
 import 'attachment_picker.dart';
 import 'chat_controller.dart';
@@ -27,7 +27,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   bool _canSend = false;
   bool _submitting = false;
   String? _pendingText;
-  List<ChatAttachment> _attachments = const [];
+  List<Attachment> _attachments = const [];
 
   @override
   void initState() {
@@ -299,9 +299,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       final picker = await ref.read(attachmentPickerProvider.future);
       if (!mounted) return;
       final picked = switch (source) {
-        'camera' => [
-          ?await picker.pickCameraImage(),
-        ].whereType<ChatAttachment>().toList(),
+        'camera' => [?await picker.pickCameraImage()],
         'gallery' => await picker.pickImages(),
         _ => await picker.pickFiles(),
       };

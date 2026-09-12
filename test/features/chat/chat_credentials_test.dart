@@ -1,12 +1,13 @@
-import 'dart:async';
+import 'dart:io';
 
-import 'package:drift/native.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:phase/data/datasources/local/app_database.dart';
+import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
-import 'package:phase/data/models/ai_model.dart';
+import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_chunk.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/profile_model.dart';
@@ -17,12 +18,17 @@ import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../support/fake_secure_storage.dart';
+
+/// 记录读取次数、始终返回同一份凭证的密钥库。
 class _Keys extends SecureKeyStorage {
+  _Keys() : super(FakeSecureStorage({'api_key_test-profile': stored}));
+
+  static const stored = 'retained-test-credential';
   var reads = 0;
-  final stored = 'retained-test-credential';
 
   @override
-  Future<String?> readApiKey(String providerProfileId) async {
+  Future<String?> read(String providerProfileId) async {
     reads++;
     return stored;
   }
@@ -30,32 +36,34 @@ class _Keys extends SecureKeyStorage {
 
 class _Provider implements AiProvider {
   @override
-  String get id => 'test-profile';
+  ApiProtocol get protocol => ApiProtocol.openaiCompletions;
 
   @override
-  ProviderCapabilities get capabilities => const ProviderCapabilities();
+  Future<List<ProfileModel>> listModels() async => const [];
 
   @override
-  Stream<ChatChunk> streamChat(ChatRequest request) =>
-      Stream.value(const ChatChunk(delta: '回复', done: true));
-
-  @override
-  Future<List<AiModel>> listModels() async => const [];
-
-  @override
-  Future<void> validateKey() async {}
+  Stream<ChatChunk> streamChat(ChatRequest request) => Stream.fromIterable([
+    const PartStart(partId: 'text_0', kind: PartKind.text),
+    const TextDelta(partId: 'text_0', text: '回复'),
+    const ResponseEnd(),
+  ]);
 }
 
 void main() {
-  for (final presetId in ['ollama', 'custom']) {
-    test('$presetId 按预设决定使用凭证，免 Key 配置不读取或发送旧凭证', () async {
-      final db = AppDatabase(NativeDatabase.memory());
+  for (final requiresKey in [true, false]) {
+    test('requiresKey=$requiresKey 决定是否读取并发送凭证', () async {
+      final tempDir = Directory.systemTemp.createTempSync('phase_credentials');
+      addTearDown(() => tempDir.deleteSync(recursive: true));
+      final db = openAppDatabase(
+        path: p.join(tempDir.path, 'phase.sqlite'),
+        hexKey: '0123456789abcdef' * 4,
+      );
       final keys = _Keys();
-      await ProviderProfileRepository(db, keys).saveProfile(
-        id: 'test-profile',
+      await ProviderProfileRepository(db, keys).createProfile(
         name: '测试配置',
         baseUrl: 'https://example.invalid/v1',
-        presetId: presetId,
+        protocol: ApiProtocol.openaiCompletions,
+        requiresKey: requiresKey,
         defaultModel: 'test-model',
         models: const [ProfileModel(id: 'test-model')],
       );
@@ -67,6 +75,11 @@ void main() {
           sharedPreferencesProvider.overrideWith((ref) => preferences),
           appDatabaseProvider.overrideWith((ref) => db),
           secureKeyStorageProvider.overrideWith((ref) => keys),
+          attachmentStorageProvider.overrideWith(
+            (ref) => AttachmentStorage(
+              Directory(p.join(tempDir.path, 'attachments')),
+            ),
+          ),
           aiProviderFactoryProvider.overrideWith(
             (ref) => (profile, key) {
               passedKey = key;
@@ -82,9 +95,9 @@ void main() {
       );
       try {
         await container.read(chatControllerProvider.notifier).send('你好');
-        expect(passedKey, presetId == 'ollama' ? isEmpty : keys.stored);
-        expect(keys.reads, presetId == 'ollama' ? 0 : 1);
-        expect(keys.stored, 'retained-test-credential');
+        // 免 Key 配置不读取、也不发送任何旧凭据。
+        expect(passedKey, requiresKey ? _Keys.stored : isEmpty);
+        expect(keys.reads, requiresKey ? 1 : 0);
       } finally {
         selectionSubscription.close();
         subscription.close();

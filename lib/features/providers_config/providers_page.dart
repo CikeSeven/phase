@@ -121,14 +121,23 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
         profile.baseUrl,
         presetById(profile.presetId).name,
         ProviderUi.protocolLabel(profile.protocol),
-        ...profile.modelCandidates.map((model) => model.id),
+        ...profile.models.map((model) => model.id),
+        // 列表外的默认模型也要能搜到。
+        ?profile.defaultModel,
       ].any((value) => value.toLowerCase().contains(query));
     }).toList();
+    // 模型数按 id 去重后统计，包含列表外的默认模型。
     final modelCount = profiles.fold<int>(
       0,
       (count, profile) =>
           count +
-          profile.modelCandidates.map((model) => model.id).toSet().length,
+          profile.models.map((model) => model.id).toSet().length +
+          (profile.defaultModel != null &&
+                  profile.models.every(
+                    (model) => model.id != profile.defaultModel,
+                  )
+              ? 1
+              : 0),
     );
     return CustomScrollView(
       key: const ValueKey('providers-scroll'),
@@ -212,10 +221,14 @@ class _ProfileRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final count = profile.modelCandidates
-        .map((model) => model.id)
-        .toSet()
-        .length;
+    final count =
+        profile.models.map((model) => model.id).toSet().length +
+        (profile.defaultModel != null &&
+                profile.models.every(
+                  (model) => model.id != profile.defaultModel,
+                )
+            ? 1
+            : 0);
     final secondaryStyle = theme.textTheme.bodySmall?.copyWith(
       color: theme.colorScheme.onSurfaceVariant,
     );

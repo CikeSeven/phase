@@ -5,19 +5,47 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/message_part.dart';
 import 'package:phase/features/chat/message_actions_sheet.dart';
 import 'package:phase/features/chat/message_bubble.dart';
 import 'package:phase/features/chat/thinking_panel.dart';
 
-ChatMessage _aiMessage(String content, ChatMessageStatus status) {
+ChatMessage _aiMessage(String content, MessageStatus status) {
   return ChatMessage(
     id: 'm1',
+    conversationId: 'c1',
     role: ChatRole.assistant,
-    content: content,
+    parts: [if (content.isNotEmpty) TextPart(text: content)],
     status: status,
     createdAt: DateTime(2026),
-    modelName: 'test-model',
+    modelLabel: 'test-model',
   );
+}
+
+/// Part 结构下的局部更新：正文替换/追加、思考设置或移除、状态切换。
+extension on ChatMessage {
+  ChatMessage withParts({
+    String? text,
+    String? thinking,
+    MessageStatus? status,
+  }) {
+    final next = <MessagePart>[];
+    for (final part in parts) {
+      switch (part) {
+        case TextPart():
+          if (text == null) next.add(part);
+        case ReasoningPart():
+          if (thinking == null) next.add(part);
+        default:
+          next.add(part);
+      }
+    }
+    if (text != null && text.isNotEmpty) next.add(TextPart(text: text));
+    if (thinking != null && thinking.isNotEmpty) {
+      next.add(ReasoningPart(publicText: thinking));
+    }
+    return copyWith(parts: next, status: status);
+  }
 }
 
 void main() {
@@ -33,17 +61,14 @@ void main() {
   }
 
   testWidgets('流式占位（空内容）不报错', (tester) async {
-    await pumpBubble(tester, _aiMessage('', ChatMessageStatus.streaming));
+    await pumpBubble(tester, _aiMessage('', MessageStatus.streaming));
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('流式半截 Markdown（未闭合代码块）不报错', (tester) async {
     await pumpBubble(
       tester,
-      _aiMessage(
-        '好的，代码如下：\n```dart\nvoid main() {',
-        ChatMessageStatus.streaming,
-      ),
+      _aiMessage('好的，代码如下：\n```dart\nvoid main() {', MessageStatus.streaming),
     );
     expect(tester.takeException(), isNull);
   });
@@ -51,7 +76,7 @@ void main() {
   testWidgets('流式半截表格不报错', (tester) async {
     await pumpBubble(
       tester,
-      _aiMessage('| 列A | 列B |\n| --- |', ChatMessageStatus.streaming),
+      _aiMessage('| 列A | 列B |\n| --- |', MessageStatus.streaming),
     );
     expect(tester.takeException(), isNull);
   });
@@ -59,14 +84,19 @@ void main() {
   group('思考区块', () {
     ChatMessage reasoningMessage({
       String? reasoning = '推演过程',
-      ChatMessageStatus status = ChatMessageStatus.done,
+      MessageStatus status = MessageStatus.completed,
     }) {
       return ChatMessage(
+        id: 'm-reasoning',
+        conversationId: 'c1',
         role: ChatRole.assistant,
-        content: '答案',
-        reasoning: reasoning,
+        parts: [
+          if (reasoning != null) ReasoningPart(publicText: reasoning),
+          const TextPart(text: '答案'),
+        ],
         status: status,
-        modelName: 'model-a',
+        modelLabel: 'model-a',
+        createdAt: DateTime(2026),
       );
     }
 
@@ -101,7 +131,7 @@ void main() {
 
     testWidgets('reasoning 流式中显示「思考中…」且默认展开', (tester) async {
       await tester.pumpWidget(
-        buildBubble(reasoningMessage(status: ChatMessageStatus.streaming)),
+        buildBubble(reasoningMessage(status: MessageStatus.streaming)),
       );
       // 有持续的光标动画，不能 pumpAndSettle。
       await tester.pump();
@@ -111,13 +141,13 @@ void main() {
     });
 
     testWidgets('无 reasoning 不因推理模型名或生成状态渲染思考区块', (tester) async {
-      for (final status in ChatMessageStatus.values) {
+      for (final status in MessageStatus.values) {
         await tester.pumpWidget(
           buildBubble(
             reasoningMessage(
               reasoning: null,
               status: status,
-            ).copyWith(modelName: 'reasoning-thinking-model'),
+            ).copyWith(modelLabel: 'reasoning-thinking-model'),
           ),
         );
         expect(find.byIcon(Symbols.psychology), findsNothing);
@@ -128,7 +158,7 @@ void main() {
     });
 
     testWidgets('空串 reasoning 在流式与完成时都不渲染思考区块', (tester) async {
-      for (final status in ChatMessageStatus.values) {
+      for (final status in MessageStatus.values) {
         await tester.pumpWidget(
           buildBubble(reasoningMessage(reasoning: '', status: status)),
         );
@@ -139,7 +169,7 @@ void main() {
     });
 
     testWidgets('同一消息 streaming 到 done 保持父结构与思考全文', (tester) async {
-      final streaming = reasoningMessage(status: ChatMessageStatus.streaming);
+      final streaming = reasoningMessage(status: MessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
       final panelState = tester.state(find.byType(ThinkingPanel));
       expect(find.text('答案', findRichText: true), findsOneWidget);
@@ -148,7 +178,7 @@ void main() {
       expect(find.text('推演过程'), findsOneWidget);
 
       await tester.pumpWidget(
-        buildBubble(streaming.copyWith(status: ChatMessageStatus.done)),
+        buildBubble(streaming.copyWith(status: MessageStatus.completed)),
       );
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(ThinkingPanel)), same(panelState));
@@ -172,8 +202,8 @@ void main() {
       final message = ValueNotifier(
         _aiMessage(
           '',
-          ChatMessageStatus.streaming,
-        ).copyWith(reasoning: lines(0, 120)),
+          MessageStatus.streaming,
+        ).withParts(thinking: lines(0, 120)),
       );
       addTearDown(message.dispose);
       await tester.pumpWidget(
@@ -204,7 +234,7 @@ void main() {
       expect(position().pixels, position().maxScrollExtent);
 
       // 流式增量跟随到底部。
-      message.value = message.value.copyWith(reasoning: lines(0, 220));
+      message.value = message.value.withParts(thinking: lines(0, 220));
       await tester.pumpAndSettle();
       expect(position().pixels, position().maxScrollExtent);
       expect(position().maxScrollExtent, greaterThan(0));
@@ -213,23 +243,21 @@ void main() {
       await tester.drag(inner, const Offset(0, 120));
       await tester.pumpAndSettle();
       final readingOffset = position().pixels;
-      message.value = message.value.copyWith(reasoning: lines(0, 300));
+      message.value = message.value.withParts(thinking: lines(0, 300));
       await tester.pumpAndSettle();
       expect(position().pixels, closeTo(readingOffset, 1));
 
       // 手动上滑回到底部后恢复跟随。
       await tester.drag(inner, const Offset(0, -4000));
       await tester.pumpAndSettle();
-      message.value = message.value.copyWith(reasoning: lines(0, 360));
+      message.value = message.value.withParts(thinking: lines(0, 360));
       await tester.pumpAndSettle();
       expect(position().pixels, position().maxScrollExtent);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('100ms 内完成且首次带 reasoning 的 done 快照直接显示全文', (tester) async {
-      final message = ValueNotifier(
-        _aiMessage('', ChatMessageStatus.streaming),
-      );
+      final message = ValueNotifier(_aiMessage('', MessageStatus.streaming));
       addTearDown(message.dispose);
       await tester.pumpWidget(
         MaterialApp(
@@ -243,10 +271,10 @@ void main() {
       );
       expect(find.byIcon(Symbols.psychology), findsNothing);
       await tester.pump(const Duration(milliseconds: 80));
-      message.value = message.value.copyWith(
-        content: '快速回复正文',
-        reasoning: '完整推演第一行\n完整推演第二行',
-        status: ChatMessageStatus.done,
+      message.value = message.value.withParts(
+        text: '快速回复正文',
+        thinking: '完整推演第一行\n完整推演第二行',
+        status: MessageStatus.completed,
       );
       await tester.pump(const Duration(milliseconds: 16));
       expect(find.text('完整推演第一行\n完整推演第二行'), findsOneWidget);
@@ -257,42 +285,51 @@ void main() {
     });
 
     testWidgets('手动收起后正文和思考增量及状态切换都不覆盖偏好', (tester) async {
-      final streaming = reasoningMessage(status: ChatMessageStatus.streaming);
+      final streaming = reasoningMessage(status: MessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
       await tester.tap(find.textContaining('思考中…'));
       await tester.pump();
       expect(find.text('推演过程'), findsNothing);
-      final updated = streaming.copyWith(reasoning: '完整思考：先分析，再校验。');
+      final updated = streaming.withParts(thinking: '完整思考：先分析，再校验。');
       await tester.pumpWidget(buildBubble(updated));
-      expect(find.text(updated.reasoning!), findsNothing);
+      expect(
+        find.text(updated.parts.whereType<ReasoningPart>().single.publicText),
+        findsNothing,
+      );
       await tester.pumpWidget(
-        buildBubble(updated.copyWith(status: ChatMessageStatus.done)),
+        buildBubble(updated.copyWith(status: MessageStatus.completed)),
       );
       await tester.pumpAndSettle();
-      expect(find.text(updated.reasoning!), findsNothing);
+      expect(
+        find.text(updated.parts.whereType<ReasoningPart>().single.publicText),
+        findsNothing,
+      );
       await tester.tap(find.text('已思考'));
       await tester.pumpAndSettle();
-      expect(find.text(updated.reasoning!), findsOneWidget);
+      expect(
+        find.text(updated.parts.whereType<ReasoningPart>().single.publicText),
+        findsOneWidget,
+      );
     });
 
     testWidgets('手动重新展开后完成时不自动折叠，错误正文仍显示', (tester) async {
-      final streaming = reasoningMessage(status: ChatMessageStatus.streaming);
+      final streaming = reasoningMessage(status: MessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
       await tester.tap(find.textContaining('思考中…'));
       await tester.pump();
       await tester.tap(find.textContaining('思考中…'));
       await tester.pump();
       await tester.pumpWidget(
-        buildBubble(streaming.copyWith(status: ChatMessageStatus.done)),
+        buildBubble(streaming.copyWith(status: MessageStatus.completed)),
       );
       await tester.pumpAndSettle();
       expect(find.text('推演过程'), findsOneWidget);
 
       await tester.pumpWidget(
         buildBubble(
-          streaming.copyWith(
-            status: ChatMessageStatus.error,
-            content: '网络连接失败，请检查网络后重试',
+          streaming.withParts(
+            status: MessageStatus.failed,
+            text: '网络连接失败，请检查网络后重试',
           ),
         ),
       );
@@ -315,7 +352,7 @@ void main() {
           body: MessageBubble(
             message: _aiMessage(
               '答案',
-              streaming ? ChatMessageStatus.streaming : ChatMessageStatus.done,
+              streaming ? MessageStatus.streaming : MessageStatus.completed,
             ),
           ),
         ),
@@ -372,21 +409,29 @@ void main() {
               home: Scaffold(
                 body: ListView(
                   children: [
-                    const MessageBubble(
+                    MessageBubble(
                       message: ChatMessage(
                         id: 'user',
+                        conversationId: 'c1',
                         role: ChatRole.user,
-                        content: '用户的一段较长输入，也应有合理宽度并在右侧对齐。',
+                        parts: const [
+                          TextPart(text: '用户的一段较长输入，也应有合理宽度并在右侧对齐。'),
+                        ],
+                        createdAt: DateTime(2026),
                       ),
                     ),
-                    const MessageBubble(
+                    MessageBubble(
                       message: ChatMessage(
                         id: 'assistant',
+                        conversationId: 'c1',
                         role: ChatRole.assistant,
-                        content: content,
-                        modelName: modelName,
-                        reasoning: '推演过程也会自然换行，不截掉原文。',
-                        status: ChatMessageStatus.streaming,
+                        parts: [
+                          const ReasoningPart(publicText: '推演过程也会自然换行，不截掉原文。'),
+                          TextPart(text: content),
+                        ],
+                        modelLabel: modelName,
+                        status: MessageStatus.streaming,
+                        createdAt: DateTime(2026),
                       ),
                     ),
                   ],
@@ -423,7 +468,7 @@ void main() {
         null,
       ),
     );
-    await pumpBubble(tester, _aiMessage('需要复制的正文', ChatMessageStatus.done));
+    await pumpBubble(tester, _aiMessage('需要复制的正文', MessageStatus.completed));
 
     await tester.longPress(find.text('需要复制的正文', findRichText: true));
     await tester.pumpAndSettle();
@@ -447,7 +492,7 @@ void main() {
   });
 
   testWidgets('AI 消息更多按钮也打开底部操作面板', (tester) async {
-    await pumpBubble(tester, _aiMessage('需要复制的正文', ChatMessageStatus.done));
+    await pumpBubble(tester, _aiMessage('需要复制的正文', MessageStatus.completed));
     await tester.tap(find.byTooltip('消息操作'));
     await tester.pumpAndSettle();
     expect(find.byType(MessageActionsSheet), findsOneWidget);
@@ -477,7 +522,7 @@ void main() {
     );
     await pumpBubble(
       tester,
-      _aiMessage('```dart\nfinal answer = 42;\n```', ChatMessageStatus.done),
+      _aiMessage('```dart\nfinal answer = 42;\n```', MessageStatus.completed),
     );
     await tester.tap(find.byTooltip('复制代码'));
     await tester.pumpAndSettle();

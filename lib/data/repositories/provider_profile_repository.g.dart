@@ -15,11 +15,13 @@ final providerProfileRepositoryProvider = ProviderProfileRepositoryProvider._();
 final class ProviderProfileRepositoryProvider
     extends
         $FunctionalProvider<
+          AsyncValue<ProviderProfileRepository>,
           ProviderProfileRepository,
-          ProviderProfileRepository,
-          ProviderProfileRepository
+          FutureOr<ProviderProfileRepository>
         >
-    with $Provider<ProviderProfileRepository> {
+    with
+        $FutureModifier<ProviderProfileRepository>,
+        $FutureProvider<ProviderProfileRepository> {
   ProviderProfileRepositoryProvider._()
     : super(
         from: null,
@@ -36,87 +38,25 @@ final class ProviderProfileRepositoryProvider
 
   @$internal
   @override
-  $ProviderElement<ProviderProfileRepository> $createElement(
+  $FutureProviderElement<ProviderProfileRepository> $createElement(
     $ProviderPointer pointer,
-  ) => $ProviderElement(pointer);
+  ) => $FutureProviderElement(pointer);
 
   @override
-  ProviderProfileRepository create(Ref ref) {
+  FutureOr<ProviderProfileRepository> create(Ref ref) {
     return providerProfileRepository(ref);
-  }
-
-  /// {@macro riverpod.override_with_value}
-  Override overrideWithValue(ProviderProfileRepository value) {
-    return $ProviderOverride(
-      origin: this,
-      providerOverride: $SyncValueProvider<ProviderProfileRepository>(value),
-    );
   }
 }
 
 String _$providerProfileRepositoryHash() =>
-    r'35701c1e12c5d374e43a3be792fb88c5119410c1';
+    r'9861503977cd8ee90c99a3afecb4f578333ec8b9';
 
-/// 一次性迁移：存量模型的 supportsReasoning 统一翻为 true。
-/// 失败不阻断读取（下次启动重试）。
-
-@ProviderFor(reasoningSupportMigration)
-final reasoningSupportMigrationProvider = ReasoningSupportMigrationProvider._();
-
-/// 一次性迁移：存量模型的 supportsReasoning 统一翻为 true。
-/// 失败不阻断读取（下次启动重试）。
-
-final class ReasoningSupportMigrationProvider
-    extends $FunctionalProvider<AsyncValue<void>, void, FutureOr<void>>
-    with $FutureModifier<void>, $FutureProvider<void> {
-  /// 一次性迁移：存量模型的 supportsReasoning 统一翻为 true。
-  /// 失败不阻断读取（下次启动重试）。
-  ReasoningSupportMigrationProvider._()
-    : super(
-        from: null,
-        argument: null,
-        retry: null,
-        name: r'reasoningSupportMigrationProvider',
-        isAutoDispose: false,
-        dependencies: <ProviderOrFamily>[
-          settingsStorageProvider,
-          providerProfileRepositoryProvider,
-        ],
-        $allTransitiveDependencies: <ProviderOrFamily>[
-          ReasoningSupportMigrationProvider.$allTransitiveDependencies0,
-          ReasoningSupportMigrationProvider.$allTransitiveDependencies1,
-          ReasoningSupportMigrationProvider.$allTransitiveDependencies2,
-        ],
-      );
-
-  static final $allTransitiveDependencies0 = settingsStorageProvider;
-  static final $allTransitiveDependencies1 =
-      SettingsStorageProvider.$allTransitiveDependencies0;
-  static final $allTransitiveDependencies2 = providerProfileRepositoryProvider;
-
-  @override
-  String debugGetCreateSourceHash() => _$reasoningSupportMigrationHash();
-
-  @$internal
-  @override
-  $FutureProviderElement<void> $createElement($ProviderPointer pointer) =>
-      $FutureProviderElement(pointer);
-
-  @override
-  FutureOr<void> create(Ref ref) {
-    return reasoningSupportMigration(ref);
-  }
-}
-
-String _$reasoningSupportMigrationHash() =>
-    r'53e7b0a3a3b072ef1a5c3f504878d7052da38ee9';
-
-/// 服务商配置列表流；先等一次性迁移完成再发出，避免读到迁移前的旧标记。
+/// 服务商配置列表流（界面用）。
 
 @ProviderFor(providerProfiles)
 final providerProfilesProvider = ProviderProfilesProvider._();
 
-/// 服务商配置列表流；先等一次性迁移完成再发出，避免读到迁移前的旧标记。
+/// 服务商配置列表流（界面用）。
 
 final class ProviderProfilesProvider
     extends
@@ -128,7 +68,7 @@ final class ProviderProfilesProvider
     with
         $FutureModifier<List<ProviderProfile>>,
         $StreamProvider<List<ProviderProfile>> {
-  /// 服务商配置列表流；先等一次性迁移完成再发出，避免读到迁移前的旧标记。
+  /// 服务商配置列表流（界面用）。
   ProviderProfilesProvider._()
     : super(
         from: null,
@@ -136,25 +76,13 @@ final class ProviderProfilesProvider
         retry: null,
         name: r'providerProfilesProvider',
         isAutoDispose: true,
-        dependencies: <ProviderOrFamily>[
-          reasoningSupportMigrationProvider,
-          providerProfileRepositoryProvider,
-        ],
-        $allTransitiveDependencies: <ProviderOrFamily>{
+        dependencies: <ProviderOrFamily>[providerProfileRepositoryProvider],
+        $allTransitiveDependencies: <ProviderOrFamily>[
           ProviderProfilesProvider.$allTransitiveDependencies0,
-          ProviderProfilesProvider.$allTransitiveDependencies1,
-          ProviderProfilesProvider.$allTransitiveDependencies2,
-          ProviderProfilesProvider.$allTransitiveDependencies3,
-        },
+        ],
       );
 
-  static final $allTransitiveDependencies0 = reasoningSupportMigrationProvider;
-  static final $allTransitiveDependencies1 =
-      ReasoningSupportMigrationProvider.$allTransitiveDependencies0;
-  static final $allTransitiveDependencies2 =
-      ReasoningSupportMigrationProvider.$allTransitiveDependencies1;
-  static final $allTransitiveDependencies3 =
-      ReasoningSupportMigrationProvider.$allTransitiveDependencies2;
+  static final $allTransitiveDependencies0 = providerProfileRepositoryProvider;
 
   @override
   String debugGetCreateSourceHash() => _$providerProfilesHash();
@@ -171,4 +99,4 @@ final class ProviderProfilesProvider
   }
 }
 
-String _$providerProfilesHash() => r'868f8160c9158a0eac2c1a8e299cd488440920fe';
+String _$providerProfilesHash() => r'd85cec0f197e2ac8b62bace1cb58c9aaf296514b';

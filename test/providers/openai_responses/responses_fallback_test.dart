@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:phase/core/error/failure.dart';
 import 'package:phase/data/models/chat_chunk.dart';
+import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/providers/openai_responses/responses_decoder.dart';
 
 void main() {
@@ -16,11 +16,14 @@ void main() {
           {'type': type, 'item_id': 'r1', 'output_index': 0, 'text': '公开摘要'},
         ]);
         expect(_reasoning(chunks), '公开摘要');
-        expect(chunks.any((chunk) => chunk.done), isFalse);
+        // 完成快照只交付内容，收口是流末尾的事。
+        expect(chunks.last, isA<ResponseEnd>());
         expect(
-          ResponsesSseDecoder.parseEvent(
-            jsonEncode({'type': type, 'text': '摘要'}),
-          )?.reasoningDelta,
+          _reasoning(
+            ResponsesSseDecoder.parseEvent(
+              jsonEncode({'type': type, 'text': '摘要'}),
+            ),
+          ),
           '摘要',
         );
       });
@@ -95,8 +98,8 @@ void main() {
         ]);
         expect(_reasoning(chunks), '公开摘要');
         expect(_body(chunks), '正文\n\n第二段');
-        expect(chunks.last.done, isTrue);
-        expect(chunks.last.usage?.totalTokens, 5);
+        expect(chunks.last, isA<ResponseEnd>());
+        expect(_usage(chunks)?.outputTokens, 3);
       });
     }
 
@@ -164,7 +167,29 @@ void main() {
         },
       ]);
       expect(_reasoning(chunks), '先检查输入。');
-      expect(chunks.last.done, isTrue);
+      expect(chunks.last, isA<ResponseEnd>());
+    });
+
+    test('快照事件之后到达的增量不会被收口吞掉', () async {
+      final chunks = await _decode([
+        {
+          'type': 'response.reasoning_summary_text.done',
+          'item_id': 'r1',
+          'summary_index': 0,
+          'text': '先说的',
+        },
+        {
+          'type': 'response.output_text.delta',
+          'item_id': 'm1',
+          'output_index': 1,
+          'delta': '后到的正文',
+        },
+      ]);
+      expect(_reasoning(chunks), '先说的');
+      expect(_body(chunks), '后到的正文');
+      // 只有一次收口，且在最后。
+      expect(chunks.whereType<ResponseEnd>(), hasLength(1));
+      expect(chunks.last, isA<ResponseEnd>());
     });
 
     test('不同 item 通过 id 与 index 链接且不吞新的 summary parts', () async {
@@ -460,8 +485,10 @@ void main() {
     ]);
     expect(_reasoning(chunks), isEmpty);
     expect(_body(chunks), isEmpty);
-    expect(chunks.last.done, isTrue);
-    expect(chunks.last.usage?.completionTokens, 8);
+    expect(chunks.whereType<PartEnd>(), isEmpty);
+    expect(chunks.last, isA<ResponseEnd>());
+    expect(_usage(chunks)?.outputTokens, 8);
+    expect(_usage(chunks)?.reasoningTokens, 7);
   });
 
   test('无空格、多行 data、逐字节 UTF8 与畸形事件可容错', () async {
@@ -475,32 +502,29 @@ void main() {
       Stream.fromIterable(utf8.encode(text).map((byte) => [byte])),
     ).toList();
     expect(_reasoning(chunks), '中文摘要');
-    expect(chunks.last.done, isTrue);
+    expect(chunks.last, isA<ResponseEnd>());
   });
 
-  test('补齐之前已发文本后，response.failed 仍然传递 ServerFailure', () async {
+  test('补齐之前已发文本后，response.failed 仍然作为流内错误交付', () async {
     final received = <ChatChunk>[];
-    await expectLater(
-      ResponsesSseDecoder.decode(
-        Stream.value(
-          utf8.encode(
-            'data:{"type":"response.reasoning_summary_text.done","text":"摘要"}\n\n'
-            'data:{"type":"response.failed","response":{"error":{"message":"过载"}}}\n\n',
+    final chunks =
+        await ResponsesSseDecoder.decode(
+          Stream.value(
+            utf8.encode(
+              'data:{"type":"response.reasoning_summary_text.done","text":"摘要"}\n\n'
+              'data:{"type":"response.failed","response":{"error":{"message":"过载"}}}\n\n',
+            ),
           ),
-        ),
-      ).map((chunk) {
-        received.add(chunk);
-        return chunk;
-      }).toList(),
-      throwsA(
-        isA<ServerFailure>().having(
-          (error) => error.message,
-          'message',
-          contains('过载'),
-        ),
-      ),
-    );
+        ).map((chunk) {
+          received.add(chunk);
+          return chunk;
+        }).toList();
+
     expect(_reasoning(received), '摘要');
+    final error = chunks.whereType<ResponseError>().single.error;
+    expect(error.message, contains('过载'));
+    // 错误事件终结响应：不再补 ResponseEnd。
+    expect(chunks.whereType<ResponseEnd>(), isEmpty);
   });
 }
 
@@ -515,7 +539,14 @@ Future<List<ChatChunk>> _decode(List<Map<String, dynamic>> events) {
 }
 
 String _reasoning(List<ChatChunk> chunks) =>
-    chunks.map((chunk) => chunk.reasoningDelta ?? '').join();
+    chunks.whereType<ReasoningDelta>().map((chunk) => chunk.text).join();
 
 String _body(List<ChatChunk> chunks) =>
-    chunks.map((chunk) => chunk.delta).join();
+    chunks.whereType<TextDelta>().map((chunk) => chunk.text).join();
+
+TokenUsage? _usage(List<ChatChunk> chunks) {
+  for (final chunk in chunks) {
+    if (chunk is UsageChunk) return chunk.usage;
+  }
+  return null;
+}

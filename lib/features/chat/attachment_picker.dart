@@ -7,12 +7,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../data/datasources/local/attachment_storage.dart';
-import '../../../data/models/chat_attachment.dart';
+import '../../../data/models/attachment.dart';
 import 'attachment_processor.dart';
 
 part 'attachment_picker.g.dart';
 
-/// 文本类文件白名单扩展名（小写）；文件内容在请求时内联进报文。
+/// 文本类文件白名单扩展名（小写）；内容随附件进入请求上下文。
 const textFileExtensions = {
   'txt',
   'md',
@@ -52,13 +52,13 @@ const maxTextFileBytes = 1024 * 1024;
 /// 附件选择入口抽象：测试可注入假实现返回预制文件。
 abstract class AttachmentPicker {
   /// 相册多选图片。
-  Future<List<ChatAttachment>> pickImages();
+  Future<List<Attachment>> pickImages();
 
   /// 拍照。
-  Future<ChatAttachment?> pickCameraImage();
+  Future<Attachment?> pickCameraImage();
 
   /// 选择文本类文件（白名单见 [textFileExtensions]）。
-  Future<List<ChatAttachment>> pickFiles();
+  Future<List<Attachment>> pickFiles();
 }
 
 /// 平台实现：image_picker / file_picker + 图片压缩处理 + 落盘。
@@ -70,36 +70,36 @@ class PlatformAttachmentPicker implements AttachmentPicker {
   final _imagePicker = ImagePicker();
 
   @override
-  Future<List<ChatAttachment>> pickImages() async {
+  Future<List<Attachment>> pickImages() async {
     final picked = await _imagePicker.pickMultiImage();
     return [for (final file in picked) await _saveImage(file)];
   }
 
   @override
-  Future<ChatAttachment?> pickCameraImage() async {
+  Future<Attachment?> pickCameraImage() async {
     final picked = await _imagePicker.pickImage(source: ImageSource.camera);
     return picked == null ? null : await _saveImage(picked);
   }
 
-  Future<ChatAttachment> _saveImage(XFile file) async {
+  Future<Attachment> _saveImage(XFile file) async {
     final bytes = await file.readAsBytes();
     final mime = lookupMimeType(file.name, headerBytes: bytes) ?? 'image/jpeg';
     final processed = await _processor.process(bytes, mime);
     return _storage.save(
       name: file.name,
       mimeType: processed.mimeType,
-      type: ChatAttachmentType.image,
+      kind: AttachmentKind.image,
       bytes: processed.bytes,
     );
   }
 
   @override
-  Future<List<ChatAttachment>> pickFiles() async {
+  Future<List<Attachment>> pickFiles() async {
     final files = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: textFileExtensions.toList(),
     );
-    final attachments = <ChatAttachment>[];
+    final attachments = <Attachment>[];
     for (final file in files) {
       final path = file.path;
       if (path == null) continue;
@@ -115,7 +115,7 @@ class PlatformAttachmentPicker implements AttachmentPicker {
         await _storage.save(
           name: file.name,
           mimeType: lookupMimeType(file.name) ?? 'text/plain',
-          type: ChatAttachmentType.file,
+          kind: AttachmentKind.text,
           bytes: await File(path).readAsBytes(),
         ),
       );

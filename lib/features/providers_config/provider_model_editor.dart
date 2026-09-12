@@ -186,7 +186,7 @@ class _ModelCard extends StatelessWidget {
                 semanticLabel: '启用该模型',
                 onChanged: enabled
                     ? (value) => onModelChanged(
-                        model.copyWith(enabled: value ?? false),
+                        model.withSettings(enabled: value ?? false),
                       )
                     : null,
               ),
@@ -227,8 +227,9 @@ class _ModelCard extends StatelessWidget {
                   tooltip: '该模型是否支持工具调用',
                   selected: model.supportsTools,
                   onSelected: enabled
-                      ? (value) =>
-                            onModelChanged(model.copyWith(supportsTools: value))
+                      ? (value) => onModelChanged(
+                          model.withSettings(supportsTools: value),
+                        )
                       : null,
                 ),
                 CapabilityChip(
@@ -239,7 +240,7 @@ class _ModelCard extends StatelessWidget {
                   selected: model.supportsImages,
                   onSelected: enabled
                       ? (value) => onModelChanged(
-                          model.copyWith(supportsImages: value),
+                          model.withSettings(supportsImages: value),
                         )
                       : null,
                 ),

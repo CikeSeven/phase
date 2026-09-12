@@ -15,10 +15,11 @@ import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
-import 'package:phase/data/models/ai_model.dart';
 import 'package:phase/data/models/chat_chunk.dart';
-import 'package:phase/data/models/chat_attachment.dart';
+import 'package:phase/data/models/attachment.dart';
+import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/conversation.dart';
 import 'package:phase/data/models/profile_model.dart';
@@ -33,14 +34,20 @@ import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-const _profile = ProviderProfile(
+import '../../support/fake_secure_storage.dart';
+
+final _profile = ProviderProfile(
   id: 'profile',
   name: '长名称服务商配置用于验证模型入口不会挤压按钮',
+  protocol: ApiProtocol.openaiCompletions,
   baseUrl: 'https://example.com/v1',
   defaultModel:
       'very-long-reasoning-model-name-2026-preview-with-extra-context',
+  createdAt: DateTime(2026),
 );
 
+/// 内存版会话仓储：布局测试只需要可控的会话与消息视图，
+/// 不走真实数据库（其行为由 repositories_test 覆盖）。
 class _MemoryConversations implements ConversationRepository {
   final items = <Conversation>[];
   final messages = <String, List<ChatMessage>>{};
@@ -52,7 +59,6 @@ class _MemoryConversations implements ConversationRepository {
   int renameCalls = 0;
   int pinCalls = 0;
   int deleteCalls = 0;
-  int _messageSequence = 0;
 
   @override
   AttachmentStorage? get attachments => null;
@@ -90,27 +96,49 @@ class _MemoryConversations implements ConversationRepository {
   }
 
   @override
-  Stream<List<ChatMessage>> watchMessages(String conversationId) async* {
-    yield [...?messages[conversationId]];
+  Stream<ConversationThread?> watchThread(String conversationId) async* {
+    ChatMessage? current() => messages[conversationId]?.last;
+    ConversationThread build() {
+      final branch = [...?messages[conversationId]];
+      final conversation = items.firstWhere(
+        (item) => item.id == conversationId,
+        orElse: () => Conversation(
+          id: conversationId,
+          title: '',
+          createdAt: DateTime(2026),
+          updatedAt: DateTime(2026),
+        ),
+      );
+      return ConversationThread(
+        conversation: conversation,
+        messages: branch,
+        branch: branch,
+        currentMessageId: current()?.id,
+      );
+    }
+
+    yield build();
     await for (final _ in _changes.stream) {
-      yield [...?messages[conversationId]];
+      yield build();
     }
   }
 
   @override
-  Future<List<ChatMessage>> getMessages(String conversationId) async => [
-    ...?messages[conversationId],
-  ];
+  Future<ConversationThread?> getThread(String conversationId) =>
+      watchThread(conversationId).first;
 
   @override
-  Future<Conversation> createConversation({String title = '新会话'}) async {
+  Future<Conversation> createConversation({
+    String title = '新会话',
+    String? assistantId,
+  }) async {
     createCalls++;
     await createGate?.future;
     if (createFailure case final failure?) throw failure;
     final conversation = Conversation(
       id: 'created-$createCalls',
       title: title,
-      pinned: false,
+      assistantId: assistantId,
       createdAt: DateTime(2026, 9, 9),
       updatedAt: DateTime(2026, 9, 9),
     );
@@ -120,58 +148,86 @@ class _MemoryConversations implements ConversationRepository {
   }
 
   @override
-  Future<ChatMessage> appendMessage({
-    required String conversationId,
-    required ChatRole role,
-    required String content,
-    ChatMessageStatus status = ChatMessageStatus.done,
-    String? modelName,
-    List<ChatAttachment> attachments = const [],
-  }) async {
-    final message = ChatMessage(
-      id: 'message-${_messageSequence++}',
-      role: role,
-      content: content,
-      status: status,
-      modelName: modelName,
-      attachments: attachments,
-    );
-    messages.putIfAbsent(conversationId, () => []).add(message);
+  Future<void> updateConversation(Conversation conversation) async {
+    final index = items.indexWhere((item) => item.id == conversation.id);
+    if (index >= 0) items[index] = conversation;
     _notify();
-    return message;
   }
 
   @override
-  Future<void> updateMessageContent(
-    String id, {
-    required String content,
-    required String? reasoning,
-    required ChatMessageStatus status,
-    Duration? thinkingDuration,
+  Future<ChatMessage> appendMessage(
+    ChatMessage message, {
+    bool updateTitle = false,
+  }) async {
+    final stored = message.copyWith(
+      parts: message.parts.isEmpty ? const [] : message.parts,
+    );
+    messages.putIfAbsent(message.conversationId, () => []).add(stored);
+    final index = items.indexWhere((item) => item.id == message.conversationId);
+    if (index >= 0) {
+      items[index] = items[index].copyWith(
+        currentMessageId: stored.id,
+        title: updateTitle && stored.text.trim().isNotEmpty
+            ? stored.text.trim()
+            : items[index].title,
+        updatedAt: message.createdAt,
+      );
+    }
+    _notify();
+    return stored;
+  }
+
+  @override
+  Future<void> updateMessage({
+    required String messageId,
+    required List<MessagePart> parts,
+    required MessageStatus status,
+    TokenUsage? usage,
+    int? thinkingDurationMs,
   }) async {
     for (final entries in messages.values) {
-      final index = entries.indexWhere((message) => message.id == id);
+      final index = entries.indexWhere((message) => message.id == messageId);
       if (index < 0) continue;
-      final old = entries[index];
-      entries[index] = ChatMessage(
-        id: id,
-        role: old.role,
-        content: content,
-        reasoning: reasoning,
-        modelName: old.modelName,
-        attachments: old.attachments,
-        thinkingDuration: thinkingDuration ?? old.thinkingDuration,
+      entries[index] = entries[index].copyWith(
+        parts: parts,
         status: status,
+        usage: usage,
+        thinkingDurationMs: thinkingDurationMs,
       );
     }
     _notify();
   }
 
   @override
+  Future<void> setCurrentMessage(
+    String conversationId,
+    String messageId,
+  ) async {
+    final index = items.indexWhere((item) => item.id == conversationId);
+    if (index >= 0) {
+      items[index] = items[index].copyWith(currentMessageId: messageId);
+    }
+    _notify();
+  }
+
+  @override
+  Future<void> saveAttachment(Attachment attachment) async {}
+
+  @override
+  Future<void> updateAttachmentExtraction(
+    String attachmentId, {
+    required String extractedTextPath,
+  }) async {}
+
+  @override
+  Future<List<Attachment>> attachmentsFor(String conversationId) async =>
+      const [];
+
+  @override
   Future<void> renameConversation(String id, String title) async {
     renameCalls++;
     final index = items.indexWhere((item) => item.id == id);
-    items[index] = items[index].copyWith(title: title);
+    if (index >= 0) items[index] = items[index].copyWith(title: title);
     _notify();
   }
 
@@ -179,7 +235,7 @@ class _MemoryConversations implements ConversationRepository {
   Future<void> setPinned(String id, {required bool pinned}) async {
     pinCalls++;
     final index = items.indexWhere((item) => item.id == id);
-    items[index] = items[index].copyWith(pinned: pinned);
+    if (index >= 0) items[index] = items[index].copyWith(pinned: pinned);
     _notify();
   }
 
@@ -196,8 +252,7 @@ class _MemoryConversations implements ConversationRepository {
 }
 
 class _MemoryKeys extends SecureKeyStorage {
-  @override
-  Future<String?> readApiKey(String providerProfileId) async => null;
+  _MemoryKeys() : super(FakeSecureStorage());
 }
 
 class _StreamingAi implements AiProvider {
@@ -205,10 +260,7 @@ class _StreamingAi implements AiProvider {
   final requests = <ChatRequest>[];
 
   @override
-  String get id => 'widget-test';
-
-  @override
-  ProviderCapabilities get capabilities => const ProviderCapabilities();
+  ApiProtocol get protocol => ApiProtocol.openaiCompletions;
 
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) {
@@ -217,10 +269,7 @@ class _StreamingAi implements AiProvider {
   }
 
   @override
-  Future<List<AiModel>> listModels() async => [];
-
-  @override
-  Future<void> validateKey() async {}
+  Future<List<ProfileModel>> listModels() async => const [];
 }
 
 class _Harness {
@@ -633,7 +682,9 @@ void main() {
   }
 
   testWidgets('顶栏在模型名右侧用不同颜色显示当前推理等级', (tester) async {
-    const profile = ProviderProfile(
+    final profile = ProviderProfile(
+      protocol: ApiProtocol.openaiCompletions,
+      createdAt: DateTime(2026),
       id: 'profile',
       name: '服务商',
       baseUrl: 'https://example.com/v1',
@@ -664,7 +715,9 @@ void main() {
     await pumpChat(
       tester,
       profiles: Stream.value([
-        const ProviderProfile(
+        ProviderProfile(
+          protocol: ApiProtocol.openaiCompletions,
+          createdAt: DateTime(2026),
           id: 'profile',
           name: '服务商',
           baseUrl: 'https://example.com/v1',
@@ -680,10 +733,12 @@ void main() {
   testWidgets('输入栏悬浮于消息区之上，列表按其实测高度留白', (tester) async {
     final repository = _MemoryConversations()..seed(1);
     repository.messages['seed-0'] = [
-      const ChatMessage(
+      ChatMessage(
         id: 'saved',
+        conversationId: 'seed-0',
         role: ChatRole.assistant,
-        content: '已有的回复',
+        parts: const [TextPart(text: '已有的回复')],
+        createdAt: DateTime(2026),
       ),
     ];
     await pumpChat(tester, repository: repository);
@@ -851,9 +906,21 @@ void main() {
       isEmpty,
     );
     expect(find.byTooltip('停止生成'), findsOneWidget);
-    expect(harness.container.read(chatControllerProvider).messages, isEmpty);
+    expect(
+      harness.container.read(chatControllerProvider).streamingParts,
+      isEmpty,
+    );
     await enterDraft(tester, '下一条草稿');
-    harness.ai.chunks.add(const ChatChunk(delta: '答案', reasoningDelta: '推演过程'));
+    harness.ai.chunks.add(
+      const PartStart(partId: 'reasoning_0', kind: PartKind.reasoning),
+    );
+    harness.ai.chunks.add(
+      const PartStart(partId: 'text_0', kind: PartKind.text),
+    );
+    harness.ai.chunks.add(
+      const ReasoningDelta(partId: 'reasoning_0', text: '推演过程'),
+    );
+    harness.ai.chunks.add(const TextDelta(partId: 'text_0', text: '答案'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 120));
     await tester.pumpAndSettle();
@@ -864,13 +931,14 @@ void main() {
     await tester.tap(find.byTooltip('停止生成'));
     await tester.pumpAndSettle();
     final reply = repository.messages.values.single.last;
-    expect(reply.status, ChatMessageStatus.done);
-    expect(reply.content, '答案');
-    expect(reply.reasoning, '推演过程');
+    // 用户停止的运行按已取消记录，已收内容保留。
+    expect(reply.status, MessageStatus.cancelled);
+    expect(reply.text, '答案');
+    expect(reply.parts.whereType<ReasoningPart>().single.publicText, '推演过程');
     expect(find.textContaining('已思考'), findsOneWidget);
     // 停止=思考结束：自动收起，思考耗时已随消息落库。
     expect(find.text('推演过程'), findsNothing);
-    expect(reply.thinkingDuration, isNotNull);
+    expect(reply.thinkingDurationMs, isNotNull);
     await tester.tap(find.textContaining('已思考'));
     await tester.pumpAndSettle();
     expect(find.text('推演过程'), findsOneWidget);
@@ -908,10 +976,12 @@ void main() {
   testWidgets('侧栏搜索惰性列表，重命名取消/保存/置顶/删除都调用真实动作', (tester) async {
     final repository = _MemoryConversations()..seed(80);
     repository.messages['seed-0'] = [
-      const ChatMessage(
+      ChatMessage(
         id: 'saved',
+        conversationId: 'seed-0',
         role: ChatRole.assistant,
-        content: '已有的旅行建议',
+        parts: const [TextPart(text: '已有的旅行建议')],
+        createdAt: DateTime(2026),
       ),
     ];
     final harness = await pumpChat(tester, repository: repository);

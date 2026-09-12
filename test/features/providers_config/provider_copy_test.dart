@@ -3,10 +3,9 @@ import 'package:phase/core/widgets/app_card.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/core/widgets/app_scaffold.dart';
 import 'package:phase/core/widgets/app_sheet.dart';
-import 'package:phase/data/models/ai_model.dart';
+import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/openai_compat.dart';
-import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/features/providers_config/provider_form_sections.dart';
 
 import 'provider_test_harness.dart';
@@ -25,7 +24,7 @@ void main() {
       apiKey: 'fake-copy-key',
     );
     harness.provider.listModelsHandler = () async => const [
-      AiModel(id: 'remote-model'),
+      ProfileModel(id: 'remote-model'),
     ];
     await harness.pump(tester);
     expect(

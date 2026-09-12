@@ -1,39 +1,113 @@
-import 'package:json_annotation/json_annotation.dart';
-
+import 'attachment.dart';
 import 'chat_message.dart';
 import 'reasoning_effort.dart';
+import 'tool_policy.dart';
 
-part 'chat_request.g.dart';
-
-/// 发起一次对话的请求，交给 [AiProvider.streamChat]。
+/// 一次请求中使用的一条消息；由 ContextBuilder 从消息与工具记录解析得到。
 ///
-/// 各厂商实现自行决定如何把 messages 映射为各自的协议格式；
-/// 流式与否由实现内部决定（OpenAI 兼容实现固定 stream: true）。
-@JsonSerializable(explicitToJson: true)
-class ChatRequest {
-  const ChatRequest({
-    required this.model,
-    required this.messages,
-    this.temperature,
-    this.reasoningEffort,
-    this.maxTokens,
+/// 这不是第二套持久化格式：它只描述"这一次请求要发什么"。
+class ResolvedMessage {
+  const ResolvedMessage({required this.role, required this.parts});
+
+  final ChatRole role;
+  final List<ResolvedPart> parts;
+}
+
+/// 请求中的内容块：正文、思考、图片、工具调用与工具结果。
+sealed class ResolvedPart {
+  const ResolvedPart();
+}
+
+class ResolvedText extends ResolvedPart {
+  const ResolvedText(this.text);
+
+  final String text;
+}
+
+/// 公开思考文本；仅在所选协议要求把思考带回上下文时使用。
+class ResolvedReasoning extends ResolvedPart {
+  const ResolvedReasoning(this.text, {this.providerData});
+
+  final String text;
+
+  /// 回传该块所需的协议状态（如 Anthropic 的 signature）。
+  final Map<String, dynamic>? providerData;
+}
+
+class ResolvedImage extends ResolvedPart {
+  const ResolvedImage(this.attachment);
+
+  final Attachment attachment;
+}
+
+/// 模型提出的工具调用，按协议要求回填。
+class ResolvedToolCall extends ResolvedPart {
+  const ResolvedToolCall({
+    required this.callId,
+    required this.toolName,
+    required this.arguments,
+    this.providerData,
   });
 
-  /// 模型名（如 `gpt-4o-mini`、`deepseek-chat`）。
-  final String model;
+  /// Provider 侧的调用 id。
+  final String callId;
+  final String toolName;
+  final Map<String, dynamic> arguments;
+  final Map<String, dynamic>? providerData;
+}
 
-  final List<ChatMessage> messages;
+/// 工具结果；是否成功由 [isError] 表达，而不是靠文案。
+class ResolvedToolResult extends ResolvedPart {
+  const ResolvedToolResult({
+    required this.callId,
+    required this.content,
+    this.isError = false,
+  });
 
+  final String callId;
+  final String content;
+  final bool isError;
+}
+
+/// 交给 [AiProvider.streamChat] 的请求。
+///
+/// 未启用的工具不进入 [tools]；不支持推理的模型不带推理字段。
+class ChatRequest {
+  const ChatRequest({
+    required this.modelId,
+    required this.messages,
+    this.systemPrompt = '',
+    this.tools = const [],
+    this.reasoningEffort = ReasoningEffort.off,
+    this.temperature,
+    this.maxOutputTokens,
+  });
+
+  final String modelId;
+  final List<ResolvedMessage> messages;
+  final String systemPrompt;
+
+  /// 本次运行开放给模型的工具；为空表示本次不发送工具定义。
+  final List<ToolDefinition> tools;
+
+  final ReasoningEffort reasoningEffort;
   final double? temperature;
+  final int? maxOutputTokens;
+}
 
-  /// 推理等级；为 null 表示模型不支持推理，协议实现不下发任何推理字段。
-  final ReasoningEffort? reasoningEffort;
+/// 工具定义：名称、描述、参数 schema、所需能力与默认策略。
+abstract interface class ToolDefinition {
+  String get name;
+  String get description;
 
-  /// 最大输出 token；为 null 时不下发，由服务端默认决定。
-  final int? maxTokens;
+  /// JSON Schema 形式的参数定义。
+  Map<String, dynamic> get inputSchema;
 
-  factory ChatRequest.fromJson(Map<String, dynamic> json) =>
-      _$ChatRequestFromJson(json);
+  /// 执行该工具需要的通道能力（文件、无障碍等）。
+  Set<String> get requiredCapabilities;
 
-  Map<String, dynamic> toJson() => _$ChatRequestToJson(this);
+  ToolPolicy get defaultPolicy;
+
+  /// 展示给用户确认页的动作摘要。
+  String describeAction(Map<String, dynamic> arguments);
 }

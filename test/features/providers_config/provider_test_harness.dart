@@ -8,9 +8,9 @@ import 'package:go_router/go_router.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
+import 'package:phase/data/datasources/local/key_store.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
-import 'package:phase/data/models/ai_model.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_chunk.dart';
 import 'package:phase/data/models/chat_request.dart';
@@ -25,7 +25,10 @@ import 'package:phase/providers/provider_factory.dart';
 
 class ProviderTestHarness {
   ProviderTestHarness({this.profileStream}) {
-    repository = ProviderProfileRepository(database, keyStorage);
+    repository = ProviderProfileRepository(
+      database,
+      SecureKeyStorage(keyStorage),
+    );
     router = GoRouter(
       initialLocation: '/settings/providers',
       routes: [
@@ -78,6 +81,7 @@ class ProviderTestHarness {
     String baseUrl = 'https://example.com/v1',
     String presetId = 'custom',
     ApiProtocol protocol = ApiProtocol.openaiCompletions,
+    bool requiresKey = true,
     List<ProfileModel> models = const [],
     String? defaultModel,
     OpenAiCompat? compatOverrides,
@@ -85,14 +89,18 @@ class ProviderTestHarness {
   }) async {
     await tester.runAsync(() async {
       await repository.saveProfile(
-        id: id,
-        name: name,
-        baseUrl: baseUrl,
-        presetId: presetId,
-        protocol: protocol,
-        models: models,
-        defaultModel: defaultModel,
-        compatOverrides: compatOverrides,
+        ProviderProfile(
+          id: id,
+          name: name,
+          protocol: protocol,
+          baseUrl: baseUrl,
+          requiresKey: requiresKey,
+          presetId: presetId,
+          models: models,
+          defaultModel: defaultModel,
+          compatOverrides: compatOverrides,
+          createdAt: DateTime.now(),
+        ),
       );
       if (apiKey != null) await repository.writeApiKey(id, apiKey);
     });
@@ -147,7 +155,8 @@ class ProviderTestHarness {
   }
 }
 
-class MemoryKeyStorage extends SecureKeyStorage {
+/// 内存密钥库：记录读写次数与可注入的失败，不触碰平台安全存储。
+class MemoryKeyStorage implements KeyStore {
   final keys = <String, String>{};
   Object? readError;
   Object? writeError;
@@ -156,38 +165,36 @@ class MemoryKeyStorage extends SecureKeyStorage {
   int deleteCount = 0;
 
   @override
-  Future<String?> readApiKey(String providerProfileId) async {
+  Future<String?> read(String key) async {
     if (readError case final error?) throw error;
-    return keys[providerProfileId];
+    return keys[key];
   }
 
   @override
-  Future<void> writeApiKey(String providerProfileId, String apiKey) async {
+  Future<void> write(String key, String value) async {
     writeCount++;
     await writeGate?.future;
     if (writeError case final error?) throw error;
-    keys[providerProfileId] = apiKey;
+    keys[key] = value;
   }
 
   @override
-  Future<void> deleteApiKey(String providerProfileId) async {
+  Future<void> delete(String key) async {
     deleteCount++;
-    keys.remove(providerProfileId);
+    keys.remove(key);
   }
 }
 
 class FakeAiProvider implements AiProvider {
-  Future<List<AiModel>> Function() listModelsHandler = () async => const [];
+  Future<List<ProfileModel>> Function() listModelsHandler = () async =>
+      const [];
   int listModelsCount = 0;
 
   @override
-  String get id => 'fake';
+  ApiProtocol get protocol => ApiProtocol.openaiCompletions;
 
   @override
-  ProviderCapabilities get capabilities => const ProviderCapabilities();
-
-  @override
-  Future<List<AiModel>> listModels() async {
+  Future<List<ProfileModel>> listModels() async {
     listModelsCount++;
     return await listModelsHandler();
   }
@@ -195,9 +202,6 @@ class FakeAiProvider implements AiProvider {
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) =>
       throw StateError('配置页面不应调用生成接口');
-
-  @override
-  Future<void> validateKey() => throw StateError('使用模型列表接口测试');
 }
 
 Finder keyed(String value) => find.byKey(ValueKey(value), skipOffstage: false);

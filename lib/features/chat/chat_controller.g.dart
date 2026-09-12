@@ -8,19 +8,22 @@ part of 'chat_controller.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
+/// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 
 @ProviderFor(ChatController)
 final chatControllerProvider = ChatControllerProvider._();
 
+/// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 final class ChatControllerProvider
     extends $NotifierProvider<ChatController, ChatState> {
+  /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
   ChatControllerProvider._()
     : super(
         from: null,
         argument: null,
         retry: null,
         name: r'chatControllerProvider',
-        isAutoDispose: true,
+        isAutoDispose: false,
         dependencies: <ProviderOrFamily>[modelSelectionProvider],
         $allTransitiveDependencies: <ProviderOrFamily>{
           ChatControllerProvider.$allTransitiveDependencies0,
@@ -28,7 +31,6 @@ final class ChatControllerProvider
           ChatControllerProvider.$allTransitiveDependencies2,
           ChatControllerProvider.$allTransitiveDependencies3,
           ChatControllerProvider.$allTransitiveDependencies4,
-          ChatControllerProvider.$allTransitiveDependencies5,
         },
       );
 
@@ -41,8 +43,6 @@ final class ChatControllerProvider
       ModelSelectionProvider.$allTransitiveDependencies2;
   static final $allTransitiveDependencies4 =
       ModelSelectionProvider.$allTransitiveDependencies3;
-  static final $allTransitiveDependencies5 =
-      ModelSelectionProvider.$allTransitiveDependencies4;
 
   @override
   String debugGetCreateSourceHash() => _$chatControllerHash();
@@ -60,7 +60,9 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'8ceca9e8369e6afadd563a186fbc99667757a932';
+String _$chatControllerHash() => r'59040cf56efa4224b8fca62667ae28fbe7de0b2d';
+
+/// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 
 abstract class _$ChatController extends $Notifier<ChatState> {
   ChatState build();
@@ -124,62 +126,62 @@ final class ConversationsProvider
   }
 }
 
-String _$conversationsHash() => r'95b0a110c705b6c6c85e78e5d7914b280b7dd821';
+String _$conversationsHash() => r'2ac16e57c492917710a601ffe21e2efe7257c30a';
 
-/// 某会话的消息流。
+/// 某会话的当前分支视图。
 
-@ProviderFor(chatMessages)
-final chatMessagesProvider = ChatMessagesFamily._();
+@ProviderFor(conversationThread)
+final conversationThreadProvider = ConversationThreadFamily._();
 
-/// 某会话的消息流。
+/// 某会话的当前分支视图。
 
-final class ChatMessagesProvider
+final class ConversationThreadProvider
     extends
         $FunctionalProvider<
-          AsyncValue<List<ChatMessage>>,
-          List<ChatMessage>,
-          Stream<List<ChatMessage>>
+          AsyncValue<ConversationThread?>,
+          ConversationThread?,
+          Stream<ConversationThread?>
         >
     with
-        $FutureModifier<List<ChatMessage>>,
-        $StreamProvider<List<ChatMessage>> {
-  /// 某会话的消息流。
-  ChatMessagesProvider._({
-    required ChatMessagesFamily super.from,
+        $FutureModifier<ConversationThread?>,
+        $StreamProvider<ConversationThread?> {
+  /// 某会话的当前分支视图。
+  ConversationThreadProvider._({
+    required ConversationThreadFamily super.from,
     required String super.argument,
   }) : super(
          retry: null,
-         name: r'chatMessagesProvider',
+         name: r'conversationThreadProvider',
          isAutoDispose: true,
          dependencies: null,
          $allTransitiveDependencies: null,
        );
 
   @override
-  String debugGetCreateSourceHash() => _$chatMessagesHash();
+  String debugGetCreateSourceHash() => _$conversationThreadHash();
 
   @override
   String toString() {
-    return r'chatMessagesProvider'
+    return r'conversationThreadProvider'
         ''
         '($argument)';
   }
 
   @$internal
   @override
-  $StreamProviderElement<List<ChatMessage>> $createElement(
+  $StreamProviderElement<ConversationThread?> $createElement(
     $ProviderPointer pointer,
   ) => $StreamProviderElement(pointer);
 
   @override
-  Stream<List<ChatMessage>> create(Ref ref) {
+  Stream<ConversationThread?> create(Ref ref) {
     final argument = this.argument as String;
-    return chatMessages(ref, argument);
+    return conversationThread(ref, argument);
   }
 
   @override
   bool operator ==(Object other) {
-    return other is ChatMessagesProvider && other.argument == argument;
+    return other is ConversationThreadProvider && other.argument == argument;
   }
 
   @override
@@ -188,26 +190,27 @@ final class ChatMessagesProvider
   }
 }
 
-String _$chatMessagesHash() => r'5148edb42d127c56359e5d0f165df93f9e19944d';
+String _$conversationThreadHash() =>
+    r'5aac3bb5841d39801bf7aceb65d941b8c05a1dc1';
 
-/// 某会话的消息流。
+/// 某会话的当前分支视图。
 
-final class ChatMessagesFamily extends $Family
-    with $FunctionalFamilyOverride<Stream<List<ChatMessage>>, String> {
-  ChatMessagesFamily._()
+final class ConversationThreadFamily extends $Family
+    with $FunctionalFamilyOverride<Stream<ConversationThread?>, String> {
+  ConversationThreadFamily._()
     : super(
         retry: null,
-        name: r'chatMessagesProvider',
+        name: r'conversationThreadProvider',
         dependencies: null,
         $allTransitiveDependencies: null,
         isAutoDispose: true,
       );
 
-  /// 某会话的消息流。
+  /// 某会话的当前分支视图。
 
-  ChatMessagesProvider call(String conversationId) =>
-      ChatMessagesProvider._(argument: conversationId, from: this);
+  ConversationThreadProvider call(String conversationId) =>
+      ConversationThreadProvider._(argument: conversationId, from: this);
 
   @override
-  String toString() => r'chatMessagesProvider';
+  String toString() => r'conversationThreadProvider';
 }

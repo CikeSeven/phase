@@ -1,97 +1,164 @@
 import 'dart:convert';
 
-import '../../core/error/failure.dart';
 import '../../data/models/chat_chunk.dart';
 import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
 import '../../data/models/reasoning_effort.dart';
 import '../attachment_encoder.dart';
+import '../dio_failure_mapper.dart';
+import '../part_assembler.dart';
 import '../sse_transport.dart';
 
 /// 构造 Responses API（POST /responses）请求体。
 ///
-/// 纯函数便于单测。system 消息置首条 developer 角色；
-/// 推理等级映射为 `reasoning: {effort, summary: auto}`（off → effort none）。
-Map<String, dynamic> buildResponsesPayload(
+/// systemPrompt 置首条 developer 消息；system 角色消息同样作为 developer。
+/// 推理等级映射为 `reasoning: {effort, summary: auto}`（off → effort none）；
+/// 模型不支持推理时不下发 reasoning 字段。
+Future<Map<String, dynamic>> buildResponsesPayload(
   ChatRequest request, {
-  List<List<AttachmentPayload>>? attachments,
-}) {
-  List<AttachmentPayload> partsFor(int index) =>
-      attachments == null || index >= attachments.length
-      ? const <AttachmentPayload>[]
-      : attachments[index];
-
-  List<Map<String, dynamic>> userContent(ChatMessage message, int index) {
-    return [
-      if (message.content.isNotEmpty)
-        {'type': 'input_text', 'text': message.content},
-      for (final part in partsFor(index))
-        if (part.isImage)
-          {
-            'type': 'input_image',
-            'image_url': 'data:${part.mimeType};base64,${part.base64Data}',
-          }
-        else
-          {'type': 'input_text', 'text': part.text},
-    ];
+  bool supportsImages = true,
+  bool supportsReasoning = true,
+}) async {
+  final attachments = RequestAttachmentEncoder(supportsImages: supportsImages);
+  final input = <Map<String, dynamic>>[
+    if (request.systemPrompt.isNotEmpty)
+      {
+        'role': 'developer',
+        'content': [
+          {'type': 'input_text', 'text': request.systemPrompt},
+        ],
+      },
+  ];
+  for (final message in request.messages) {
+    input.addAll(await _responsesItems(message, attachments));
   }
 
   return {
-    'model': request.model,
-    'input': [
-      for (var index = 0; index < request.messages.length; index++)
-        switch (request.messages[index].role) {
-          ChatRole.system => {
-            'role': 'developer',
-            'content': [
-              {'type': 'input_text', 'text': request.messages[index].content},
-            ],
-          },
-          ChatRole.user => {
-            'role': 'user',
-            'content': userContent(request.messages[index], index),
-          },
-          ChatRole.assistant => {
-            'role': 'assistant',
-            'content': [
-              {'type': 'output_text', 'text': request.messages[index].content},
-            ],
-          },
-        },
-    ],
+    'model': request.modelId,
+    'input': input,
     'stream': true,
-    if (request.reasoningEffort case final effort?)
-      'reasoning': effort == ReasoningEffort.off
+    if (supportsReasoning)
+      'reasoning': request.reasoningEffort == ReasoningEffort.off
           ? {'effort': 'none'}
-          : {'effort': effort.name, 'summary': 'auto'},
+          : {'effort': request.reasoningEffort.name, 'summary': 'auto'},
     if (request.temperature != null) 'temperature': request.temperature,
-    if (request.maxTokens != null) 'max_output_tokens': request.maxTokens,
+    if (request.maxOutputTokens != null)
+      'max_output_tokens': request.maxOutputTokens,
+    // 未开放工具时不下发工具定义。
+    if (request.tools.isNotEmpty)
+      'tools': [
+        for (final tool in request.tools)
+          {
+            'type': 'function',
+            'name': tool.name,
+            'description': tool.description,
+            'parameters': tool.inputSchema,
+          },
+      ],
   };
+}
+
+Future<List<Map<String, dynamic>>> _responsesItems(
+  ResolvedMessage message,
+  RequestAttachmentEncoder attachments,
+) async {
+  final blocks = <Map<String, dynamic>>[];
+  for (final part in message.parts) {
+    switch (part) {
+      case ResolvedText(:final text):
+        if (text.isEmpty) break;
+        blocks.add({
+          'type': message.role == ChatRole.assistant
+              ? 'output_text'
+              : 'input_text',
+          'text': text,
+        });
+      case ResolvedImage(:final attachment):
+        final payload = await attachments.encode(attachment);
+        if (payload.isImage) {
+          blocks.add({'type': 'input_image', 'image_url': payload.dataUri});
+        } else if (payload.text case final text?) {
+          blocks.add({'type': 'input_text', 'text': text});
+        }
+      case ResolvedReasoning():
+        // 公开思考摘要不回传：Responses 的 reasoning item 需要服务端状态，
+        // P0 不请求服务端保存响应，因此不重建它。
+        break;
+      case ResolvedToolCall():
+      case ResolvedToolResult():
+        // 函数调用与结果在下面按顶层 item 组织。
+        break;
+    }
+  }
+
+  final items = <Map<String, dynamic>>[];
+  if (message.role == ChatRole.system) {
+    if (blocks.isEmpty) return items;
+    return [
+      {'role': 'developer', 'content': blocks},
+    ];
+  }
+  if (blocks.isNotEmpty) {
+    items.add({'role': message.role.name, 'content': blocks});
+  }
+  for (final part in message.parts) {
+    switch (part) {
+      case ResolvedToolCall(:final callId, :final toolName, :final arguments):
+        // 函数调用是顶层 item，不嵌在 message 里。
+        items.add({
+          'type': 'function_call',
+          'call_id': callId,
+          'name': toolName,
+          'arguments': jsonEncode(arguments),
+        });
+      case ResolvedToolResult(:final callId, :final content):
+        items.add({
+          'type': 'function_call_output',
+          'call_id': callId,
+          'output': content,
+        });
+      default:
+        break;
+    }
+  }
+  return items;
 }
 
 /// Responses API 的 SSE 事件解析。
 abstract final class ResponsesSseDecoder {
-  /// 独立解析单个 data 载荷；跨事件去重应使用 [decode]。
-  ///
-  /// `response.failed` / `error` 事件以 [ServerFailure] 抛出。
-  static ChatChunk? parseEvent(String data) =>
-      _ResponsesStreamDecoder().parse(data, standalone: true);
+  /// 独立解析单个 data 载荷并收口；跨事件去重与合并应使用 [decode]。
+  static List<ChatChunk> parseEvent(String data) {
+    final decoder = _ResponsesStreamDecoder();
+    final chunks = decoder.parse(data, standalone: true);
+    // 畸形的载荷不是协议事件：既不产出内容，也不收口。
+    if (!decoder.sawEvent) return const [];
+    return [...chunks, ...decoder.finish()];
+  }
 
   /// 每条响应独立追踪 item 与文本段，只补齐已发前缀的缺失后缀。
   static Stream<ChatChunk> decode(Stream<List<int>> byteStream) async* {
     final decoder = _ResponsesStreamDecoder();
     await for (final data in decodeSseDataLines(byteStream)) {
-      final chunk = decoder.parse(data);
-      if (chunk != null) yield chunk;
+      for (final chunk in decoder.parse(data)) {
+        yield chunk;
+      }
+      if (decoder.isDone) return;
     }
-    final pending = decoder.flush(finish: true);
-    if (pending != null) yield pending;
+    for (final chunk in decoder.finish()) {
+      yield chunk;
+    }
   }
 }
 
 enum _ResponseChannel { summary, reasoning, content }
 
 class _ResponsesStreamDecoder {
+  _ResponsesStreamDecoder() {
+    _parts = PartAssembler(_out.add);
+  }
+
+  final _out = <ChatChunk>[];
+  late final PartAssembler _parts;
   final _byId = <String, _ResponseItem>{};
   final _byIndex = <int, _ResponseItem>{};
   final _items = <_ResponseItem>[];
@@ -99,16 +166,26 @@ class _ResponsesStreamDecoder {
   _ResponsePart? _lastReasoningPart;
   _ResponsePart? _lastContentPart;
   var _nextItemOrder = 0;
+  var _terminated = false;
+  var _sawEvent = false;
+  var _finished = false;
 
-  ChatChunk? parse(String data, {bool standalone = false}) {
-    if (data.trim() == '[DONE]') return flush(finish: true, done: true);
+  bool get isDone => _terminated || _finished;
+
+  /// 本次解析是否识别出一个协议事件（单事件解析据此决定是否收口）。
+  bool get sawEvent => _sawEvent;
+
+  List<ChatChunk> parse(String data, {bool standalone = false}) {
+    if (isDone) return const [];
+    if (data.trim() == '[DONE]') return finish();
     final Object? decoded;
     try {
       decoded = jsonDecode(data);
     } on FormatException {
-      return null;
+      return const [];
     }
-    if (decoded is! Map<String, dynamic>) return null;
+    if (decoded is! Map<String, dynamic>) return const [];
+    _sawEvent = true;
     final type = decoded['type'];
     var done = false;
     TokenUsage? usage;
@@ -156,8 +233,20 @@ class _ResponsesStreamDecoder {
           _index(decoded['content_index']) ?? 0,
         );
       case 'response.output_item.added':
-        _item(decoded);
-        return null;
+        final item = _item(decoded);
+        final value = decoded['item'];
+        if (value is Map<String, dynamic>) {
+          _readToolCall(item, value, snapshot: false);
+        }
+        return const [];
+      case 'response.function_call_arguments.delta':
+        _readToolArguments(_item(decoded), decoded['delta'], snapshot: false);
+      case 'response.function_call_arguments.done':
+        _readToolArguments(
+          _item(decoded),
+          decoded['arguments'],
+          snapshot: true,
+        );
       case 'response.output_item.done':
         _readItem(_item(decoded), decoded['item']);
       case 'response.completed':
@@ -176,15 +265,38 @@ class _ResponsesStreamDecoder {
         done = true;
         usage = _parseUsage(response);
       case 'response.failed':
-        throw ServerFailure('响应失败: ${_errorMessage(decoded['response'])}');
+        // 先交付已经补出的内容，再报流内错误。
+        _flush(finish: false);
+        _terminated = true;
+        _out.add(
+          ResponseError(
+            error: mapProtocolError(decoded['response'] ?? decoded),
+          ),
+        );
+        return _drain();
       case 'response.error':
       case 'error':
-        throw ServerFailure('响应错误: ${_errorMessage(decoded)}');
+        _flush(finish: false);
+        _terminated = true;
+        _out.add(ResponseError(error: mapProtocolError(decoded)));
+        return _drain();
       default:
-        return null;
+        return const [];
     }
-    return flush(finish: done || standalone, done: done, usage: usage);
+    _flush(finish: done || standalone, done: done, usage: usage);
+    return _drain();
   }
+
+  /// 响应收口：补齐未结束的块，产出 usage 与 ResponseEnd。
+  List<ChatChunk> finish({TokenUsage? usage}) {
+    if (isDone) return const [];
+    _finished = true;
+    _flush(finish: true);
+    _parts.finish(usage: usage ?? _pendingUsage);
+    return _drain();
+  }
+
+  TokenUsage? _pendingUsage;
 
   _ResponseItem _item(Map<String, dynamic> event) {
     final value = event['item'];
@@ -243,8 +355,69 @@ class _ResponsesStreamDecoder {
       item.update(_ResponseChannel.reasoning, 0, value['text'], snapshot: true);
     } else if (value['type'] == 'message') {
       _readParts(item, value['content'], _ResponseChannel.content);
+    } else if (value['type'] == 'function_call') {
+      _readToolCall(item, value, snapshot: true);
     }
     item.complete = true;
+  }
+
+  /// 读取函数调用的身份字段；[snapshot] 为 true 时 arguments 是完整快照。
+  void _readToolCall(
+    _ResponseItem item,
+    Map<String, dynamic> value, {
+    required bool snapshot,
+  }) {
+    final rawCallId = value['call_id'];
+    if (rawCallId is String && rawCallId.isNotEmpty) {
+      item.toolCall.callId = rawCallId;
+    }
+    final rawName = value['name'];
+    if (rawName is String && rawName.isNotEmpty) {
+      item.toolCall.name = rawName;
+    }
+    final tool = item.toolCall;
+    if (tool.callId != null || tool.name != null) {
+      _parts.toolCall(
+        item,
+        callId: tool.callId,
+        toolName: tool.name,
+        argumentsFragment: _argumentsSuffix(tool, value['arguments'], snapshot),
+      );
+    }
+    if (snapshot) tool.complete = true;
+  }
+
+  void _readToolArguments(
+    _ResponseItem item,
+    Object? value, {
+    required bool snapshot,
+  }) {
+    final tool = item.toolCall;
+    final fragment = _argumentsSuffix(tool, value, snapshot);
+    if (fragment == null) return;
+    _parts.toolCall(
+      item,
+      callId: tool.callId,
+      toolName: tool.name,
+      argumentsFragment: fragment,
+    );
+  }
+
+  /// 参数片段只追加；完整快照只补已发前缀的缺失后缀，不重复追加。
+  String? _argumentsSuffix(
+    _ResponseToolCall tool,
+    Object? value,
+    bool snapshot,
+  ) {
+    if (value is! String || value.isEmpty) return null;
+    if (!snapshot) {
+      tool.arguments += value;
+      return value;
+    }
+    if (!value.startsWith(tool.arguments)) return null;
+    final suffix = value.substring(tool.arguments.length);
+    tool.arguments = value;
+    return suffix.isEmpty ? null : suffix;
   }
 
   void _readParts(_ResponseItem item, Object? parts, _ResponseChannel channel) {
@@ -270,11 +443,8 @@ class _ResponsesStreamDecoder {
     if (accepted) item.update(channel, index, part['text'], snapshot: true);
   }
 
-  ChatChunk? flush({
-    bool finish = false,
-    bool done = false,
-    TokenUsage? usage,
-  }) {
+  /// 把当前已知的文本补齐到事件流；完成快照只补缺失后缀，不重复追加。
+  void _flush({bool finish = false, bool done = false, TokenUsage? usage}) {
     final items = [..._items]
       ..sort((a, b) {
         final order = (a.outputIndex ?? a.order).compareTo(
@@ -282,8 +452,6 @@ class _ResponsesStreamDecoder {
         );
         return order == 0 ? a.order.compareTo(b.order) : order;
       });
-    final reasoning = StringBuffer();
-    final content = StringBuffer();
     for (final item in items) {
       for (final channel in _ResponseChannel.values) {
         final parts =
@@ -298,64 +466,64 @@ class _ResponsesStreamDecoder {
           final suffix = part.text.substring(part.emitted.length);
           final isReasoning = channel != _ResponseChannel.content;
           final previous = isReasoning ? _lastReasoningPart : _lastContentPart;
-          // ChatChunk 只能追加，不能把旧段的快照后缀错插到后来段后面。
+          // 只能追加，不能把旧段的快照后缀错插到后来段后面。
           final canAppend =
               !part.complete ||
               part.emitted.isEmpty ||
               identical(previous, part);
           if (suffix.isNotEmpty && canAppend) {
-            final buffer = isReasoning ? reasoning : content;
+            var text = suffix;
             if (previous != null &&
                 !identical(previous, part) &&
                 item.separateParts) {
-              buffer.write('\n\n');
+              text = '\n\n$text';
             }
-            buffer.write(suffix);
-            part.emitted = part.text;
+            // 同一个 part 的增量落到同一个块：key 用 part 本身，
+            // partId 由组装器按首现顺序分配。
             if (isReasoning) {
+              _parts.reasoning(part, text);
               _lastReasoningPart = part;
             } else {
+              _parts.text(part, text);
               _lastContentPart = part;
             }
+            part.emitted = part.text;
           }
           if (!finish && !item.complete && !part.complete) break;
           nextIndex = entry.key.$2 + 1;
         }
       }
     }
-    if (content.isEmpty && reasoning.isEmpty && !done) return null;
-    return ChatChunk(
-      delta: content.toString(),
-      reasoningDelta: reasoning.isEmpty ? null : reasoning.toString(),
-      done: done,
-      usage: usage,
-    );
+    if (usage != null) _pendingUsage = usage;
   }
 
   static int? _index(Object? value) =>
       value is int && value >= 0 ? value : null;
-
-  static String _errorMessage(Object? holder) {
-    if (holder is Map<String, dynamic>) {
-      final error = holder['error'];
-      if (error is Map<String, dynamic> && error['message'] is String) {
-        return error['message'] as String;
-      }
-      if (holder['message'] is String) return holder['message'] as String;
-    }
-    return '未知错误';
-  }
 
   static TokenUsage? _parseUsage(Object? response) {
     if (response is! Map<String, dynamic>) return null;
     final usage = response['usage'];
     if (usage is! Map<String, dynamic>) return null;
     int? asInt(Object? value) => value is int ? value : null;
+    final outputDetails = usage['output_tokens_details'];
+    final inputDetails = usage['input_tokens_details'];
     return TokenUsage(
-      promptTokens: asInt(usage['input_tokens']),
-      completionTokens: asInt(usage['output_tokens']),
-      totalTokens: asInt(usage['total_tokens']),
+      inputTokens: asInt(usage['input_tokens']),
+      outputTokens: asInt(usage['output_tokens']),
+      reasoningTokens: outputDetails is Map<String, dynamic>
+          ? asInt(outputDetails['reasoning_tokens'])
+          : null,
+      cachedInputTokens: inputDetails is Map<String, dynamic>
+          ? asInt(inputDetails['cached_tokens'])
+          : null,
     );
+  }
+
+  List<ChatChunk> _drain() {
+    if (_out.isEmpty) return const [];
+    final events = List<ChatChunk>.of(_out);
+    _out.clear();
+    return events;
   }
 }
 
@@ -367,6 +535,7 @@ class _ResponseItem {
   var separateParts = false;
   var complete = false;
   final parts = <(_ResponseChannel, int), _ResponsePart>{};
+  final toolCall = _ResponseToolCall();
 
   void update(
     _ResponseChannel channel,
@@ -383,6 +552,14 @@ class _ResponseItem {
       part.text += value;
     }
   }
+}
+
+/// 一个函数调用在响应内的累积状态（参数只追加，不逐段解析 JSON）。
+class _ResponseToolCall {
+  String? callId;
+  String? name;
+  var arguments = '';
+  var complete = false;
 }
 
 class _ResponsePart {

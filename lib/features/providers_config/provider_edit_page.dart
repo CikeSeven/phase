@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/utils/id.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -77,7 +78,9 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       _loadError = null;
     });
     try {
-      final repository = ref.read(providerProfileRepositoryProvider);
+      final repository = await ref.read(
+        providerProfileRepositoryProvider.future,
+      );
       final profile = await repository.getProfile(widget.profileId!);
       if (profile == null) {
         if (mounted) {
@@ -98,9 +101,15 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
         _presetId = profile.presetId;
         _protocol = profile.protocol;
         _compatOverrides = profile.compatOverrides;
-        _models = {for (final model in profile.modelCandidates) model.id: model}
-            .values
-            .toList();
+        // 列表外的默认模型也要可见可编辑，否则保存会把它丢掉。
+        final models = List.of(profile.models);
+        final fallback = profile.defaultModel;
+        if (fallback != null &&
+            fallback.isNotEmpty &&
+            models.every((model) => model.id != fallback)) {
+          models.insert(0, ProfileModel(id: fallback));
+        }
+        _models = models;
         _defaultModel = profile.defaultModel;
         _loading = false;
       });
@@ -356,10 +365,12 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
     final profile = ProviderProfile(
       id: _profileId ?? 'unsaved',
       name: _nameController.text.trim(),
-      baseUrl: _baseUrlController.text.trim(),
       protocol: _protocol,
+      baseUrl: _baseUrlController.text.trim(),
+      requiresKey: _preset.requiresApiKey,
       presetId: _presetId,
       compatOverrides: _compatOverrides,
+      createdAt: DateTime.now(),
     );
     final enteredKey = _apiKeyController.text.trim();
     final apiKey = _preset.requiresApiKey
@@ -383,7 +394,18 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
         for (final id in ids) {
           // 新拉到的模型默认不启用，由用户勾选后进入聊天模型列表；
           // 已有模型的勾选与能力标记不受影响。
-          merged.putIfAbsent(id, () => ProfileModel(id: id, enabled: false));
+          // 新拉到的模型默认不启用（由用户勾选才进入聊天列表），
+          // 能力标记沿用原型的宽松默认，确实不支持的模型由用户关闭。
+          merged.putIfAbsent(
+            id,
+            () => ProfileModel(
+              id: id,
+              enabled: false,
+              supportsReasoning: true,
+              supportsTools: true,
+              supportsImages: true,
+            ),
+          );
         }
         _models = merged.values.toList();
         _testing = false;
@@ -408,21 +430,29 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
     FocusScope.of(context).unfocus();
     final apiKey = _apiKeyController.text.trim();
     final requiresApiKey = _preset.requiresApiKey;
-    final repository = ref.read(providerProfileRepositoryProvider);
+    final repository = await ref.read(providerProfileRepositoryProvider.future);
+    if (!mounted) return;
     setState(() {
       _saving = true;
       _invalidateTest();
     });
     try {
+      final existing = _profileId == null
+          ? null
+          : await repository.getProfile(_profileId!);
       final profile = await repository.saveProfile(
-        id: _profileId,
-        name: _nameController.text.trim(),
-        baseUrl: _baseUrlController.text.trim(),
-        protocol: _protocol,
-        presetId: _presetId,
-        defaultModel: _defaultModel,
-        models: List.of(_models),
-        compatOverrides: _compatOverrides,
+        ProviderProfile(
+          id: _profileId ?? generateId(),
+          name: _nameController.text.trim(),
+          protocol: _protocol,
+          baseUrl: _baseUrlController.text.trim(),
+          requiresKey: requiresApiKey,
+          presetId: _presetId,
+          models: List.of(_models),
+          defaultModel: _defaultModel,
+          compatOverrides: _compatOverrides,
+          createdAt: existing?.createdAt ?? DateTime.now(),
+        ),
       );
       _profileId = profile.id;
       if (requiresApiKey && apiKey.isNotEmpty) {

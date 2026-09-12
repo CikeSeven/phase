@@ -7,7 +7,9 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
+import '../../../data/models/message_part.dart';
 import 'attachment_chips.dart';
 import 'chat_code_block.dart';
 import 'message_actions_sheet.dart';
@@ -15,18 +17,40 @@ import 'thinking_panel.dart';
 
 /// 用户消息保留右侧色面，AI 正文使用完整的阅读宽度。
 class MessageBubble extends StatelessWidget {
-  const MessageBubble({required this.message, super.key});
+  const MessageBubble({
+    required this.message,
+    this.attachments = const {},
+    super.key,
+  });
 
   final ChatMessage message;
 
+  /// 当前会话的附件索引，用于把 Part 里的附件引用还原成文件。
+  final Map<String, Attachment> attachments;
+
   bool get _isUser => message.role == ChatRole.user;
+
+  /// 公开思考文本；签名等协议状态不在 Part 里，也不会显示成思考。
+  String get thinkingText => [
+    for (final part in message.parts)
+      if (part is ReasoningPart) part.publicText,
+  ].join();
+
+  /// 用户消息的附件与正文；助手消息的正文与思考分开渲染。
+  List<Attachment> get _messageAttachments => [
+    for (final part in message.parts)
+      if (part is ImagePart && attachments[part.attachmentId] != null)
+        attachments[part.attachmentId]!
+      else if (part is DocumentPart && attachments[part.attachmentId] != null)
+        attachments[part.attachmentId]!,
+  ];
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final isError = message.status == ChatMessageStatus.error;
-    final streaming = message.status == ChatMessageStatus.streaming;
+    final isError = message.status == MessageStatus.failed;
+    final streaming = message.status == MessageStatus.streaming;
     final textColor = isError
         ? colors.onErrorContainer
         : _isUser
@@ -39,7 +63,7 @@ class MessageBubble extends StatelessWidget {
 
     return SizeChangedLayoutNotifier(
       child: Semantics(
-        customSemanticsActions: message.content.isEmpty
+        customSemanticsActions: message.text.isEmpty
             ? null
             : {CustomSemanticsAction(label: '复制消息'): () => _copy(context)},
         child: GestureDetector(
@@ -79,15 +103,15 @@ class MessageBubble extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (message.attachments.isNotEmpty) ...[
+                              if (_messageAttachments.isNotEmpty) ...[
                                 MessageAttachments(
-                                  attachments: message.attachments,
+                                  attachments: _messageAttachments,
                                 ),
-                                if (message.content.isNotEmpty)
+                                if (message.text.isNotEmpty)
                                   const SizedBox(height: AppSpacing.s),
                               ],
-                              if (message.content.isNotEmpty)
-                                Text(message.content, style: textStyle),
+                              if (message.text.isNotEmpty)
+                                Text(message.text, style: textStyle),
                             ],
                           ),
                         ),
@@ -110,7 +134,7 @@ class MessageBubble extends StatelessWidget {
                         const SizedBox(width: AppSpacing.s),
                         Expanded(
                           child: Text(
-                            message.modelName ?? '相月',
+                            message.modelLabel ?? '相月',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -125,7 +149,7 @@ class MessageBubble extends StatelessWidget {
                         ),
                       ],
                     ),
-                    if (message.reasoning?.isNotEmpty == true)
+                    if (thinkingText.isNotEmpty)
                       Padding(
                         key: ValueKey('thinking-${message.id}'),
                         padding: const EdgeInsets.only(
@@ -133,9 +157,13 @@ class MessageBubble extends StatelessWidget {
                           bottom: AppSpacing.m,
                         ),
                         child: ThinkingPanel(
-                          reasoning: message.reasoning!,
+                          reasoning: thinkingText,
                           streaming: streaming,
-                          duration: message.thinkingDuration,
+                          duration: message.thinkingDurationMs == null
+                              ? null
+                              : Duration(
+                                  milliseconds: message.thinkingDurationMs!,
+                                ),
                         ),
                       ),
                     Container(
@@ -180,7 +208,7 @@ class MessageBubble extends StatelessWidget {
                             const SizedBox(height: AppSpacing.s),
                           ],
                           GptMarkdown(
-                            message.content,
+                            message.text,
                             key: const ValueKey('message-markdown'),
                             style: textStyle,
                             isStreaming: streaming,
@@ -213,7 +241,7 @@ class MessageBubble extends StatelessWidget {
   Future<void> _showActions(BuildContext context) async {
     final copy = await showMessageActionsSheet(
       context,
-      canCopy: message.content.isNotEmpty,
+      canCopy: message.text.isNotEmpty,
     );
     if (copy == true && context.mounted) await _copy(context);
   }
@@ -221,7 +249,7 @@ class MessageBubble extends StatelessWidget {
   Future<void> _copy(BuildContext context) async {
     String feedback;
     try {
-      await Clipboard.setData(ClipboardData(text: message.content));
+      await Clipboard.setData(ClipboardData(text: message.text));
       feedback = '已复制';
     } on PlatformException {
       feedback = '复制失败，请重试';

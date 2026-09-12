@@ -5,7 +5,7 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../data/models/chat_attachment.dart';
+import '../../../data/models/attachment.dart';
 
 /// 输入栏上方的附件草稿条：横向滚动，图片缩略图/文件名 + 移除按钮。
 class AttachmentChips extends StatelessWidget {
@@ -15,8 +15,8 @@ class AttachmentChips extends StatelessWidget {
     super.key,
   });
 
-  final List<ChatAttachment> attachments;
-  final ValueChanged<ChatAttachment> onRemove;
+  final List<Attachment> attachments;
+  final ValueChanged<Attachment> onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -44,14 +44,13 @@ class AttachmentChips extends StatelessWidget {
 class _Chip extends StatelessWidget {
   const _Chip({required this.attachment, required this.onRemove, super.key});
 
-  final ChatAttachment attachment;
+  final Attachment attachment;
   final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final isImage = attachment.type == ChatAttachmentType.image;
     return Material(
       color: colors.surfaceContainerHigh,
       borderRadius: AppRadius.smallAll,
@@ -59,9 +58,9 @@ class _Chip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (isImage)
+          if (attachment.isImage)
             Image.file(
-              File(attachment.path),
+              File(attachment.localPath),
               width: 48,
               height: 48,
               fit: BoxFit.cover,
@@ -75,7 +74,7 @@ class _Chip extends StatelessWidget {
               padding: EdgeInsets.only(left: AppSpacing.s),
               child: Icon(Symbols.description, size: 20),
             ),
-          if (!isImage) ...[
+          if (!attachment.isImage) ...[
             const SizedBox(width: AppSpacing.xs),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 120),
@@ -103,7 +102,7 @@ class _Chip extends StatelessWidget {
 class MessageAttachments extends StatelessWidget {
   const MessageAttachments({required this.attachments, super.key});
 
-  final List<ChatAttachment> attachments;
+  final List<Attachment> attachments;
 
   @override
   Widget build(BuildContext context) {
@@ -112,7 +111,7 @@ class MessageAttachments extends StatelessWidget {
       runSpacing: AppSpacing.s,
       children: [
         for (final attachment in attachments)
-          if (attachment.type == ChatAttachmentType.image)
+          if (attachment.isImage)
             GestureDetector(
               key: ValueKey('message-attachment-${attachment.id}'),
               onTap: () => _previewImage(context, attachment),
@@ -124,7 +123,7 @@ class MessageAttachments extends StatelessWidget {
                     maxHeight: 160,
                   ),
                   child: Image.file(
-                    File(attachment.path),
+                    File(attachment.localPath),
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) =>
                         _fileFallback(context, attachment),
@@ -138,7 +137,7 @@ class MessageAttachments extends StatelessWidget {
     );
   }
 
-  Widget _fileFallback(BuildContext context, ChatAttachment attachment) {
+  Widget _fileFallback(BuildContext context, Attachment attachment) {
     final theme = Theme.of(context);
     return Material(
       color: theme.colorScheme.surfaceContainerHigh,
@@ -168,14 +167,14 @@ class MessageAttachments extends StatelessWidget {
     );
   }
 
-  void _previewImage(BuildContext context, ChatAttachment attachment) {
+  void _previewImage(BuildContext context, Attachment attachment) {
     showDialog<void>(
       context: context,
       builder: (context) => Dialog(
         clipBehavior: Clip.antiAlias,
         child: InteractiveViewer(
           child: Image.file(
-            File(attachment.path),
+            File(attachment.localPath),
             errorBuilder: (_, _, _) => const Padding(
               padding: EdgeInsets.all(AppSpacing.xl),
               child: Text('图片文件已丢失'),
