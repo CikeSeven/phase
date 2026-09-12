@@ -128,7 +128,9 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   }
 
   bool _onInnerScroll(ScrollNotification notification) {
-    if (notification is UserScrollNotification) {
+    if (notification is OverscrollNotification) {
+      _handOffOverscroll(notification);
+    } else if (notification is UserScrollNotification) {
       if (notification.direction == ScrollDirection.reverse) {
         _followInner = false;
       }
@@ -136,6 +138,24 @@ class _ThinkingPanelState extends State<ThinkingPanel>
       _followInner = notification.metrics.extentAfter <= 1;
     }
     return false;
+  }
+
+  /// 内层滚到边界后，把继续拖动的那一段位移交给外层消息列表。
+  ///
+  /// Flutter 的嵌套滚动不会自动接力：手指落在思考区里，这个手势就归内层所有，
+  /// 内层到顶以后继续上滑只会卡住。这里把边界处的过卷量转给最近的祖先滚动
+  /// 视图，于是「思考区滚到头 → 继续滚整条消息」是连贯的一个动作。
+  void _handOffOverscroll(OverscrollNotification notification) {
+    final outer = Scrollable.maybeOf(context)?.position;
+    if (outer == null || !outer.hasContentDimensions) return;
+    final offset = notification.overscroll;
+    if (offset == 0) return;
+    final target = (outer.pixels + offset).clamp(
+      outer.minScrollExtent,
+      outer.maxScrollExtent,
+    );
+    if ((target - outer.pixels).abs() < 0.5) return;
+    outer.jumpTo(target);
   }
 
   /// 流式期间每秒刷新计时；disableAnimations 下保持静止（也避免

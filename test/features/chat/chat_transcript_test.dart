@@ -268,6 +268,63 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  /// 思考区滚到边界后，剩下的位移交给整条消息：两个方向各一条用例。
+  Future<void> pumpLongThinking(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    // 思考内容远高于 260dp 的限高，内层一定有可滚范围。
+    final longReasoning = List.generate(
+      120,
+      (index) => '推演第 $index 行',
+    ).join('\n');
+    await pumpTranscript(tester, [
+      ..._history(count: 12),
+      _message(id: 'long', text: '短答', thinking: longReasoning),
+    ]);
+  }
+
+  testWidgets('思考区滚到顶后继续向下拖，整条消息跟着回滚', (tester) async {
+    await pumpLongThinking(tester);
+    final before = position(tester).pixels;
+
+    // 一次手势拖到底：内层先滚到顶，多出来的位移转给外层列表。
+    await tester.drag(find.byType(ThinkingPanel), const Offset(0, 4000));
+    await tester.pumpAndSettle();
+
+    expect(
+      position(tester).pixels,
+      lessThan(before - 200),
+      reason: '内层到顶后，整条消息应当跟着回滚',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('思考区滚到底后继续向上拖，整条消息继续前进', (tester) async {
+    await pumpLongThinking(tester);
+    // 先让整条消息离开底部，给「继续前进」留出空间。手指要落在消息区
+    // （思考区上方），落在思考区里会被内层接走。
+    await tester.dragFrom(const Offset(180, 120), const Offset(0, 240));
+    await tester.pumpAndSettle();
+    final reading = position(tester).pixels;
+    // 手指落在思考区的内容里（避开标题行），位置要在屏幕内。
+    final rect = tester.getRect(find.byType(ThinkingPanel));
+
+    // 内层此刻可能停在中间：先把它拖到底，多出来的位移再交给外层。
+    await tester.dragFrom(
+      Offset(rect.center.dx, rect.top + 120),
+      const Offset(0, -4000),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      position(tester).pixels,
+      greaterThan(reading + 100),
+      reason: '内层到底后，整条消息应当继续向前滚',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('回看时下方思考完成自动收起，但阅读位置不被打断', (tester) async {
     final history = _history(count: 50);
     final reply = _message(
@@ -278,10 +335,9 @@ void main() {
       status: MessageStatus.streaming,
     );
     await pumpTranscript(tester, [...history, reply]);
-    await tester.drag(
-      find.byKey(const ValueKey('transcript-first')),
-      const Offset(0, 900),
-    );
+    // 手指落在消息区（不是思考区）：这里要的是整条列表的回看位置，
+    // 落在思考区里会先滚内层、再由内层把剩余位移交给外层。
+    await tester.dragFrom(const Offset(180, 120), const Offset(0, 200));
     await tester.pumpAndSettle();
 
     await pumpTranscript(tester, [
