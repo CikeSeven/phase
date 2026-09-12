@@ -31,8 +31,10 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage> {
-  /// 顶栏两行各自的最小触区（设计要求的 48dp）。
-  static const _minTapTarget = 48.0;
+  /// 顶栏默认高度；两行紧凑排布的固定行高与行间距。
+  static const _defaultToolbarHeight = 64.0;
+  static const _compactRowHeight = 24.0;
+  static const _rowGap = 2.0;
 
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerOpen = false;
@@ -59,20 +61,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final scaler = MediaQuery.textScalerOf(context);
-    final titleStyle = theme.textTheme.titleMedium;
-    final modelStyle = theme.textTheme.bodyMedium;
-    // 标题列两行各是可点区域：每行至少 48dp 触区，文字更大时随之增高。
-    final titleRow = math.max(
-      _minTapTarget,
-      scaler.scale(titleStyle?.fontSize ?? 16) * (titleStyle?.height ?? 1.4) +
-          AppSpacing.s,
-    );
-    final modelRow = math.max(
-      _minTapTarget,
-      scaler.scale(modelStyle?.fontSize ?? 14) * (modelStyle?.height ?? 1.45) +
-          AppSpacing.s,
-    );
-    final toolbarHeight = titleRow + modelRow;
+    final titleStyle = theme.textTheme.labelLarge;
+    final modelStyle = theme.textTheme.labelMedium;
+    // 顶栏保持默认高度：两行紧凑排布，只有大字号时按文字实际高度略微增高。
+    final contentHeight =
+        scaler.scale(titleStyle?.fontSize ?? 14) * (titleStyle?.height ?? 1.4) +
+        scaler.scale(modelStyle?.fontSize ?? 12) *
+            (modelStyle?.height ?? 1.45) +
+        _rowGap +
+        AppSpacing.xs * 2;
+    final toolbarHeight = math.max(_defaultToolbarHeight, contentHeight);
     final modelLabel = selection.hasError
         ? '模型加载失败'
         : selection.when(
@@ -111,104 +109,102 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               onPressed: _openDrawer,
               icon: const Icon(Symbols.menu),
             ),
-            title: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // 助手名一行：点击切换助手。
-                  Tooltip(
-                    message: '切换助手',
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: InkWell(
-                        key: const ValueKey('chat-assistant-picker'),
-                        borderRadius: AppRadius.smallAll,
-                        onTap: () => showAssistantPickerSheet(context),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            minHeight: _minTapTarget,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  assistantName,
-                                  key: const ValueKey('chat-assistant-name'),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: titleStyle,
-                                ),
+            title: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 助手名一行：点击切换助手。
+                Tooltip(
+                  message: '切换助手',
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      key: const ValueKey('chat-assistant-picker'),
+                      borderRadius: AppRadius.smallAll,
+                      onTap: () => showAssistantPickerSheet(context),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: _compactRowHeight,
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                assistantName,
+                                key: const ValueKey('chat-assistant-name'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: titleStyle,
                               ),
-                              const SizedBox(width: AppSpacing.xs),
-                              Icon(
-                                Symbols.expand_more,
-                                size: 18,
-                                color: colors.primary,
-                              ),
-                            ],
-                          ),
+                            ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Icon(
+                              Symbols.expand_more,
+                              size: 18,
+                              color: colors.primary,
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                  // 模型一行：点击选择模型。
-                  Tooltip(
-                    message: '选择模型',
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: InkWell(
-                        key: const ValueKey('chat-model-picker'),
-                        borderRadius: AppRadius.smallAll,
-                        onTap: () => showModelPickerSheet(context),
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(
-                            minHeight: _minTapTarget,
-                          ),
-                          child: Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  modelLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: modelStyle?.copyWith(
-                                    color: selection.hasError
-                                        ? colors.error
-                                        : colors.primary,
-                                  ),
+                ),
+                const SizedBox(height: _rowGap),
+                // 模型一行：点击选择模型。
+                Tooltip(
+                  message: '选择模型',
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      key: const ValueKey('chat-model-picker'),
+                      borderRadius: AppRadius.smallAll,
+                      onTap: () => showModelPickerSheet(context),
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(
+                          minHeight: _compactRowHeight,
+                        ),
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                modelLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: modelStyle?.copyWith(
+                                  color: selection.hasError
+                                      ? colors.error
+                                      : colors.primary,
                                 ),
                               ),
-                              // 推理开启时跟在模型名右侧，关闭或不支持不显示。
-                              if (current?.supportsReasoning == true &&
-                                  current!.effort != ReasoningEffort.off) ...[
-                                const SizedBox(width: AppSpacing.xs),
-                                Text(
-                                  current.effort.label,
-                                  key: const ValueKey('chat-reasoning-effort'),
-                                  maxLines: 1,
-                                  style: modelStyle?.copyWith(
-                                    color: colors.onSurfaceVariant,
-                                  ),
-                                ),
-                              ],
+                            ),
+                            // 推理开启时跟在模型名右侧，关闭或不支持不显示。
+                            if (current?.supportsReasoning == true &&
+                                current!.effort != ReasoningEffort.off) ...[
                               const SizedBox(width: AppSpacing.xs),
-                              Icon(
-                                Symbols.expand_more,
-                                size: 20,
-                                color: colors.primary,
+                              Text(
+                                current.effort.label,
+                                key: const ValueKey('chat-reasoning-effort'),
+                                maxLines: 1,
+                                style: modelStyle?.copyWith(
+                                  color: colors.onSurfaceVariant,
+                                ),
                               ),
                             ],
-                          ),
+                            const SizedBox(width: AppSpacing.xs),
+                            Icon(
+                              Symbols.expand_more,
+                              size: 20,
+                              color: colors.primary,
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
             actions: [
               IconButton(

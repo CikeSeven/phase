@@ -11,6 +11,7 @@ import 'package:phase/core/theme/app_spacing.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/theme/frosted_surface.dart';
 import 'package:phase/core/widgets/app_background.dart';
+import 'package:phase/core/widgets/app_top_bar.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
@@ -702,12 +703,16 @@ void main() {
           iconRect.right,
           lessThanOrEqualTo(tester.getRect(find.byTooltip('新会话')).left),
         );
-        expect(
-          tester
-              .getSize(find.byKey(const ValueKey('chat-model-picker')))
-              .height,
-          greaterThanOrEqualTo(48),
+        // 顶栏默认高度下两行紧凑排布；字号放大时按文字实际高度增高。
+        final toolbarHeight = tester.getSize(find.byType(AppTopBar)).height;
+        expect(toolbarHeight, scale == 1 ? 64 : greaterThanOrEqualTo(64));
+        final assistantRect = tester.getRect(
+          find.byKey(const ValueKey('chat-assistant-picker')),
         );
+        final modelRect = tester.getRect(
+          find.byKey(const ValueKey('chat-model-picker')),
+        );
+        expect(modelRect.top - assistantRect.bottom, lessThanOrEqualTo(4));
         await tester.tap(icon);
         await tester.pumpAndSettle();
         expect(find.byType(ModelPickerSheet), findsOneWidget);
