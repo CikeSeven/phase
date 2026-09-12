@@ -98,7 +98,9 @@ Future<List<Map<String, dynamic>>> _responsesItems(
       {'role': 'developer', 'content': blocks},
     ];
   }
-  if (blocks.isNotEmpty) {
+  // 工具消息没有 message 形态：结果只作为顶层 function_call_output item
+  // （Responses 的角色只有 user/assistant/system/developer）。
+  if (blocks.isNotEmpty && message.role != ChatRole.tool) {
     items.add({'role': message.role.name, 'content': blocks});
   }
   for (final part in message.parts) {

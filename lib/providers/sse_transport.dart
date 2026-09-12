@@ -67,6 +67,23 @@ Uri resolveEndpoint(String baseUrl, String path) {
   return Uri.parse(base).resolve(path);
 }
 
+/// 读出错误响应的正文。
+///
+/// 流式响应里 `data` 是 `ResponseBody`，直接当对象用会丢掉服务端写明的
+/// 错误字段（分类与文案都靠它）；这里把字节流读完再交出文本。
+Future<Object?> readErrorBody(Object? data) async {
+  if (data is! ResponseBody) return data;
+  try {
+    final bytes = await data.stream.fold<List<int>>(
+      <int>[],
+      (all, chunk) => all..addAll(chunk),
+    );
+    return utf8.decode(bytes, allowMalformed: true);
+  } on Exception {
+    return null;
+  }
+}
+
 /// 各协议共用的 SSE POST 传输：鉴权头、流式响应、取消桥接、错误映射。
 ///
 /// 手写 controller 是为了把「订阅取消」桥接到 dio 的 CancelToken，
@@ -111,7 +128,17 @@ Stream<ChatChunk> postSseStream({
       }
     } on DioException catch (e) {
       if (!controller.isClosed) {
-        controller.addError(mapDioExceptionToProviderError(e));
+        // 错误体可能是流式 ResponseBody：读出来才能用服务端写明的错误字段。
+        final body = await readErrorBody(e.response?.data);
+        controller.addError(
+          e.response?.statusCode == null
+              ? mapDioExceptionToProviderError(e)
+              : mapHttpResponseError(
+                  statusCode: e.response!.statusCode!,
+                  body: body,
+                  cause: e,
+                ),
+        );
         await controller.close();
       }
     }

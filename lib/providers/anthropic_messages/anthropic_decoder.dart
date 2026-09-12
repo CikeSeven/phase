@@ -36,15 +36,41 @@ Future<Map<String, dynamic>> buildAnthropicPayload(
   }
 
   final messages = <Map<String, dynamic>>[];
-  for (final message in request.messages) {
+  var index = 0;
+  while (index < request.messages.length) {
+    final message = request.messages[index];
     // system 角色消息并入顶层 system 字段，不进入 messages。
-    if (message.role == ChatRole.system) continue;
+    if (message.role == ChatRole.system) {
+      index++;
+      continue;
+    }
+
+    // 连续的工具结果合并成一条 user 消息：Anthropic 要求 tool_result 块
+    // 紧跟对应的 tool_use，一轮多个调用必须留在同一条消息里
+    // （严格端点会直接拒绝逐条发送的形态）。
+    if (_isToolResult(message)) {
+      final blocks = <Map<String, dynamic>>[];
+      while (index < request.messages.length &&
+          _isToolResult(request.messages[index])) {
+        blocks.addAll(
+          await _anthropicBlocks(request.messages[index], attachments),
+        );
+        index++;
+      }
+      if (blocks.isNotEmpty) {
+        messages.add({'role': 'user', 'content': blocks});
+      }
+      continue;
+    }
+
     final blocks = await _anthropicBlocks(message, attachments);
-    if (blocks.isEmpty) continue;
-    messages.add({
-      'role': message.role == ChatRole.assistant ? 'assistant' : 'user',
-      'content': blocks,
-    });
+    if (blocks.isNotEmpty) {
+      messages.add({
+        'role': message.role == ChatRole.assistant ? 'assistant' : 'user',
+        'content': blocks,
+      });
+    }
+    index++;
   }
 
   final system = _systemText(request);
@@ -134,6 +160,11 @@ Future<List<Map<String, dynamic>>> _anthropicBlocks(
   }
   return blocks;
 }
+
+/// 只含工具结果的消息：Anthropic 里它们要合并进一条 user 消息。
+bool _isToolResult(ResolvedMessage message) =>
+    message.parts.isNotEmpty &&
+    message.parts.every((part) => part is ResolvedToolResult);
 
 /// systemPrompt 与 system 角色消息的合并结果。
 String _systemText(ChatRequest request) => [

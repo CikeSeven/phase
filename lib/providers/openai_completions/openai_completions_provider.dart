@@ -221,15 +221,16 @@ class OpenAiCompletionsProvider implements AiProvider {
 
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) async* {
+    final payload = await buildCompletionsPayload(
+      request,
+      compat: _compat,
+      supportsImages: modelSupportsImages(_profile, request.modelId),
+      supportsReasoning: modelSupportsReasoning(_profile, request.modelId),
+    );
     yield* postSseStream(
       dio: _dio,
       uri: resolveEndpoint(_profile.baseUrl, 'chat/completions'),
-      payload: await buildCompletionsPayload(
-        request,
-        compat: _compat,
-        supportsImages: modelSupportsImages(_profile, request.modelId),
-        supportsReasoning: modelSupportsReasoning(_profile, request.modelId),
-      ),
+      payload: payload,
       headers: _headers,
       decode: OpenAiSseDecoder.decode,
     );

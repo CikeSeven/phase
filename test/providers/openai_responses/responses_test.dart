@@ -143,6 +143,12 @@ void main() {
         'call_id': 'call_1',
         'output': '晴',
       });
+      // 工具结果是顶层 item，不再包一层 message；Responses 的角色里没有 tool。
+      expect(input, hasLength(4));
+      expect(
+        input.map((item) => item['role']).whereType<String>(),
+        everyElement(isNot('tool')),
+      );
       expect(payload.toString().contains('内部推理'), isFalse);
     });
   });
