@@ -39,13 +39,22 @@ class ChatTranscript extends StatefulWidget {
 }
 
 class _ChatTranscriptState extends State<ChatTranscript> {
-  static const _bottomThreshold = 96.0;
+  /// 判定「还在底部」的容差：惯性回弹与亚像素抖动不解除底部跟随。
+  static const _bottomThreshold = 8.0;
+
+  /// 显示「回到底部」按钮的最小回看距离，避免轻扫一下就出现按钮。
+  static const _returnButtonThreshold = 96.0;
   final _scrollController = ScrollController(keepScrollOffset: false);
   bool _followTail = true;
   bool _userScrolling = false;
   bool _reconcileScheduled = false;
   bool _programmaticScroll = false;
   bool _showReturnToBottom = false;
+
+  /// 本次手势开始时的滚动位置与「是否被拖离尾部」，用于判断松手后
+  /// 该不该恢复底部跟随（停在底部上方的回看不应该被拉回去）。
+  double? _dragStartPixels;
+  bool _draggedAway = false;
   ({BuildContext context, double y})? _readingAnchor;
 
   @override
@@ -104,7 +113,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
         }
       }
       final showButton =
-          !_followTail && position.extentAfter > _bottomThreshold;
+          !_followTail && position.extentAfter > _returnButtonThreshold;
       if (showButton != _showReturnToBottom) {
         setState(() => _showReturnToBottom = showButton);
       }
@@ -139,11 +148,13 @@ class _ChatTranscriptState extends State<ChatTranscript> {
 
   bool _onScroll(ScrollNotification notification) {
     if (notification.depth != 0 || _programmaticScroll) return false;
-    if (notification is ScrollStartNotification &&
-        notification.dragDetails != null) {
+    if (notification is ScrollStartNotification) {
       _readingAnchor = null;
       _userScrolling = true;
       _followTail = false;
+      _dragStartPixels = notification.metrics.pixels;
+      // 用户想继续贴底时（例如在底部上滑想看内容），放开后仍应跟随。
+      _draggedAway = false;
     } else if (notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle) {
       _readingAnchor = null;
@@ -151,7 +162,16 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       _followTail = false;
     } else if (notification is ScrollEndNotification && _userScrolling) {
       _userScrolling = false;
-      _followTail = notification.metrics.extentAfter <= _bottomThreshold;
+      final metrics = notification.metrics;
+      // 手势是否把列表拖离了尾部：底部回弹不改变滚动位置，不算拖开。
+      final start = _dragStartPixels;
+      if (start != null && metrics.pixels < start - 0.5) {
+        _draggedAway = true;
+      }
+      // 只有停在底部（且整段手势没往上拖）才恢复跟随；停在底部上方的
+      // 一小段距离同样算"用户在回看"，不把视图拉回去。
+      _followTail = !_draggedAway && metrics.extentAfter <= _bottomThreshold;
+      _dragStartPixels = null;
     }
     _scheduleReconcile();
     return false;

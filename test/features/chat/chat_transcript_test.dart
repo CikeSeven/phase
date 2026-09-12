@@ -177,19 +177,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('底部附近的小幅回看仍能在下一次增量后跟随', (tester) async {
+  testWidgets('底部附近的小幅回看不被拉回，下一次增量也不解除阅读位置', (tester) async {
     await pumpTranscript(tester, _history());
+    final bottom = position(tester).pixels;
     await tester.drag(
       find.byKey(const ValueKey('transcript-first')),
       const Offset(0, 40),
     );
     await tester.pumpAndSettle();
+    final readingOffset = position(tester).pixels;
+    // 离开底部一小段就是回看：停在原处，不因为离底部近而被拉回。
+    expect(readingOffset, lessThan(bottom - 1));
+
     final messages = _history();
     await pumpTranscript(tester, [
       ...messages,
       _message(id: 'new', role: ChatRole.assistant, text: '紧接着的回复\n第二行'),
     ]);
+    expect(position(tester).pixels, closeTo(readingOffset, 0.5));
+    expect(position(tester).extentAfter, greaterThan(1));
+
+    // 回到真正底部后才恢复跟随。
+    await tester.drag(
+      find.byKey(const ValueKey('transcript-first')),
+      const Offset(0, -4000),
+    );
+    await tester.pumpAndSettle();
     expect(position(tester).extentAfter, lessThan(1));
+  });
+
+  testWidgets('空闲状态下的重建不会把回看位置拉回底部', (tester) async {
+    final messages = _history();
+    await pumpTranscript(tester, messages);
+    await tester.drag(
+      find.byKey(const ValueKey('transcript-first')),
+      const Offset(0, 40),
+    );
+    await tester.pumpAndSettle();
+    final readingOffset = position(tester).pixels;
+
+    // 同一批消息重新构建（例如数据库流再次发出、尺寸变化）：位置保持。
+    await pumpTranscript(tester, messages);
+    expect(position(tester).pixels, closeTo(readingOffset, 0.5));
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('流式思考完成自动收起全文且无越界，未回看时保持末端', (tester) async {
