@@ -22,7 +22,7 @@ void main() {
     tool.executeAsync = (_, cancellation) async {
       entered.complete();
       await cancellation.whenCancelled;
-      return const ToolOutcome.unknown('动作已派发，结果需核验');
+      return const ToolOutcome.cancelled('请求已停止');
     };
     final h = await ToolLoopHarness.create(registry: ToolRegistry([tool]));
     final driver = h.container.read(channelDriverProvider) as FakeChannelDriver;
@@ -37,7 +37,7 @@ void main() {
     await sending;
     final record = (await h.recordsByCall())['provider-call']!;
     expect(record.channel, ExecutionChannel.accessibility);
-    expect(record.status, ToolCallStatus.unknown);
+    expect(record.status, ToolCallStatus.cancelled);
     expect(record.id, isNot('provider-call'));
     expect(driver.ends, [run.id]);
     expect(h.provider.requests, hasLength(1));
@@ -45,7 +45,7 @@ void main() {
     expect(h.container.read(executionControllerProvider).runId, isNull);
   });
 
-  test('启动服务失败保存明确执行错误且不执行工具，下一次发送仍可用', () async {
+  test('启动服务失败回填给 AI、不执行工具，后续模型轮与发送仍可用', () async {
     final tool = RecordingTool(
       name: 'device_action',
       channel: ExecutionChannel.accessibility,
@@ -55,18 +55,18 @@ void main() {
     driver.startFailure = const ExecutionFailure(
       ExecutionFailureCode.permissionRequired,
     );
-    h.provider.turns.add(
+    h.provider.turns.addAll([
       toolTurn(callId: 'provider-call', toolName: tool.name, arguments: '{}'),
-    );
-    await expectLater(
-      h.controller().send('执行设备动作'),
-      throwsA(isA<ExecutionFailure>()),
-    );
+      textTurn('设备权限不可用，我可以继续提供文字帮助'),
+    ]);
+    await h.controller().send('执行设备动作');
     expect(tool.executions, isEmpty);
     final record = (await h.recordsByCall())['provider-call']!;
     expect(record.status, ToolCallStatus.failed);
     expect(record.errorCode, 'permissionRequired');
-    expect((await h.latestRun()).finishReason, RunFinishReason.executionError);
+    expect(record.resultMessageId, isNotNull);
+    expect(h.provider.requests, hasLength(2));
+    expect((await h.latestRun()).finishReason, RunFinishReason.completed);
     expect(h.state().isGenerating, isFalse);
     h.provider.turns.add(textTurn('仅回答，不执行'));
     await h.controller().send('只回答');
@@ -91,7 +91,7 @@ void main() {
     final driver = h.container.read(channelDriverProvider) as FakeChannelDriver;
     h.provider.turns.addAll([
       toolTurn(callId: 'bad', toolName: tool.name, arguments: '{}'),
-      textTurn('参数不足'),
+      textTurn('参数不足，由 AI 处理错误'),
     ]);
     await h.controller().send('无效动作');
     expect(driver.starts, isEmpty);

@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'dart:convert';
+
+import '../../models/execution_scope.dart';
+import '../../../core/error/failure.dart';
+
 part 'settings_storage.g.dart';
 
 /// shared_preferences 的设置项封装：只放非敏感的偏好设置。
@@ -9,6 +14,25 @@ class SettingsStorage {
   SettingsStorage(this._prefs);
 
   final SharedPreferences _prefs;
+
+  ExecutionScope readExecutionScope() {
+    final value = _prefs.getString('execution_scope');
+    if (value == null) return const ExecutionScope();
+    try {
+      return ExecutionScope.fromJson(jsonDecode(value) as Map<String, dynamic>);
+    } on Object {
+      throw const OperationFailure('执行范围读取失败，请重新设置');
+    }
+  }
+
+  Future<void> writeExecutionScope(ExecutionScope scope) async {
+    if (!await _prefs.setString(
+      'execution_scope',
+      jsonEncode(scope.toJson()),
+    )) {
+      throw const OperationFailure('执行范围保存失败，请重试');
+    }
+  }
 
   static const _themeModeKey = 'theme_mode';
 

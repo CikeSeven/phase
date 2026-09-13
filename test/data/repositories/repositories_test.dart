@@ -392,7 +392,7 @@ void main() {
     expect((await toolCalls.getByRun('r1')).single.id, 'c1');
   });
 
-  test('结果未确认：保留最后已知动作并标记 unknown', () async {
+  test('工具失败保留原参数和已知响应，不建立人工核验状态', () async {
     final conversation = await conversations.createConversation();
     await conversations.appendMessage(
       message(id: 'm1', conversationId: conversation.id, role: ChatRole.user),
@@ -431,10 +431,14 @@ void main() {
       ),
     );
     await toolCalls.markExecuting('c1');
-    final unknown = await toolCalls.markUnknown('c1', errorCode: 'timeout');
-    expect(unknown.status, ToolCallStatus.unknown);
-    // 参数保持原样，可供核验。
-    expect(unknown.arguments['nodeId'], 'n3');
+    final failed = await toolCalls.markFailed(
+      'c1',
+      errorCode: 'timeout',
+      result: '请求超时',
+    );
+    expect(failed.status, ToolCallStatus.failed);
+    expect(failed.result, '请求超时');
+    expect(failed.arguments['nodeId'], 'n3');
   });
 
   test('默认助手只创建一次；删除后会话引用被置空', () async {
@@ -463,17 +467,20 @@ void main() {
         toolPolicy: const ToolPolicyConfig(
           policies: {
             'write_file': ToolPolicy.ask,
-            'click_node': ToolPolicy.allow,
+            applicationOperationsPolicyKey: ToolPolicy.allow,
             'shell': ToolPolicy.deny,
           },
         ),
         createdAt: DateTime.now(),
       ),
     );
-    expect(assistant.toolPolicy.enabledTools, {'write_file', 'click_node'});
+    expect(assistant.toolPolicy.enabledTools, {
+      'write_file',
+      ...applicationOperationTools,
+    });
     expect(assistant.toolPolicy.overrides, {
       'write_file': ToolPolicy.ask,
-      'click_node': ToolPolicy.allow,
+      applicationOperationsPolicyKey: ToolPolicy.allow,
       'shell': ToolPolicy.deny,
     });
   });

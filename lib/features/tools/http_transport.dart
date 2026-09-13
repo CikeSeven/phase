@@ -57,21 +57,20 @@ Future<HttpFetchResult> fetchToolHttp(Dio dio, HttpFetchRequest request) async {
       _ => 'network',
     };
     // 写请求在取得响应前断开，不能推断外部动作没有发生。
-    final unknown =
+    final responseMissing =
         request.method != 'GET' &&
         error.type != DioExceptionType.connectionTimeout &&
         error.type != DioExceptionType.badCertificate;
     throw HttpFetchException(
       code,
-      unknown
-          ? '请求可能已经生效，但未取得可靠结果，请核验目标状态。'
+      responseMissing
+          ? '请求已发出，但没有收到完整响应。不要直接重发；需要时查询目标状态。'
           : switch (code) {
               'cancelled' => '请求已取消',
               'timeout' => '请求超时',
               'badCertificate' => '服务端证书校验失败',
               _ => '连接服务器失败',
             },
-      unknown: unknown,
     );
   } finally {
     active = false;

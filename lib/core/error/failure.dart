@@ -18,6 +18,14 @@ sealed class Failure implements Exception {
   String toString() => '$runtimeType: $message';
 }
 
+/// 持久化边界失败；不能当作普通工具错误继续派发动作。
+final class StorageFailure extends Failure {
+  const StorageFailure(super.message, {super.cause});
+
+  @override
+  String get userMessage => '数据读取或保存失败，请稍后重试';
+}
+
 /// 已知的操作前置条件不满足；调用方只传固定、安全的用户提示。
 final class OperationFailure extends Failure {
   const OperationFailure(super.message);
@@ -83,7 +91,6 @@ enum ExecutionFailureCode {
   timeout,
   executionFailed,
   cancelled,
-  resultUnknown,
 }
 
 final class ExecutionFailure extends Failure {
@@ -95,9 +102,8 @@ final class ExecutionFailure extends Failure {
     ExecutionFailureCode.permissionRequired => '请开启任务通知或所需执行权限后重试',
     ExecutionFailureCode.targetChanged => '操作目标已改变，请重新观察',
     ExecutionFailureCode.invalidArguments => '执行请求无效',
-    ExecutionFailureCode.timeout => '执行通道响应超时，请核验任务状态',
+    ExecutionFailureCode.timeout => '执行通道响应超时',
     ExecutionFailureCode.cancelled => '任务已停止',
-    ExecutionFailureCode.resultUnknown => '动作结果未确认，请核验实际状态',
     ExecutionFailureCode.unavailable => '执行通道不可用，请返回相月后重试',
     ExecutionFailureCode.executionFailed => 'Android 执行失败，请重试',
   };

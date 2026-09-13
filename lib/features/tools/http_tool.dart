@@ -132,9 +132,6 @@ class HttpRequestTool extends Tool {
       }
       return ToolOutcome.success('$headerLine\n$body');
     } on HttpFetchException catch (error) {
-      if (error.unknown) {
-        return ToolOutcome.unknown(error.message, errorCode: error.code);
-      }
       if (error.code == 'cancelled') {
         return ToolOutcome.cancelled(error.message);
       }
@@ -186,9 +183,8 @@ class HttpFetchResult {
 }
 
 class HttpFetchException implements Exception {
-  const HttpFetchException(this.code, this.message, {this.unknown = false});
+  const HttpFetchException(this.code, this.message);
 
   final String code;
   final String message;
-  final bool unknown;
 }

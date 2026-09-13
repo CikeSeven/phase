@@ -15,18 +15,26 @@ class ToolPolicyConfig {
   /// 本次运行开放给模型的工具：显式允许与询问的都开放，deny 的不开放。
   Set<String> get enabledTools => {
     for (final entry in policies.entries)
-      if (entry.value != ToolPolicy.deny) entry.key,
+      if (entry.value != ToolPolicy.deny)
+        if (entry.key == applicationOperationsPolicyKey)
+          ...applicationOperationTools
+        else if (!applicationOperationTools.contains(entry.key))
+          entry.key,
   };
 
   /// 工具级策略；未列出的工具不开放。
-  Map<String, ToolPolicy> get overrides => {...policies};
+  Map<String, ToolPolicy> get overrides => {
+    for (final entry in policies.entries)
+      if (!applicationOperationTools.contains(entry.key))
+        entry.key: entry.value,
+  };
 
   ToolPolicyConfig withPolicy(String toolName, ToolPolicy policy) {
     return ToolPolicyConfig(policies: {...policies, toolName: policy});
   }
 
   String encode() => jsonEncode({
-    for (final entry in policies.entries) entry.key: entry.value.name,
+    for (final entry in overrides.entries) entry.key: entry.value.name,
   });
 
   factory ToolPolicyConfig.decode(String? json) {
@@ -36,7 +44,8 @@ class ToolPolicyConfig {
     return ToolPolicyConfig(
       policies: {
         for (final entry in decoded.entries)
-          entry.key: toolPolicyFromName(entry.value as String?),
+          if (!applicationOperationTools.contains(entry.key))
+            entry.key: toolPolicyFromName(entry.value as String?),
       },
     );
   }
@@ -91,6 +100,7 @@ const defaultToolPolicyConfig = ToolPolicyConfig(
     'list_files': ToolPolicy.allow,
     'write_file': ToolPolicy.ask,
     'http_request': ToolPolicy.ask,
+    applicationOperationsPolicyKey: ToolPolicy.ask,
   },
 );
 

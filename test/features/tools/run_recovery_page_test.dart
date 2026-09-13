@@ -5,7 +5,6 @@ import 'package:phase/app.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/features/settings/theme_mode_controller.dart';
-import 'package:phase/features/tools/run_recovery_controller.dart';
 import 'package:phase/features/tools/run_recovery_page.dart';
 import 'package:phase/features/tools/tool.dart';
 
@@ -21,7 +20,7 @@ Future<void> settleRecovery(WidgetTester tester) async {
 
 void main() {
   for (final dark in [false, true]) {
-    testWidgets('启动可达核验入口，取消不改变记录，保存后继续不重做 ${dark ? '深色窄屏' : '浅色'}', (
+    testWidgets('中断任务直接继续，无结果核验入口且不重发已派发调用 ${dark ? '深色窄屏' : '浅色'}', (
       tester,
     ) async {
       tester.view.devicePixelRatio = 1;
@@ -44,52 +43,18 @@ void main() {
         ),
       );
       await settleRecovery(tester);
-      expect(
-        h.container
-            .read(runRecoveryControllerProvider)
-            .requireValue
-            .single
-            .needsVerification,
-        isTrue,
-      );
       expect(h.provider.requests, isEmpty);
       await tester.tap(find.byKey(const ValueKey('open-recovered-runs')));
       await settleRecovery(tester);
       expect(find.byType(RunRecoveryPage), findsOneWidget);
       expect(tester.takeException(), isNull);
-      final verify = find.byKey(const ValueKey('verify-tool-record-0'));
-      await tester.ensureVisible(verify);
-      await tester.tap(verify);
-      await settleRecovery(tester);
-      await tester.ensureVisible(find.text('取消'));
-      await tester.tap(find.text('取消'));
-      await settleRecovery(tester);
+      expect(find.text('核验结果'), findsNothing);
+      expect(find.byKey(const ValueKey('verification-status')), findsNothing);
       expect(
         (await h.recordsByCall())['call-0']!.status,
-        ToolCallStatus.unknown,
+        ToolCallStatus.failed,
       );
-
-      await tester.tap(verify);
-      await settleRecovery(tester);
-      final status = find.byKey(const ValueKey('verification-status'));
-      await tester.ensureVisible(status);
-      await tester.tap(status);
-      await settleRecovery(tester);
-      await tester.tap(find.text('已确认成功').last);
-      await settleRecovery(tester);
-      final result = find.byKey(const ValueKey('verification-result'));
-      await tester.ensureVisible(result);
-      await tester.enterText(result, '已人工检查目标文件');
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('save-verification')),
-      );
-      await tester.tap(find.byKey(const ValueKey('save-verification')));
-      await settleRecovery(tester);
-      expect(
-        (await h.recordsByCall())['call-0']!.status,
-        ToolCallStatus.succeeded,
-      );
-      h.provider.turns.add(textTurn('核验后继续'));
+      h.provider.turns.add(textTurn('由 AI 处理已返回的错误'));
       final resume = find.byKey(ValueKey('resume-run-${run.id}'));
       await tester.ensureVisible(resume);
       await tester.tap(resume);

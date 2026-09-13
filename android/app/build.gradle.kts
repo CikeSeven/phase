@@ -26,6 +26,7 @@ android {
         // flag during build.
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        testInstrumentationRunner = "app.xiangyue.phase.ExecutionSmokeRunner"
     }
 
     buildTypes {
@@ -35,6 +36,7 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+    testBuildType = providers.gradleProperty("phaseTestBuildType").orElse("debug").get()
 }
 
 kotlin {

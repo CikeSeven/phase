@@ -93,23 +93,12 @@ class ExecutedTool {
   /// 工具记录；参数错误等未执行的情况也可能有记录。
   final ToolCallRecord? record;
 
-  /// 结果消息 id；为空表示结果未确认，整个任务需要暂停。
+  /// 已保存的结果消息 id。
   final String? messageId;
-
-  /// 结果未确认：已派发但没有可靠结果，等用户核验。
-  bool get suspended =>
-      record?.status == ToolCallStatus.unknown || messageId == null;
 }
 
 /// 循环结束原因。
-enum AgentFinishReason {
-  completed,
-  cancelled,
-  turnLimit,
-
-  /// 动作结果未确认，运行挂起等待核验。
-  unknownResult,
-}
+enum AgentFinishReason { completed, cancelled, turnLimit }
 
 /// 单循环：模型调用 → 工具执行 → 结果回填 → 下一轮。
 ///
@@ -140,10 +129,7 @@ class AgentLoop {
         if (_host.isCancelled) {
           return _host.finish(AgentFinishReason.cancelled);
         }
-        final executed = await _host.executeTool(call, turn);
-        if (executed.suspended) {
-          return _host.finish(AgentFinishReason.unknownResult);
-        }
+        await _host.executeTool(call, turn);
       }
 
       if (_host.isCancelled) {

@@ -37,7 +37,7 @@ final class RunRecoveryControllerProvider
 }
 
 String _$runRecoveryControllerHash() =>
-    r'21b634a7c9218195e284e0524cb534524a9d160f';
+    r'9021d434afa58b4c4e6ca93338b0fcc1a1356492';
 
 /// 启动核对只执行一次；读取失败保持错误状态，不能伪装成没有中断任务。
 

@@ -108,9 +108,7 @@ class ToolCard extends StatelessWidget {
                   maxLines: record.status == ToolCallStatus.succeeded ? 3 : 6,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodySmall?.copyWith(
-                    color:
-                        record.status == ToolCallStatus.failed ||
-                            record.status == ToolCallStatus.unknown
+                    color: record.status == ToolCallStatus.failed
                         ? colors.error
                         : colors.onSurface,
                   ),

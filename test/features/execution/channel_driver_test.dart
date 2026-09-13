@@ -123,17 +123,17 @@ void main() {
     expect(calls, hasLength(1));
   });
 
-  test('等待原生响应时取消传到底层，回调丢失保留 unknown，迟到成功不改终态', () async {
+  test('等待响应时取消传到底层，取消收口后迟到成功不改终态', () async {
     final cancel = RunCancellation();
     final result = driver.execute(request(), cancel);
     await Future<void>.delayed(Duration.zero);
     cancel.cancel();
     final stopped = await result;
     expect(cancellations, ['app-call']);
-    expect(stopped.status, ExecutionStatus.unknown);
+    expect(stopped.status, ExecutionStatus.cancelled);
     response.complete(success('app-call'));
     await Future<void>.delayed(Duration.zero);
-    expect(stopped.status, ExecutionStatus.unknown);
+    expect(stopped.status, ExecutionStatus.cancelled);
   });
 
   test('派发前取消不调用平台；派发后以原生明确结果收口', () async {
@@ -163,10 +163,10 @@ void main() {
     addTearDown(cancel.cancel);
     final result = driver.execute(request(), cancel);
     response.complete(success('provider-call-not-app-call'));
-    expect((await result).status, ExecutionStatus.unknown);
+    expect((await result).status, ExecutionStatus.failed);
     host('execute', (_) async => ['native-error', 'secret fixture', null]);
     final failed = await driver.execute(request(id: 'second'), cancel);
-    expect(failed.status, ExecutionStatus.unknown);
+    expect(failed.status, ExecutionStatus.failed);
     expect(failed.result, isEmpty);
   });
 
@@ -175,12 +175,12 @@ void main() {
     addTearDown(cancel.cancel);
     expect(
       (await driver.execute(request(timeout: 10), cancel)).status,
-      ExecutionStatus.unknown,
+      ExecutionStatus.failed,
     );
     expect(cancellations, contains('app-call'));
     final pending = driver.execute(request(id: 'second'), cancel);
     await driver.dispose();
-    expect((await pending).status, ExecutionStatus.unknown);
+    expect((await pending).status, ExecutionStatus.cancelled);
     response.complete(success('app-call'));
   });
 
@@ -190,7 +190,7 @@ void main() {
     addTearDown(subscription.cancel);
     final codec = ExecutionFlutterApi.pigeonChannelCodec;
     for (final entry in {
-      'stopRequested': ['run'],
+      'stopRequested': ['run', null],
       'confirmationDecision': ['run', 'app-call', ConfirmationDecision.approve],
     }.entries) {
       final done = Completer<void>();

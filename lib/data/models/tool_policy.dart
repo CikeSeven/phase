@@ -3,6 +3,16 @@
 /// allow 在已授权范围内直接执行，ask 需要用户确认，deny 不向模型开放。
 enum ToolPolicy { allow, ask, deny }
 
+const applicationOperationsPolicyKey = 'app_operations';
+const applicationOperationTools = {
+  'list_apps',
+  'open_app',
+  'inspect_ui',
+  'click_node',
+  'scroll',
+  'input_text',
+};
+
 ToolPolicy toolPolicyFromName(String? name) {
   for (final policy in ToolPolicy.values) {
     if (policy.name == name) return policy;

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:mime/mime.dart';
 import 'package:path/path.dart' as p;
 
+import '../../../core/error/failure.dart';
 import '../../../core/utils/id.dart';
 import '../../../features/tools/tool.dart';
 import '../../models/attachment.dart';
@@ -30,7 +31,7 @@ class ArtifactStorage implements ToolStorage {
 
   @override
   Future<List<Attachment>> attachments(String conversationId) =>
-      loadAttachments(conversationId);
+      _guard(() => loadAttachments(conversationId));
 
   @override
   String artifactsDirectory(String conversationId) =>
@@ -41,12 +42,18 @@ class ArtifactStorage implements ToolStorage {
     required String conversationId,
     required String path,
     required String name,
+    String? sha256,
+    String? extractedTextPath,
+    String? extractionError,
   }) {
     return _register(
       conversationId: conversationId,
       path: path,
       name: name,
       mimeType: lookupMimeType(name) ?? 'application/octet-stream',
+      sha256: sha256,
+      extractedTextPath: extractedTextPath,
+      extractionError: extractionError,
     );
   }
 
@@ -56,7 +63,7 @@ class ArtifactStorage implements ToolStorage {
     required String name,
     required String mimeType,
     required List<int> bytes,
-  }) async {
+  }) => _guard(() async {
     final directory = Directory(artifactsDirectory(conversationId));
     await directory.create(recursive: true);
     final file = File(p.join(directory.path, _uniqueName(directory, name)));
@@ -68,43 +75,48 @@ class ArtifactStorage implements ToolStorage {
       name: p.basename(file.path),
       mimeType: mimeType,
     );
-  }
+  });
 
   /// 把产物目录里尚未登记的产物写成附件。
   ///
   /// 每次执行后统一扫描一次：工具自己登记过并写进结果引用的产物不在待登记
   /// 范围内，这里兜住其余写到产物目录却没有登记的文件。
-  Future<List<Attachment>> registerPendingArtifacts(
-    String conversationId,
-  ) async {
-    final directory = Directory(artifactsDirectory(conversationId));
-    if (!directory.existsSync()) return const [];
-    final known = {
-      for (final attachment in await attachments(conversationId))
-        p.normalize(attachment.localPath),
-    };
-    final registered = <Attachment>[];
-    for (final entity in directory.listSync(recursive: true)) {
-      if (entity is! File) continue;
-      if (known.contains(p.normalize(entity.path))) continue;
-      registered.add(
-        await registerArtifact(
-          conversationId: conversationId,
-          path: entity.path,
-          // 嵌套目录下的产物保留相对路径，重名时能区分。
-          name: p.relative(entity.path, from: directory.path),
-        ),
-      );
-    }
-    return registered;
-  }
+  Future<List<Attachment>> registerPendingArtifacts(String conversationId) =>
+      _guard(() async {
+        final directory = Directory(artifactsDirectory(conversationId));
+        if (!directory.existsSync()) return const [];
+        final known = {
+          for (final attachment in await attachments(conversationId)) ...[
+            p.normalize(attachment.localPath),
+            if (attachment.extractedTextPath != null)
+              p.normalize(attachment.extractedTextPath!),
+          ],
+        };
+        final registered = <Attachment>[];
+        for (final entity in directory.listSync(recursive: true)) {
+          if (entity is! File) continue;
+          if (known.contains(p.normalize(entity.path))) continue;
+          registered.add(
+            await registerArtifact(
+              conversationId: conversationId,
+              path: entity.path,
+              // 嵌套目录下的产物保留相对路径，重名时能区分。
+              name: p.relative(entity.path, from: directory.path),
+            ),
+          );
+        }
+        return registered;
+      });
 
   Future<Attachment> _register({
     required String conversationId,
     required String path,
     required String name,
     required String mimeType,
-  }) async {
+    String? sha256,
+    String? extractedTextPath,
+    String? extractionError,
+  }) => _guard(() async {
     final file = File(path);
     final attachment = Attachment(
       id: generateId(),
@@ -114,10 +126,23 @@ class ArtifactStorage implements ToolStorage {
       mimeType: mimeType,
       size: file.existsSync() ? file.lengthSync() : 0,
       localPath: path,
+      sha256: sha256,
+      extractedTextPath: extractedTextPath,
+      extractionError: extractionError,
       createdAt: DateTime.now(),
     );
     await saveAttachment(attachment);
     return attachment;
+  });
+
+  Future<T> _guard<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on StorageFailure {
+      rethrow;
+    } catch (error) {
+      throw StorageFailure('工具产物读取或保存失败', cause: error);
+    }
   }
 
   /// 同名产物不覆盖：登记的名字与磁盘文件名始终一一对应。

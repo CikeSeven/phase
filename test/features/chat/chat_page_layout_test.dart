@@ -1110,6 +1110,21 @@ void main() {
 
     await tester.tap(find.byTooltip('停止生成'));
     await tester.pumpAndSettle();
+    // 取消现在先等待订阅释放，再保存终态；动画结束不等于异步 IO 已收尾。
+    await tester.runAsync(() async {
+      for (
+        var i = 0;
+        i < 100 && harness.container.read(chatControllerProvider).isGenerating;
+        i++
+      ) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(
+      harness.container.read(chatControllerProvider).isGenerating,
+      isFalse,
+    );
     final reply = repository.messages.values.single.last;
     // 用户停止的运行按已取消记录，已收内容保留。
     expect(reply.status, MessageStatus.cancelled);

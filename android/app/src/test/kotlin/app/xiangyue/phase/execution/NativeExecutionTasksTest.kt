@@ -35,7 +35,7 @@ class NativeExecutionTasksTest {
         assertEquals(1, dispatched)
     }
 
-    @Test fun cancellationReachesRunningDriverAndLeavesUnknownEffect() = runBlocking {
+    @Test fun cancellationReachesRunningDriverWithoutInventingRollback() = runBlocking {
         val dispatched = CompletableDeferred<Unit>()
         var cancelled = false
         val tasks = NativeExecutionTasks(this, mapOf(ExecutionAction.CLICK_NODE to NativeAction { _, _ ->
@@ -46,7 +46,7 @@ class NativeExecutionTasksTest {
         val result = async { tasks.execute(request()) }
         dispatched.await()
         tasks.cancel("app-call")
-        assertEquals(ExecutionStatus.UNKNOWN, result.await().status)
+        assertEquals(ExecutionStatus.CANCELLED, result.await().status)
         assertTrue(cancelled)
     }
 
@@ -72,8 +72,8 @@ class NativeExecutionTasksTest {
             success("provider-call")
         })) {}
         tasks.begin("run")
-        assertEquals(ExecutionStatus.UNKNOWN, tasks.execute(request("timeout", 10)).status)
-        assertEquals(ExecutionStatus.UNKNOWN, tasks.execute(request()).status)
+        assertEquals(ExecutionStatus.FAILED, tasks.execute(request("timeout", 10)).status)
+        assertEquals(ExecutionStatus.FAILED, tasks.execute(request()).status)
     }
 
     @Test fun endRunCancelsChildrenInsteadOfReplayingAfterRestart() = runBlocking {
@@ -85,7 +85,7 @@ class NativeExecutionTasksTest {
         val result = async { tasks.execute(request()) }
         started.await()
         tasks.end("run")
-        assertEquals(ExecutionStatus.UNKNOWN, result.await().status)
+        assertEquals(ExecutionStatus.CANCELLED, result.await().status)
         assertNull(tasks.runId)
         assertEquals(ExecutionStatus.CANCELLED, tasks.execute(request()).status)
     }

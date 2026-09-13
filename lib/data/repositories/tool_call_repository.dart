@@ -183,17 +183,6 @@ class ToolCallRepository {
     });
   }
 
-  /// 已进入执行阶段但结果不可靠：保留最后已知动作，等待核验。
-  Future<ToolCallRecord> markUnknown(String id, {String? errorCode}) {
-    return _apply(id, '记录结果未确认失败', (record) {
-      return record.copyWith(
-        status: ToolCallStatus.unknown,
-        errorCode: errorCode,
-        finishedAt: DateTime.now(),
-      );
-    });
-  }
-
   Future<ToolCallRecord> _apply(
     String id,
     String failureMessage,
@@ -220,7 +209,7 @@ class ToolCallRepository {
       rethrow;
     } on Exception catch (e, st) {
       AppLogger.error('$message (${e.runtimeType})', null, st);
-      throw UnknownFailure(message, cause: e);
+      throw StorageFailure(message, cause: e);
     }
   }
 }

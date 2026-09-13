@@ -1,0 +1,7 @@
+<resources>
+    <item type="id" name="search_input" />
+    <item type="id" name="search_button" />
+    <item type="id" name="search_results" />
+    <item type="id" name="detail_title" />
+    <item type="id" name="result_item" />
+</resources>

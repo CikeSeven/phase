@@ -202,13 +202,15 @@ class FlutterError (
 ) : RuntimeException()
 
 enum class ExecutionAction(val raw: Int) {
-  INSPECT_UI(0),
-  CLICK_NODE(1),
-  SCROLL(2),
-  INPUT_TEXT(3),
-  READ_FILE(4),
-  WRITE_FILE(5),
-  LIST_FILES(6);
+  LIST_APPS(0),
+  OPEN_APP(1),
+  INSPECT_UI(2),
+  CLICK_NODE(3),
+  SCROLL(4),
+  INPUT_TEXT(5),
+  READ_FILE(6),
+  WRITE_FILE(7),
+  LIST_FILES(8);
 
   companion object {
     fun ofRaw(raw: Int): ExecutionAction? {
@@ -220,8 +222,7 @@ enum class ExecutionAction(val raw: Int) {
 enum class ExecutionStatus(val raw: Int) {
   SUCCEEDED(0),
   FAILED(1),
-  CANCELLED(2),
-  UNKNOWN(3);
+  CANCELLED(2);
 
   companion object {
     fun ofRaw(raw: Int): ExecutionStatus? {
@@ -237,8 +238,7 @@ enum class ChannelError(val raw: Int) {
   INVALID_ARGUMENTS(3),
   TIMEOUT(4),
   EXECUTION_FAILED(5),
-  CANCELLED(6),
-  RESULT_UNKNOWN(7);
+  CANCELLED(6);
 
   companion object {
     fun ofRaw(raw: Int): ChannelError? {
@@ -265,6 +265,28 @@ enum class ConfirmationDecision(val raw: Int) {
 
   companion object {
     fun ofRaw(raw: Int): ConfirmationDecision? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+enum class ApplicationListMode(val raw: Int) {
+  BLACKLIST(0),
+  WHITELIST(1);
+
+  companion object {
+    fun ofRaw(raw: Int): ApplicationListMode? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+enum class PermissionScreen(val raw: Int) {
+  NOTIFICATIONS(0),
+  ACCESSIBILITY(1);
+
+  companion object {
+    fun ofRaw(raw: Int): PermissionScreen? {
       return values().firstOrNull { it.raw == raw }
     }
   }
@@ -389,7 +411,8 @@ data class ExecutionArtifact (
   val uri: String,
   val name: String,
   val size: Long,
-  val sha256: String? = null
+  val sha256: String? = null,
+  val localPath: String? = null
 )
  {
   companion object {
@@ -398,7 +421,8 @@ data class ExecutionArtifact (
       val name = pigeonVar_list[1] as String
       val size = pigeonVar_list[2] as Long
       val sha256 = pigeonVar_list[3] as String?
-      return ExecutionArtifact(uri, name, size, sha256)
+      val localPath = pigeonVar_list[4] as String?
+      return ExecutionArtifact(uri, name, size, sha256, localPath)
     }
   }
   fun toList(): List<Any?> {
@@ -407,6 +431,7 @@ data class ExecutionArtifact (
       name,
       size,
       sha256,
+      localPath,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -417,7 +442,7 @@ data class ExecutionArtifact (
       return true
     }
     val other = other as ExecutionArtifact
-    return ExecutionApiPigeonUtils.deepEquals(this.uri, other.uri) && ExecutionApiPigeonUtils.deepEquals(this.name, other.name) && ExecutionApiPigeonUtils.deepEquals(this.size, other.size) && ExecutionApiPigeonUtils.deepEquals(this.sha256, other.sha256)
+    return ExecutionApiPigeonUtils.deepEquals(this.uri, other.uri) && ExecutionApiPigeonUtils.deepEquals(this.name, other.name) && ExecutionApiPigeonUtils.deepEquals(this.size, other.size) && ExecutionApiPigeonUtils.deepEquals(this.sha256, other.sha256) && ExecutionApiPigeonUtils.deepEquals(this.localPath, other.localPath)
   }
 
   override fun hashCode(): Int {
@@ -426,10 +451,11 @@ data class ExecutionArtifact (
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.name)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.size)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.sha256)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.localPath)
     return result
   }
   override fun toString(): String {
-    return "ExecutionArtifact(uri=$uri, name=$name, size=$size, sha256=$sha256)"
+    return "ExecutionArtifact(uri=$uri, name=$name, size=$size, sha256=$sha256, localPath=$localPath)"
   }
 }
 
@@ -539,7 +565,8 @@ data class ExecutionProgress (
 data class ExecutionCapabilities (
   val actions: List<ExecutionAction>,
   val notificationsAllowed: Boolean,
-  val activityResumed: Boolean
+  val activityResumed: Boolean,
+  val accessibilityConnected: Boolean
 )
  {
   companion object {
@@ -547,7 +574,8 @@ data class ExecutionCapabilities (
       val actions = pigeonVar_list[0] as List<ExecutionAction>
       val notificationsAllowed = pigeonVar_list[1] as Boolean
       val activityResumed = pigeonVar_list[2] as Boolean
-      return ExecutionCapabilities(actions, notificationsAllowed, activityResumed)
+      val accessibilityConnected = pigeonVar_list[3] as Boolean
+      return ExecutionCapabilities(actions, notificationsAllowed, activityResumed, accessibilityConnected)
     }
   }
   fun toList(): List<Any?> {
@@ -555,6 +583,7 @@ data class ExecutionCapabilities (
       actions,
       notificationsAllowed,
       activityResumed,
+      accessibilityConnected,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -565,7 +594,7 @@ data class ExecutionCapabilities (
       return true
     }
     val other = other as ExecutionCapabilities
-    return ExecutionApiPigeonUtils.deepEquals(this.actions, other.actions) && ExecutionApiPigeonUtils.deepEquals(this.notificationsAllowed, other.notificationsAllowed) && ExecutionApiPigeonUtils.deepEquals(this.activityResumed, other.activityResumed)
+    return ExecutionApiPigeonUtils.deepEquals(this.actions, other.actions) && ExecutionApiPigeonUtils.deepEquals(this.notificationsAllowed, other.notificationsAllowed) && ExecutionApiPigeonUtils.deepEquals(this.activityResumed, other.activityResumed) && ExecutionApiPigeonUtils.deepEquals(this.accessibilityConnected, other.accessibilityConnected)
   }
 
   override fun hashCode(): Int {
@@ -573,10 +602,223 @@ data class ExecutionCapabilities (
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.actions)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.notificationsAllowed)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.activityResumed)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.accessibilityConnected)
     return result
   }
   override fun toString(): String {
-    return "ExecutionCapabilities(actions=$actions, notificationsAllowed=$notificationsAllowed, activityResumed=$activityResumed)"
+    return "ExecutionCapabilities(actions=$actions, notificationsAllowed=$notificationsAllowed, activityResumed=$activityResumed, accessibilityConnected=$accessibilityConnected)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class ExecutionSession (
+  val runId: String,
+  val deviceTask: Boolean,
+  val fileUris: List<String>,
+  val appPolicy: ApplicationPolicy,
+  val currentAppPolicy: ApplicationPolicy
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): ExecutionSession {
+      val runId = pigeonVar_list[0] as String
+      val deviceTask = pigeonVar_list[1] as Boolean
+      val fileUris = pigeonVar_list[2] as List<String>
+      val appPolicy = pigeonVar_list[3] as ApplicationPolicy
+      val currentAppPolicy = pigeonVar_list[4] as ApplicationPolicy
+      return ExecutionSession(runId, deviceTask, fileUris, appPolicy, currentAppPolicy)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      runId,
+      deviceTask,
+      fileUris,
+      appPolicy,
+      currentAppPolicy,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as ExecutionSession
+    return ExecutionApiPigeonUtils.deepEquals(this.runId, other.runId) && ExecutionApiPigeonUtils.deepEquals(this.deviceTask, other.deviceTask) && ExecutionApiPigeonUtils.deepEquals(this.fileUris, other.fileUris) && ExecutionApiPigeonUtils.deepEquals(this.appPolicy, other.appPolicy) && ExecutionApiPigeonUtils.deepEquals(this.currentAppPolicy, other.currentAppPolicy)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.runId)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.deviceTask)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.fileUris)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.appPolicy)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.currentAppPolicy)
+    return result
+  }
+  override fun toString(): String {
+    return "ExecutionSession(runId=$runId, deviceTask=$deviceTask, fileUris=$fileUris, appPolicy=$appPolicy, currentAppPolicy=$currentAppPolicy)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class ApplicationPolicy (
+  val mode: ApplicationListMode,
+  val blacklist: List<String>,
+  val whitelist: List<String>,
+  val allowedSystemApps: List<String>
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): ApplicationPolicy {
+      val mode = pigeonVar_list[0] as ApplicationListMode
+      val blacklist = pigeonVar_list[1] as List<String>
+      val whitelist = pigeonVar_list[2] as List<String>
+      val allowedSystemApps = pigeonVar_list[3] as List<String>
+      return ApplicationPolicy(mode, blacklist, whitelist, allowedSystemApps)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      mode,
+      blacklist,
+      whitelist,
+      allowedSystemApps,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as ApplicationPolicy
+    return ExecutionApiPigeonUtils.deepEquals(this.mode, other.mode) && ExecutionApiPigeonUtils.deepEquals(this.blacklist, other.blacklist) && ExecutionApiPigeonUtils.deepEquals(this.whitelist, other.whitelist) && ExecutionApiPigeonUtils.deepEquals(this.allowedSystemApps, other.allowedSystemApps)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.mode)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.blacklist)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.whitelist)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.allowedSystemApps)
+    return result
+  }
+  override fun toString(): String {
+    return "ApplicationPolicy(mode=$mode, blacklist=$blacklist, whitelist=$whitelist, allowedSystemApps=$allowedSystemApps)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class FileGrant (
+  val uri: String,
+  val name: String,
+  val directory: Boolean,
+  val writable: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): FileGrant {
+      val uri = pigeonVar_list[0] as String
+      val name = pigeonVar_list[1] as String
+      val directory = pigeonVar_list[2] as Boolean
+      val writable = pigeonVar_list[3] as Boolean
+      return FileGrant(uri, name, directory, writable)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      uri,
+      name,
+      directory,
+      writable,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as FileGrant
+    return ExecutionApiPigeonUtils.deepEquals(this.uri, other.uri) && ExecutionApiPigeonUtils.deepEquals(this.name, other.name) && ExecutionApiPigeonUtils.deepEquals(this.directory, other.directory) && ExecutionApiPigeonUtils.deepEquals(this.writable, other.writable)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.uri)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.name)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.directory)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.writable)
+    return result
+  }
+  override fun toString(): String {
+    return "FileGrant(uri=$uri, name=$name, directory=$directory, writable=$writable)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class InstalledApplication (
+  val packageName: String,
+  val label: String,
+  val isSystem: Boolean,
+  val installedAtMs: Long,
+  val launchable: Boolean,
+  val versionName: String? = null,
+  val sizeBytes: Long? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): InstalledApplication {
+      val packageName = pigeonVar_list[0] as String
+      val label = pigeonVar_list[1] as String
+      val isSystem = pigeonVar_list[2] as Boolean
+      val installedAtMs = pigeonVar_list[3] as Long
+      val launchable = pigeonVar_list[4] as Boolean
+      val versionName = pigeonVar_list[5] as String?
+      val sizeBytes = pigeonVar_list[6] as Long?
+      return InstalledApplication(packageName, label, isSystem, installedAtMs, launchable, versionName, sizeBytes)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      packageName,
+      label,
+      isSystem,
+      installedAtMs,
+      launchable,
+      versionName,
+      sizeBytes,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as InstalledApplication
+    return ExecutionApiPigeonUtils.deepEquals(this.packageName, other.packageName) && ExecutionApiPigeonUtils.deepEquals(this.label, other.label) && ExecutionApiPigeonUtils.deepEquals(this.isSystem, other.isSystem) && ExecutionApiPigeonUtils.deepEquals(this.installedAtMs, other.installedAtMs) && ExecutionApiPigeonUtils.deepEquals(this.launchable, other.launchable) && ExecutionApiPigeonUtils.deepEquals(this.versionName, other.versionName) && ExecutionApiPigeonUtils.deepEquals(this.sizeBytes, other.sizeBytes)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.packageName)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.label)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.isSystem)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.installedAtMs)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.launchable)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.versionName)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.sizeBytes)
+    return result
+  }
+  override fun toString(): String {
+    return "InstalledApplication(packageName=$packageName, label=$label, isSystem=$isSystem, installedAtMs=$installedAtMs, launchable=$launchable, versionName=$versionName, sizeBytes=$sizeBytes)"
   }
 }
 
@@ -706,41 +948,71 @@ private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
         }
       }
       134.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionTarget.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          ApplicationListMode.ofRaw(it.toInt())
         }
       }
       135.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionRequest.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          PermissionScreen.ofRaw(it.toInt())
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionArtifact.fromList(it)
+          ExecutionTarget.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionResult.fromList(it)
+          ExecutionRequest.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionProgress.fromList(it)
+          ExecutionArtifact.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionCapabilities.fromList(it)
+          ExecutionResult.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionConfirmation.fromList(it)
+          ExecutionProgress.fromList(it)
         }
       }
       141.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ExecutionCapabilities.fromList(it)
+        }
+      }
+      142.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ExecutionSession.fromList(it)
+        }
+      }
+      143.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ApplicationPolicy.fromList(it)
+        }
+      }
+      144.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          FileGrant.fromList(it)
+        }
+      }
+      145.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          InstalledApplication.fromList(it)
+        }
+      }
+      146.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ExecutionConfirmation.fromList(it)
+        }
+      }
+      147.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           HostReply.fromList(it)
         }
@@ -770,36 +1042,60 @@ private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
         stream.write(133)
         writeValue(stream, value.raw.toLong())
       }
-      is ExecutionTarget -> {
+      is ApplicationListMode -> {
         stream.write(134)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is ExecutionRequest -> {
+      is PermissionScreen -> {
         stream.write(135)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is ExecutionArtifact -> {
+      is ExecutionTarget -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is ExecutionResult -> {
+      is ExecutionRequest -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is ExecutionProgress -> {
+      is ExecutionArtifact -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is ExecutionCapabilities -> {
+      is ExecutionResult -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is ExecutionConfirmation -> {
+      is ExecutionProgress -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is HostReply -> {
+      is ExecutionCapabilities -> {
         stream.write(141)
+        writeValue(stream, value.toList())
+      }
+      is ExecutionSession -> {
+        stream.write(142)
+        writeValue(stream, value.toList())
+      }
+      is ApplicationPolicy -> {
+        stream.write(143)
+        writeValue(stream, value.toList())
+      }
+      is FileGrant -> {
+        stream.write(144)
+        writeValue(stream, value.toList())
+      }
+      is InstalledApplication -> {
+        stream.write(145)
+        writeValue(stream, value.toList())
+      }
+      is ExecutionConfirmation -> {
+        stream.write(146)
+        writeValue(stream, value.toList())
+      }
+      is HostReply -> {
+        stream.write(147)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -813,7 +1109,7 @@ interface ExecutionHostApi {
   suspend fun execute(request: ExecutionRequest): ExecutionResult
   fun cancel(toolCallId: String)
   fun queryCapabilities(): ExecutionCapabilities
-  suspend fun startRun(runId: String): HostReply
+  suspend fun startRun(session: ExecutionSession): HostReply
   fun endRun(runId: String)
   fun setConfirmation(confirmation: ExecutionConfirmation?)
 
@@ -883,10 +1179,10 @@ interface ExecutionHostApi {
         if (api != null) {
           channel.setMessageHandler { message, reply ->
             val args = message as List<Any?>
-            val runIdArg = args[0] as String
+            val sessionArg = args[0] as ExecutionSession
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
-                listOf(api.startRun(runIdArg))
+                listOf(api.startRun(sessionArg))
               } catch (exception: Throwable) {
                 ExecutionApiPigeonUtils.wrapError(exception)
               }
@@ -923,6 +1219,134 @@ interface ExecutionHostApi {
             val confirmationArg = args[0] as ExecutionConfirmation?
             val wrapped: List<Any?> = try {
               api.setConfirmation(confirmationArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              ExecutionApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+    }
+  }
+}
+/** Generated interface from Pigeon that represents a handler of messages from Flutter. */
+interface ExecutionSetupApi {
+  suspend fun selectFile(directory: Boolean): FileGrant?
+  suspend fun fileGrants(): List<FileGrant>
+  fun releaseFileGrant(uri: String)
+  suspend fun installedApplications(): List<InstalledApplication>
+  fun updateApplicationPolicy(policy: ApplicationPolicy)
+  fun openPermissionSettings(screen: PermissionScreen)
+
+  companion object {
+    /** The codec used by ExecutionSetupApi. */
+    val codec: MessageCodec<Any?> by lazy {
+      ExecutionApiPigeonCodec()
+    }
+    /** Sets up an instance of `ExecutionSetupApi` to handle messages through the `binaryMessenger`. */
+    @JvmOverloads
+    fun setUp(binaryMessenger: BinaryMessenger, api: ExecutionSetupApi?, messageChannelSuffix: String = "") {
+      val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.selectFile$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val directoryArg = args[0] as Boolean
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.selectFile(directoryArg))
+              } catch (exception: Throwable) {
+                ExecutionApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.fileGrants$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.fileGrants())
+              } catch (exception: Throwable) {
+                ExecutionApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.releaseFileGrant$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val uriArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.releaseFileGrant(uriArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              ExecutionApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.installedApplications$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.installedApplications())
+              } catch (exception: Throwable) {
+                ExecutionApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.updateApplicationPolicy$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val policyArg = args[0] as ApplicationPolicy
+            val wrapped: List<Any?> = try {
+              api.updateApplicationPolicy(policyArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              ExecutionApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.openPermissionSettings$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val screenArg = args[0] as PermissionScreen
+            val wrapped: List<Any?> = try {
+              api.openPermissionSettings(screenArg)
               listOf(null)
             } catch (exception: Throwable) {
               ExecutionApiPigeonUtils.wrapError(exception)
@@ -1001,13 +1425,13 @@ class ExecutionFlutterApi(private val binaryMessenger: BinaryMessenger, private 
       }
     }
   }
-  suspend fun stopRequested(runIdArg: String)
+  suspend fun stopRequested(runIdArg: String, reasonArg: String?)
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     return suspendCancellableCoroutine { continuation ->
       val channelName = "dev.flutter.pigeon.phase.ExecutionFlutterApi.stopRequested$separatedMessageChannelSuffix"
       val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-      channel.send(listOf(runIdArg)) {
+      channel.send(listOf(runIdArg, reasonArg)) {
         if (it is List<*>) {
           if (it.size > 1) {
             continuation.resumeWithException(FlutterError(it[0] as String, it[1] as String, it[2] as String?))

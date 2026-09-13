@@ -47,7 +47,12 @@ class ChatRunBanner extends ConsumerWidget {
     final pending = ref.watch(executionControllerProvider).confirmation;
     final reopen = ToolConfirmationHost.reopenOf(context);
     final canConfirm = pending != null && reopen != null;
-    if (!runningElsewhere && count == 0 && !recovery.hasError && !canConfirm) {
+    final retry = chat.retry;
+    if (!runningElsewhere &&
+        count == 0 &&
+        !recovery.hasError &&
+        !canConfirm &&
+        retry == null) {
       return const SizedBox.shrink();
     }
     return Center(
@@ -59,6 +64,17 @@ class ChatRunBanner extends ConsumerWidget {
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.xs,
             children: [
+              if (retry != null)
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    '自动重试 ${retry.attempt}/${retry.maxRetries} · 等待 ${retry.delay.inSeconds} 秒',
+                    key: const ValueKey('model-retry-status'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
               if (canConfirm)
                 TextButton(
                   key: const ValueKey('reopen-tool-confirmation'),

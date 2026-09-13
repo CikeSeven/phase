@@ -85,8 +85,6 @@ class ToolExecutionResult {
 
   /// 等待确认期间被用户停止。
   bool get cancelled => record.status == ToolCallStatus.cancelled;
-
-  bool get unknown => record.status == ToolCallStatus.unknown;
 }
 
 /// 工具执行器：参数校验、策略决定、确认、执行与状态记录。
@@ -115,7 +113,8 @@ class ToolExecutor {
   final Duration confirmationTimeout;
 
   /// 策略和参数有效后才准备平台宿主；禁止的调用不触发服务或权限交互。
-  final Future<void> Function(Tool tool)? prepareChannel;
+  final Future<void> Function(Tool tool, Map<String, dynamic> arguments)?
+  prepareChannel;
 
   /// 执行一次工具调用；返回最终记录状态与工具输出。
   Future<ToolExecutionResult> execute(
@@ -189,16 +188,19 @@ class ToolExecutor {
     );
     if (!cancellation.isCancelled) {
       try {
-        await prepareChannel?.call(tool);
+        await prepareChannel?.call(tool, arguments);
+      } on StorageFailure {
+        rethrow;
       } on Failure catch (failure) {
-        await toolCalls.markFailed(
+        final outcome = _failureOutcome(failure);
+        final failed = await toolCalls.markFailed(
           record.id,
           result: failure.userMessage,
           errorCode: failure is ExecutionFailure
               ? failure.code.name
               : 'channelUnavailable',
         );
-        rethrow;
+        return ToolExecutionResult(record: failed, outcome: outcome);
       }
     }
     if (policy == ToolPolicy.ask) {
@@ -250,19 +252,21 @@ class ToolExecutor {
       );
     } on ToolCancelled {
       outcome = const ToolOutcome.cancelled('本次动作在明确的取消点停止。');
-    } on Failure {
-      await _markStorageUnknown(record.id);
+    } on StorageFailure {
+      await _markStorageFailure(record.id);
       rethrow;
+    } on Failure catch (failure) {
+      outcome = _failureOutcome(failure);
     } on ToolArgumentException catch (error) {
       outcome = ToolOutcome.failure(
         error.message,
         errorCode: 'invalidArguments',
       );
-    } on Exception catch (error, stackTrace) {
+    } catch (error, stackTrace) {
       AppLogger.error('工具执行异常：${error.runtimeType}', null, stackTrace);
-      outcome = const ToolOutcome.unknown(
-        '工具未返回可靠结果，请核验实际状态。',
-        errorCode: 'toolUnknown',
+      outcome = const ToolOutcome.failure(
+        '工具执行失败，没有取得完整结果。可读取当前状态后再决定后续操作。',
+        errorCode: 'executionFailed',
       );
     }
 
@@ -272,10 +276,6 @@ class ToolExecutor {
         ToolOutcome(cancelled: true) => await toolCalls.markCancelled(
           record.id,
           result: outcome.content,
-        ),
-        ToolOutcome(unknown: true) => await toolCalls.markUnknown(
-          record.id,
-          errorCode: outcome.errorCode,
         ),
         ToolOutcome(ok: true) => await toolCalls.markSucceeded(
           record.id,
@@ -289,15 +289,26 @@ class ToolExecutor {
         ),
       };
     } on Failure {
-      await _markStorageUnknown(record.id);
+      await _markStorageFailure(record.id);
       rethrow;
     }
     return ToolExecutionResult(record: updated, outcome: outcome);
   }
 
-  Future<void> _markStorageUnknown(String id) async {
+  ToolOutcome _failureOutcome(Failure failure) => ToolOutcome.failure(
+    failure.userMessage,
+    errorCode: failure is ExecutionFailure
+        ? failure.code.name
+        : 'executionFailed',
+  );
+
+  Future<void> _markStorageFailure(String id) async {
     try {
-      await toolCalls.markUnknown(id, errorCode: 'storageError');
+      await toolCalls.markFailed(
+        id,
+        errorCode: 'storageError',
+        result: '工具结果保存失败。已有操作不会自动重发，后续可读取当前状态。',
+      );
     } on Failure {
       // 原异常由调用者收口；数据库仍不可写时由启动核对处理 executing。
       AppLogger.error('工具结果未能持久化，需在启动时核对');

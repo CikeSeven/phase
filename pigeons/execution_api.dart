@@ -9,6 +9,8 @@ import 'package:pigeon/pigeon.dart';
   ),
 )
 enum ExecutionAction {
+  listApps,
+  openApp,
   inspectUi,
   clickNode,
   scroll,
@@ -18,7 +20,7 @@ enum ExecutionAction {
   listFiles,
 }
 
-enum ExecutionStatus { succeeded, failed, cancelled, unknown }
+enum ExecutionStatus { succeeded, failed, cancelled }
 
 enum ChannelError {
   permissionRequired,
@@ -28,7 +30,6 @@ enum ChannelError {
   timeout,
   executionFailed,
   cancelled,
-  resultUnknown,
 }
 
 enum ProgressKind { stage, progress }
@@ -74,11 +75,13 @@ class ExecutionArtifact {
     required this.name,
     required this.size,
     this.sha256,
+    this.localPath,
   });
   String uri;
   String name;
   int size;
   String? sha256;
+  String? localPath;
 }
 
 class ExecutionResult {
@@ -114,11 +117,77 @@ class ExecutionCapabilities {
     required this.actions,
     required this.notificationsAllowed,
     required this.activityResumed,
+    this.accessibilityConnected = false,
   });
   List<ExecutionAction> actions;
   bool notificationsAllowed;
   bool activityResumed;
+  bool accessibilityConnected;
 }
+
+class ExecutionSession {
+  ExecutionSession({
+    required this.runId,
+    required this.deviceTask,
+    required this.fileUris,
+    required this.appPolicy,
+    required this.currentAppPolicy,
+  });
+  String runId;
+  bool deviceTask;
+  List<String> fileUris;
+  ApplicationPolicy appPolicy;
+  ApplicationPolicy currentAppPolicy;
+}
+
+enum ApplicationListMode { blacklist, whitelist }
+
+class ApplicationPolicy {
+  ApplicationPolicy({
+    required this.mode,
+    required this.blacklist,
+    required this.whitelist,
+    required this.allowedSystemApps,
+  });
+  ApplicationListMode mode;
+  List<String> blacklist;
+  List<String> whitelist;
+  List<String> allowedSystemApps;
+}
+
+class FileGrant {
+  FileGrant({
+    required this.uri,
+    required this.name,
+    required this.directory,
+    required this.writable,
+  });
+  String uri;
+  String name;
+  bool directory;
+  bool writable;
+}
+
+class InstalledApplication {
+  InstalledApplication({
+    required this.packageName,
+    required this.label,
+    required this.isSystem,
+    required this.installedAtMs,
+    required this.launchable,
+    this.versionName,
+    this.sizeBytes,
+  });
+  String packageName;
+  String label;
+  bool isSystem;
+  int installedAtMs;
+  bool launchable;
+  String? versionName;
+  int? sizeBytes;
+}
+
+enum PermissionScreen { notifications, accessibility }
 
 class ExecutionConfirmation {
   ExecutionConfirmation({
@@ -151,9 +220,22 @@ abstract class ExecutionHostApi {
   void cancel(String toolCallId);
   ExecutionCapabilities queryCapabilities();
   @async
-  HostReply startRun(String runId);
+  HostReply startRun(ExecutionSession session);
   void endRun(String runId);
   void setConfirmation(ExecutionConfirmation? confirmation);
+}
+
+@HostApi()
+abstract class ExecutionSetupApi {
+  @async
+  FileGrant? selectFile(bool directory);
+  @async
+  List<FileGrant> fileGrants();
+  void releaseFileGrant(String uri);
+  @async
+  List<InstalledApplication> installedApplications();
+  void updateApplicationPolicy(ApplicationPolicy policy);
+  void openPermissionSettings(PermissionScreen screen);
 }
 
 @FlutterApi()
@@ -165,5 +247,5 @@ abstract class ExecutionFlutterApi {
     String toolCallId,
     ConfirmationDecision decision,
   );
-  void stopRequested(String runId);
+  void stopRequested(String runId, String? reason);
 }

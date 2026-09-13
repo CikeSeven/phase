@@ -83,6 +83,68 @@ void main() {
     );
   });
 
+  test('删除人工核验机制时收口已有挂起状态，保留会话和实际响应', () async {
+    await insertConversation(title: '保留原会话');
+    final now = DateTime.now();
+    await db
+        .into(db.messages)
+        .insert(
+          MessagesCompanion.insert(
+            id: 'input',
+            conversationId: 'conv_1',
+            role: ChatRole.user,
+            status: MessageStatus.completed,
+            createdAt: now,
+          ),
+        );
+    await db
+        .into(db.agentRuns)
+        .insert(
+          AgentRunsCompanion.insert(
+            id: 'run',
+            conversationId: 'conv_1',
+            inputMessageId: 'input',
+            configurationJson: '{}',
+            status: RunStatus.running,
+            maxTurns: 30,
+            createdAt: now,
+          ),
+        );
+    await db
+        .into(db.toolCalls)
+        .insert(
+          ToolCallsCompanion.insert(
+            id: 'call',
+            runId: 'run',
+            assistantMessageId: 'input',
+            toolName: 'read_file',
+            argumentsJson: '{"reference":"notes.txt"}',
+            channel: ExecutionChannel.app,
+            defaultPolicy: ToolPolicy.allow,
+            status: ToolCallStatus.executing,
+            result: const Value('{"actionAccepted":true,"reason":"请核验"}'),
+            createdAt: now,
+          ),
+        );
+    await db.customStatement(
+      "UPDATE tool_calls SET status = 'unknown' WHERE id = 'call'",
+    );
+    await db.customStatement(
+      "UPDATE agent_runs SET status = 'awaitingResult' WHERE id = 'run'",
+    );
+    await db.close();
+    db = openAppDatabase(path: dbPath(), hexKey: hexKey);
+    final call = await db.select(db.toolCalls).getSingle();
+    final run = await db.select(db.agentRuns).getSingle();
+    expect(call.status, ToolCallStatus.failed);
+    expect(jsonDecode(call.result!)['actionAccepted'], isTrue);
+    expect(call.result, isNot(contains('核验')));
+    expect(run.status, RunStatus.failed);
+    expect(run.finishedAt, isNotNull);
+    expect((await db.select(db.conversations).getSingle()).title, '保留原会话');
+    expect(await db.select(db.messages).get(), hasLength(1));
+  });
+
   test('服务商删除级联清理其模型', () async {
     await insertProvider('p1');
     await db

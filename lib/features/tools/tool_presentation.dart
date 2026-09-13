@@ -27,10 +27,16 @@ class ToolPresentation {
     'write_file' => '写入文件',
     'list_files' => '列出文件',
     'http_request' => 'HTTP 请求',
+    'inspect_ui' => '观察界面',
+    'list_apps' => '获取应用列表',
+    'open_app' => '打开应用',
+    'click_node' => '点击控件',
+    'scroll' => '滚动界面',
+    'input_text' => '输入文本',
     _ => toolName,
   };
 
-  /// 状态文案：六个状态分别可辨认，不用"处理中"糊成一团。
+  /// 状态文案区分执行阶段与终态，不用“处理中”混淆成功和失败。
   static String statusLabel(ToolCallStatus status) => switch (status) {
     ToolCallStatus.prepared => '准备中',
     ToolCallStatus.awaitingConfirmation => '等待确认',
@@ -39,14 +45,13 @@ class ToolPresentation {
     ToolCallStatus.failed => '已失败',
     ToolCallStatus.rejected => '已拒绝',
     ToolCallStatus.cancelled => '已取消',
-    ToolCallStatus.unknown => '结果未确认',
   };
 
   static Color statusColor(BuildContext context, ToolCallStatus status) {
     final colors = Theme.of(context).colorScheme;
     return switch (status) {
       ToolCallStatus.succeeded => colors.tertiary,
-      ToolCallStatus.failed || ToolCallStatus.unknown => colors.error,
+      ToolCallStatus.failed => colors.error,
       ToolCallStatus.rejected || ToolCallStatus.cancelled => colors.outline,
       ToolCallStatus.prepared ||
       ToolCallStatus.awaitingConfirmation ||
@@ -62,7 +67,6 @@ class ToolPresentation {
     ToolCallStatus.failed => Symbols.error,
     ToolCallStatus.rejected => Symbols.block,
     ToolCallStatus.cancelled => Symbols.cancel,
-    ToolCallStatus.unknown => Symbols.help,
   };
 
   /// 该状态是否仍在进行（用于显示进度动画）。
@@ -180,7 +184,6 @@ class ToolPresentation {
       ToolCallStatus.failed => '执行失败',
       ToolCallStatus.rejected => '未执行（已拒绝）',
       ToolCallStatus.cancelled => '已取消',
-      ToolCallStatus.unknown => '动作可能已经发生，结果未确认',
     };
   }
 }

@@ -20,9 +20,6 @@ class RecoveredRun {
   final AgentRun run;
   final String title;
   final List<ToolCallRecord> calls;
-
-  bool get needsVerification =>
-      calls.any((call) => call.status == ToolCallStatus.unknown);
 }
 
 /// 运行的读写：保存循环位置、计数与终态，供中断后按已存状态恢复。
@@ -62,7 +59,6 @@ class AgentRunRepository {
                   (t) => t.status.isIn([
                     RunStatus.running.name,
                     RunStatus.awaitingConfirmation.name,
-                    RunStatus.awaitingResult.name,
                   ]),
                 )
                 ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
@@ -85,8 +81,6 @@ class AgentRunRepository {
                     (t) => t.status.isIn([
                       RunStatus.running.name,
                       RunStatus.awaitingConfirmation.name,
-                      RunStatus.awaitingResult.name,
-                      RunStatus.failed.name,
                     ]),
                   )
                   ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
@@ -100,22 +94,13 @@ class AgentRunRepository {
                     ..where((t) => t.runId.equals(row.id))
                     ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]))
                   .get();
-          if (row.status == RunStatus.failed &&
-              !callRows.any(
-                (c) =>
-                    c.status == ToolCallStatus.unknown ||
-                    c.status == ToolCallStatus.executing ||
-                    (row.finishReason == RunFinishReason.storageError &&
-                        c.resultMessageId == null),
-              )) {
-            continue;
-          }
           final calls = <ToolCallRecord>[];
           for (final value in callRows) {
             var call = toolCallFromRow(value);
             if (afterRestart && call.status == ToolCallStatus.executing) {
               call = call.copyWith(
-                status: ToolCallStatus.unknown,
+                status: ToolCallStatus.failed,
+                result: call.result ?? '上次运行中断，工具未返回完整结果。需要时先读取当前状态。',
                 errorCode: 'interrupted',
                 finishedAt: now,
               );
@@ -148,20 +133,15 @@ class AgentRunRepository {
                   ),
                 );
           }
-          final unknown = calls
-              .where((c) => c.status == ToolCallStatus.unknown)
-              .firstOrNull;
           final awaiting = calls
               .where((c) => c.status == ToolCallStatus.awaitingConfirmation)
               .firstOrNull;
           final run = agentRunFromRow(row).copyWith(
-            status: unknown != null
-                ? RunStatus.awaitingResult
-                : awaiting != null
+            status: awaiting != null
                 ? RunStatus.awaitingConfirmation
                 : RunStatus.running,
-            activeToolCallId: unknown?.id ?? awaiting?.id,
-            clearActiveToolCall: unknown == null && awaiting == null,
+            activeToolCallId: awaiting?.id,
+            clearActiveToolCall: awaiting == null,
           );
           await (_db.update(
             _db.agentRuns,
@@ -187,7 +167,7 @@ class AgentRunRepository {
     );
   }
 
-  /// 用户明确结束中断任务；未知外部效果仍保留 unknown，不宣称撤销。
+  /// 用户结束中断任务；保留已执行动作的结果，不宣称已撤销。
   Future<void> stopRecovered(String id) => _guard(
     '结束中断任务失败',
     () => _db.transaction(() async {
@@ -216,47 +196,6 @@ class AgentRunRepository {
       );
     }),
   );
-
-  /// 核验是用户对实际效果的明确记录，不自动检查或重放动作。
-  Future<void> verifyResult(
-    String callId, {
-    required bool succeeded,
-    required String result,
-  }) {
-    if (result.trim().isEmpty) throw const OperationFailure('请填写核验到的实际结果');
-    return _guard(
-      '保存核验结果失败',
-      () => _db.transaction(() async {
-        final row = await (_db.select(
-          _db.toolCalls,
-        )..where((t) => t.id.equals(callId))).getSingle();
-        if (row.status != ToolCallStatus.unknown) {
-          throw const OperationFailure('此动作已不再等待核验');
-        }
-        await (_db.update(
-          _db.toolCalls,
-        )..where((t) => t.id.equals(callId))).write(
-          ToolCallsCompanion(
-            status: Value(
-              succeeded ? ToolCallStatus.succeeded : ToolCallStatus.failed,
-            ),
-            result: Value('人工核验：${result.trim()}'),
-            errorCode: const Value('verified'),
-            finishedAt: Value(DateTime.now()),
-          ),
-        );
-        await (_db.update(
-          _db.agentRuns,
-        )..where((t) => t.id.equals(row.runId))).write(
-          const AgentRunsCompanion(
-            status: Value(RunStatus.running),
-            finishReason: Value(null),
-            finishedAt: Value(null),
-          ),
-        );
-      }),
-    );
-  }
 
   /// 本轮模型调用前增加轮次计数。
   Future<AgentRun> beginTurn(String runId) {
@@ -299,16 +238,6 @@ class AgentRunRepository {
   Future<AgentRun> resume(String runId) {
     return _update(runId, '恢复运行状态失败', (run) {
       return run.copyWith(status: RunStatus.running, clearActiveToolCall: true);
-    });
-  }
-
-  /// 动作已派发但结果未取得：挂起运行，等待核验。
-  Future<AgentRun> waitForResult(String runId, String toolCallId) {
-    return _update(runId, '等待工具结果失败', (run) {
-      return run.copyWith(
-        status: RunStatus.awaitingResult,
-        activeToolCallId: toolCallId,
-      );
     });
   }
 
@@ -407,7 +336,7 @@ class AgentRunRepository {
       rethrow;
     } on Exception catch (e, st) {
       AppLogger.error('$message (${e.runtimeType})', null, st);
-      throw UnknownFailure(message, cause: e);
+      throw StorageFailure(message, cause: e);
     }
   }
 }

@@ -30,6 +30,7 @@ import 'package:phase/data/repositories/row_mappers.dart';
 import 'package:phase/data/repositories/tool_call_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/chat/model_selection.dart';
+import 'package:phase/features/chat/model_retry.dart';
 import 'package:phase/features/tools/tool.dart';
 import 'package:phase/features/tools/tool_executor.dart';
 import 'package:phase/features/execution/channel_driver.dart';
@@ -222,6 +223,10 @@ class ToolLoopHarness {
     List<ProfileModel>? models,
     AiProvider Function(ProviderProfile profile, String apiKey)? factory,
     Future<void> Function(Attachment attachment)? saveArtifact,
+    ApiProtocol protocol = ApiProtocol.openaiCompletions,
+    ModelRetryPolicy retryPolicy = const ModelRetryPolicy(
+      baseDelay: Duration.zero,
+    ),
   }) async {
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
@@ -232,7 +237,7 @@ class ToolLoopHarness {
       background: false,
     );
     final keys = FakeSecureStorage();
-    final scripted = ScriptedProvider(ApiProtocol.openaiCompletions);
+    final scripted = ScriptedProvider(protocol);
     final profileRepository = ProviderProfileRepository(
       database,
       SecureKeyStorage(keys),
@@ -240,7 +245,7 @@ class ToolLoopHarness {
     final profile = await profileRepository.createProfile(
       name: '测试服务商',
       baseUrl: 'https://example.com/v1',
-      protocol: ApiProtocol.openaiCompletions,
+      protocol: protocol,
       models: models ?? const [ProfileModel(id: 'model-a', enabled: true)],
       defaultModel: 'model-a',
     );
@@ -252,7 +257,8 @@ class ToolLoopHarness {
         assistant.copyWith(
           toolPolicy: ToolPolicyConfig(
             policies: {
-              for (final tool in registry.tools) tool.name: tool.defaultPolicy,
+              for (final tool in registry.tools)
+                tool.policyKey: tool.defaultPolicy,
             },
           ),
         ),
@@ -260,6 +266,7 @@ class ToolLoopHarness {
     }
     final container = ProviderContainer(
       overrides: [
+        modelRetryPolicyProvider.overrideWith((ref) => retryPolicy),
         channelDriverProvider.overrideWith((ref) {
           final driver = FakeChannelDriver();
           ref.onDispose(() => unawaited(driver.dispose()));

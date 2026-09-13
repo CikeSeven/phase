@@ -136,7 +136,7 @@ void main() {
       controller.ensureDeviceHost('run'),
       throwsA(isA<ExecutionFailure>()),
     );
-    expect(stopped, 1);
+    expect(stopped, 0);
     await controller.endRun('run');
     driver.startFailure = null;
     controller.beginRun('next', stop: () {});

@@ -11,11 +11,8 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../chat/chat_controller.dart';
-import '../chat/tool_artifact_viewer.dart';
-import '../../../data/models/tool_call_record.dart';
 import 'run_recovery_controller.dart';
 import 'tool_card.dart';
-import 'tool_result_verification_dialog.dart';
 
 class RunRecoveryPage extends ConsumerStatefulWidget {
   const RunRecoveryPage({super.key});
@@ -80,20 +77,6 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
     );
   }
 
-  Future<void> _inspect(String callId) async {
-    try {
-      final attachment = await ref
-          .read(runRecoveryControllerProvider.notifier)
-          .inspectWrite(callId);
-      if (mounted) await showToolArtifact(context, attachment);
-    } on Failure catch (error) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.userMessage)));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final entries = ref.watch(runRecoveryControllerProvider);
@@ -136,43 +119,10 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
                           style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: AppSpacing.s),
-                        Text(
-                          entry.needsVerification
-                              ? '动作可能已经发生，请先核验实际结果；继续不会自动重做已记录的动作。'
-                              : '任务已中断。继续使用原运行配置和确认期限，不重做已保存结果的动作。',
-                        ),
+                        Text('任务已中断。继续后由 AI 处理已有结果，不会自动重发已派发的动作。'),
                         for (final call in entry.calls) ...[
                           const SizedBox(height: AppSpacing.m),
                           ToolCard(record: call),
-                          if (call.status == ToolCallStatus.unknown &&
-                              call.toolName == 'write_file')
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton(
-                                onPressed: _working
-                                    ? null
-                                    : () => _inspect(call.id),
-                                child: const Text('查看写入目标'),
-                              ),
-                            ),
-                          if (call.status == ToolCallStatus.unknown)
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton.icon(
-                                key: ValueKey('verify-tool-${call.id}'),
-                                onPressed: _working
-                                    ? null
-                                    : () => showDialog<void>(
-                                        context: context,
-                                        builder: (_) =>
-                                            ToolResultVerificationDialog(
-                                              record: call,
-                                            ),
-                                      ),
-                                icon: const Icon(Symbols.fact_check),
-                                label: const Text('核验结果'),
-                              ),
-                            ),
                         ],
                         const SizedBox(height: AppSpacing.m),
                         Wrap(
@@ -188,9 +138,7 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
                             ),
                             FilledButton.tonal(
                               key: ValueKey('resume-run-${entry.run.id}'),
-                              onPressed: _working || entry.needsVerification
-                                  ? null
-                                  : () => _resume(entry),
+                              onPressed: _working ? null : () => _resume(entry),
                               child: const Text('继续任务'),
                             ),
                           ],

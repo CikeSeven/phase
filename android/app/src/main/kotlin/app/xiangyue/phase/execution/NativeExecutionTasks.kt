@@ -15,7 +15,6 @@ class NativeExecutionTasks(
     private val emit: (ExecutionProgress) -> Unit,
 ) {
     private class Pending {
-        var dispatched = false
         var sequence = 0L
         var lastProgressAt = 0L
         lateinit var job: Deferred<ExecutionResult>
@@ -49,7 +48,6 @@ class NativeExecutionTasks(
             try {
                 withTimeout(request.timeoutMs) {
                     ensureActive()
-                    task.dispatched = true
                     val response = action.execute(request) { kind, payload ->
                         // File drivers may report from IO; maps and Pigeon delivery stay on main.
                         withContext(scope.coroutineContext.minusKey(Job)) {
@@ -61,22 +59,22 @@ class NativeExecutionTasks(
                             }
                         }
                     }
-                    if (response.toolCallId == id) response else unknown(id)
+                    if (response.toolCallId == id) response else result(id, ExecutionStatus.FAILED, ChannelError.EXECUTION_FAILED)
                 }
             } catch (_: TimeoutCancellationException) {
-                if (task.dispatched) unknown(id) else result(id, ExecutionStatus.FAILED, ChannelError.TIMEOUT)
+                result(id, ExecutionStatus.FAILED, ChannelError.TIMEOUT)
             } catch (_: CancellationException) {
-                if (task.dispatched) unknown(id) else result(id, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
+                result(id, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
             } catch (_: Exception) {
                 // Do not send raw Android exception messages across the bridge.
-                unknown(id)
+                result(id, ExecutionStatus.FAILED, ChannelError.EXECUTION_FAILED)
             }
         }
         return try {
             task.job.await()
         } catch (_: CancellationException) {
             task.job.cancel()
-            if (task.dispatched) unknown(id) else result(id, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
+            result(id, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
         } finally {
             if (pending[id] === task) pending.remove(id)
         }
@@ -100,6 +98,5 @@ class NativeExecutionTasks(
     companion object {
         fun result(id: String, status: ExecutionStatus, error: ChannelError) =
             ExecutionResult(id, status, emptyMap(), emptyList(), error)
-        fun unknown(id: String) = result(id, ExecutionStatus.UNKNOWN, ChannelError.RESULT_UNKNOWN)
     }
 }

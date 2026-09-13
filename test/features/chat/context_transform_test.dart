@@ -184,7 +184,7 @@ void main() {
         .single;
     expect(result.callId, 'call_old');
     expect(result.isError, isTrue);
-    expect(result.content, contains('没有返回结果'));
+    expect(result.content, contains('没有返回完整结果'));
   });
 
   test('跨模型的思考不带协议状态', () async {

@@ -41,6 +41,13 @@ class SettingsPage extends ConsumerWidget {
             onTap: () => context.push('/settings/providers'),
           ),
           const SizedBox(height: AppSpacing.xxxl),
+          SettingsEntry(
+            icon: Symbols.touch_app,
+            tone: AppTone.teal,
+            title: '执行与权限',
+            onTap: () => context.push('/settings/execution'),
+          ),
+          const SizedBox(height: AppSpacing.l),
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.xl),
             child: Column(

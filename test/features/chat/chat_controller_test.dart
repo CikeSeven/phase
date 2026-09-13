@@ -404,7 +404,11 @@ void main() {
     );
 
     await controller().send('你好');
-    expect(fakeProvider.lastRequest!.systemPrompt, '只回答与代码有关的问题。');
+    expect(
+      fakeProvider.lastRequest!.systemPrompt,
+      startsWith('只回答与代码有关的问题。\n'),
+    );
+    expect(fakeProvider.lastRequest!.systemPrompt, contains('list_apps'));
 
     final repository = await container.read(
       conversationRepositoryProvider.future,

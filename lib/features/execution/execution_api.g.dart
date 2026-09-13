@@ -112,6 +112,8 @@ int _deepHash(Object? value) {
 }
 
 enum ExecutionAction {
+  listApps,
+  openApp,
   inspectUi,
   clickNode,
   scroll,
@@ -121,7 +123,7 @@ enum ExecutionAction {
   listFiles,
 }
 
-enum ExecutionStatus { succeeded, failed, cancelled, unknown }
+enum ExecutionStatus { succeeded, failed, cancelled }
 
 enum ChannelError {
   permissionRequired,
@@ -131,12 +133,15 @@ enum ChannelError {
   timeout,
   executionFailed,
   cancelled,
-  resultUnknown,
 }
 
 enum ProgressKind { stage, progress }
 
 enum ConfirmationDecision { approve, reject, stop }
+
+enum ApplicationListMode { blacklist, whitelist }
+
+enum PermissionScreen { notifications, accessibility }
 
 /// 机器校验的目标，不使用动作摘要代替目标身份。节点只在对应快照内有效。
 class ExecutionTarget {
@@ -278,6 +283,7 @@ class ExecutionArtifact {
     required this.name,
     required this.size,
     this.sha256,
+    this.localPath,
   });
 
   String uri;
@@ -288,8 +294,10 @@ class ExecutionArtifact {
 
   String? sha256;
 
+  String? localPath;
+
   List<Object?> _toList() {
-    return <Object?>[uri, name, size, sha256];
+    return <Object?>[uri, name, size, sha256, localPath];
   }
 
   Object encode() {
@@ -303,6 +311,7 @@ class ExecutionArtifact {
       name: result[1]! as String,
       size: result[2]! as int,
       sha256: result[3] as String?,
+      localPath: result[4] as String?,
     );
   }
 
@@ -318,7 +327,8 @@ class ExecutionArtifact {
     return _deepEquals(uri, other.uri) &&
         _deepEquals(name, other.name) &&
         _deepEquals(size, other.size) &&
-        _deepEquals(sha256, other.sha256);
+        _deepEquals(sha256, other.sha256) &&
+        _deepEquals(localPath, other.localPath);
   }
 
   @override
@@ -327,7 +337,7 @@ class ExecutionArtifact {
 
   @override
   String toString() {
-    return 'ExecutionArtifact(uri: $uri, name: $name, size: $size, sha256: $sha256)';
+    return 'ExecutionArtifact(uri: $uri, name: $name, size: $size, sha256: $sha256, localPath: $localPath)';
   }
 }
 
@@ -459,6 +469,7 @@ class ExecutionCapabilities {
     required this.actions,
     required this.notificationsAllowed,
     required this.activityResumed,
+    this.accessibilityConnected = false,
   });
 
   List<ExecutionAction> actions;
@@ -467,8 +478,15 @@ class ExecutionCapabilities {
 
   bool activityResumed;
 
+  bool accessibilityConnected;
+
   List<Object?> _toList() {
-    return <Object?>[actions, notificationsAllowed, activityResumed];
+    return <Object?>[
+      actions,
+      notificationsAllowed,
+      activityResumed,
+      accessibilityConnected,
+    ];
   }
 
   Object encode() {
@@ -481,6 +499,7 @@ class ExecutionCapabilities {
       actions: (result[0]! as List<Object?>).cast<ExecutionAction>(),
       notificationsAllowed: result[1]! as bool,
       activityResumed: result[2]! as bool,
+      accessibilityConnected: result[3]! as bool,
     );
   }
 
@@ -495,7 +514,8 @@ class ExecutionCapabilities {
     }
     return _deepEquals(actions, other.actions) &&
         _deepEquals(notificationsAllowed, other.notificationsAllowed) &&
-        _deepEquals(activityResumed, other.activityResumed);
+        _deepEquals(activityResumed, other.activityResumed) &&
+        _deepEquals(accessibilityConnected, other.accessibilityConnected);
   }
 
   @override
@@ -504,7 +524,271 @@ class ExecutionCapabilities {
 
   @override
   String toString() {
-    return 'ExecutionCapabilities(actions: $actions, notificationsAllowed: $notificationsAllowed, activityResumed: $activityResumed)';
+    return 'ExecutionCapabilities(actions: $actions, notificationsAllowed: $notificationsAllowed, activityResumed: $activityResumed, accessibilityConnected: $accessibilityConnected)';
+  }
+}
+
+class ExecutionSession {
+  ExecutionSession({
+    required this.runId,
+    required this.deviceTask,
+    required this.fileUris,
+    required this.appPolicy,
+    required this.currentAppPolicy,
+  });
+
+  String runId;
+
+  bool deviceTask;
+
+  List<String> fileUris;
+
+  ApplicationPolicy appPolicy;
+
+  ApplicationPolicy currentAppPolicy;
+
+  List<Object?> _toList() {
+    return <Object?>[runId, deviceTask, fileUris, appPolicy, currentAppPolicy];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static ExecutionSession decode(Object result) {
+    result as List<Object?>;
+    return ExecutionSession(
+      runId: result[0]! as String,
+      deviceTask: result[1]! as bool,
+      fileUris: (result[2]! as List<Object?>).cast<String>(),
+      appPolicy: result[3]! as ApplicationPolicy,
+      currentAppPolicy: result[4]! as ApplicationPolicy,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! ExecutionSession || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(runId, other.runId) &&
+        _deepEquals(deviceTask, other.deviceTask) &&
+        _deepEquals(fileUris, other.fileUris) &&
+        _deepEquals(appPolicy, other.appPolicy) &&
+        _deepEquals(currentAppPolicy, other.currentAppPolicy);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'ExecutionSession(runId: $runId, deviceTask: $deviceTask, fileUris: $fileUris, appPolicy: $appPolicy, currentAppPolicy: $currentAppPolicy)';
+  }
+}
+
+class ApplicationPolicy {
+  ApplicationPolicy({
+    required this.mode,
+    required this.blacklist,
+    required this.whitelist,
+    required this.allowedSystemApps,
+  });
+
+  ApplicationListMode mode;
+
+  List<String> blacklist;
+
+  List<String> whitelist;
+
+  List<String> allowedSystemApps;
+
+  List<Object?> _toList() {
+    return <Object?>[mode, blacklist, whitelist, allowedSystemApps];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static ApplicationPolicy decode(Object result) {
+    result as List<Object?>;
+    return ApplicationPolicy(
+      mode: result[0]! as ApplicationListMode,
+      blacklist: (result[1]! as List<Object?>).cast<String>(),
+      whitelist: (result[2]! as List<Object?>).cast<String>(),
+      allowedSystemApps: (result[3]! as List<Object?>).cast<String>(),
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! ApplicationPolicy || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(mode, other.mode) &&
+        _deepEquals(blacklist, other.blacklist) &&
+        _deepEquals(whitelist, other.whitelist) &&
+        _deepEquals(allowedSystemApps, other.allowedSystemApps);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'ApplicationPolicy(mode: $mode, blacklist: $blacklist, whitelist: $whitelist, allowedSystemApps: $allowedSystemApps)';
+  }
+}
+
+class FileGrant {
+  FileGrant({
+    required this.uri,
+    required this.name,
+    required this.directory,
+    required this.writable,
+  });
+
+  String uri;
+
+  String name;
+
+  bool directory;
+
+  bool writable;
+
+  List<Object?> _toList() {
+    return <Object?>[uri, name, directory, writable];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static FileGrant decode(Object result) {
+    result as List<Object?>;
+    return FileGrant(
+      uri: result[0]! as String,
+      name: result[1]! as String,
+      directory: result[2]! as bool,
+      writable: result[3]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! FileGrant || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(uri, other.uri) &&
+        _deepEquals(name, other.name) &&
+        _deepEquals(directory, other.directory) &&
+        _deepEquals(writable, other.writable);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'FileGrant(uri: $uri, name: $name, directory: $directory, writable: $writable)';
+  }
+}
+
+class InstalledApplication {
+  InstalledApplication({
+    required this.packageName,
+    required this.label,
+    required this.isSystem,
+    required this.installedAtMs,
+    required this.launchable,
+    this.versionName,
+    this.sizeBytes,
+  });
+
+  String packageName;
+
+  String label;
+
+  bool isSystem;
+
+  int installedAtMs;
+
+  bool launchable;
+
+  String? versionName;
+
+  int? sizeBytes;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      packageName,
+      label,
+      isSystem,
+      installedAtMs,
+      launchable,
+      versionName,
+      sizeBytes,
+    ];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static InstalledApplication decode(Object result) {
+    result as List<Object?>;
+    return InstalledApplication(
+      packageName: result[0]! as String,
+      label: result[1]! as String,
+      isSystem: result[2]! as bool,
+      installedAtMs: result[3]! as int,
+      launchable: result[4]! as bool,
+      versionName: result[5] as String?,
+      sizeBytes: result[6] as int?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! InstalledApplication || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(packageName, other.packageName) &&
+        _deepEquals(label, other.label) &&
+        _deepEquals(isSystem, other.isSystem) &&
+        _deepEquals(installedAtMs, other.installedAtMs) &&
+        _deepEquals(launchable, other.launchable) &&
+        _deepEquals(versionName, other.versionName) &&
+        _deepEquals(sizeBytes, other.sizeBytes);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'InstalledApplication(packageName: $packageName, label: $label, isSystem: $isSystem, installedAtMs: $installedAtMs, launchable: $launchable, versionName: $versionName, sizeBytes: $sizeBytes)';
   }
 }
 
@@ -652,29 +936,47 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is ConfirmationDecision) {
       buffer.putUint8(133);
       writeValue(buffer, value.index);
-    } else if (value is ExecutionTarget) {
+    } else if (value is ApplicationListMode) {
       buffer.putUint8(134);
-      writeValue(buffer, value.encode());
-    } else if (value is ExecutionRequest) {
+      writeValue(buffer, value.index);
+    } else if (value is PermissionScreen) {
       buffer.putUint8(135);
-      writeValue(buffer, value.encode());
-    } else if (value is ExecutionArtifact) {
+      writeValue(buffer, value.index);
+    } else if (value is ExecutionTarget) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionResult) {
+    } else if (value is ExecutionRequest) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionProgress) {
+    } else if (value is ExecutionArtifact) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionCapabilities) {
+    } else if (value is ExecutionResult) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionConfirmation) {
+    } else if (value is ExecutionProgress) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    } else if (value is HostReply) {
+    } else if (value is ExecutionCapabilities) {
       buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    } else if (value is ExecutionSession) {
+      buffer.putUint8(142);
+      writeValue(buffer, value.encode());
+    } else if (value is ApplicationPolicy) {
+      buffer.putUint8(143);
+      writeValue(buffer, value.encode());
+    } else if (value is FileGrant) {
+      buffer.putUint8(144);
+      writeValue(buffer, value.encode());
+    } else if (value is InstalledApplication) {
+      buffer.putUint8(145);
+      writeValue(buffer, value.encode());
+    } else if (value is ExecutionConfirmation) {
+      buffer.putUint8(146);
+      writeValue(buffer, value.encode());
+    } else if (value is HostReply) {
+      buffer.putUint8(147);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -700,20 +1002,34 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : ConfirmationDecision.values[value];
       case 134:
-        return ExecutionTarget.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : ApplicationListMode.values[value];
       case 135:
-        return ExecutionRequest.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : PermissionScreen.values[value];
       case 136:
-        return ExecutionArtifact.decode(readValue(buffer)!);
+        return ExecutionTarget.decode(readValue(buffer)!);
       case 137:
-        return ExecutionResult.decode(readValue(buffer)!);
+        return ExecutionRequest.decode(readValue(buffer)!);
       case 138:
-        return ExecutionProgress.decode(readValue(buffer)!);
+        return ExecutionArtifact.decode(readValue(buffer)!);
       case 139:
-        return ExecutionCapabilities.decode(readValue(buffer)!);
+        return ExecutionResult.decode(readValue(buffer)!);
       case 140:
-        return ExecutionConfirmation.decode(readValue(buffer)!);
+        return ExecutionProgress.decode(readValue(buffer)!);
       case 141:
+        return ExecutionCapabilities.decode(readValue(buffer)!);
+      case 142:
+        return ExecutionSession.decode(readValue(buffer)!);
+      case 143:
+        return ApplicationPolicy.decode(readValue(buffer)!);
+      case 144:
+        return FileGrant.decode(readValue(buffer)!);
+      case 145:
+        return InstalledApplication.decode(readValue(buffer)!);
+      case 146:
+        return ExecutionConfirmation.decode(readValue(buffer)!);
+      case 147:
         return HostReply.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -798,7 +1114,7 @@ class ExecutionHostApi {
     return pigeonVar_replyValue! as ExecutionCapabilities;
   }
 
-  Future<HostReply> startRun(String runId) async {
+  Future<HostReply> startRun(ExecutionSession session) async {
     final pigeonVar_channelName =
         'dev.flutter.pigeon.phase.ExecutionHostApi.startRun$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -807,7 +1123,7 @@ class ExecutionHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[runId],
+      <Object?>[session],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -860,6 +1176,144 @@ class ExecutionHostApi {
   }
 }
 
+class ExecutionSetupApi {
+  /// Constructor for [ExecutionSetupApi]. The [binaryMessenger] named argument is
+  /// available for dependency injection. If it is left null, the default
+  /// BinaryMessenger will be used which routes to the host platform.
+  ExecutionSetupApi({
+    BinaryMessenger? binaryMessenger,
+    String messageChannelSuffix = '',
+  }) : pigeonVar_binaryMessenger = binaryMessenger,
+       pigeonVar_messageChannelSuffix = messageChannelSuffix.isNotEmpty
+           ? '.$messageChannelSuffix'
+           : '';
+  final BinaryMessenger? pigeonVar_binaryMessenger;
+
+  static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
+
+  final String pigeonVar_messageChannelSuffix;
+
+  Future<FileGrant?> selectFile(bool directory) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionSetupApi.selectFile$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[directory],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+    return pigeonVar_replyValue as FileGrant?;
+  }
+
+  Future<List<FileGrant>> fileGrants() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionSetupApi.fileGrants$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as List<Object?>).cast<FileGrant>();
+  }
+
+  Future<void> releaseFileGrant(String uri) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionSetupApi.releaseFileGrant$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[uri],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<List<InstalledApplication>> installedApplications() async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionSetupApi.installedApplications$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: false,
+    );
+    return (pigeonVar_replyValue! as List<Object?>)
+        .cast<InstalledApplication>();
+  }
+
+  Future<void> updateApplicationPolicy(ApplicationPolicy policy) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionSetupApi.updateApplicationPolicy$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[policy],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<void> openPermissionSettings(PermissionScreen screen) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionSetupApi.openPermissionSettings$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[screen],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+}
+
 abstract class ExecutionFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
@@ -873,7 +1327,7 @@ abstract class ExecutionFlutterApi {
     ConfirmationDecision decision,
   );
 
-  void stopRequested(String runId);
+  void stopRequested(String runId, String? reason);
 
   static void setUp(
     ExecutionFlutterApi? api, {
@@ -974,8 +1428,9 @@ abstract class ExecutionFlutterApi {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           final List<Object?> args = message! as List<Object?>;
           final String arg_runId = args[0]! as String;
+          final String? arg_reason = args[1] as String?;
           try {
-            api.stopRequested(arg_runId);
+            api.stopRequested(arg_runId, arg_reason);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

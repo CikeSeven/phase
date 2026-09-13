@@ -28,6 +28,7 @@ final class ChatControllerProvider
           modelSelectionProvider,
           currentAssistantProvider,
           activeConversationProvider,
+          settingsStorageProvider,
         ],
         $allTransitiveDependencies: <ProviderOrFamily>{
           ChatControllerProvider.$allTransitiveDependencies0,
@@ -75,7 +76,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'c040c47e159509db54c921bc2ebb8ff4eec1d2d8';
+String _$chatControllerHash() => r'ead4360e975ee5876445bc16454fbf23d26b13b8';
 
 /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 
@@ -150,7 +151,58 @@ final class ToolRegistryProvider
   }
 }
 
-String _$toolRegistryHash() => r'6ee5336edf52011934310d8ff738fcb87a80a645';
+String _$toolRegistryHash() => r'5af1cc322b2a9262377cf79604ad14d04e905e88';
+
+/// 单一重试预算，协议传输不再叠加第二层自动重试。
+
+@ProviderFor(modelRetryPolicy)
+final modelRetryPolicyProvider = ModelRetryPolicyProvider._();
+
+/// 单一重试预算，协议传输不再叠加第二层自动重试。
+
+final class ModelRetryPolicyProvider
+    extends
+        $FunctionalProvider<
+          ModelRetryPolicy,
+          ModelRetryPolicy,
+          ModelRetryPolicy
+        >
+    with $Provider<ModelRetryPolicy> {
+  /// 单一重试预算，协议传输不再叠加第二层自动重试。
+  ModelRetryPolicyProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'modelRetryPolicyProvider',
+        isAutoDispose: false,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$modelRetryPolicyHash();
+
+  @$internal
+  @override
+  $ProviderElement<ModelRetryPolicy> $createElement($ProviderPointer pointer) =>
+      $ProviderElement(pointer);
+
+  @override
+  ModelRetryPolicy create(Ref ref) {
+    return modelRetryPolicy(ref);
+  }
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(ModelRetryPolicy value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<ModelRetryPolicy>(value),
+    );
+  }
+}
+
+String _$modelRetryPolicyHash() => r'b4ddba276e47dcee02ad828fb86c647f8a0608cd';
 
 /// 工具运行的存储能力：会话附件、按会话隔离的产物目录与产物登记。
 ///

@@ -1,8 +1,53 @@
+import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../core/error/failure.dart';
 import '../core/error/provider_error.dart';
+
+/// 请求建立与正文流共用同一错误分类，不能把正文断线降为未知错误。
+ProviderError mapProviderException(Object error) => switch (error) {
+  ProviderError() => error,
+  DioException() => mapDioExceptionToProviderError(error),
+  SocketException() || HttpException() || NetworkFailure() => ProviderError(
+    ProviderErrorCategory.network,
+    '连接中断',
+    cause: error,
+  ),
+  TimeoutException() => ProviderError(
+    ProviderErrorCategory.timeout,
+    '连接超时',
+    cause: error,
+  ),
+  AuthFailure() => ProviderError(
+    ProviderErrorCategory.auth,
+    '鉴权失败',
+    cause: error,
+  ),
+  RateLimitFailure() => ProviderError(
+    ProviderErrorCategory.rateLimit,
+    '请求限流',
+    cause: error,
+  ),
+  ServerFailure() => ProviderError(
+    ProviderErrorCategory.providerError,
+    '服务暂时不可用',
+    cause: error,
+    retryable: true,
+  ),
+  CancelledFailure() => ProviderError(
+    ProviderErrorCategory.cancelled,
+    '请求已取消',
+    cause: error,
+  ),
+  _ => ProviderError(
+    ProviderErrorCategory.providerError,
+    '请求或响应处理失败',
+    cause: error,
+  ),
+};
 
 /// 把 dio 异常映射为统一的 [ProviderError] 分类（design 第五部分 §5.2）。
 ///
@@ -25,8 +70,14 @@ ProviderError mapDioExceptionToProviderError(DioException error) {
         '请求超时或连接超时',
         cause: error,
       );
-    case DioExceptionType.connectionError:
     case DioExceptionType.badCertificate:
+      return ProviderError(
+        ProviderErrorCategory.network,
+        '证书验证失败',
+        cause: error,
+        retryable: false,
+      );
+    case DioExceptionType.connectionError:
       return ProviderError(
         ProviderErrorCategory.network,
         '网络连接失败',
@@ -36,6 +87,7 @@ ProviderError mapDioExceptionToProviderError(DioException error) {
       return mapHttpResponseError(
         statusCode: error.response?.statusCode ?? 0,
         body: error.response?.data,
+        headers: error.response?.headers.map,
         cause: error,
       );
     case DioExceptionType.unknown:
@@ -53,6 +105,7 @@ ProviderError mapDioExceptionToProviderError(DioException error) {
 ProviderError mapHttpResponseError({
   required int statusCode,
   Object? body,
+  Map<String, List<String>>? headers,
   Object? cause,
 }) {
   final error = protocolErrorObject(body);
@@ -61,7 +114,15 @@ ProviderError mapHttpResponseError({
       _categoryForStatus(statusCode) ??
       ProviderErrorCategory.providerError;
   final message = protocolErrorMessage(error) ?? 'HTTP $statusCode';
-  return ProviderError(category, message, cause: cause);
+  return ProviderError(
+    category,
+    message,
+    cause: cause,
+    retryable: category == ProviderErrorCategory.providerError
+        ? statusCode >= 500 || _isKnownServerError(error)
+        : null,
+    retryAfter: parseRetryAfter(headers),
+  );
 }
 
 /// 流内错误事件（HTTP 200 的 SSE 里夹带的 error 对象）映射为分类错误。
@@ -75,6 +136,7 @@ ProviderError mapProtocolError(Object? error) {
   return ProviderError(
     categoryForProtocolError(object) ?? ProviderErrorCategory.providerError,
     protocolErrorMessage(object) ?? '协议返回错误事件',
+    retryable: _isKnownServerError(object) ? true : null,
   );
 }
 
@@ -110,7 +172,16 @@ String? protocolErrorMessage(Object? error) {
 /// 只做精确匹配，不做文本匹配或前缀猜测。
 ProviderErrorCategory? categoryForProtocolError(Object? error) {
   if (error is! Map) return null;
-  for (final field in const ['type', 'code', 'status', 'reason']) {
+  // 明确的账户配额耗尽优先于笼统的 rate_limit_error 类型。
+  if (const [
+    'code',
+    'type',
+    'status',
+    'reason',
+  ].any((field) => error[field] == 'insufficient_quota')) {
+    return ProviderErrorCategory.quota;
+  }
+  for (final field in const ['code', 'type', 'status', 'reason']) {
     final value = error[field];
     if (value is String && _categoryByErrorField[value] != null) {
       return _categoryByErrorField[value];
@@ -131,7 +202,7 @@ const _categoryByErrorField = <String, ProviderErrorCategory>{
   // 限流与配额
   'rate_limit_error': ProviderErrorCategory.rateLimit,
   'rate_limit_exceeded': ProviderErrorCategory.rateLimit,
-  'insufficient_quota': ProviderErrorCategory.rateLimit,
+  'insufficient_quota': ProviderErrorCategory.quota,
   'RESOURCE_EXHAUSTED': ProviderErrorCategory.rateLimit,
   // 超出模型上下文容量
   'context_length_exceeded': ProviderErrorCategory.contextLimit,
@@ -156,6 +227,32 @@ const _categoryByErrorField = <String, ProviderErrorCategory>{
   // 超时
   'DEADLINE_EXCEEDED': ProviderErrorCategory.timeout,
 };
+
+bool _isKnownServerError(Object? error) =>
+    categoryForProtocolError(error) == ProviderErrorCategory.providerError;
+
+/// 标准 Retry-After 支持秒数和 HTTP 日期；无效值不参与等待计算。
+Duration? parseRetryAfter(Map<String, List<String>>? headers, {DateTime? now}) {
+  final values = headers?.entries
+      .where((entry) => entry.key.toLowerCase() == 'retry-after')
+      .firstOrNull
+      ?.value;
+  if (values == null || values.isEmpty) return null;
+  final value = values.first.trim();
+  final seconds = double.tryParse(value);
+  if (seconds != null) {
+    if (!seconds.isFinite || seconds < 0) return null;
+    // 超长等待只需交给上层拒绝，不把不可信数值溢出成负的 Duration。
+    if (seconds > 86400) return const Duration(days: 1);
+    return Duration(milliseconds: (seconds * 1000).ceil());
+  }
+  try {
+    final delay = HttpDate.parse(value).difference(now ?? DateTime.now());
+    return delay.isNegative ? Duration.zero : delay;
+  } on HttpException {
+    return null;
+  }
+}
 
 ProviderErrorCategory? _categoryForStatus(int statusCode) {
   if (statusCode == 401 || statusCode == 403) {

@@ -5,6 +5,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/utils/logger.dart';
 import '../../../data/models/tool_call_record.dart';
+import '../../../data/models/execution_scope.dart';
+import '../../../data/models/application_access_policy.dart';
 import '../tools/tool.dart';
 import '../tools/tool_executor.dart';
 import 'channel_driver.dart';
@@ -32,6 +34,9 @@ class ExecutionController extends _$ExecutionController {
   void Function()? _stop;
   Timer? _expiry;
   bool _deviceTask = false;
+  bool _nativeTask = false;
+  ExecutionScope _scope = const ExecutionScope();
+  ApplicationAccessPolicy Function()? _readCurrentAppPolicy;
   bool _stopped = false;
   Future<void> _nativeUpdates = Future.value();
   StreamSubscription<NativeExecutionEvent>? _nativeSubscription;
@@ -47,28 +52,43 @@ class ExecutionController extends _$ExecutionController {
     return const ExecutionState();
   }
 
-  void beginRun(String runId, {required void Function() stop}) {
+  void beginRun(
+    String runId, {
+    required void Function() stop,
+    ExecutionScope scope = const ExecutionScope(),
+    ApplicationAccessPolicy Function()? readCurrentAppPolicy,
+  }) {
     if (state.runId != null) throw const OperationFailure('已有运行中的任务');
     _stop = stop;
     _stopped = false;
     _deviceTask = false;
+    _nativeTask = false;
+    _scope = scope;
+    _readCurrentAppPolicy = readCurrentAppPolicy;
     state = ExecutionState(runId: runId, foreground: state.foreground);
   }
 
   /// 直到实际进入设备工具才启动服务；仅开放了工具的普通聊天不启动服务。
-  Future<void> ensureDeviceHost(String runId) async {
+  Future<void> ensureDeviceHost(String runId, {bool deviceTask = true}) async {
     if (state.runId != runId || _stopped) {
       throw const ExecutionFailure(ExecutionFailureCode.cancelled);
     }
-    if (_deviceTask) return;
-    _deviceTask = true;
+    if (_nativeTask && (!deviceTask || _deviceTask)) return;
     try {
       final driver = ref.read(channelDriverProvider);
       _nativeSubscription ??= driver.events.listen(_onNativeEvent);
-      await driver.startRun(runId);
+      await driver.startRun(
+        runId,
+        scope: _scope,
+        deviceTask: deviceTask,
+        currentAppPolicy: _readCurrentAppPolicy?.call() ?? _scope.appPolicy,
+      );
+      _nativeTask = true;
+      _deviceTask = _deviceTask || deviceTask;
     } on Failure catch (failure) {
       _deviceTask = false;
-      stopRun(runId);
+      _nativeTask = false;
+      // 准备失败尚未派发动作，交给工具结果回填；明确的 NativeStop 仍停止根任务。
       if (ref.mounted) {
         state = ExecutionState(
           runId: runId,
@@ -84,7 +104,7 @@ class ExecutionController extends _$ExecutionController {
     if (state.runId != runId) return;
     _complete(ToolDecision.expired);
     _stop = null;
-    if (_deviceTask) {
+    if (_nativeTask) {
       try {
         await _nativeUpdates;
         await ref.read(channelDriverProvider).endRun(runId);
@@ -98,6 +118,7 @@ class ExecutionController extends _$ExecutionController {
         rethrow;
       } finally {
         _deviceTask = false;
+        _nativeTask = false;
       }
     }
     if (ref.mounted) {
@@ -193,7 +214,22 @@ class ExecutionController extends _$ExecutionController {
 
   void _onNativeEvent(NativeExecutionEvent event) {
     switch (event) {
-      case NativeStop(:final runId):
+      case NativeStop(:final runId, :final reason):
+        final message = switch (reason) {
+          'locked' => '设备已锁定，自动操作已停止',
+          'permissionRequired' => '无障碍授权已关闭，自动操作已停止',
+          'targetChanged' => '目标 App 已改变，自动操作已停止',
+          'serviceStopped' => '任务服务已停止',
+          'applicationDenied' => '应用已被名单禁止，自动操作已停止',
+          _ => null,
+        };
+        if (message != null && state.runId == runId) {
+          state = ExecutionState(
+            runId: runId,
+            foreground: state.foreground,
+            failure: OperationFailure(message),
+          );
+        }
         stopRun(runId);
       case NativeDecision(:final runId, :final toolCallId, :final decision):
         // 原生面板只在相月不在前台时拥有输入权；交接后的迟到决定丢弃。

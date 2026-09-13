@@ -437,37 +437,35 @@ void main() {
     );
   });
 
-  test('工具结果未确认：挂起等待核验，不当作普通失败也不重做', () async {
+  test('工具失败立即回填给 AI 并继续，不要求人工核验也不自动重发', () async {
     final risky = RecordingTool(
       name: 'risky',
-      outcome: const ToolOutcome.unknown('动作已派发，结果未知'),
+      outcome: const ToolOutcome.failure('未收到完整响应'),
     );
     final harness = await ToolLoopHarness.create(
       registry: ToolRegistry([risky]),
     );
-    harness.provider.turns.add(
+    harness.provider.turns.addAll([
       toolTurn(callId: 'call_1', toolName: 'risky', arguments: '{}'),
-    );
-
+      textTurn('调用没有完成，我会依据返回的信息处理'),
+    ]);
     await harness.controller().send('执行');
-
-    // 动作派发过一次，结果未确认。
     expect(risky.executions, hasLength(1));
     final record = (await harness.recordsByCall())['call_1']!;
-    expect(record.status, ToolCallStatus.unknown);
-    final run = await harness.latestRun();
-    expect(run.status, RunStatus.awaitingResult);
-    expect(run.finishReason, isNull);
-    expect(run.activeToolCallId, record.id);
-    // 没有结果就不是 Failed：不写结果消息，也不自动重做动作。
-    final branch = await harness.branch();
-    expect(branch.where((message) => message.role == ChatRole.tool), isEmpty);
-    expect(branch, hasLength(2));
-    expect(harness.state().isGenerating, isFalse);
-    // 未结束的运行在启动恢复入口可见（状态不丢）。
-    final unfinished = await harness.container.read(
-      runRecoveryControllerProvider.future,
+    expect(record.status, ToolCallStatus.failed);
+    expect(record.resultMessageId, isNotNull);
+    expect((await harness.latestRun()).status, RunStatus.completed);
+    expect(harness.provider.requests, hasLength(2));
+    expect(
+      (await harness.branch())
+          .where((m) => m.role == ChatRole.tool)
+          .single
+          .text,
+      contains('未收到完整响应'),
     );
-    expect(unfinished.map((entry) => entry.run.id), contains(run.id));
+    expect(
+      await harness.container.read(runRecoveryControllerProvider.future),
+      isEmpty,
+    );
   });
 }

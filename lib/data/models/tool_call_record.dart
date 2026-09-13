@@ -9,9 +9,6 @@ enum ToolCallStatus {
   failed,
   rejected,
   cancelled,
-
-  /// 已进入执行阶段但没有取得可靠结果；如实展示并提供核验入口。
-  unknown,
 }
 
 /// 用户对一次确认的决定。

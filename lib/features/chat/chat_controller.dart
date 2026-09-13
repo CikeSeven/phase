@@ -32,6 +32,7 @@ import '../../../data/repositories/assistant_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import '../../../data/repositories/tool_call_repository.dart';
 import '../../../providers/ai_provider.dart';
+import '../../../providers/dio_failure_mapper.dart';
 import '../../../providers/provider_factory.dart';
 import '../tools/agent_loop.dart';
 import '../tools/http_transport.dart';
@@ -40,7 +41,11 @@ import '../tools/tool.dart';
 import '../tools/tool_executor.dart';
 import '../tools/tool_registry.dart';
 import '../execution/execution_controller.dart';
+import '../../../data/datasources/local/settings_storage.dart';
+import '../execution/platform_tools.dart';
+import '../execution/channel_driver.dart';
 import 'model_selection.dart';
+import 'model_retry.dart';
 
 part 'chat_controller.g.dart';
 
@@ -55,6 +60,7 @@ class ChatState {
     this.isGenerating = false,
     this.runningConversationId,
     this.streamingMessageId,
+    this.retry,
   });
 
   /// 正在生成的回答内容块（按 Part 顺序）。
@@ -66,6 +72,7 @@ class ChatState {
   final bool isGenerating;
   final String? runningConversationId;
   final String? streamingMessageId;
+  final ModelRetryState? retry;
 
   ChatState copyWith({
     List<MessagePart>? streamingParts,
@@ -75,8 +82,11 @@ class ChatState {
     String? streamingMessageId,
     bool clearStreaming = false,
     bool clearRun = false,
+    ModelRetryState? retry,
+    bool clearRetry = false,
   }) {
     return ChatState(
+      retry: clearRetry || clearRun ? null : retry ?? this.retry,
       streamingParts: clearStreaming
           ? const []
           : streamingParts ?? this.streamingParts,
@@ -95,7 +105,12 @@ class ChatState {
 /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 @Riverpod(
   keepAlive: true,
-  dependencies: [ModelSelection, currentAssistant, ActiveConversation],
+  dependencies: [
+    ModelSelection,
+    currentAssistant,
+    ActiveConversation,
+    settingsStorage,
+  ],
 )
 class ChatController extends _$ChatController implements AgentLoopHost {
   /// 流式增量写库的节流间隔：SSE chunk 远密于屏幕刷新。
@@ -111,9 +126,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 回填给模型的工具结果上限（字节）；超出时截断并附截断标记。
   static const _maxToolResultBytes = 8 * 1024;
 
-  /// 尚未产生输出的临时模型错误最多重试次数（design 第二部分 §7）。
-  static const _maxModelRetries = 2;
-
   StreamSubscription<ChatChunk>? _subscription;
   Completer<void>? _doneCompleter;
   Timer? _flushTimer;
@@ -121,6 +133,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   String? _streamingMessageId;
 
   ProviderError? _streamError;
+  bool _acceptingChunks = false;
 
   /// 流式期间的块缓冲：partId → 已累积内容。
   final List<_LivePart> _liveParts = [];
@@ -167,7 +180,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _flushTimer?.cancel();
       _publishTimer?.cancel();
       _cancellation?.cancel();
-      unawaited(_subscription?.cancel());
+      _acceptingChunks = false;
       _completeRequest();
     });
     return const ChatState();
@@ -438,8 +451,17 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     }
     final assistant = await awaitAssistantContext(ref);
 
-    // 分支指针回到该用户消息：新回答成为它的下一条，旧回答保留为历史分支。
-    await repository.setCurrentMessage(conversationId, userMessage.id);
+    // 只重做最后的模型回答；已有动作与结果留在新分支的上下文中。
+    // 即使停止时缺少结果消息，也保留调用，由上下文装配补齐实际错误。
+    final toolHistory = thread.branch
+        .skip(index + 1)
+        .where(
+          (message) => message.parts.any(
+            (part) => part is ToolCallPart || part is ToolResultPart,
+          ),
+        );
+    final parentId = toolHistory.lastOrNull?.id ?? userMessage.id;
+    await repository.setCurrentMessage(conversationId, parentId);
 
     await _startRun(
       repository: repository,
@@ -502,6 +524,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             maxOutputTokens: modelConfig?.maxOutputTokens,
           ),
           systemPrompt: assistant?.systemPrompt ?? '',
+          executionScope: ref
+              .read(settingsStorageProvider)
+              .readExecutionScope(),
           enabledTools: selection.supportsTools
               ? assistant?.toolPolicy.enabledTools ?? const {}
               : const {},
@@ -549,9 +574,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       registry: registry,
       toolCalls: toolCalls,
       runs: runs,
-      prepareChannel: (tool) async {
-        if (tool.channel != ExecutionChannel.app) {
-          await execution.ensureDeviceHost(run.id);
+      prepareChannel: (tool, arguments) async {
+        if (tool.usesPlatform(arguments)) {
+          await execution.ensureDeviceHost(
+            run.id,
+            deviceTask: tool.channel != ExecutionChannel.app,
+          );
         }
       },
     );
@@ -570,7 +598,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _turnTailId = null;
     recovery.runStarted(run.id);
     try {
-      execution.beginRun(run.id, stop: stop);
+      execution.beginRun(
+        run.id,
+        stop: stop,
+        scope: run.configuration.executionScope,
+        readCurrentAppPolicy: () =>
+            ref.read(settingsStorageProvider).readExecutionScope().appPolicy,
+      );
       _runAttachments = await _attachmentIndex(run.conversationId, const []);
       state = state.copyWith(
         isGenerating: true,
@@ -585,10 +619,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
       if (resuming && !await _restorePendingTools()) return;
       await AgentLoop(this, maxTurns: run.maxTurns - run.turnCount).run();
-    } on ExecutionFailure {
-      await _finishRun(RunStatus.failed, RunFinishReason.executionError);
-      rethrow;
-    } on Failure {
+    } on StorageFailure {
       // 落库失败：运行按存储失败收口后再交给界面提示，不留永远 running 的运行。
       try {
         await _finishRun(RunStatus.failed, RunFinishReason.storageError);
@@ -596,7 +627,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         AppLogger.error('运行终态未能保存，启动时需核对');
       }
       rethrow;
+    } on Failure {
+      await _finishUnexpectedRun();
+      rethrow;
+    } catch (error, stackTrace) {
+      AppLogger.error('运行异常：${error.runtimeType}', null, stackTrace);
+      await _finishUnexpectedRun();
+      throw UnknownFailure('运行执行失败', cause: error);
     } finally {
+      _acceptingChunks = false;
       _flushTimer?.cancel();
       _flushTimer = null;
       _publishTimer?.cancel();
@@ -630,12 +669,25 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     }
   }
 
+  Future<void> _finishUnexpectedRun() async {
+    try {
+      await _finishRun(
+        isCancelled ? RunStatus.stopped : RunStatus.failed,
+        isCancelled
+            ? RunFinishReason.cancelled
+            : RunFinishReason.executionError,
+      );
+    } on Failure {
+      AppLogger.error('运行终态未能保存，启动时需核对');
+    }
+  }
+
   void _checkRecoveredConversation(String? id) {
     final recovery = ref.read(runRecoveryControllerProvider);
     if (recovery.hasError) throw const OperationFailure('请先重试读取中断任务');
     if (id != null &&
         (recovery.value ?? []).any((entry) => entry.run.conversationId == id)) {
-      throw const OperationFailure('请先继续、核验或停止此会话的中断任务');
+      throw const OperationFailure('请先继续或停止此会话的中断任务');
     }
   }
 
@@ -650,7 +702,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           .where((entry) => entry.run.id == runId)
           .firstOrNull;
       if (entry == null) throw const OperationFailure('此任务已结束');
-      if (entry.needsVerification) throw const OperationFailure('请先核验结果未确认的动作');
       final run = entry.run;
       final config = run.configuration;
       final modelConfig = config.modelSelection;
@@ -727,7 +778,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           await finish(AgentFinishReason.cancelled);
           return false;
         }
-        final result = await executeTool(
+        await executeTool(
           ToolCall(
             callId: providerCallId,
             toolName: record.toolName,
@@ -737,10 +788,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           ),
           turn,
         );
-        if (result.suspended) {
-          await finish(AgentFinishReason.unknownResult);
-          return false;
-        }
       }
     }
     return true;
@@ -765,10 +812,26 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       currentModelId: selection.model,
     );
 
+    return _requestWithRetry(
+      selection,
+      messages,
+      parentId: thread.currentMessageId,
+    );
+  }
+
+  /// 一次模型尝试保存为独立消息；失败尝试保留在同一父节点的历史分支。
+  Future<StreamedTurn> _streamAttempt(
+    AiProvider provider,
+    ChatRequest request, {
+    required String? parentId,
+  }) async {
+    final run = _run!;
+    final repository = _repository!;
+    final selection = _selection!;
     final assistantMessage = ChatMessage(
       id: generateId(),
       conversationId: run.conversationId,
-      parentId: thread.currentMessageId,
+      parentId: parentId,
       runId: run.id,
       role: ChatRole.assistant,
       status: MessageStatus.streaming,
@@ -795,7 +858,20 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       streamingMessageId: assistantMessage.id,
     );
 
-    await _requestWithRetry(selection, messages);
+    try {
+      if (!isCancelled) {
+        _run = await _runs!.countModelAttempt(run.id);
+        await _consume(provider, request);
+      }
+    } finally {
+      _flushTimer?.cancel();
+      _flushTimer = null;
+      await _pendingFlush;
+      _publishImmediately();
+      if (ref.mounted) state = state.copyWith(clearStreaming: true);
+      _streamingMessageId = null;
+    }
+    if (_flushFailure case final error?) throw error;
 
     final parts = _partsFromLive(_liveParts);
     final toolCalls = _toolCallsFromLive();
@@ -809,16 +885,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                 'incomplete response',
               )
             : null);
-    _streamError = null;
-    _flushTimer?.cancel();
-    _flushTimer = null;
-    await _pendingFlush;
-    if (_flushFailure case final error?) throw error;
-    _publishImmediately();
-    if (ref.mounted) state = state.copyWith(clearStreaming: true);
-    _streamingMessageId = null;
-    _subscription = null;
-    _doneCompleter = null;
+    _streamError = failure;
     _turnThinkingDurationMs = _currentThinkingDurationMs;
 
     if (_stoppedManually || isCancelled) {
@@ -965,17 +1032,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       );
     }
 
-    if (record.status == ToolCallStatus.unknown) {
-      // 结果未确认：不写结果消息，运行挂起等待核验，不自动重做动作。
-      _run = await _runs!.waitForResult(run.id, record.id);
-      return ExecutedTool(
-        callId: call.callId,
-        content: record.result ?? _statusText(record.status),
-        isError: true,
-        record: record,
-      );
-    }
-
     final content = _resultText(record);
     // 结果消息接在本轮末尾之后：多个结果按执行顺序串成同一条分支。
     final message = ChatMessage(
@@ -1034,14 +1090,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         RunStatus.failed,
         RunFinishReason.turnLimit,
       ),
-      AgentFinishReason.unknownResult => (RunStatus.awaitingResult, null),
     };
-    if (reason == AgentFinishReason.unknownResult) {
-      // 结果未确认是挂起而不是结束：状态与待核验调用已由 waitForResult 落库，
-      // 这里不写终态与结束原因，也不自动重做动作。
-      _runFinished = true;
-      return Future.value();
-    }
     return _finishRun(result.$1, result.$2);
   }
 
@@ -1085,7 +1134,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     if (_cancellation == null) return;
     _stoppedManually = true;
     _cancellation?.cancel();
-    unawaited(_subscription?.cancel());
+    _acceptingChunks = false;
     _completeRequest();
   }
 
@@ -1094,19 +1143,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     if (done != null && !done.isCompleted) done.complete();
   }
 
-  /// 一次真实请求：订阅事件流，累积内容直到结束、出错或停止。
-  ///
-  /// 只有尚未产生输出的临时错误（网络、限流）才重试，最多 [_maxModelRetries]
-  /// 次，每次计入 modelAttemptCount；工具没有自动重试。
-  Future<void> _requestWithRetry(
+  /// 重试当前模型轮：请求上下文固定，先保存失败尝试再退避，不重放工具。
+  Future<StreamedTurn> _requestWithRetry(
     ChatModelSelection selection,
-    List<ResolvedMessage> messages,
-  ) async {
+    List<ResolvedMessage> messages, {
+    required String? parentId,
+  }) async {
     final apiKey = selection.profile.requiresKey
         ? await ref.read(secureKeyStorageProvider).read(selection.profile.id) ??
               ''
         : '';
-    if (isCancelled) return;
     final provider = ref.read(aiProviderFactoryProvider)(
       selection.profile,
       apiKey,
@@ -1117,7 +1163,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         .firstOrNull;
     final request = ChatRequest(
       modelId: selection.model,
-      systemPrompt: _run?.configuration.systemPrompt ?? '',
+      systemPrompt:
+          '${_run?.configuration.systemPrompt ?? ''}${executionScopePrompt(_run!.configuration.executionScope, toolExecution: _run!.configuration.enabledTools.isNotEmpty, applicationOperations: _run!.configuration.enabledTools.any(applicationOperationTools.contains))}',
       messages: messages,
       tools: _toolDefinitions(),
       // 模型不支持推理时不下发任何推理字段。
@@ -1128,51 +1175,77 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       maxOutputTokens: modelConfig?.maxOutputTokens,
     );
 
+    final policy = ref.read(modelRetryPolicyProvider);
     for (var attempt = 0; ; attempt++) {
-      if (isCancelled) return;
-      _run = await _runs!.countModelAttempt(_run!.id);
-      await _consume(provider, request);
+      final turn = await _streamAttempt(provider, request, parentId: parentId);
+      if (isCancelled || turn.cancelled) return turn;
       final error = _streamError;
-      if (error == null || !error.retryable || _stoppedManually) return;
-      // 已产生的输出不重放，避免把半句话拼成两份。
-      if (_liveParts.any((part) => part.buffer.isNotEmpty)) return;
-      if (attempt >= _maxModelRetries) return;
-      _liveParts.clear();
-      _streamError = null;
+      if (error == null) return turn;
+      final delay = policy.delayFor(error, attempt + 1);
+      if (delay == null) return turn;
+      if (ref.mounted) {
+        state = state.copyWith(
+          retry: ModelRetryState(
+            attempt: attempt + 1,
+            maxRetries: policy.maxRetries,
+            delay: delay,
+          ),
+        );
+      }
+      await waitForModelRetry(delay, _cancellation!);
+      if (ref.mounted) state = state.copyWith(clearRetry: true);
+      if (isCancelled) return turn;
     }
   }
 
   /// 订阅一次请求的事件流，直到结束、出错或被停止。
   Future<void> _consume(AiProvider provider, ChatRequest request) async {
     if (isCancelled) return;
-    final doneCompleter = Completer<void>();
-    void completeOnce() {
-      if (!doneCompleter.isCompleted) {
-        doneCompleter.complete();
+    final done = Completer<void>();
+    StreamSubscription<ChatChunk>? subscription;
+    _doneCompleter = done;
+    _acceptingChunks = true;
+    try {
+      subscription = provider
+          .streamChat(request)
+          .listen(
+            (chunk) {
+              if (identical(_doneCompleter, done)) _onChunk(chunk);
+            },
+            onError: (Object error, StackTrace stackTrace) {
+              if (!_acceptingChunks || !identical(_doneCompleter, done)) return;
+              _acceptingChunks = false;
+              if (error is StorageFailure) {
+                if (!done.isCompleted) done.completeError(error, stackTrace);
+              } else {
+                _streamError = mapProviderException(error);
+                if (!done.isCompleted) done.complete();
+              }
+            },
+            onDone: () {
+              if (!done.isCompleted) done.complete();
+            },
+            cancelOnError: true,
+          );
+      _subscription = subscription;
+      await done.future;
+    } on StorageFailure {
+      rethrow;
+    } catch (error) {
+      _streamError = mapProviderException(error);
+    } finally {
+      _acceptingChunks = false;
+      try {
+        await subscription?.cancel();
+      } catch (error) {
+        if (!isCancelled && !_responseComplete) {
+          _streamError ??= mapProviderException(error);
+        }
+        AppLogger.warning('模型流清理失败');
       }
+      if (identical(_subscription, subscription)) _subscription = null;
+      if (identical(_doneCompleter, done)) _doneCompleter = null;
     }
-
-    // 不能用 asFuture：它会覆盖 onError，且取消后永不完成（stop 会挂死）。
-    final subscription = provider
-        .streamChat(request)
-        .listen(
-          _onChunk,
-          onError: (Object error) {
-            _streamError = error is ProviderError
-                ? error
-                : ProviderError(
-                    ProviderErrorCategory.providerError,
-                    error is Failure ? error.userMessage : '连接服务商失败',
-                    cause: error,
-                  );
-            completeOnce();
-          },
-          onDone: completeOnce,
-          cancelOnError: true,
-        );
-    _subscription = subscription;
-    _doneCompleter = doneCompleter;
-    await doneCompleter.future;
   }
 
   /// 本次运行下发的工具定义：助手策略与模型工具能力都满足才下发。
@@ -1254,13 +1327,18 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   }
 
   /// 回填给模型与结果消息的文本；记录里没有结果时按状态给出说明。
-  String _resultText(ToolCallRecord record) =>
-      _truncateResult(record.result ?? _statusText(record.status));
+  String _resultText(ToolCallRecord record) => _truncateResult(
+    record.result ?? _statusText(record.status),
+    limit:
+        record.channel == ExecutionChannel.accessibility ||
+            record.toolName == 'list_apps'
+        ? 64 * 1024
+        : _maxToolResultBytes,
+  );
 
   String _statusText(ToolCallStatus status) => switch (status) {
     ToolCallStatus.rejected => '用户拒绝了本次动作，没有执行。',
     ToolCallStatus.cancelled => '本次调用已取消，没有取得结果。',
-    ToolCallStatus.unknown => '本次动作已派发，但结果未确认。',
     ToolCallStatus.prepared ||
     ToolCallStatus.awaitingConfirmation ||
     ToolCallStatus.executing => '本次调用没有返回内容。',
@@ -1269,18 +1347,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   };
 
   /// 结果按上限截断：超出时附截断标记，不把整段输出塞进上下文。
-  String _truncateResult(String text) {
+  String _truncateResult(String text, {int limit = _maxToolResultBytes}) {
     final bytes = utf8.encode(text);
-    if (bytes.length <= _maxToolResultBytes) return text;
-    final head = utf8.decode(
-      bytes.sublist(0, _maxToolResultBytes),
-      allowMalformed: true,
-    );
-    return '$head\n【结果已截断：超过 ${_maxToolResultBytes ~/ 1024}KB】';
+    if (bytes.length <= limit) return text;
+    final head = utf8.decode(bytes.sublist(0, limit), allowMalformed: true);
+    return '$head\n【结果已截断：超过 ${limit ~/ 1024}KB】';
   }
 
   void _onChunk(ChatChunk chunk) {
-    if (isCancelled || !ref.mounted) return;
+    if (!_acceptingChunks || isCancelled || !ref.mounted) return;
     switch (chunk) {
       case PartStart():
         if (chunk.kind == PartKind.toolCall) {
@@ -1334,10 +1409,18 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         _turnUsage = usage;
       case ResponseEnd(:final complete):
         _responseComplete = complete;
+        if (!complete) {
+          _streamError = const ProviderError(
+            ProviderErrorCategory.incompleteResponse,
+            'response ended before completion',
+          );
+        }
+        _acceptingChunks = false;
+        _completeRequest();
       case ResponseError(:final error):
         // 流内错误即本次响应结束：保留已收内容，按失败收口。
         _streamError = error;
-        unawaited(_subscription?.cancel());
+        _acceptingChunks = false;
         _completeRequest();
     }
     _scheduleFlush();
@@ -1407,7 +1490,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         );
       } on Failure catch (error) {
         _flushFailure = error;
-        unawaited(_subscription?.cancel());
+        _acceptingChunks = false;
         _completeRequest();
       }
     });
@@ -1416,7 +1499,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 当前分支 + 工具记录 → 一次请求的内容（design 第二部分 §3）。
   ///
   /// 工具调用与结果按记录成组保留：调用引用的记录与结果消息都存在才进入
-  /// 请求，结果未确认的调用整体略过，不留下孤立调用或孤立结果。
+  /// 请求，缺少结果消息时按已知记录补回错误，不留下孤立调用。
   Future<List<ResolvedMessage>> _resolveHistory(
     List<ChatMessage> messages,
     Map<String, Attachment> attachments, {
@@ -1535,12 +1618,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               for (final entry in missingResults.entries)
                 ResolvedToolResult(
                   callId: entry.key.callId,
-                  content: _truncateResult(
-                    entry.value.result ??
-                        (entry.value.status == ToolCallStatus.unknown
-                            ? '动作已经派发但结果未确认，请先核验实际效果，不要重复执行。'
-                            : _noResultText),
-                  ),
+                  content: _truncateResult(entry.value.result ?? _noResultText),
                   isError: entry.value.status != ToolCallStatus.succeeded,
                 ),
             ],
@@ -1552,7 +1630,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   }
 
   /// 调用没有得到结果时的合成回执：如实说明，不假装成功。
-  static const _noResultText = '调用没有返回结果（本次运行未执行或已中断）';
+  static const _noResultText = '调用没有返回完整结果（尚未执行或运行已中断）。需要时先读取当前状态，不要直接重复提交动作。';
 
   /// 这一轮是否被中途打断（用户停止或出错收场）：它的思考块不完整，
   /// 不进上下文；已产出的正文与已执行的调用照常保留。
@@ -1672,9 +1750,14 @@ ToolRegistry toolRegistry(Ref ref) {
   final dio = Dio(BaseOptions(connectTimeout: const Duration(seconds: 15)));
   ref.onDispose(() => dio.close(force: true));
   return buildBuiltInRegistry(
+    platform: () => ref.read(channelDriverProvider),
     httpFetch: (request) => fetchToolHttp(dio, request),
   );
 }
+
+/// 单一重试预算，协议传输不再叠加第二层自动重试。
+@Riverpod(keepAlive: true)
+ModelRetryPolicy modelRetryPolicy(Ref ref) => const ModelRetryPolicy();
 
 /// 工具运行的存储能力：会话附件、按会话隔离的产物目录与产物登记。
 ///

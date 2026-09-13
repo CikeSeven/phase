@@ -14,7 +14,7 @@ import 'tool_loop_harness.dart';
 import 'run_recovery_fixture.dart';
 
 void main() {
-  test('启动将 executing 转为 unknown，保留 prepared，按原期限拒绝过期确认', () async {
+  test('启动将中断调用转为失败，保留 prepared，按原期限拒绝过期确认', () async {
     final echo = RecordingTool(name: 'echo');
     final h = await ToolLoopHarness.create(registry: ToolRegistry([echo]));
     final expired = DateTime.now().subtract(const Duration(seconds: 1));
@@ -29,9 +29,8 @@ void main() {
         .read(runRecoveryControllerProvider)
         .requireValue
         .single;
-    expect(entry.needsVerification, isTrue);
     expect(entry.calls.map((c) => c.status), [
-      ToolCallStatus.unknown,
+      ToolCallStatus.failed,
       ToolCallStatus.prepared,
       ToolCallStatus.rejected,
     ]);
@@ -53,7 +52,7 @@ void main() {
       isEmpty,
     );
     final records = await h.recordsByCall();
-    expect(records['call-0']!.status, ToolCallStatus.unknown);
+    expect(records['call-0']!.status, ToolCallStatus.failed);
     expect(records['call-1']!.status, ToolCallStatus.cancelled);
     expect((await (await h.runs()).getById(run.id))!.status, RunStatus.stopped);
   });
@@ -85,7 +84,8 @@ void main() {
     expect(h.provider.requests, hasLength(1));
     expect(h.provider.requests.single.temperature, 0.4);
     expect(h.provider.requests.single.maxOutputTokens, 300);
-    expect(h.provider.requests.single.systemPrompt, 'saved prompt');
+    expect(h.provider.requests.single.systemPrompt, startsWith('saved prompt'));
+    expect(h.provider.requests.single.systemPrompt, contains('工具响应和错误由你处理'));
     final stored = (await (await h.runs()).getById(run.id))!;
     expect(stored.status, RunStatus.completed);
     expect(stored.turnCount, 2);
@@ -96,21 +96,22 @@ void main() {
     );
   });
 
-  test('未知结果先人工核验，再回填已知事实；不得重做动作', () async {
+  test('中断后的失败自动回填给 AI，不填写状态也不重发旧动作', () async {
     final echo = RecordingTool(name: 'echo');
     final h = await ToolLoopHarness.create(registry: ToolRegistry([echo]));
     final run = await seedInterrupted(h, [ToolCallStatus.executing]);
-    await expectLater(
-      h.controller().resumeRun(run.id),
-      throwsA(isA<OperationFailure>()),
-    );
-    final recovery = h.container.read(runRecoveryControllerProvider.notifier);
-    await recovery.verify('record-0', succeeded: true, result: '目标已经保存');
-    h.provider.turns.add(textTurn('verified'));
+    h.provider.turns.add(textTurn('我会根据错误和当前状态继续处理'));
     await h.controller().resumeRun(run.id);
     expect(echo.executions, isEmpty);
     expect(h.provider.requests, hasLength(1));
-    expect((await h.recordsByCall())['call-0']!.result, '人工核验：目标已经保存');
+    expect((await h.recordsByCall())['call-0']!.result, contains('上次运行中断'));
+    expect(
+      (await h.branch())
+          .where((message) => message.role == ChatRole.tool)
+          .single
+          .text,
+      contains('上次运行中断'),
+    );
     expect(
       (await (await h.runs()).getById(run.id))!.status,
       RunStatus.completed,

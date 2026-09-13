@@ -253,6 +253,16 @@ class AppDatabase extends _$AppDatabase {
 
   /// 每次打开都确保外键与索引就绪（建表、升级后都会执行）。
   Future<void> _prepareDatabase(OpeningDetails details) async {
+    // 删除人工核验机制时一并收口其挂起状态；在枚举解码前执行，保留消息和动作记录。
+    await customStatement(
+      "UPDATE tool_calls SET status = 'failed', error_code = 'interrupted', "
+      "result = REPLACE(REPLACE(COALESCE(result, '上次调用没有返回完整结果。'), '请核验', '可读取最新状态'), '结果未确认', '响应未完整返回') "
+      "WHERE status = 'unknown'",
+    );
+    await customStatement(
+      "UPDATE agent_runs SET status = 'failed', finish_reason = 'executionError', "
+      "finished_at = COALESCE(finished_at, strftime('%s', 'now')) WHERE status = 'awaitingResult'",
+    );
     // 引用约束需要显式打开；索引围绕实际查询建立。
     await customStatement('PRAGMA foreign_keys = ON');
     await customStatement(

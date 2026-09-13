@@ -18,6 +18,9 @@ abstract interface class ToolStorage {
     required String conversationId,
     required String path,
     required String name,
+    String? sha256,
+    String? extractedTextPath,
+    String? extractionError,
   });
 
   /// 把内存中的字节登记成附件（截断的响应正文等）。
@@ -68,39 +71,28 @@ class ToolContext {
   }
 }
 
-/// 工具执行结果：成功、失败或结果未知，附带产物与说明。
+/// 工具执行结果：成功、失败或取消，附带实际响应、产物与错误说明。
 class ToolOutcome {
   const ToolOutcome({
     required this.ok,
     required this.content,
     this.artifacts = const [],
     this.errorCode,
-    this.unknown = false,
     this.cancelled = false,
   });
 
   const ToolOutcome.success(this.content, {this.artifacts = const []})
     : ok = true,
-      unknown = false,
       cancelled = false,
       errorCode = null;
 
   const ToolOutcome.failure(this.content, {this.errorCode})
     : ok = false,
-      unknown = false,
-      cancelled = false,
-      artifacts = const [];
-
-  /// 已派发但结果不可靠：界面提示核验，不自动重做动作。
-  const ToolOutcome.unknown(this.content, {this.errorCode})
-    : ok = false,
-      unknown = true,
       cancelled = false,
       artifacts = const [];
 
   const ToolOutcome.cancelled(this.content)
     : ok = false,
-      unknown = false,
       cancelled = true,
       errorCode = 'cancelled',
       artifacts = const [];
@@ -112,8 +104,6 @@ class ToolOutcome {
   final List<String> artifacts;
   final String? errorCode;
 
-  /// 结果是否未确认。
-  final bool unknown;
   final bool cancelled;
 }
 
@@ -125,6 +115,10 @@ abstract class Tool {
   const Tool();
 
   ExecutionChannel get channel => ExecutionChannel.app;
+  String get policyKey => name;
+
+  bool usesPlatform(Map<String, dynamic> arguments) =>
+      channel != ExecutionChannel.app;
 
   String get name;
   String get description;
@@ -302,7 +296,8 @@ class ToolRegistry {
     Map<String, ToolPolicy> overrides,
   ) {
     if (!enabledTools.contains(tool.name)) return ToolPolicy.deny;
-    return overrides[tool.name] ?? tool.defaultPolicy;
+    return overrides[tool.policyKey] ??
+        (tool.policyKey == tool.name ? tool.defaultPolicy : ToolPolicy.deny);
   }
 }
 

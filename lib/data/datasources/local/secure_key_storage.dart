@@ -1,5 +1,6 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/error/failure.dart';
 import 'key_store.dart';
 
 part 'secure_key_storage.g.dart';
@@ -15,7 +16,15 @@ class SecureKeyStorage {
 
   String _keyFor(String profileId) => 'api_key_$profileId';
 
-  Future<String?> read(String profileId) => _store.read(_keyFor(profileId));
+  Future<String?> read(String profileId) async {
+    try {
+      return await _store.read(_keyFor(profileId));
+    } on StorageFailure {
+      rethrow;
+    } catch (error) {
+      throw StorageFailure('读取模型凭据失败', cause: error);
+    }
+  }
 
   Future<void> write(String profileId, String apiKey) =>
       _store.write(_keyFor(profileId), apiKey);

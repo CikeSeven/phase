@@ -2,17 +2,9 @@ import 'chat_message.dart';
 import 'model_selection.dart';
 import 'tool_policy.dart';
 import 'openai_compat.dart';
+import 'execution_scope.dart';
 
-enum RunStatus {
-  running,
-  awaitingConfirmation,
-
-  /// 动作已派发但结果未取得，运行暂停等待核验。
-  awaitingResult,
-  completed,
-  stopped,
-  failed,
-}
+enum RunStatus { running, awaitingConfirmation, completed, stopped, failed }
 
 enum RunFinishReason {
   completed,
@@ -67,6 +59,7 @@ class RunConfiguration {
     this.supportsImages = true,
     this.supportsTools = true,
     this.compatOverrides,
+    this.executionScope = const ExecutionScope(),
   });
 
   final RunConnection connection;
@@ -80,6 +73,7 @@ class RunConfiguration {
   final bool supportsImages;
   final bool supportsTools;
   final OpenAiCompat? compatOverrides;
+  final ExecutionScope executionScope;
 
   Map<String, dynamic> toJson() => {
     'connection': connection.toJson(),
@@ -93,10 +87,14 @@ class RunConfiguration {
     'supportsImages': supportsImages,
     'supportsTools': supportsTools,
     'compatOverrides': compatOverrides?.toJson(),
+    'executionScope': executionScope.toJson(),
   };
 
   factory RunConfiguration.fromJson(Map<String, dynamic> json) =>
       RunConfiguration(
+        executionScope: ExecutionScope.fromJson(
+          (json['executionScope'] as Map<String, dynamic>?) ?? {},
+        ),
         connection: RunConnection.fromJson(
           json['connection'] as Map<String, dynamic>,
         ),

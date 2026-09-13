@@ -174,7 +174,6 @@ class ConversationRepository {
         (run) => const {
           RunStatus.running,
           RunStatus.awaitingConfirmation,
-          RunStatus.awaitingResult,
         }.contains(run.status),
       )) {
         throw const OperationFailure('请先结束或处理此会话的任务，再复制会话');
@@ -627,7 +626,7 @@ class ConversationRepository {
       rethrow;
     } on Exception catch (e, st) {
       AppLogger.error('$message (${e.runtimeType})', null, st);
-      throw UnknownFailure(message, cause: e);
+      throw StorageFailure(message, cause: e);
     }
   }
 }

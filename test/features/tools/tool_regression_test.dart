@@ -13,7 +13,6 @@ import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/tools/tool.dart';
-import 'package:phase/features/tools/run_recovery_controller.dart';
 import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/anthropic_messages/anthropic_messages_provider.dart';
 import 'package:phase/providers/google_generative_ai/google_generative_ai_provider.dart';
@@ -169,7 +168,7 @@ void main() {
   for (final entry in partialCalls.entries) {
     test('${entry.key.name} EOF 不能派发参数已经完整的工具调用', () async {
       final echo = RecordingTool(name: 'echo');
-      final gateway = await Gateway.start([entry.value]);
+      final gateway = await Gateway.start(List.filled(3, entry.value));
       final h = await ToolLoopHarness.create(
         registry: ToolRegistry([echo]),
         factory: (p, k) => gateway.factory(p, k, entry.key),
@@ -177,7 +176,7 @@ void main() {
       await h.controller().send('review');
       expect(echo.executions, isEmpty);
       expect((await h.latestRun()).finishReason, RunFinishReason.modelError);
-      expect(gateway.requests, hasLength(1));
+      expect(gateway.requests, hasLength(3));
     });
   }
 
@@ -230,28 +229,28 @@ void main() {
 
   test('Responses incomplete 不执行已经出现的完整调用', () async {
     final echo = RecordingTool(name: 'echo');
-    final gateway = await Gateway.start([
-      sse({
-        'type': 'response.incomplete',
-        'response': {
-          'output': [
-            {
-              'type': 'function_call',
-              'id': 'fc-0',
-              'call_id': 'call-0',
-              'name': 'echo',
-              'arguments': '{}',
-            },
-          ],
-        },
-      }),
-    ]);
+    final incomplete = sse({
+      'type': 'response.incomplete',
+      'response': {
+        'output': [
+          {
+            'type': 'function_call',
+            'id': 'fc-0',
+            'call_id': 'call-0',
+            'name': 'echo',
+            'arguments': '{}',
+          },
+        ],
+      },
+    });
+    final gateway = await Gateway.start(List.filled(3, incomplete));
     final h = await ToolLoopHarness.create(
       registry: ToolRegistry([echo]),
       factory: (p, k) => gateway.factory(p, k, ApiProtocol.openaiResponses),
     );
     await h.controller().send('review');
     expect(echo.executions, isEmpty);
+    expect(gateway.requests, hasLength(3));
     expect((await h.latestRun()).finishReason, RunFinishReason.modelError);
   });
 
@@ -432,8 +431,11 @@ void main() {
     await request.response.close();
     await sending;
     expect(stoppedPromptly, isTrue, reason: '停止后仍在等待真实 HTTP 响应，直到服务端主动关闭才结束');
-    expect((await h.recordsByCall())['call_1']!.status, ToolCallStatus.unknown);
-    expect((await h.latestRun()).status, RunStatus.awaitingResult);
+    expect(
+      (await h.recordsByCall())['call_1']!.status,
+      ToolCallStatus.cancelled,
+    );
+    expect((await h.latestRun()).status, RunStatus.stopped);
   });
 
   test(
@@ -460,17 +462,13 @@ void main() {
         'fake summary',
       );
       final record = (await h.recordsByCall())['call_1']!;
-      expect(record.status, ToolCallStatus.unknown);
-      final preview = await h.container
-          .read(runRecoveryControllerProvider.notifier)
-          .inspectWrite(record.id);
-      expect(File(preview.localPath).readAsStringSync(), 'fake summary');
+      expect(record.status, ToolCallStatus.failed);
       expect(
         (await h.recordsByCall())['call_1']!.status,
-        ToolCallStatus.unknown,
+        ToolCallStatus.failed,
       );
       expect(h.provider.requests, hasLength(1));
-      expect((await h.latestRun()).status, RunStatus.awaitingResult);
+      expect((await h.latestRun()).status, RunStatus.failed);
     },
   );
 

@@ -10,6 +10,7 @@ import '../../features/providers_config/providers_page.dart';
 import '../../features/settings/settings_page.dart';
 import '../../features/tools/run_recovery_page.dart';
 import '../../features/tools/tool_records_page.dart';
+import '../../features/execution/execution_settings_page.dart';
 
 part 'app_router.g.dart';
 
@@ -48,6 +49,11 @@ GoRouter appRouter(Ref ref) {
         pageBuilder: (context, state) =>
             materialPage(state, const SettingsPage()),
         routes: [
+          GoRoute(
+            path: 'execution',
+            pageBuilder: (context, state) =>
+                materialPage(state, const ExecutionSettingsPage()),
+          ),
           GoRoute(
             path: 'providers',
             pageBuilder: (context, state) =>

@@ -101,6 +101,13 @@ Stream<ChatChunk> postSseStream({
   final cancelToken = CancelToken();
   final controller = StreamController<ChatChunk>();
   StreamSubscription<ChatChunk>? responseSubscription;
+  var cancelled = false;
+
+  void fail(Object error, StackTrace stackTrace) {
+    if (cancelled || controller.isClosed) return;
+    controller.addError(mapProviderException(error), stackTrace);
+    unawaited(controller.close());
+  }
 
   controller.onListen = () async {
     try {
@@ -110,6 +117,7 @@ Stream<ChatChunk> postSseStream({
         options: Options(responseType: ResponseType.stream, headers: headers),
         cancelToken: cancelToken,
       );
+      if (cancelled) return;
       final body = response.data;
       if (body == null) {
         if (!controller.isClosed) {
@@ -120,27 +128,34 @@ Stream<ChatChunk> postSseStream({
         }
       } else {
         responseSubscription = decode(body.stream).listen(
-          controller.add,
-          onError: controller.addError,
+          (chunk) {
+            if (!cancelled && !controller.isClosed) controller.add(chunk);
+          },
+          onError: fail,
           onDone: controller.close,
+          cancelOnError: true,
         );
         if (controller.isPaused) responseSubscription!.pause();
       }
-    } on DioException catch (e) {
-      if (!controller.isClosed) {
+    } on DioException catch (e, stackTrace) {
+      if (!cancelled && !controller.isClosed) {
         // 错误体可能是流式 ResponseBody：读出来才能用服务端写明的错误字段。
         final body = await readErrorBody(e.response?.data);
-        controller.addError(
+        if (cancelled) return;
+        fail(
           e.response?.statusCode == null
               ? mapDioExceptionToProviderError(e)
               : mapHttpResponseError(
                   statusCode: e.response!.statusCode!,
                   body: body,
+                  headers: e.response?.headers.map,
                   cause: e,
                 ),
+          stackTrace,
         );
-        await controller.close();
       }
+    } catch (error, stackTrace) {
+      fail(error, stackTrace);
     }
   };
 
@@ -148,7 +163,8 @@ Stream<ChatChunk> postSseStream({
   controller.onResume = () => responseSubscription?.resume();
   controller.onCancel = () async {
     // 先中断网络，再等待解码流退出；addStream 会把这两个步骤倒置。
-    cancelToken.cancel('用户停止生成');
+    cancelled = true;
+    cancelToken.cancel('模型请求结束或取消');
     try {
       await responseSubscription?.cancel();
     } on DioException catch (e) {

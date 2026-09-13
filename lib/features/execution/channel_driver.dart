@@ -6,16 +6,20 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/utils/logger.dart';
+import '../../../data/models/execution_scope.dart';
+import '../../../data/models/application_access_policy.dart';
 import '../tools/tool.dart';
 import 'execution_api.g.dart';
+import 'application_policy_bridge.dart';
 
 part 'channel_driver.g.dart';
 
 sealed class NativeExecutionEvent {}
 
 final class NativeStop extends NativeExecutionEvent {
-  NativeStop(this.runId);
+  NativeStop(this.runId, {this.reason});
   final String runId;
+  final String? reason;
 }
 
 final class NativeDecision extends NativeExecutionEvent {
@@ -32,7 +36,13 @@ final class NativeCapabilities extends NativeExecutionEvent {
 
 abstract interface class ChannelDriver {
   Stream<NativeExecutionEvent> get events;
-  Future<void> startRun(String runId);
+  Map<String, Object?>? get latestSnapshot;
+  Future<void> startRun(
+    String runId, {
+    ExecutionScope scope = const ExecutionScope(),
+    bool deviceTask = true,
+    ApplicationAccessPolicy? currentAppPolicy,
+  });
   Future<void> endRun(String runId);
   Future<void> setConfirmation(ExecutionConfirmation? confirmation);
   Future<ExecutionCapabilities> queryCapabilities();
@@ -44,7 +54,7 @@ abstract interface class ChannelDriver {
   Future<void> dispose();
 }
 
-/// 平台 Future 只交付一次终态；进度不能完成任务。桥接失联时不声称动作已撤销。
+/// 平台 Future 只交付一次终态；进度不能完成任务。桥接失联返回失败，停止返回取消，不声称动作已撤销。
 class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   PigeonChannelDriver({
     ExecutionHostApi? host,
@@ -62,10 +72,13 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   final _pending = <String, _PendingExecution>{};
   final _seen = <String>{};
   String? _runId;
+  Map<String, Object?>? _latestSnapshot;
   bool _disposed = false;
 
   @override
   Stream<NativeExecutionEvent> get events => _events.stream;
+  @override
+  Map<String, Object?>? get latestSnapshot => _latestSnapshot;
 
   Future<T> _boundary<T>(Future<T> Function() call) async {
     if (_disposed) {
@@ -83,14 +96,29 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   }
 
   @override
-  Future<void> startRun(String runId) async {
-    if (_runId != null || runId.isEmpty) {
+  Future<void> startRun(
+    String runId, {
+    ExecutionScope scope = const ExecutionScope(),
+    bool deviceTask = true,
+    ApplicationAccessPolicy? currentAppPolicy,
+  }) async {
+    if ((_runId != null && _runId != runId) || runId.isEmpty) {
       throw const ExecutionFailure(ExecutionFailureCode.invalidArguments);
     }
+    if (_runId == null) _seen.clear();
     _runId = runId;
-    _seen.clear();
     try {
-      final reply = await _boundary(() => _host.startRun(runId));
+      final reply = await _boundary(
+        () => _host.startRun(
+          ExecutionSession(
+            runId: runId,
+            deviceTask: deviceTask,
+            fileUris: scope.fileUris,
+            appPolicy: scope.appPolicy.toBridge(),
+            currentAppPolicy: (currentAppPolicy ?? scope.appPolicy).toBridge(),
+          ),
+        ),
+      );
       if (reply.error case final error?) {
         throw ExecutionFailure(ExecutionFailureCode.values.byName(error.name));
       }
@@ -109,10 +137,17 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
       await _boundary(() => _host.endRun(runId));
     } finally {
       for (final pending in _pending.values.toList()) {
-        pending.complete(_unknown(pending.id));
+        pending.complete(
+          _result(
+            pending.id,
+            ExecutionStatus.cancelled,
+            ChannelError.cancelled,
+          ),
+        );
       }
       _runId = null;
       _seen.clear();
+      _latestSnapshot = null;
     }
   }
 
@@ -192,7 +227,9 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
       Duration(milliseconds: frozen.timeoutMs) + cancelGrace,
       () {
         unawaited(_bestEffort(() => _host.cancel(pending.id)));
-        pending.complete(_unknown(pending.id));
+        pending.complete(
+          _result(pending.id, ExecutionStatus.failed, ChannelError.timeout),
+        );
       },
     );
     unawaited(
@@ -203,7 +240,13 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
         pending.cancelling = true;
         pending.cancelTimer = Timer(
           cancelGrace,
-          () => pending.complete(_unknown(pending.id)),
+          () => pending.complete(
+            _result(
+              pending.id,
+              ExecutionStatus.cancelled,
+              ChannelError.cancelled,
+            ),
+          ),
         );
         await _bestEffort(() => _host.cancel(pending.id));
       }),
@@ -224,11 +267,19 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   ) async {
     try {
       final result = await _host.execute(request);
+      if (result.toolCallId == pending.id &&
+          !pending.done.isCompleted &&
+          !pending.cancelling &&
+          result.result['snapshot'] is Map) {
+        _latestSnapshot = Map<String, Object?>.from(
+          result.result['snapshot'] as Map,
+        );
+      }
       pending.complete(
-        result.toolCallId == pending.id ? result : _unknown(pending.id),
+        result.toolCallId == pending.id ? result : _failed(pending.id),
       );
     } on Object {
-      pending.complete(_unknown(pending.id));
+      pending.complete(_failed(pending.id));
     }
   }
 
@@ -261,15 +312,15 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   }
 
   @override
-  void stopRequested(String runId) {
-    if (!_disposed) _events.add(NativeStop(runId));
+  void stopRequested(String runId, [String? reason]) {
+    if (!_disposed) _events.add(NativeStop(runId, reason: reason));
   }
 
   Future<void> _bestEffort(Future<void> Function() action) async {
     try {
       await action().timeout(cancelGrace);
     } on Object {
-      AppLogger.warning('Android 执行通道未确认清理，需核验任务状态');
+      AppLogger.warning('Android 执行通道未确认清理，将结束当前请求');
     }
   }
 
@@ -279,15 +330,17 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
     _disposed = true;
     ExecutionFlutterApi.setUp(null, binaryMessenger: _messenger);
     for (final pending in _pending.values.toList()) {
-      pending.complete(_unknown(pending.id));
+      pending.complete(
+        _result(pending.id, ExecutionStatus.cancelled, ChannelError.cancelled),
+      );
     }
     final runId = _runId;
     if (runId != null) await _bestEffort(() => _host.endRun(runId));
     await _events.close();
   }
 
-  static ExecutionResult _unknown(String id) =>
-      _result(id, ExecutionStatus.unknown, ChannelError.resultUnknown);
+  static ExecutionResult _failed(String id) =>
+      _result(id, ExecutionStatus.failed, ChannelError.executionFailed);
   static ExecutionResult _result(
     String id,
     ExecutionStatus status,
