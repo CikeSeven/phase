@@ -170,11 +170,15 @@ class ToolPresentation {
         '……（共 ${text.length} 字，以上为前 $_previewChars 字）';
   }
 
-  /// 结果摘要：失败与未确认要显示原因，成功只显示一句。
+  /// 结果摘要只展示用户能理解的状态，不把协议 JSON 或恢复规则当提示。
   static String summary(ToolCallRecord record) {
+    if (record.errorCode == 'storageError') {
+      return '相月未能保存这次对话，任务已停止。';
+    }
     final result = record.result?.trim();
     if (result != null && result.isNotEmpty) {
-      return result.length > 160 ? '${result.substring(0, 160)}…' : result;
+      final text = _fileSummary(record, result) ?? result;
+      return text.length > 160 ? '${text.substring(0, 160)}…' : text;
     }
     return switch (record.status) {
       ToolCallStatus.prepared => '参数已就绪，等待执行',
@@ -184,6 +188,39 @@ class ToolPresentation {
       ToolCallStatus.failed => '执行失败',
       ToolCallStatus.rejected => '未执行（已拒绝）',
       ToolCallStatus.cancelled => '已取消',
+    };
+  }
+
+  static String? _fileSummary(ToolCallRecord record, String result) {
+    if (!const {
+      'read_file',
+      'write_file',
+      'list_files',
+    }.contains(record.toolName)) {
+      return null;
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(result);
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map<String, dynamic>) return null;
+    for (final key in const ['reason', 'warning', 'extractionError']) {
+      final message = decoded[key];
+      if (message is String && message.trim().isNotEmpty) return message;
+    }
+    if (record.status != ToolCallStatus.succeeded) return null;
+    final name = decoded['name'];
+    final label = name is String && name.isNotEmpty ? '「$name」' : '文件';
+    return switch (record.toolName) {
+      'read_file' => '已读取$label',
+      'write_file' => '已写入$label',
+      'list_files' =>
+        decoded['files'] is List
+            ? '找到 ${(decoded['files'] as List).length} 个项目'
+            : '已读取目录',
+      _ => null,
     };
   }
 }

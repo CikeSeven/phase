@@ -18,7 +18,7 @@ sealed class Failure implements Exception {
   String toString() => '$runtimeType: $message';
 }
 
-/// 持久化边界失败；不能当作普通工具错误继续派发动作。
+/// 会话、执行记录等应用状态存储失败；普通工具文件的 IO 失败不使用此类型。
 final class StorageFailure extends Failure {
   const StorageFailure(super.message, {super.cause});
 

@@ -45,7 +45,7 @@ void main() {
         .whereType<ResolvedToolResult>()
         .single;
     expect(error.isError, isTrue);
-    expect(error.content, contains('工具执行失败'));
+    expect(error.content, '没有收到这次操作的完整结果。');
     expect(error.content, isNot(contains('fake private error detail')));
     expect((await h.latestRun()).status, RunStatus.completed);
     expect(

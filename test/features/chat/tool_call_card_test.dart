@@ -28,19 +28,24 @@ void main() {
     List<String> artifacts = const [],
     ToolCallStatus status = ToolCallStatus.succeeded,
     String? result = '已创建「summary.md」（8 字）',
+    String toolName = 'write_file',
+    String? errorCode,
   }) {
     return ToolCallRecord(
       id: 'tool-1',
       runId: 'run-1',
       assistantMessageId: 'msg-1',
-      toolName: 'write_file',
+      toolName: toolName,
       arguments: const {'path': 'summary.md', 'content': '# 摘要'},
-      target: '写入文件「summary.md」（8 字，新文件）',
+      target: toolName == 'read_file'
+          ? '读取文件：notes.txt'
+          : '写入文件「summary.md」（8 字，新文件）',
       channel: ExecutionChannel.app,
       defaultPolicy: ToolPolicy.ask,
       status: status,
       decision: ToolDecision.approved,
       result: result,
+      errorCode: errorCode,
       artifacts: artifacts,
       createdAt: DateTime(2026, 9, 12, 10),
     );
@@ -119,6 +124,44 @@ void main() {
     await pumpCard(tester, stored: null);
     expect(find.text('写入文件'), findsNothing);
     expect(find.byType(Card), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('读取失败显示文件名与原因，不直接显示工具 JSON', (tester) async {
+    await pumpCard(
+      tester,
+      stored: record(
+        toolName: 'read_file',
+        status: ToolCallStatus.failed,
+        errorCode: 'fileReadFailed',
+        result: jsonEncode({
+          'uri': 'content://fixture/tree/root/document/notes.txt',
+          'name': 'notes.txt',
+          'reason': '未能读取「notes.txt」的内容。',
+        }),
+      ),
+    );
+    expect(find.text('未能读取「notes.txt」的内容。'), findsOneWidget);
+    expect(find.textContaining('content://'), findsNothing);
+    expect(find.textContaining('"reason"'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('实际记录保存失败明确说明对话未保存，不显示 AI 恢复规则', (tester) async {
+    final stored = record(
+      status: ToolCallStatus.failed,
+      errorCode: 'storageError',
+      result: jsonEncode({
+        'uri': 'content://fixture/file',
+        'actionAccepted': true,
+      }),
+    );
+    await pumpCard(tester, stored: stored);
+    expect(find.text('相月未能保存这次对话，任务已停止。'), findsOneWidget);
+    expect(find.textContaining('自动重发'), findsNothing);
+    expect(find.textContaining('当前状态'), findsNothing);
+    expect(find.textContaining('actionAccepted'), findsNothing);
+    expect(stored.result, contains('actionAccepted'));
     expect(tester.takeException(), isNull);
   });
 

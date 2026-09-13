@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/error/failure.dart';
 import '../../../core/utils/id.dart';
+import '../../../core/utils/logger.dart';
 import '../../../features/tools/tool.dart';
 import '../../models/attachment.dart';
 
@@ -31,7 +32,7 @@ class ArtifactStorage implements ToolStorage {
 
   @override
   Future<List<Attachment>> attachments(String conversationId) =>
-      _guard(() => loadAttachments(conversationId));
+      _recordOperation(() => loadAttachments(conversationId));
 
   @override
   String artifactsDirectory(String conversationId) =>
@@ -63,7 +64,7 @@ class ArtifactStorage implements ToolStorage {
     required String name,
     required String mimeType,
     required List<int> bytes,
-  }) => _guard(() async {
+  }) => _fileOperation(() async {
     final directory = Directory(artifactsDirectory(conversationId));
     await directory.create(recursive: true);
     final file = File(p.join(directory.path, _uniqueName(directory, name)));
@@ -82,7 +83,7 @@ class ArtifactStorage implements ToolStorage {
   /// 每次执行后统一扫描一次：工具自己登记过并写进结果引用的产物不在待登记
   /// 范围内，这里兜住其余写到产物目录却没有登记的文件。
   Future<List<Attachment>> registerPendingArtifacts(String conversationId) =>
-      _guard(() async {
+      _fileOperation(() async {
         final directory = Directory(artifactsDirectory(conversationId));
         if (!directory.existsSync()) return const [];
         final known = {
@@ -116,7 +117,7 @@ class ArtifactStorage implements ToolStorage {
     String? sha256,
     String? extractedTextPath,
     String? extractionError,
-  }) => _guard(() async {
+  }) => _fileOperation(() async {
     final file = File(path);
     final attachment = Attachment(
       id: generateId(),
@@ -124,24 +125,34 @@ class ArtifactStorage implements ToolStorage {
       kind: AttachmentKind.artifact,
       name: name,
       mimeType: mimeType,
-      size: file.existsSync() ? file.lengthSync() : 0,
+      size: await file.length(),
       localPath: path,
       sha256: sha256,
       extractedTextPath: extractedTextPath,
       extractionError: extractionError,
       createdAt: DateTime.now(),
     );
-    await saveAttachment(attachment);
+    await _recordOperation(() => saveAttachment(attachment));
     return attachment;
   });
 
-  Future<T> _guard<T>(Future<T> Function() action) async {
+  Future<T> _fileOperation<T>(Future<T> Function() action) async {
+    try {
+      return await action();
+    } on FileSystemException catch (error) {
+      AppLogger.warning('工具文件处理失败 (io=${error.osError?.errorCode})');
+      throw const OperationFailure('相月未能读取或保存这份文件。');
+    }
+  }
+
+  /// 只有附件记录所在的应用数据边界失败，才阻止任务继续。
+  Future<T> _recordOperation<T>(Future<T> Function() action) async {
     try {
       return await action();
     } on StorageFailure {
       rethrow;
     } catch (error) {
-      throw StorageFailure('工具产物读取或保存失败', cause: error);
+      throw StorageFailure('工具附件记录读取或保存失败', cause: error);
     }
   }
 

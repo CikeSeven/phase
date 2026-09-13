@@ -265,7 +265,7 @@ class ToolExecutor {
     } catch (error, stackTrace) {
       AppLogger.error('工具执行异常：${error.runtimeType}', null, stackTrace);
       outcome = const ToolOutcome.failure(
-        '工具执行失败，没有取得完整结果。可读取当前状态后再决定后续操作。',
+        '没有收到这次操作的完整结果。',
         errorCode: 'executionFailed',
       );
     }
@@ -289,7 +289,7 @@ class ToolExecutor {
         ),
       };
     } on Failure {
-      await _markStorageFailure(record.id);
+      await _markStorageFailure(record.id, result: outcome.content);
       rethrow;
     }
     return ToolExecutionResult(record: updated, outcome: outcome);
@@ -302,12 +302,12 @@ class ToolExecutor {
         : 'executionFailed',
   );
 
-  Future<void> _markStorageFailure(String id) async {
+  Future<void> _markStorageFailure(String id, {String? result}) async {
     try {
       await toolCalls.markFailed(
         id,
         errorCode: 'storageError',
-        result: '工具结果保存失败。已有操作不会自动重发，后续可读取当前状态。',
+        result: result ?? '相月未能保存这次对话，任务已停止。',
       );
     } on Failure {
       // 原异常由调用者收口；数据库仍不可写时由启动核对处理 executing。

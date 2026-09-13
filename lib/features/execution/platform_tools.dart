@@ -5,6 +5,7 @@ import 'dart:isolate';
 import 'package:path/path.dart' as p;
 
 import '../../../core/error/failure.dart';
+import '../../../core/utils/logger.dart';
 import '../../../data/models/execution_scope.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
@@ -154,11 +155,19 @@ class ScopedFileTool extends Tool {
     final details = {...result.result};
     for (final artifact in result.artifacts) {
       final source = artifact.localPath;
-      if (source == null) throw const OperationFailure('文件内容没有返回，读取失败');
+      if (source == null) {
+        return _unavailableArtifact(
+          details,
+          artifact.name,
+          artifacts: ids,
+          reason: '文件内容没有返回，未能读取「${artifact.name}」。',
+        );
+      }
+      // 原文件名只用于展示。加上调用前缀后可能超过文件系统的单段字节上限。
       final target = File(
         p.join(
           context.artifactsDirectory,
-          '${context.toolCallId}-${p.basename(artifact.name)}',
+          '${context.toolCallId}-${ids.length}',
         ),
       );
       try {
@@ -220,7 +229,12 @@ class ScopedFileTool extends Tool {
         );
         ids.add(attachment.id);
       } on FileSystemException catch (error) {
-        throw StorageFailure('文件副本保存失败', cause: error);
+        AppLogger.warning('授权文件处理失败 (io=${error.osError?.errorCode})');
+        await _discardCopy(target);
+        return _unavailableArtifact(details, artifact.name, artifacts: ids);
+      } on OperationFailure {
+        await _discardCopy(target);
+        return _unavailableArtifact(details, artifact.name, artifacts: ids);
       } finally {
         // 仅清理原生返回的临时副本，绝不删除 content URI 指向的外部文件。
         try {
@@ -231,6 +245,47 @@ class ScopedFileTool extends Tool {
       }
     }
     return ToolOutcome.success(jsonEncode(details), artifacts: ids);
+  }
+
+  ToolOutcome _unavailableArtifact(
+    Map<String, Object?> details,
+    String fileName, {
+    required List<String> artifacts,
+    String? reason,
+  }) {
+    if (name == 'write_file') {
+      // 原生已校验写入成功；预览副本失败不能把已完成的写入说成失败。
+      return ToolOutcome.success(
+        jsonEncode({
+          ...details,
+          'name': fileName,
+          'warning': '文件「$fileName」已写入，但暂时无法预览。',
+        }),
+        artifacts: artifacts,
+      );
+    }
+    return ToolOutcome.failure(
+      jsonEncode({
+        ...details,
+        'name': fileName,
+        'reason':
+            reason ??
+            (details['text'] is String
+                ? '已读取「$fileName」，但未能保存附件。'
+                : '未能读取「$fileName」的内容。'),
+      }),
+      errorCode: 'fileReadFailed',
+    );
+  }
+
+  Future<void> _discardCopy(File target) async {
+    for (final file in [File('${target.path}.extracted.txt'), target]) {
+      try {
+        if (await file.exists()) await file.delete();
+      } on FileSystemException {
+        AppLogger.warning('未完成的文件副本清理失败');
+      }
+    }
   }
 }
 
