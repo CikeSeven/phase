@@ -33,7 +33,7 @@ void main() {
                 onPressed: () async {
                   result = await showApplicationPolicySheet(
                     context,
-                    applications: [
+                    loadApplications: () async => [
                       app('third', label: '第三方', size: 90),
                       app('system', label: '系统设置', system: true, size: 10),
                     ],
@@ -122,7 +122,7 @@ void main() {
               onPressed: () async {
                 result = await showApplicationPolicySheet(
                   context,
-                  applications: [app(package, label: '相月')],
+                  loadApplications: () async => [app(package, label: '相月')],
                   initialPolicy: initial,
                 );
               },
@@ -225,5 +225,79 @@ void main() {
           .toSet(),
       applicationOperationTools,
     );
+  });
+
+  testWidgets('Expressive 菜单筛选排序真实应用列表，不重载或丢失名单草稿', (tester) async {
+    tester.view.physicalSize = const Size(800, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    var loads = 0;
+    ApplicationAccessPolicy? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                result = await showApplicationPolicySheet(
+                  context,
+                  loadApplications: () async {
+                    loads++;
+                    return [
+                      app('a', label: 'Alpha', installed: 10, size: 100),
+                      app('b', label: 'Beta', installed: 30, size: 10),
+                      app(
+                        'c',
+                        label: 'Gamma',
+                        system: true,
+                        installed: 20,
+                        size: 50,
+                      ),
+                    ];
+                  },
+                  initialPolicy: const ApplicationAccessPolicy(),
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    List<String?> names() => tester
+        .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
+        .map((row) => (row.title! as Text).data)
+        .toList();
+    Future<void> choose(String key, String label) async {
+      await tester.ensureVisible(find.byKey(ValueKey(key)));
+      await tester.tap(find.byKey(ValueKey(key)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(MenuItemButton, label));
+      await tester.pumpAndSettle();
+    }
+
+    expect(names(), ['Alpha', 'Beta', 'Gamma']);
+    await tester.tap(find.text('Alpha'));
+    await tester.pump();
+    await choose('application-list-sort', '安装时间（新到旧）');
+    expect(names(), ['Beta', 'Gamma', 'Alpha']);
+    await choose('application-list-sort', '安装包大小（大到小）');
+    expect(names(), ['Alpha', 'Gamma', 'Beta']);
+    await choose('application-list-filter', '第三方应用');
+    expect(names(), ['Alpha', 'Beta']);
+    await tester.enterText(
+      find.byKey(const ValueKey('application-list-query')),
+      'Beta',
+    );
+    await tester.pumpAndSettle();
+    expect(names(), ['Beta']);
+    await tester.tap(find.byKey(const ValueKey('confirm-application-policy')));
+    await tester.pumpAndSettle();
+    expect(result!.blacklist, {'a'});
+    expect(loads, 1);
+    expect(tester.takeException(), isNull);
   });
 }

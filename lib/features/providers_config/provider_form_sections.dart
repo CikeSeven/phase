@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_section.dart';
 import '../../../data/models/api_protocol.dart';
@@ -24,7 +25,7 @@ class ProviderFormSections extends StatelessWidget {
     required this.enabled,
     required this.testing,
     required this.onChoosePreset,
-    required this.onChooseProtocol,
+    required this.onProtocolChanged,
     required this.onConnectionChanged,
     required this.onToggleKeyVisibility,
     required this.onTest,
@@ -47,7 +48,7 @@ class ProviderFormSections extends StatelessWidget {
   final int? testedModelCount;
   final String? testError;
   final VoidCallback onChoosePreset;
-  final VoidCallback onChooseProtocol;
+  final ValueChanged<ApiProtocol> onProtocolChanged;
   final VoidCallback onConnectionChanged;
   final VoidCallback onToggleKeyVisibility;
   final VoidCallback onTest;
@@ -112,27 +113,15 @@ class ProviderFormSections extends StatelessWidget {
                     value == null || value.trim().isEmpty ? '请输入服务商名称' : null,
               ),
               const SizedBox(height: AppSpacing.l),
-              // 不裁剪：InputDecorator 的浮动标签会越过圆角边界，裁剪会截断标签。
-              Material(
-                color: theme.colorScheme.surface.withValues(alpha: 0),
-                borderRadius: AppRadius.mediumAll,
-                child: InkWell(
-                  key: const ValueKey('choose-protocol'),
-                  borderRadius: AppRadius.mediumAll,
-                  onTap: enabled ? onChooseProtocol : null,
-                  child: InputDecorator(
-                    decoration: const InputDecoration(
-                      labelText: 'API 协议',
-                      suffixIcon: Icon(Symbols.expand_more),
-                    ),
-                    child: Text(
-                      ProviderUi.protocolLabel(protocol),
-                      key: const ValueKey('protocol-label'),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
+              AppDropdown<ApiProtocol>(
+                key: const ValueKey('choose-protocol'),
+                label: 'API 协议',
+                value: protocol,
+                options: {
+                  for (final protocol in ApiProtocol.values)
+                    protocol: ProviderUi.protocolLabel(protocol),
+                },
+                onChanged: enabled ? onProtocolChanged : null,
               ),
               const SizedBox(height: AppSpacing.s),
               Text(ProviderUi.protocolHint(protocol), style: secondaryStyle),

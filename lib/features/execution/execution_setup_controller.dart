@@ -19,19 +19,29 @@ ExecutionSetupApi executionSetupApi(Ref ref) => ExecutionSetupApi();
 class ExecutionSetupState {
   const ExecutionSetupState({
     this.scope = const ExecutionScope(),
-    this.grants = const [],
-    this.applications = const [],
-    this.capabilities,
+    this.grants = const AsyncLoading(),
+    this.capabilities = const AsyncLoading(),
   });
   final ExecutionScope scope;
-  final List<FileGrant> grants;
-  final List<InstalledApplication> applications;
-  final ExecutionCapabilities? capabilities;
+  final AsyncValue<List<FileGrant>> grants;
+  final AsyncValue<ExecutionCapabilities> capabilities;
+
+  ExecutionSetupState copyWith({
+    ExecutionScope? scope,
+    AsyncValue<List<FileGrant>>? grants,
+    AsyncValue<ExecutionCapabilities>? capabilities,
+  }) => ExecutionSetupState(
+    scope: scope ?? this.scope,
+    grants: grants ?? this.grants,
+    capabilities: capabilities ?? this.capabilities,
+  );
 }
 
 @Riverpod(keepAlive: true, dependencies: [settingsStorage])
 class ExecutionSetupController extends _$ExecutionSetupController {
   bool _busy = false;
+  Future<void>? _grantsLoading;
+  Future<void>? _capabilitiesLoading;
   @override
   FutureOr<ExecutionSetupState> build() => ExecutionSetupState(
     scope: ref.read(settingsStorageProvider).readExecutionScope(),
@@ -39,34 +49,59 @@ class ExecutionSetupController extends _$ExecutionSetupController {
 
   Future<void> load() async {
     if (_busy) return;
-    _busy = true;
-    state = const AsyncLoading();
     try {
-      final api = ref.read(executionSetupApiProvider);
-      final grants = await _boundary(api.fileGrants);
-      final apps = await _boundary(api.installedApplications);
-      final capabilities = await ref
-          .read(channelDriverProvider)
-          .queryCapabilities();
-      if (ref.mounted) {
-        state = AsyncData(
-          ExecutionSetupState(
-            scope: ref.read(settingsStorageProvider).readExecutionScope(),
-            grants: grants,
-            applications: apps,
-            capabilities: capabilities,
-          ),
-        );
-      }
+      final scope = ref.read(settingsStorageProvider).readExecutionScope();
+      state = AsyncData(
+        (state.value ?? const ExecutionSetupState()).copyWith(scope: scope),
+      );
     } catch (error, stack) {
       if (ref.mounted) state = AsyncError(error, stack);
-    } finally {
-      _busy = false;
+      return;
+    }
+    await Future.wait([loadGrants(), loadCapabilities()]);
+  }
+
+  Future<void> loadGrants() => _grantsLoading ??= _loadGrants().whenComplete(
+    () => _grantsLoading = null,
+  );
+
+  Future<void> _loadGrants() async {
+    final value = state.value;
+    if (value == null) return;
+    state = AsyncData(value.copyWith(grants: const AsyncLoading()));
+    final grants = await AsyncValue.guard(
+      () => _boundary(ref.read(executionSetupApiProvider).fileGrants),
+    );
+    if (ref.mounted && state.value != null) {
+      state = AsyncData(state.requireValue.copyWith(grants: grants));
     }
   }
 
+  Future<void> loadCapabilities() => _capabilitiesLoading ??=
+      _loadCapabilities().whenComplete(() => _capabilitiesLoading = null);
+
+  Future<void> _loadCapabilities() async {
+    final value = state.value;
+    if (value == null) return;
+    state = AsyncData(value.copyWith(capabilities: const AsyncLoading()));
+    final capabilities = await AsyncValue.guard(
+      () => ref.read(channelDriverProvider).queryCapabilities(),
+    );
+    if (ref.mounted && state.value != null) {
+      state = AsyncData(
+        state.requireValue.copyWith(capabilities: capabilities),
+      );
+    }
+  }
+
+  Future<List<InstalledApplication>> loadApplications() =>
+      _boundary(ref.read(executionSetupApiProvider).installedApplications);
+
   Future<FileGrant?> chooseFile(bool directory) async {
-    if (_busy) return null;
+    if (_busy) throw const OperationFailure('请等待当前操作完成');
+    if (_grantsLoading != null) {
+      throw const OperationFailure('请等待文件授权读取完成');
+    }
     _busy = true;
     try {
       return await _boundary(
@@ -75,7 +110,7 @@ class ExecutionSetupController extends _$ExecutionSetupController {
       );
     } finally {
       _busy = false;
-      await load();
+      if (ref.mounted) unawaited(loadGrants());
     }
   }
 
@@ -105,6 +140,9 @@ class ExecutionSetupController extends _$ExecutionSetupController {
 
   Future<void> release(String uri) async {
     if (_busy) throw const OperationFailure('请等待当前操作完成');
+    if (_grantsLoading != null) {
+      throw const OperationFailure('请等待文件授权读取完成');
+    }
     _busy = true;
     try {
       await _boundary(
@@ -120,7 +158,7 @@ class ExecutionSetupController extends _$ExecutionSetupController {
       );
     } finally {
       _busy = false;
-      await load();
+      if (ref.mounted) unawaited(loadGrants());
     }
   }
 

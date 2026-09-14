@@ -19,6 +19,7 @@ import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/providers_config/provider_edit_page.dart';
+import 'package:phase/features/providers_config/provider_ui.dart';
 import 'package:phase/features/providers_config/providers_page.dart';
 import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
@@ -279,19 +280,33 @@ Future<void> chooseProtocol(
     settle: !pendingRequest,
   );
   if (pendingRequest) {
-    // 获取中的进度动画让 pumpAndSettle 永不稳定，手动推完面板动画。
+    // 获取中的进度动画让 pumpAndSettle 永不稳定，手动推完菜单动画。
     await tester.pump(const Duration(milliseconds: 400));
   }
   await tapProviderControl(
     tester,
-    keyed('protocol-${protocol.name}'),
+    find.widgetWithText(MenuItemButton, ProviderUi.protocolLabel(protocol)),
     settle: !pendingRequest,
   );
+  if (pendingRequest) {
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+  }
+  expect(currentProtocolLabel(tester), ProviderUi.protocolLabel(protocol));
 }
 
 /// 当前表单上展示的协议标签文本。
 String currentProtocolLabel(WidgetTester tester) =>
-    tester.widget<Text>(keyed('protocol-label')).data!;
+    (tester
+                .widget<InputDecorator>(
+                  find.descendant(
+                    of: keyed('choose-protocol'),
+                    matching: find.byType(InputDecorator),
+                  ),
+                )
+                .child!
+            as Text)
+        .data!;
 
 void setKeyboard(WidgetTester tester, double keyboard) {
   tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
