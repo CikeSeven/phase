@@ -12,6 +12,7 @@ import 'package:phase/app.dart';
 import 'package:phase/core/router/app_router.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
+import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/api_protocol.dart';
@@ -83,8 +84,9 @@ void main() {
       final keys = _PreviewKeyStorage();
       final profiles = ProviderProfileRepository(db, keys);
       final conversations = ConversationRepository(db);
+      late String gatewayId;
       await tester.runAsync(() async {
-        await profiles.createProfile(
+        final gateway = await profiles.createProfile(
           name: '开发网关',
           baseUrl: 'https://preview.invalid/v1',
           protocol: ApiProtocol.openaiResponses,
@@ -95,6 +97,7 @@ void main() {
             ProfileModel(id: 'long-context-reasoning', supportsReasoning: true),
           ],
         );
+        gatewayId = gateway.id;
         await profiles.createProfile(
           name: '本地模型',
           baseUrl: 'http://localhost:11434/v1',
@@ -120,6 +123,7 @@ void main() {
           ChatMessage(
             id: 'preview-m2',
             conversationId: conversation.id,
+            parentId: 'preview-m1',
             role: ChatRole.assistant,
             parts: const [
               TextPart(text: '可以先确定优先顺序，再为每件事留一个明确的时间段。先从最需要专注的小工具原型开始。'),
@@ -176,7 +180,7 @@ void main() {
 
       SharedPreferences.setMockInitialValues({
         'theme_mode': mode.startsWith('dark') ? 'dark' : 'light',
-        'last_profile_id': 'preview-gateway',
+        'last_profile_id': gatewayId,
         'last_model': 'gpt-5.6-sol',
         'last_reasoning_effort': 'medium',
       });
@@ -186,6 +190,11 @@ void main() {
           sharedPreferencesProvider.overrideWith((ref) => preferences),
           appDatabaseProvider.overrideWith((ref) => db),
           secureKeyStorageProvider.overrideWith((ref) => keys),
+          attachmentStorageProvider.overrideWith(
+            (ref) => AttachmentStorage(
+              Directory(p.join(tempDir.path, 'attachments')),
+            ),
+          ),
         ],
       );
       await tester.pumpWidget(
@@ -199,25 +208,37 @@ void main() {
 
       final scaffold = tester.state<ScaffoldState>(find.byType(Scaffold).first);
       scaffold.openDrawer();
-      await tester.pumpAndSettle();
+      await _settleDatabase(tester);
       await _save(tester, '$mode-drawer');
       await tester.tap(find.text('把今天的想法整理成计划'));
       await _settleDatabase(tester);
       await _save(tester, '$mode-chat-message');
-      await tester.drag(find.byType(ChatTranscript), const Offset(0, 400));
+      final transcriptRect = tester.getRect(find.byType(ChatTranscript));
+      await tester.dragFrom(
+        Offset(transcriptRect.left + 8, transcriptRect.center.dy),
+        const Offset(0, 400),
+      );
       await tester.pumpAndSettle();
       expect(find.byTooltip('回到底部'), findsOneWidget);
       await _save(tester, '$mode-chat-history');
       await tester.tap(find.byTooltip('回到底部'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('回到底部'), findsNothing);
-      await tester.drag(find.byType(ChatTranscript), const Offset(0, 400));
-      await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text('已思考'));
+      final reasoningLabel = find.textContaining('已思考');
+      await tester.scrollUntilVisible(
+        reasoningLabel,
+        -120,
+        scrollable: find
+            .descendant(
+              of: find.byType(ChatTranscript),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
       await tester.pumpAndSettle();
       await _save(tester, '$mode-reasoning');
-      expect(find.text('已思考').hitTestable(), findsOneWidget);
-      await tester.tap(find.text('已思考'));
+      expect(reasoningLabel.hitTestable(), findsOneWidget);
+      await tester.tap(reasoningLabel);
       await tester.pumpAndSettle();
       await _save(tester, '$mode-reasoning-collapsed');
 
@@ -243,7 +264,7 @@ void main() {
       router.push('/settings/providers');
       await _settleDatabase(tester);
       await _save(tester, '$mode-providers');
-      router.push('/settings/providers/preview-gateway');
+      router.push('/settings/providers/$gatewayId');
       await _settleDatabase(tester);
       await _save(tester, '$mode-provider-edit');
 

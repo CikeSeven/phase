@@ -3,10 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_selection_surface.dart';
 import 'theme_mode_controller.dart';
 import 'theme_preview.dart';
 
@@ -128,46 +128,47 @@ class _ThemeModeOption extends StatelessWidget {
       key: ValueKey('theme-option-${mode.name}'),
       selected: selected,
       button: true,
-      child: Material(
+      child: AppSelectionSurface(
+        selected: selected,
+        onTap: onTap,
         color: selected
             ? theme.colorScheme.primaryContainer.withValues(alpha: 0.72)
             : theme.colorScheme.surfaceContainerLow.withValues(alpha: 0.4),
-        borderRadius: AppRadius.mediumAll,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.m),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        themeModeLabel(mode),
-                        style: theme.textTheme.titleMedium,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.m),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      themeModeLabel(mode),
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    ExcludeSemantics(
+                      child: ThemePreview(
+                        key: ValueKey('theme-swatch-${mode.name}'),
+                        mode: mode,
                       ),
-                      const SizedBox(height: AppSpacing.s),
-                      ExcludeSemantics(
-                        child: ThemePreview(
-                          key: ValueKey('theme-swatch-${mode.name}'),
-                          mode: mode,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: AppSpacing.s),
-                if (selected)
-                  Icon(
-                    Symbols.check_circle,
-                    color: theme.colorScheme.primary,
-                    fill: 1,
-                  ),
-              ],
-            ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              SizedBox.square(
+                dimension: 24,
+                child: selected
+                    ? Icon(
+                        Symbols.check_circle,
+                        color: theme.colorScheme.primary,
+                        fill: 1,
+                      )
+                    : null,
+              ),
+            ],
           ),
         ),
       ),

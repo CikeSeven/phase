@@ -7,7 +7,7 @@
 - [产品与技术设计](docs/product_and_technical_design.md)：首版产品范围、Agent Loop、Android 执行通道、数据模型和 Provider 契约。
 - [初版实施计划](docs/implementation_plan.md)：从正式契约到首版验收的建设顺序。
 - [工程规范](AGENTS.md)：代码边界、数据安全、测试和 Android 操作约定。
-- [UI 规范](DESIGN.md)：Material 3 界面、交互和验收要求。
+- [UI 规范](DESIGN.md)：Material 3 Expressive 组件、月色玻璃主题、交互和验收要求。
 
 ## 开发检查
 

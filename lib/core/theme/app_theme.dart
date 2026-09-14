@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 
+import 'app_control_style.dart';
 import 'app_radius.dart';
 import 'app_spacing.dart';
 import 'brand_colors.dart';
 
-/// 月白与墨蓝画布上的 Material 3 月色玻璃主题。
+/// 保留月色玻璃配色与材质的 Material 3 Expressive 主题。
 abstract final class AppTheme {
   static const seedColor = Color(0xFF3D5A98);
 
@@ -59,17 +60,17 @@ abstract final class AppTheme {
         .copyWith(
           headlineMedium: base.textTheme.headlineMedium?.copyWith(
             fontSize: 28,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             height: 1.25,
           ),
           headlineSmall: base.textTheme.headlineSmall?.copyWith(
             fontSize: 24,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             height: 1.3,
           ),
           titleLarge: base.textTheme.titleLarge?.copyWith(
             fontSize: 22,
-            fontWeight: FontWeight.w600,
+            fontWeight: FontWeight.w700,
             height: 1.25,
           ),
           titleMedium: base.textTheme.titleMedium?.copyWith(
@@ -113,9 +114,6 @@ abstract final class AppTheme {
         .apply(bodyColor: colors.onSurface, displayColor: colors.onSurface);
     final outline = colors.outlineVariant.withValues(alpha: 0.68);
     final transparent = colors.surface.withValues(alpha: 0);
-    final buttonShape = RoundedRectangleBorder(
-      borderRadius: AppRadius.mediumAll,
-    );
     final menuShape = RoundedRectangleBorder(
       borderRadius: AppRadius.mediumAll,
       side: BorderSide(color: outline),
@@ -233,73 +231,47 @@ abstract final class AppTheme {
         minTileHeight: 56,
       ),
       filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: AppSpacing.m,
-          ),
-          shape: buttonShape,
-          textStyle: text.labelLarge,
+        style: AppControlStyle.medium.copyWith(
+          textStyle: WidgetStatePropertyAll(text.titleMedium),
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
-        style: ElevatedButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: AppSpacing.m,
-          ),
-          shape: buttonShape,
-          elevation: 1,
-          textStyle: text.labelLarge,
+        style: AppControlStyle.medium.copyWith(
+          textStyle: WidgetStatePropertyAll(text.titleMedium),
+          elevation: const WidgetStatePropertyAll(1),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(
-            horizontal: 20,
-            vertical: AppSpacing.m,
+        style: AppControlStyle.medium.copyWith(
+          side: WidgetStateProperty.resolveWith(
+            (states) => BorderSide(
+              color: states.contains(WidgetState.disabled)
+                  ? colors.onSurface.withValues(alpha: 0.12)
+                  : colors.outline,
+            ),
           ),
-          shape: buttonShape,
-          side: BorderSide(color: colors.outline),
-          textStyle: text.labelLarge,
+          textStyle: WidgetStatePropertyAll(text.titleMedium),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.l,
-            vertical: AppSpacing.m,
-          ),
-          shape: const RoundedRectangleBorder(borderRadius: AppRadius.smallAll),
-          textStyle: text.labelLarge,
+        style: AppControlStyle.compact.copyWith(
+          textStyle: WidgetStatePropertyAll(text.labelLarge),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          minimumSize: const Size(48, 48),
-          padding: const EdgeInsets.all(AppSpacing.m),
-          shape: const RoundedRectangleBorder(borderRadius: AppRadius.smallAll),
+        style: AppControlStyle.compact.copyWith(
+          padding: const WidgetStatePropertyAll(EdgeInsets.all(AppSpacing.m)),
         ),
       ),
       segmentedButtonTheme: SegmentedButtonThemeData(
-        style: ButtonStyle(
-          minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
-          padding: const WidgetStatePropertyAll(
-            EdgeInsets.symmetric(
-              horizontal: AppSpacing.l,
-              vertical: AppSpacing.m,
-            ),
-          ),
+        style: AppControlStyle.compact.copyWith(
           textStyle: WidgetStatePropertyAll(text.labelLarge),
-          side: WidgetStatePropertyAll(BorderSide(color: outline)),
-          shape: const WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: AppRadius.smallAll),
-          ),
+          side: const WidgetStatePropertyAll(BorderSide.none),
+          shape: const WidgetStatePropertyAll(StadiumBorder()),
           backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return colors.onSurface.withValues(alpha: 0.12);
+            }
             return states.contains(WidgetState.selected)
                 ? colors.primaryContainer
                 : colors.surfaceContainerLow.withValues(alpha: 0.72);
@@ -312,6 +284,31 @@ abstract final class AppTheme {
                 ? colors.onPrimaryContainer
                 : colors.onSurface;
           }),
+        ),
+      ),
+      sliderTheme: SliderThemeData(
+        trackHeight: 16,
+        trackGap: 6,
+        trackShape: const GappedSliderTrackShape(),
+        thumbShape: const HandleThumbShape(),
+        thumbSize: WidgetStateProperty.resolveWith(
+          (states) => Size(
+            !states.contains(WidgetState.disabled) &&
+                    (states.contains(WidgetState.pressed) ||
+                        states.contains(WidgetState.focused))
+                ? 2
+                : 4,
+            44,
+          ),
+        ),
+        tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 2),
+        inactiveTrackColor: colors.secondaryContainer,
+        activeTickMarkColor: colors.onPrimary,
+        inactiveTickMarkColor: colors.onSecondaryContainer,
+        valueIndicatorShape: const RoundedRectSliderValueIndicatorShape(),
+        valueIndicatorColor: colors.inverseSurface,
+        valueIndicatorTextStyle: text.labelLarge?.copyWith(
+          color: colors.onInverseSurface,
         ),
       ),
       chipTheme: ChipThemeData(
@@ -354,7 +351,7 @@ abstract final class AppTheme {
         labelTextStyle: WidgetStatePropertyAll(text.bodyMedium),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        shape: buttonShape,
+        shape: const RoundedRectangleBorder(borderRadius: AppRadius.controlAll),
         backgroundColor: colors.primaryContainer,
         foregroundColor: colors.onPrimaryContainer,
         elevation: 2,

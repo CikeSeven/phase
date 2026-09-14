@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/theme/app_radius.dart';
+import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/frosted_surface.dart';
 import '../../../data/models/attachment.dart';
@@ -126,11 +126,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         IconButton.filled(
           icon: Icon(isGenerating ? Symbols.stop : Symbols.arrow_upward),
           tooltip: isGenerating ? '停止生成' : '发送',
-          style: IconButton.styleFrom(
-            minimumSize: const Size(48, 48),
-            shape: const RoundedRectangleBorder(
-              borderRadius: AppRadius.mediumAll,
+          style: ButtonStyle(
+            minimumSize: const WidgetStatePropertyAll(
+              Size.square(AppControlStyle.mediumHeight),
             ),
+            shape: AppControlStyle.shape(active: isGenerating),
           ),
           onPressed: isGenerating
               ? () => ref.read(chatControllerProvider.notifier).stop()
@@ -163,10 +163,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               final scaler = MediaQuery.textScalerOf(context);
               final actionHeight = needsConfiguration
                   ? (scaler.scale(14) * 1.25 + AppSpacing.xl).clamp(
-                      48.0,
+                      AppControlStyle.mediumHeight,
                       double.infinity,
                     )
-                  : 48.0;
+                  : AppControlStyle.mediumHeight;
               final minimumHeight =
                   scaler.scale(16) * 1.5 + AppSpacing.xl + actionHeight;
               return SingleChildScrollView(

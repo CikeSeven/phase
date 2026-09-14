@@ -12,6 +12,31 @@ void main() {
     ('dark', AppTheme.dark()),
   ]) {
     group(name, () {
+      test('Expressive 不改变月色玻璃的配色与正文尺度', () {
+        final original = ColorScheme.fromSeed(
+          seedColor: const Color(0xFF3D5A98),
+          brightness: theme.brightness,
+        );
+        expect(theme.colorScheme.primary, original.primary);
+        expect(theme.colorScheme.primaryContainer, original.primaryContainer);
+        expect(theme.colorScheme.secondary, original.secondary);
+        expect(theme.colorScheme.tertiary, original.tertiary);
+        expect(
+          theme.colorScheme.surface,
+          theme.brightness == Brightness.dark
+              ? const Color(0xFF0C1423)
+              : const Color(0xFFF5F7FC),
+        );
+        expect(
+          theme.extension<BrandColors>(),
+          theme.brightness == Brightness.dark
+              ? BrandColors.dark
+              : BrandColors.light,
+        );
+        expect(theme.textTheme.bodyMedium?.fontSize, 14);
+        expect(theme.textTheme.bodyMedium?.height, 1.5);
+      });
+
       test('语义色和容器文字满足正文对比度', () {
         final colors = theme.colorScheme;
         final brand = theme.extension<BrandColors>()!;

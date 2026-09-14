@@ -23,7 +23,8 @@ class AppSheet extends StatelessWidget {
     this.footer,
     this.showClose = true,
     this.scrollableChild = true,
-  });
+    this.footerMaxHeightFactor = 0.32,
+  }) : assert(footerMaxHeightFactor > 0 && footerMaxHeightFactor <= 0.5);
 
   final String title;
   final String? subtitle;
@@ -34,6 +35,9 @@ class AppSheet extends StatelessWidget {
   final Widget? footer;
   final bool showClose;
   final bool scrollableChild;
+
+  /// 多行操作可扩大 footer 预算；短窗口仍由整个面板滚动。
+  final double footerMaxHeightFactor;
 
   @override
   Widget build(BuildContext context) {
@@ -207,7 +211,9 @@ class AppSheet extends StatelessWidget {
                           if (footer != null)
                             ConstrainedBox(
                               constraints: BoxConstraints(
-                                maxHeight: panelConstraints.maxHeight * 0.32,
+                                maxHeight:
+                                    panelConstraints.maxHeight *
+                                    footerMaxHeightFactor,
                               ),
                               child: SingleChildScrollView(
                                 primary: false,

@@ -5,8 +5,14 @@ import 'package:flutter/widgets.dart';
 /// 相月使用更舒展的圆角作为视觉识别，组件仍按尺寸选择档位，避免
 /// 所有元素都使用同一个超大圆角。
 abstract final class AppRadius {
-  /// 小按钮、Chip、列表项。
+  /// 紧凑控件按压态。
+  static const double extraSmall = 8;
+
+  /// Chip、列表项与选择面按压态。
   static const double small = 12;
+
+  /// 中号按钮按压态、紧凑按钮选中态。
+  static const double control = 16;
 
   /// 输入框、卡片。
   static const double medium = 20;
@@ -20,6 +26,12 @@ abstract final class AppRadius {
   /// 短胶囊与紧凑输入栏。
   static const double full = 40;
 
+  static const BorderRadius extraSmallAll = BorderRadius.all(
+    Radius.circular(extraSmall),
+  );
+  static const BorderRadius controlAll = BorderRadius.all(
+    Radius.circular(control),
+  );
   static const BorderRadius smallAll = BorderRadius.all(Radius.circular(small));
   static const BorderRadius mediumAll = BorderRadius.all(
     Radius.circular(medium),

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
+import 'core/theme/app_motion.dart';
 import 'core/theme/app_theme.dart';
 import 'features/settings/theme_mode_controller.dart';
 import 'features/tools/run_recovery_controller.dart';
@@ -44,9 +45,11 @@ class _PhaseAppState extends ConsumerState<PhaseApp> {
       darkTheme: AppTheme.dark(),
       themeMode: themeMode,
       routerConfig: router,
-      builder: (context, child) => ToolConfirmationHost(
-        navigatorKey: router.routerDelegate.navigatorKey,
-        child: child!,
+      builder: (context, child) => AppMotionTheme(
+        child: ToolConfirmationHost(
+          navigatorKey: router.routerDelegate.navigatorKey,
+          child: child!,
+        ),
       ),
     );
   }

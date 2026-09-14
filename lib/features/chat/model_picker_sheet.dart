@@ -4,11 +4,13 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/theme/app_radius.dart';
+import '../../../core/theme/app_control_style.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../data/models/profile_model.dart';
 import '../../../data/models/provider_profile.dart';
@@ -333,7 +335,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         Scrollable.ensureVisible(
           context,
           alignment: 0,
-          duration: const Duration(milliseconds: 250),
+          duration: AppMotion.reduce(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 250),
           curve: Curves.easeOutCubic,
         );
       }
@@ -373,7 +377,10 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final scaler = MediaQuery.textScalerOf(context);
-    final tabHeight = AppSpacing.s * 2 + scaler.scale(14) * 1.35;
+    final tabHeight = (AppSpacing.s * 2 + scaler.scale(14) * 1.35).clamp(
+      AppControlStyle.touchTarget,
+      double.infinity,
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: AppSpacing.s),
       child: SizedBox(
@@ -387,7 +394,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           itemBuilder: (context, index) {
             final profile = profiles[index];
             final selected = profile.id == selectedProfileId;
-            final foreground = selected
+            final foreground = _saving
+                ? colors.onSurface.withValues(alpha: 0.38)
+                : selected
                 ? colors.onPrimaryContainer
                 : colors.onSurface;
             return Semantics(
@@ -395,51 +404,53 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               selected: selected,
               button: true,
               label: profile.name,
-              child: Material(
-                borderRadius: AppRadius.mediumAll,
-                color: selected
-                    ? colors.primaryContainer.withValues(alpha: 0.72)
-                    : colors.surfaceContainerHigh.withValues(alpha: 0.6),
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: _saving ? null : () => _scrollToProvider(profile.id),
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(
-                      minWidth: 64,
-                      maxWidth: 200,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.m,
-                        vertical: AppSpacing.s,
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Flexible(
-                            child: Text(
-                              profile.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.labelLarge?.copyWith(
-                                color: foreground,
-                              ),
-                            ),
+              child: FilledButton.tonal(
+                onPressed: _saving ? null : () => _scrollToProvider(profile.id),
+                style: AppControlStyle.compact.copyWith(
+                  animationDuration: AppMotion.reduce(context)
+                      ? Duration.zero
+                      : AppMotion.effects,
+                  shape: AppControlStyle.shape(compact: true, active: selected),
+                  padding: const WidgetStatePropertyAll(
+                    EdgeInsets.symmetric(horizontal: AppSpacing.m),
+                  ),
+                  backgroundColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.disabled)) return null;
+                    return selected
+                        ? colors.primaryContainer.withValues(alpha: 0.72)
+                        : colors.surfaceContainerHigh.withValues(alpha: 0.6);
+                  }),
+                ),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    minWidth: 64,
+                    maxWidth: 200,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          profile.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.labelLarge?.copyWith(
+                            color: foreground,
                           ),
-                          const SizedBox(width: AppSpacing.xs),
-                          Text(
-                            '${counts[profile.id] ?? 0}',
-                            maxLines: 1,
-                            style: theme.textTheme.labelMedium?.copyWith(
-                              color: selected
-                                  ? foreground
-                                  : colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        '${counts[profile.id] ?? 0}',
+                        maxLines: 1,
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: selected || _saving
+                              ? foreground
+                              : colors.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -468,55 +479,49 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       selected: selected,
       button: true,
       label: entry.profile.name,
-      child: Material(
-        borderRadius: AppRadius.mediumAll,
-        color: selected
-            ? colors.primaryContainer.withValues(alpha: 0.72)
-            : colors.surface.withValues(alpha: 0),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: _saving ? null : () => _choose(entry),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: 56),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.m),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+      child: AppSelectionSurface(
+        selected: selected,
+        onTap: _saving ? null : () => _choose(entry),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56),
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.m),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        model.id,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: foreground,
+                        ),
+                      ),
+                      if (metadata.isNotEmpty) ...[
+                        const SizedBox(height: AppSpacing.xs),
                         Text(
-                          model.id,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: foreground,
+                          metadata.join(' · '),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: selected
+                                ? foreground
+                                : colors.onSurfaceVariant,
                           ),
                         ),
-                        if (metadata.isNotEmpty) ...[
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            metadata.join(' · '),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: selected
-                                  ? foreground
-                                  : colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
                       ],
-                    ),
+                    ],
                   ),
-                  const SizedBox(width: AppSpacing.m),
-                  SizedBox.square(
-                    dimension: 24,
-                    child: selected
-                        ? Icon(Symbols.check_circle, color: foreground, fill: 1)
-                        : null,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(width: AppSpacing.m),
+                SizedBox.square(
+                  dimension: 24,
+                  child: selected
+                      ? Icon(Symbols.check_circle, color: foreground, fill: 1)
+                      : null,
+                ),
+              ],
             ),
           ),
         ),

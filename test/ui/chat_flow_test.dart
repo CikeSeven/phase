@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/app.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
@@ -108,6 +109,8 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, '帮我安排今天的任务');
     await tester.pump();
+    final sendRect = tester.getRect(find.byTooltip('发送'));
+    expect(sendRect.size, const Size.square(56));
     await tester.tap(find.byTooltip('发送'));
     await _until(tester, () => provider.requests.length == 1);
     expect(provider.requests.single.modelId, 'reasoning-test');
@@ -119,6 +122,12 @@ void main() {
       '帮我安排今天的任务',
     );
     expect(find.byTooltip('停止生成'), findsOneWidget);
+    expect(tester.getRect(find.byTooltip('停止生成')), sendRect);
+    final stopButton = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Symbols.stop),
+    );
+    expect(stopButton.isSelected, isNull);
+    expect(stopButton.style!.shape!.resolve({}), isA<RoundedRectangleBorder>());
 
     provider.response!.add(
       const PartStart(partId: 'reasoning_0', kind: PartKind.reasoning),

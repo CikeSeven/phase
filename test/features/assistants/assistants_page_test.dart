@@ -221,7 +221,16 @@ void main() {
 
   Future<void> changeWritePolicy(WidgetTester tester, String label) async {
     final field = find.byKey(const ValueKey('tool-policy-write_file'));
-    await tester.ensureVisible(field);
+    await tester.scrollUntilVisible(
+      field,
+      160,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('assistant-edit-scroll')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(field);
     await tester.pumpAndSettle();

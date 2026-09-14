@@ -12,7 +12,7 @@
 ## 2. 技术与依赖
 
 - 使用 Flutter stable；SDK 约束与依赖声明见 `pubspec.yaml`，解析版本见 `pubspec.lock`，实际工具链用 `flutter --version` 确认，不维护第二份版本表。
-- UI 使用 Material 3、`material_symbols_icons`、`gpt_markdown`；业务状态用 Riverpod 3 注解生成，路由用 go_router，网络用 Dio，存储用 Drift / shared_preferences / flutter_secure_storage。
+- UI 采用 Material 3 Expressive 设计体系，以 Flutter Material 组件和项目共享样式/交互适配实现，保留月色玻璃主题；图标与 Markdown 使用 `material_symbols_icons`、`gpt_markdown`，具体组件与动效边界见 DESIGN。业务状态用 Riverpod 3 注解生成，路由用 go_router，网络用 Dio，存储用 Drift / shared_preferences / flutter_secure_storage。
 - 优先复用 SDK、标准库和已有依赖；新增或升级依赖先说明必要性与影响，同步 manifest 和 lockfile。分析器规则以 `analysis_options.yaml` 为准，不为通过检查关闭 lint。
 
 ## 3. 结构与依赖边界

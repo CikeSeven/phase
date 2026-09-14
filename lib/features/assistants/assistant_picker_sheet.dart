@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../data/models/assistant.dart';
 import '../chat/chat_controller.dart';
@@ -96,54 +96,46 @@ class _AssistantOption extends StatelessWidget {
       button: true,
       selected: selected,
       label: assistant.name,
-      child: Material(
+      child: AppSelectionSurface(
+        selected: selected,
+        onTap: onTap,
         key: ValueKey('assistant-option-${assistant.id}'),
-        color: selected
-            ? colors.primaryContainer.withValues(alpha: 0.72)
-            : colors.surface.withValues(alpha: 0),
-        borderRadius: AppRadius.mediumAll,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          borderRadius: AppRadius.mediumAll,
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.m,
-              vertical: AppSpacing.m,
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  selected ? Symbols.check_circle : Symbols.circle,
-                  size: 20,
-                  color: selected
-                      ? colors.primary
-                      : colors.onSurfaceVariant.withValues(alpha: 0.4),
-                ),
-                const SizedBox(width: AppSpacing.m),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        assistant.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodyLarge,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.m,
+            vertical: AppSpacing.m,
+          ),
+          child: Row(
+            children: [
+              SizedBox.square(
+                dimension: 24,
+                child: selected
+                    ? Icon(Symbols.check_circle, color: colors.primary, fill: 1)
+                    : null,
+              ),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      assistant.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    Text(
+                      prompt.isEmpty ? '未设置系统提示词' : prompt,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant,
                       ),
-                      Text(
-                        prompt.isEmpty ? '未设置系统提示词' : prompt,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

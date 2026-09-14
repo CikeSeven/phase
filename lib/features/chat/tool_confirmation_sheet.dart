@@ -111,6 +111,7 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
     final target = (record.target ?? '').trim();
 
     return AppSheet(
+      footerMaxHeightFactor: 0.5,
       title: ToolPresentation.toolLabel(record.toolName),
       subtitle: widget.request.summary,
       // 面板只提供三个动作：关闭（含返回手势）按未决定处理。

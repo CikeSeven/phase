@@ -1,6 +1,12 @@
 # DESIGN.md — 相月 UI 规范
 
-**月色玻璃，留白优先。** 以当前 Material 3 界面为基线：月白/墨蓝画布、克制的彩色表面、局部玻璃质感，服务于 Android 单手操作与长时间阅读。工程边界见 [AGENTS.md](./AGENTS.md)。
+**月色玻璃，留白优先。** 采用 Material 3 Expressive 的组件形状、操作层级与响应式动效，保留月白/墨蓝画布、克制的彩色表面和局部玻璃质感，服务于 Android 单手操作与长时间阅读。工程边界见 [AGENTS.md](./AGENTS.md)。
+
+### 实现边界
+
+- 使用 Flutter SDK Material 组件，由 `AppTheme`、`AppControlStyle`、`AppSelectionSurface` 与 `AppMotion` 适配当前使用场景；SDK 没有完整的 Expressive 全局开关，不把 `useMaterial3: true` 描述为已启用完整 Expressive 组件库。
+- Expressive 不等于更换配色算法：不切换 `DynamicSchemeVariant.expressive`，不引入系统壁纸动态取色；保留原有种子色、明暗语义色、品牌扩展与玻璃材质。
+- 按钮状态形状与空间弹簧参考官方 Android Material 的 [Expressive 按钮](https://github.com/material-components/material-components-android/blob/master/lib/java/com/google/android/material/button/res/values/styles.xml) 和 [motion tokens](https://github.com/material-components/material-components-android/blob/master/lib/java/com/google/android/material/motion/res/values/tokens.xml)。当前 SDK 按钮形状仍使用其隐式插值，不宣称与 Android 原生弹簧完全一致；选择面单独使用物理弹簧。
 
 ## 1. 设计原则
 
@@ -44,13 +50,16 @@
 | 项目 | 基线 |
 | --- | --- |
 | 间距 | `xs/s/m/l/xl/xxl/xxxl/section` = 4/8/12/16/24/32/40/48dp |
-| 小圆角 | `small` 12：会话行、小控件；`medium` 20：字段、思考区、主题选项 |
+| 小圆角 | `extraSmall` 8：紧凑控件按压；`small` 12：会话行、选择面按压；`control` 16：中号按钮按压/紧凑按钮选中；`medium` 20：字段、思考区、未选选择面 |
 | 大圆角 | `large` 28：通用卡片、输入栏、消息；`extraLarge` 32：侧栏、弹层、设置主面；`full` 40：短胶囊 |
 | 页面标题 | `titleLarge` 22sp / 1.25；分区/入口 `titleMedium` 16sp / 1.4 |
+| 操作层级 | Filled / Elevated / Outlined 按钮最小高 56dp，标签 16sp；文字与普通图标按钮最小触区 48dp；大字时自然增高 |
 | 正文与说明 | `bodyLarge` 16sp / 1.5；`bodyMedium` 14sp / 1.5；元信息 `bodySmall` 12sp / 1.45 |
 | 内容限宽 | 设置/表单与底部面板 720dp，聊天阅读区/输入栏 840dp，Dialog 440dp |
 
 - 字体跟随系统，所有字号从 `TextTheme` 取用；不固定整行高度来容纳放大的文字。
+- 标题使用强调字重（`headlineMedium` / `headlineSmall` / `titleLarge` 为 700）；聊天正文仍沿用原字号、字重与行高，不把整页文字加粗。
+- 操作按钮使用真正随尺寸延展的 `StadiumBorder` 胶囊，而非固定半径冒充全圆角；按压收敛为圆角矩形。卡片、输入框与玻璃浮层仍使用原有圆角档位，不全局改成胶囊。
 - 页面水平留白 16–24dp；分区间距 24–40dp，卡片间距 12dp，相关字段间距 16dp；弹层选项至少留 8dp，不把卡片贴在一起。
 - 文本起点、图标和尾部操作保持对齐；图标本身通常 20–24dp，可点击触区至少 48×48dp，不能用小图标尺寸替代触区尺寸。
 - 长名称采用受约束的换行或省略，保留操作按钮空间；圆角不能吞掉短行的内容宽度。尺寸依父约束，不把整屏宽度用于弹窗内的子项。
@@ -59,6 +68,9 @@
 
 - 共享布局优先复用 `lib/core/widgets/`；仅用于某个业务的外观留在 feature 内，如 `ThemePreview`、消息操作面板，不为一次局部需求修改全局组件默认值。
 - 可操作色面使用 Material / InkWell 反馈；无框入口可以透明，但仍应有明确标题、触区和反馈。`ListTileTheme` 不全局加卡片背景。
+- 按钮通过 `AppControlStyle` 统一普通、按压、选中与禁用形状；保留各按钮种类和破坏性动作的语义色。提供 56dp 主操作与 48dp 紧凑操作，不为视觉层级改变操作含义。
+- 主题、模型和助手选择复用 `AppSelectionSurface`：未选 20dp、选中 28dp、按压 12dp 的形状反馈；色面保留浅主色，选中还需实心勾与读屏语义。弹簧只改变形状，不缩放触区、不移动相邻行；选中标记预留固定宽度。
+- 滑杆使用 SDK 的 `HandleThumbShape`、`GappedSliderTrackShape` 与 16dp 轨道；不通过已弃用年份标志切换外观，不改变分段、推理等级或保存时机。
 - 图标沿用 `material_symbols_icons` 的现有 `Symbols.xxx`，不混用旧 `Icons`；无后缀图标与 `_rounded` 是不同字形，不能把当前实现写成已统一 Rounded。改变字形须作为独立视觉调整。
 - 纯图标按钮必须有 tooltip/语义标签；装饰预览不重复朗读，选择项暴露选中语义，错误提示可由读屏获知。
 - 加载、空数据、失败、保存中分别表达；不把加载失败当成“尚未配置”，不留无作用的按钮，不用空白页面代替状态提示。
@@ -70,12 +82,13 @@
 - 路由显式返回 Flutter SDK 的 `MaterialPage`，保留 `PredictiveBackPageTransitionsBuilder` 和 Manifest 的 `enableOnBackInvokedCallback`；不要退回无动画页面或自制普通转场替代预测返回。
 - 普通 push/pop 使用当前 SDK 默认 Material 转场；系统返回手势必须支持进度预览、取消与提交，不将普通转场名称写死为业务约定。
 - `PopScope.canPop` 提前反映可返回状态，不使用 `WillPopScope` 临时异步拦截；返回优先处理当前弹层/侧栏，根聊天页无覆盖层时才恢复正常系统返回。
-- 新增控件过渡以 180–260ms 为参考，路由沿用 SDK 时长；不得为增加动画改变保存、取消或选择生效时机。
+- 选择面形状使用 Expressive fast spatial 弹簧（mass 1、stiffness 800、damping ratio 0.6），快速反向时从当前值/速度继续；颜色使用 200ms 无回弹过渡。SDK 按钮形状使用 200ms 隐式过渡，路由继续沿用 SDK 默认时长与预测返回；不得为动画延迟动作或改变保存、取消、选择生效时机。
 
 ### 聊天页
 
 - 顶栏保留侧栏按钮、品牌/服务商、模型入口和新会话按钮；设置留在侧栏。模型下拉箭头紧贴模型名，间距 4dp；短名称不把箭头推到最右，长名称省略且保留箭头。
 - 输入栏多行最多五行，发送/停止位置稳定；焦点在编辑框时整个外边框用主题主色，失焦恢复默认，不改变尺寸、不画第二层内部边框。判断依据是焦点，不是键盘是否可见。附件入口为回形针图标与来源面板（拍照/相册/文件），草稿以输入框上方的横向附件条展示、可单个移除；模型未标记支持图片时拦截图片入口。用户消息气泡在正文上方展示图片缩略图（点开大图）与文件标签。
+- 发送/停止共用 56dp 触区：发送为圆形，运行态为圆角方形，图标与 tooltip 同步变化；停止不是开关选中态，不增加 toggle 语义，不因动画重复派发动作。
 - 空态保留简洁引导与真实入口；发送前失败不清草稿，接受发送后再清理已发送内容；侧栏和弹层往返不主动抢焦点或丢草稿。
 - 根任务的运行状态独立于当前查看的会话；切换会话仍保留停止入口，并提供“返回运行中的会话”。启动发现中断任务时显示可达的任务入口；读取失败提供重试，不当作没有任务。
 - 模型自动重试期间仍属于运行中，发送/停止入口不变；任务条显示重试次数与等待间隔，切换会话不丢失停止能力。失败尝试保留为历史分支，新尝试替换当前显示的失败回答，不把两次正文或思考拼成一次成功回答。
@@ -152,6 +165,7 @@
 | 会话更多操作 | 按钮锚定 `MenuAnchor`，不是消息的长按菜单 |
 
 - BottomSheet 保留拖柄、标题、关闭入口；未提交时支持返回、点遮罩和下滑关闭，取消不执行动作，保存中遵循防重复与离开保护。`AppSheet` 的 child 默认是有界可滚动区域，静态内容设 `scrollableChild: false`，不要双重无界滚动。
+- `AppSheet` 常规 footer 最多占面板高度 32%；工具确认的三个 56dp 动作显式使用 `footerMaxHeightFactor: 0.5`，保证正常视口全部可达，不改变其他面板默认布局。极短窗口仍由整个面板滚动。
 - 键盘避让只做一次，保留底部安全区；短屏或横屏允许内容与操作滚动到达，不能靠固定高度截断按钮。弹层不主动聚焦聊天输入框。
 - Dialog 操作区取消在次、确认在主；破坏性动作使用 error 语义色并说明后果。重复提交锁定、保存失败可重试。
 - 保留字段含义、当前值、错误原因、删除影响、版本与必要凭据说明；删掉“支持多行输入”、重复口号、复述按钮用途的长提示，连同多余留白一起删除。
@@ -160,7 +174,7 @@
 ## 8. 无障碍与性能
 
 - 正文与背景的最终对比度至少 4.5:1；不能只检查透明色的原始值，也不能用降低文字透明度制造“高级感”。深浅主题和放大字号均需检查。
-- `disableAnimations` / `accessibleNavigation` 时，玻璃组件去模糊并合成实底；生成光标可见但静止，离屏停止动画。不在空态添加无限装饰动画，不逐字播放流式文本。
+- `disableAnimations` / `accessibleNavigation` 时，玻璃组件去模糊并合成实底；`AppMotionTheme` 将 SDK 按钮形状过渡置零，选择面停止弹簧并立即到达当前状态，模型标签定位不动画滚动。生成光标可见但静止，离屏停止动画。不在空态添加无限装饰动画，不逐字播放流式文本。
 - 消息/会话/模型列表保留惰性构建与稳定身份；不要让展开/收起、键盘变化或弹层往返重置阅读状态。
 - 玻璃和拖动性能在目标 Android 的 Profile 构建上检查；记录设备刷新率、UI/raster 帧耗时和超时帧，比较同模式、同场景。截图成功、Debug 观感或 widget 运行时间不能证明流畅。
 - 不在没有帧数据时把卡顿归咎设备或某段 `setState`；`RepaintBoundary` 也不能代替对实时背景模糊成本的测量。
@@ -170,6 +184,7 @@
 按本次改动选择相关回归，代码交付仍执行 AGENTS 的标准检查；以下是验收要求，不是已经覆盖全部场景的声明。
 
 - **布局**：320/360dp、横屏、1.3x/2x 字号、键盘、长名称、长消息与大量列表；检查触区、截断、按钮可达性及浅深主题。
+- **Expressive**：`test/core/theme/app_theme_test.dart` 验证品牌色与正文基线不变；`test/core/theme/expressive_controls_test.dart` 验证真实按压/释放、禁用、键盘、快速改选、减少动画、大字和滑杆交互。
 - **聊天/侧栏**：`test/features/chat/chat_page_layout_test.dart`、`test/features/chat/chat_transcript_test.dart`、`test/features/chat/message_bubble_test.dart` 验证图标位置、焦点、跟手、阅读与复制。
 - **设置/弹层**：`test/features/settings/settings_page_test.dart`、`test/core/theme/app_panels_test.dart` 覆盖主题确认/取消、持久化和滚动约束。
 - **路由**：`test/route_transition_test.dart` 与 `test/ui/predictive_back_test.dart`；普通 push/pop 测试不替代系统手势通道或真机返回预览检查。

@@ -116,8 +116,7 @@ void main() {
   });
 
   testWidgets('三个动作各占一行，停止任务在最上且是红色，拖动杆只有一根', (tester) async {
-    // 手机尺寸的视口：面板 footer 有 32% 高度上限，过矮的窗口里它自身会滚动，
-    // 量出来的位置就不代表真机上的排版。
+    // 多行主操作扩大 footer 高度预算，手机视口内三个动作都应完整可达。
     tester.view.physicalSize = const Size(400, 860);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -138,6 +137,9 @@ void main() {
     expect(reject.left, closeTo(stop.left, 0.5));
     expect(allow.width, closeTo(stop.width, 0.5));
     expect(stop.width, greaterThan(200));
+    for (final rect in [stop, reject, allow]) {
+      expect(rect.height, greaterThanOrEqualTo(56));
+    }
 
     // 停止任务用错误色：这是不可撤销的收尾动作。
     final colors = AppTheme.light().colorScheme;
@@ -180,6 +182,11 @@ void main() {
     expect(find.text('HTTP 请求'), findsOneWidget);
     expect(parameterText(tester, 'url'), 'https://example.com/a?b=1');
     expect(parameterText(tester, 'method'), 'POST');
+    await tester.dragUntilVisible(
+      find.byKey(const ValueKey('tool-parameter-headers')),
+      find.byKey(const ValueKey('tool-confirmation-body')),
+      const Offset(0, -100),
+    );
     expect(parameterText(tester, 'headers'), contains('"X-Trace": "abc"'));
     // 请求正文在长参数之后：滚动到底部再断言它的真实取值。
     await tester.dragUntilVisible(
