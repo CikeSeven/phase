@@ -13,6 +13,7 @@ import '../../data/models/provider_profile.dart';
 import '../../data/models/reasoning_effort.dart';
 import '../ai_provider.dart';
 import '../attachment_encoder.dart';
+import '../tool_result_images.dart';
 import '../dio_failure_mapper.dart';
 import '../sse_transport.dart';
 import 'sse_decoder.dart';
@@ -42,7 +43,7 @@ Future<Map<String, dynamic>> buildCompletionsPayload(
       'content': request.systemPrompt,
     });
   }
-  for (final message in request.messages) {
+  for (final message in expandToolResultImages(request.messages)) {
     messages.addAll(await _completionsMessages(message, compat, attachments));
   }
 

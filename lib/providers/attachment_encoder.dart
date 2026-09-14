@@ -55,7 +55,7 @@ Future<AttachmentPayload> encodeAttachment(
   Attachment attachment, {
   required bool supportsImages,
 }) async {
-  if (attachment.kind == AttachmentKind.image) {
+  if (attachment.isImage) {
     if (!supportsImages) {
       return _placeholder(attachment, '[图片已省略：当前模型不支持图片输入]');
     }
@@ -64,7 +64,7 @@ Future<AttachmentPayload> encodeAttachment(
       return _placeholder(attachment, '[图片文件已丢失]');
     }
     return AttachmentPayload(
-      kind: attachment.kind,
+      kind: AttachmentKind.image,
       name: attachment.name,
       mimeType: attachment.mimeType,
       base64Data: base64Encode(bytes),

@@ -109,6 +109,75 @@ void main() {
     });
   }
 
+  testWidgets('相月显示为普通第三方应用，可加入黑名单和白名单，取消不保存', (tester) async {
+    const package = 'app.xiangyue.phase';
+    var initial = const ApplicationAccessPolicy();
+    ApplicationAccessPolicy? result;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light(),
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: TextButton(
+              onPressed: () async {
+                result = await showApplicationPolicySheet(
+                  context,
+                  applications: [app(package, label: '相月')],
+                  initialPolicy: initial,
+                );
+              },
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final row = find.byKey(
+      const ValueKey('application-policy-app.xiangyue.phase'),
+    );
+    Future<void> open() async {
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.scrollUntilVisible(
+        row,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('application-list-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await open();
+    expect(tester.widget<CheckboxListTile>(row).value, isFalse);
+    await tester.tap(row);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('confirm-application-policy')));
+    await tester.pumpAndSettle();
+    expect(result!.blacklist, {package});
+    expect(result!.allows(package, isSystem: false), isFalse);
+    expect(initial.blacklist, isEmpty);
+    initial = const ApplicationAccessPolicy(mode: AppListMode.whitelist);
+    await open();
+    expect(tester.widget<CheckboxListTile>(row).value, isFalse);
+    await tester.tap(row);
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('confirm-application-policy')));
+    await tester.pumpAndSettle();
+    expect(result!.whitelist, {package});
+    expect(result!.allows(package, isSystem: false), isTrue);
+    await open();
+    await tester.tap(row);
+    await tester.tap(find.byTooltip('关闭'));
+    await tester.pumpAndSettle();
+    expect(result, isNull);
+    expect(initial.whitelist, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('助手中应用操作只显示一个策略开关并控制全部应用工具', (tester) async {
     final driver = FakeChannelDriver();
     addTearDown(driver.dispose);

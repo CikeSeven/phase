@@ -18,6 +18,8 @@ class ToolPresentation {
     'write_file' => Symbols.save,
     'list_files' => Symbols.folder_open,
     'http_request' => Symbols.language,
+    'capture_screen' => Symbols.screenshot,
+    'perform_gestures' => Symbols.touch_app,
     _ => Symbols.build,
   };
 
@@ -33,6 +35,8 @@ class ToolPresentation {
     'click_node' => '点击控件',
     'scroll' => '滚动界面',
     'input_text' => '输入文本',
+    'capture_screen' => '截图观察',
+    'perform_gestures' => '执行手势组合',
     _ => toolName,
   };
 
@@ -126,6 +130,13 @@ class ToolPresentation {
 
   /// 关键参数的中文标签；未登记的参数用原始键名。
   static const _parameterLabels = <String, Map<String, String>>{
+    'perform_gestures': {
+      'packageName': '目标应用',
+      'coordinateSpace': '坐标空间（默认屏幕像素）',
+      'imageWidth': '参照图片宽度',
+      'imageHeight': '参照图片高度',
+      'actions': '手势组合（按声明的坐标空间顺序执行）',
+    },
     'read_file': {'reference': '引用', 'offset': '起始行', 'limit': '读取行数'},
     'write_file': {'path': '写入路径', 'content': '写入内容'},
     'http_request': {
@@ -177,7 +188,10 @@ class ToolPresentation {
     }
     final result = record.result?.trim();
     if (result != null && result.isNotEmpty) {
-      final text = _fileSummary(record, result) ?? result;
+      final text =
+          _visualSummary(record, result) ??
+          _fileSummary(record, result) ??
+          result;
       return text.length > 160 ? '${text.substring(0, 160)}…' : text;
     }
     return switch (record.status) {
@@ -189,6 +203,29 @@ class ToolPresentation {
       ToolCallStatus.rejected => '未执行（已拒绝）',
       ToolCallStatus.cancelled => '已取消',
     };
+  }
+
+  static String? _visualSummary(ToolCallRecord record, String result) {
+    if (!visualOperationTools.contains(record.toolName)) return null;
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(result);
+    } on FormatException {
+      return null;
+    }
+    if (decoded is! Map) return null;
+    final count = decoded['completedCount'];
+    final prefix = count is num ? '系统已完成 $count 步手势。' : '';
+    if (decoded['observationError'] case final String error) {
+      return '$prefix操作后截图不可用：$error';
+    }
+    if (decoded['reason'] case final String reason) {
+      return '$prefix$reason';
+    }
+    if (decoded['screenshot'] case final Map screenshot) {
+      return '$prefix已获取 ${screenshot['imageWidth']} × ${screenshot['imageHeight']} 的窗口截图';
+    }
+    return prefix.isEmpty ? null : prefix;
   }
 
   static String? _fileSummary(ToolCallRecord record, String result) {

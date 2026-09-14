@@ -56,7 +56,9 @@ class Attachment {
 
   final DateTime createdAt;
 
-  bool get isImage => kind == AttachmentKind.image;
+  bool get isImage =>
+      kind == AttachmentKind.image ||
+      (kind == AttachmentKind.artifact && mimeType.startsWith('image/'));
 
   /// 文档类附件：内容以抽取文本参与请求。
   bool get isDocument =>

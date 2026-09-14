@@ -8,11 +8,14 @@ import android.content.IntentFilter
 import android.content.res.Configuration
 import android.view.accessibility.AccessibilityEvent
 import app.xiangyue.phase.PhaseApplication
+import app.xiangyue.phase.vision.VisualDriver
 
 class PhaseAccessibilityService : AccessibilityService() {
     lateinit var driver: AccessibilityDriver
         private set
     lateinit var overlay: TaskOverlay
+        private set
+    lateinit var visual: VisualDriver
         private set
     private val coordinator get() = (application as PhaseApplication).runtime.coordinator
     private val screenOff = object : BroadcastReceiver() {
@@ -21,7 +24,7 @@ class PhaseAccessibilityService : AccessibilityService() {
 
     override fun onServiceConnected() {
         super.onServiceConnected()
-        driver = AccessibilityDriver(this); overlay = TaskOverlay(this)
+        driver = AccessibilityDriver(this); overlay = TaskOverlay(this); visual = VisualDriver(this)
         instance = this
         if (android.os.Build.VERSION.SDK_INT >= 33) registerReceiver(screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF), Context.RECEIVER_NOT_EXPORTED)
         else registerReceiver(screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF))
@@ -44,6 +47,7 @@ class PhaseAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         if (::overlay.isInitialized) overlay.hide()
         if (::driver.isInitialized) driver.clear()
+        if (::visual.isInitialized) visual.clear()
         try { unregisterReceiver(screenOff) } catch (_: IllegalArgumentException) {}
         instance = null
         coordinator.interruptDevice("permissionRequired")

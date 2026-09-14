@@ -40,6 +40,10 @@ class ExecutionSmokeRunner : Instrumentation() {
         targetPackage = target
         val id = "smoke-${UUID.randomUUID()}"
         val app = targetContext.applicationContext as PhaseApplication
+        if (scenario == "self-visual") {
+            VisualSmokeScenario(this) { stage = it }.run(report)
+            return
+        }
         if (scenario == "applications") {
             val coordinator = withContext(Dispatchers.Main) { app.runtime.coordinator }
             applicationScenario(coordinator, id, report)

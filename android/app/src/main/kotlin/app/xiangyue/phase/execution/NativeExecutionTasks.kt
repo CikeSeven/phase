@@ -17,6 +17,7 @@ class NativeExecutionTasks(
     private class Pending {
         var sequence = 0L
         var lastProgressAt = 0L
+        var checkpoint: Map<String, Any?> = emptyMap()
         lateinit var job: Deferred<ExecutionResult>
     }
     private val pending = mutableMapOf<String, Pending>()
@@ -26,6 +27,14 @@ class NativeExecutionTasks(
     private var stopped = false
 
     val capabilities get() = actions.keys.toList()
+
+    fun checkpoint(id: String, value: Map<String, Any?>) {
+        pending[id]?.checkpoint = value.toMap()
+    }
+
+    private fun interrupted(id: String, task: Pending, status: ExecutionStatus, error: ChannelError) =
+        if (task.checkpoint.isEmpty()) result(id, status, error)
+        else ExecutionResult(id, status, task.checkpoint + ("reason" to error.name.lowercase()), emptyList(), error)
 
     fun begin(run: String) {
         check(runId == null)
@@ -62,9 +71,9 @@ class NativeExecutionTasks(
                     if (response.toolCallId == id) response else result(id, ExecutionStatus.FAILED, ChannelError.EXECUTION_FAILED)
                 }
             } catch (_: TimeoutCancellationException) {
-                result(id, ExecutionStatus.FAILED, ChannelError.TIMEOUT)
+                interrupted(id, task, ExecutionStatus.FAILED, ChannelError.TIMEOUT)
             } catch (_: CancellationException) {
-                result(id, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
+                interrupted(id, task, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
             } catch (_: Exception) {
                 // Do not send raw Android exception messages across the bridge.
                 result(id, ExecutionStatus.FAILED, ChannelError.EXECUTION_FAILED)
@@ -74,7 +83,7 @@ class NativeExecutionTasks(
             task.job.await()
         } catch (_: CancellationException) {
             task.job.cancel()
-            result(id, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
+            interrupted(id, task, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
         } finally {
             if (pending[id] === task) pending.remove(id)
         }

@@ -5,6 +5,7 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
 import '../../data/models/reasoning_effort.dart';
 import '../attachment_encoder.dart';
+import '../tool_result_images.dart';
 import '../dio_failure_mapper.dart';
 import '../part_assembler.dart';
 import '../sse_transport.dart';
@@ -35,7 +36,7 @@ Future<Map<String, dynamic>> buildResponsesPayload(
         ],
       },
   ];
-  for (final message in request.messages) {
+  for (final message in expandToolResultImages(request.messages)) {
     input.addAll(await _responsesItems(message, attachments));
   }
 

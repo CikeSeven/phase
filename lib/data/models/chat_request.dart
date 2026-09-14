@@ -72,11 +72,15 @@ class ResolvedToolResult extends ResolvedPart {
     required this.callId,
     required this.content,
     this.isError = false,
+    this.images = const [],
   });
 
   final String callId;
   final String content;
   final bool isError;
+
+  /// Tool-produced images; persisted attachments remain the source of truth.
+  final List<Attachment> images;
 }
 
 /// 交给 [AiProvider.streamChat] 的请求。

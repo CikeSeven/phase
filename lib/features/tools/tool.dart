@@ -135,6 +135,9 @@ abstract class Tool {
   /// 确认页展示给用户的一句话动作摘要。
   String describeAction(Map<String, dynamic> arguments);
 
+  /// Additional semantic validation before confirmation and platform preparation.
+  String? validateArguments(Map<String, dynamic> arguments) => null;
+
   /// 执行工具；抛异常按失败处理，超时与用户停止由调用方取消。
   Future<ToolOutcome> execute(
     Map<String, dynamic> arguments,

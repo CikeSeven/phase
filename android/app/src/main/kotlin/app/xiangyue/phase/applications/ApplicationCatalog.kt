@@ -34,7 +34,6 @@ class ApplicationCatalog(private val context: Context) {
 
     private fun describe(info: PackageInfo): InstalledApplication? {
         val application = info.applicationInfo ?: return null
-        if (application.packageName == context.packageName) return null
         return InstalledApplication(
             application.packageName,
             application.loadLabel(packages).toString().take(200),

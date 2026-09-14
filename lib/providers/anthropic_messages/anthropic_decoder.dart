@@ -5,6 +5,7 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
 import '../../data/models/reasoning_effort.dart';
 import '../attachment_encoder.dart';
+import '../tool_result_images.dart';
 import '../dio_failure_mapper.dart';
 import '../part_assembler.dart';
 import '../sse_transport.dart';
@@ -35,10 +36,11 @@ Future<Map<String, dynamic>> buildAnthropicPayload(
     }
   }
 
+  final resolved = expandToolResultImages(request.messages);
   final messages = <Map<String, dynamic>>[];
   var index = 0;
-  while (index < request.messages.length) {
-    final message = request.messages[index];
+  while (index < resolved.length) {
+    final message = resolved[index];
     // system 角色消息并入顶层 system 字段，不进入 messages。
     if (message.role == ChatRole.system) {
       index++;
@@ -50,11 +52,8 @@ Future<Map<String, dynamic>> buildAnthropicPayload(
     // （严格端点会直接拒绝逐条发送的形态）。
     if (_isToolResult(message)) {
       final blocks = <Map<String, dynamic>>[];
-      while (index < request.messages.length &&
-          _isToolResult(request.messages[index])) {
-        blocks.addAll(
-          await _anthropicBlocks(request.messages[index], attachments),
-        );
+      while (index < resolved.length && _isToolResult(resolved[index])) {
+        blocks.addAll(await _anthropicBlocks(resolved[index], attachments));
         index++;
       }
       if (blocks.isNotEmpty) {

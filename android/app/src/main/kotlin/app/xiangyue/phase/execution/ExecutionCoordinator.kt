@@ -25,11 +25,12 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     private var launching = false
     private var overlaySuppressed = false
     private val fileActions = setOf(ExecutionAction.READ_FILE, ExecutionAction.WRITE_FILE, ExecutionAction.LIST_FILES)
+    private val visualActions = setOf(ExecutionAction.CAPTURE_SCREEN, ExecutionAction.PERFORM_GESTURES)
     private val tasks = NativeExecutionTasks(scope, ExecutionAction.entries.associateWith { action ->
-        NativeAction { request, _ ->
+        NativeAction { request, progress ->
             if (action in fileActions) files.execute(request, session?.fileUris ?: emptyList())
             else if (action == ExecutionAction.LIST_APPS) listApplications(request)
-            else executeUi(request)
+            else executeUi(request, progress)
         }
     }) { progress ->
         send { flutter.progress(progress) }
@@ -49,8 +50,15 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         val manager = context.getSystemService(NotificationManager::class.java)
         val channelEnabled = Build.VERSION.SDK_INT < 26 ||
             manager.getNotificationChannel(ExecutionService.CHANNEL_ID)?.importance != NotificationManager.IMPORTANCE_NONE
-        val connected = PhaseAccessibilityService.instance != null
-        return ExecutionCapabilities(tasks.capabilities.filter { it in fileActions || it == ExecutionAction.LIST_APPS || connected }, manager.areNotificationsEnabled() && channelEnabled, resumed, connected)
+        val accessibility = PhaseAccessibilityService.instance
+        val connected = accessibility != null
+        val screenshots = Build.VERSION.SDK_INT >= 34 &&
+            ((accessibility?.serviceInfo?.capabilities ?: 0) and
+                android.accessibilityservice.AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT) != 0
+        return ExecutionCapabilities(tasks.capabilities.filter {
+            (it in fileActions || it == ExecutionAction.LIST_APPS || connected) &&
+                (it != ExecutionAction.CAPTURE_SCREEN || screenshots)
+        }, manager.areNotificationsEnabled() && channelEnabled, resumed, connected)
     }
 
     fun setActivityResumed(value: Boolean) {
@@ -108,6 +116,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         tasks.end(runId)
         session = null; deviceActive = false; activeTargetPackage = null
         PhaseAccessibilityService.instance?.driver?.clear()
+        PhaseAccessibilityService.instance?.visual?.clear()
         PhaseAccessibilityService.instance?.overlay?.hide()
         starting?.complete(HostReply(ChannelError.CANCELLED))
         val host = service
@@ -163,12 +172,17 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         refreshOverlay()
     }
 
-    private suspend fun executeUi(request: ExecutionRequest): ExecutionResult = deviceQueue.withLock {
-        val target = request.target.packageName
-        if (target.isNullOrBlank() || request.arguments["packageName"] != target) return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.INVALID_ARGUMENTS)
+    private suspend fun executeUi(request: ExecutionRequest, progress: suspend (ProgressKind, String) -> Unit): ExecutionResult = deviceQueue.withLock {
+        val accessibility = PhaseAccessibilityService.instance
+        if (request.action == ExecutionAction.CAPTURE_SCREEN && (!deviceActive || accessibility == null))
+            return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.PERMISSION_REQUIRED)
+        val target = try { resolveUiTarget(request) { accessibility?.driver?.activePackage() } }
+        catch (_: IllegalArgumentException) {
+            return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.INVALID_ARGUMENTS)
+        } ?: return@withLock ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
+            mapOf("reason" to "当前没有可截图的前台应用窗口"), emptyList(), ChannelError.UNAVAILABLE)
         val application = applications.get(target)
         if (application == null || application.packageName != target || !allowed(application)) return@withLock denied(request)
-        val accessibility = PhaseAccessibilityService.instance
         if (!deviceActive || accessibility == null) return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.PERMISSION_REQUIRED)
         overlaySuppressed = true
         accessibility.overlay.hide()
@@ -186,6 +200,13 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
                 if (!allowed(application)) return@withLock denied(request)
                 ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED, mapOf("packageName" to target, "actionAccepted" to true,
                     "observationChanged" to true, "snapshot" to accessibility.driver.snapshot(target)), emptyList())
+            } else if (request.action in visualActions) {
+                activeTargetPackage = target
+                accessibility.visual.execute(request, target, validatePolicy = {
+                    currentCoroutineContext().ensureActive()
+                    val current = applications.get(target)
+                    if (current == null || !allowed(current)) throw app.xiangyue.phase.vision.VisualBlocked("applicationDenied")
+                }, checkpoint = { tasks.checkpoint(request.toolCallId, it) }, progress = progress)
             } else {
                 // No implicit launch or switch: snapshot/package/window identity is checked by the driver.
                 val result = accessibility.driver.execute(request, target)

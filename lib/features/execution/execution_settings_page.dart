@@ -172,6 +172,17 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
                         ),
                 ),
                 const SizedBox(height: AppSpacing.l),
+                ListTile(
+                  title: const Text('截图观察与手势组合'),
+                  subtitle: Text(
+                    value.capabilities?.actions.contains(
+                              ExecutionAction.captureScreen,
+                            ) ==
+                            true
+                        ? '窗口截图可用，需模型支持图片与工具；手势可直接使用屏幕像素，也可按图片宽高换算，不要求先截图。'
+                        : '截图需要 Android 14+ 和已连接的无障碍服务；手势与控件操作不依赖截图能力。',
+                  ),
+                ),
                 Text('授权文件与目录', style: Theme.of(context).textTheme.titleMedium),
                 const Text('勾选范围仅在保存后用于新任务；选择器授权不等于开放给模型。解除授权立即生效，不删除文件。'),
                 Wrap(
@@ -276,7 +287,9 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
                   ),
                 const SizedBox(height: AppSpacing.l),
                 Text('应用操作', style: Theme.of(context).textTheme.titleMedium),
-                const Text('不再选择固定目标 App。AI 获取应用列表和执行动作均受同一名单校验；相月自身不参与自动化。'),
+                const Text(
+                  'AI 获取应用列表和执行动作均受同一名单校验；相月与其他第三方应用使用相同规则，可在名单中允许或禁止。',
+                ),
                 ListTile(
                   key: const ValueKey('edit-application-policy'),
                   title: const Text('应用名单'),

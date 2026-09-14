@@ -528,7 +528,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               .read(settingsStorageProvider)
               .readExecutionScope(),
           enabledTools: selection.supportsTools
-              ? assistant?.toolPolicy.enabledTools ?? const {}
+              ? {
+                  for (final name
+                      in assistant?.toolPolicy.enabledTools ?? <String>{})
+                    if (selection.supportsImages || name != 'capture_screen')
+                      name,
+                }
               : const {},
           toolPolicies: selection.supportsTools
               ? assistant?.toolPolicy.overrides ?? const {}
@@ -1506,6 +1511,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required String currentModelId,
   }) async {
     final records = await _recordsFor(messages);
+    final latestVisualRecord = messages
+        .expand((message) => message.parts)
+        .whereType<ToolResultPart>()
+        .map((part) => records[part.toolCallId])
+        .where(
+          (record) =>
+              record != null && visualOperationTools.contains(record.toolName),
+        )
+        .lastOrNull;
     // 结果文本以结果消息为准：拒绝等状态只写进结果消息，记录里可能没有。
     final results = <String, ResolvedToolResult>{};
     for (final message in messages) {
@@ -1516,6 +1530,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         if (record == null || callId == null) continue;
         results[part.toolCallId] = ResolvedToolResult(
           callId: callId,
+          images: record.id == latestVisualRecord?.id
+              ? [
+                  for (final id in record.artifacts)
+                    if (attachments[id]?.isImage == true) attachments[id]!,
+                ]
+              : const [],
           content: _truncateResult(
             message.text.isNotEmpty
                 ? message.text

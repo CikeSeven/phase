@@ -235,3 +235,32 @@ adb -s "$DEVICE" shell am start -W -n app.xiangyue.phase/.MainActivity
 - 移除部分输出后禁止重试的限制。每次尝试是独立历史消息，重试从同一父节点与原请求上下文开始；此前工具结果保留，失败输出/协议状态不回放，不重复执行历史动作。重新生成也保留已发生的工具历史。
 - 验证入口：`test/features/chat/model_retry_test.dart`、`test/features/chat/model_retry_banner_test.dart`、`test/features/chat/model_retry_transport_test.dart`、`test/features/tools/tool_error_recovery_test.dart`、`test/providers/retry_error_test.dart`；四协议使用假凭据与原始 SSE 经过真实适配器到 Controller/数据库，重试后的等待响应与空闲流取消通过真实回环 HTTP 连接验证。
 - 已执行 Dart 格式检查、`dart run build_runner build`、`flutter analyze --no-pub`、完整 `flutter test --no-pub`（616 通过、4 个预览用例跳过）及 `git diff --check`。未安装真机或调用真实模型网关，测试不代表真机 UI、性能或真实网关验收。
+
+## 16. 视觉观察与手势组合增量（2026-09-15）
+
+按用户要求暂不开展 S5，前置实现 P1 感知中的窗口视觉子集，不代表其余 P1 功能已完成。
+
+- **工具与权限**：新增 `capture_screen` 和 `perform_gestures`，沿用助手“应用操作”策略、运行快照与最新应用名单的交集；不支持图片的模型不下发视觉工具，主动返回这些调用也会被执行器拒绝。执行设置显示实际窗口截图能力与模型能力条件。
+- **真实图片链路**：Android 14+ 无障碍窗口截图 → 临时 PNG → Dart 尺寸校验及产物登记 → `ResolvedToolResult.images` → 四协议图片请求。最长边 1568px、最大 4MB；完整工具结果组之后追加标明工具来源的图片观察，不拆开多调用配对。当前分支只回填最近一次视觉结果的图片，历史截图仍保留并可预览。
+- **坐标与组合**：图片像素坐标绑定原生截图 ID、窗口原点、尺寸与旋转，原生负责缩放映射；支持单击、双击、长按、滑动、等待的 1–10 步串行组合。整组固定参数只确认一次；Dart 确认前校验所有步骤，原生在任何动作前检查所有坐标，逐步复核目标和权限。截图最多有效 120 秒且只能用于一次组合；目标内容变化、窗口/旋转变化与过期图像要求重新观察。
+- **中断与反馈**：记录已结束步骤的系统回调、完成数量、中断步骤及是否已派发；失败、停止和超时不继续调度，也不重发已派发手势。成功后获取最终截图；截图/临时文件失败作为工具错误，保留此前动作信息；应用记录写入失败仍结束运行。Android 不提供已派发手势的撤销句柄，不声称停止撤销了外部效果。
+- **回归**：`test/features/execution/visual_tools_test.dart`（功能与失败/停止）、`visual_protocol_flow_test.dart`（四协议原始 SSE、真实回环 HTTP、真实适配器到图片请求及数据库）、`visual_ui_test.dart`（浅深主题、320dp、2x 字号、预览与拒绝）；Kotlin `VisualExecutionTest` 覆盖坐标映射、整组校验、串行中断、取消/超时保留步骤及不重放。
+- **已执行检查**：Pigeon 生成并重复生成校验一致；`dart run build_runner build`；Dart 格式检查；`flutter analyze --no-pub` 无问题；完整 `flutter test --no-pub` 639 通过、4 个预览用例跳过；`./gradlew :app:testDebugUnitTest` 18 通过；`flutter build apk --profile` 成功；`git diff --check` 通过。未新增依赖、未改变数据库 schema、应用 ID 或签名。构建仍有 Kotlin 插件未来兼容性及既有字体引用警告，未在本任务中调整相关配置。
+- **本次未验证**：新视觉功能的真机安装、截图尺寸/坐标实际命中、原生浮层与系统回调、真实模型视觉判断和 Profile 性能。Profile 包位于 `build/app/outputs/flutter-apk/app-profile.apk`，未执行安装、卸载或数据清理。本批不包含多指、键盘按键与输入法替代；标准文本输入继续使用原有 `input_text`。
+
+## 17. 截图观察改为无参读取当前页面（2026-09-15）
+
+- `capture_screen()` 不再接收 `packageName`：工具定义、提示词与确认文案同步修改，不要求模型先查询应用列表或打开应用。原生从实际前台应用窗口识别目标，再校验运行/最新名单；截图结果仍返回真实包名供后续手势使用，不采用模型指定或缓存的目标。
+- 手势组合继续绑定截图结果中的 `packageName` 与 `screenshotId`，不因截图简化参数而跟随切换到别的应用。截图仍按最长边 1568px 缩放、PNG 无损编码、4MB 上限处理，本次未改变压缩方式。
+- 已更新四协议无参截图闭环回归、工具策略契约与确认 UI 用例；新增参数拒绝回归和 Kotlin `UiTargetTest`，覆盖每次从前台取目标、无窗口、拒绝伪造目标与手势不自动换目标。格式检查、`flutter analyze --no-pub`、完整 `flutter test --no-pub`（640 通过、4 跳过）、原生 JVM 测试（21 通过）、Profile 构建及 `git diff --check` 均通过。未新增依赖，未修改 Pigeon 定义或数据库 schema。
+- 上一批 Profile 已按用户要求覆盖安装到授权手机并成功启动；本节无参修订仅完成构建，尚未再次覆盖安装，也未做新行为的真机或真实模型验收。更新包为 `build/app/outputs/flutter-apk/app-profile.apk`。
+
+## 18. 相月同权与手势解除截图依赖（2026-09-15）
+
+本节更新第 16、17 节中的截图绑定和权限规则，以当前产品设计 §4.6 为准。
+
+- 相月自身不再从原生应用枚举和查询中排除，和其他第三方应用一样默认通过黑名单模式，可被显式禁止或加入白名单；截图、控件和手势使用同一工具策略与名单规则，没有自身应用只读特例。
+- 手势移除截图 ID、120 秒有效期、内容事件版本和一次性使用门槛。默认直接使用屏幕像素；图片坐标由 `coordinateSpace=image_pixels` 与图片宽高解释，整组派发前换算成屏幕像素。同一坐标说明可用于新调用，框架不重放同一已派发调用。每步保留实际目标、名单、坐标边界及停止校验。
+- 手势不依赖模型图片能力或 Android 截图能力。动作成功后尽力截图，截图失败/副本不可读只作为 `observationError` 回填，不撤销或重发已完成动作；应用记录存储失败仍按原规则收尾。图片缩放与 PNG 压缩规则未改变。
+- 已执行格式检查、`dart run build_runner build`、静态分析、完整 Flutter 测试（644 通过、4 个预览用例跳过）、Kotlin JVM 测试（25 通过）、Profile 与原生测试 APK 构建及 `git diff --check`。新增回归覆盖自身名单选择、无前置截图手势、重复坐标换算、整组边界校验和观察失败保留动作成功。
+- 已用 `adb install -r` 覆盖安装并启动 Profile 包，保留应用数据。原生设备探针确认相月可被枚举和查询；手势探针在 instrumentation 重启后的无障碍服务未连接处停止，不能算实际点击验收通过。最终正常覆盖安装后系统显示相月无障碍服务已绑定、无异常服务。用户随后反馈“可以了”。未执行真实模型网关自动化或 Profile 帧性能验收。

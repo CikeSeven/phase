@@ -22,7 +22,7 @@ String executionScopePrompt(
   // 不把黑名单包名放进模型提示词，应用信息只通过过滤后的 list_apps 提供。
   return '${!toolExecution ? '' : '\n工具响应和错误由你处理，不要求用户核验普通操作的结果或填写状态。需要判断执行效果时，用正常的只读工具获取当前界面或文件。失败或取消不等于外部效果已撤销，不要无条件重发有副作用动作；无法继续时明确说明错误。用户授权与密码等必要输入仍由用户提供。'}'
       '${scope.fileUris.isEmpty ? '' : '\n本次授权文件句柄：${jsonEncode(scope.fileUris)}。'}'
-      '${!applicationOperations ? '' : '\n应用操作统一受应用名单限制。先用 list_apps 查询可用应用，再用 open_app(packageName) 打开；所有应用工具必须传入同一目标的真实 packageName。不要猜包名绕过名单。UI 操作必须使用该应用最新快照的 snapshotId 和 nodeId；每次动作后使用新观察。系统接受动作不等于任务成功，最终回答依据观察。支付、密码、验证码需用户手动处理。'}';
+      '${!applicationOperations ? '' : '\n应用操作统一受应用名单限制。需要打开应用时先用 list_apps 查询，再用 open_app(packageName) 打开。capture_screen 无参数，直接读取手机当前前台页面，不必先查应用列表或提供包名；其他目标操作必须传入真实 packageName。不要猜包名绕过名单。控件操作使用该应用最新快照的 snapshotId 和 nodeId；perform_gestures 可直接使用屏幕像素坐标，不要求截图 ID 或先截图；使用图片坐标时声明 coordinateSpace=image_pixels 和参照图片的 imageWidth/imageHeight，以便换算。capture_screen 只提供观察，不是执行许可。只组合无需中途重新识别的手势，目标不确定时先重新截图，不根据旧图猜测跳转后的坐标。每次动作后使用新观察。系统接受动作不等于任务成功，最终回答依据观察。支付、密码、验证码需用户手动处理。'}';
 }
 
 ToolOutcome platformOutcome(ExecutionResult result) {

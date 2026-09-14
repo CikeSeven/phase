@@ -210,7 +210,9 @@ enum class ExecutionAction(val raw: Int) {
   INPUT_TEXT(5),
   READ_FILE(6),
   WRITE_FILE(7),
-  LIST_FILES(8);
+  LIST_FILES(8),
+  CAPTURE_SCREEN(9),
+  PERFORM_GESTURES(10);
 
   companion object {
     fun ofRaw(raw: Int): ExecutionAction? {

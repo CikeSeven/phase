@@ -4,6 +4,7 @@ import 'tool.dart';
 import '../execution/channel_driver.dart';
 import '../execution/execution_api.g.dart';
 import '../execution/platform_tools.dart';
+import '../execution/visual_tools.dart';
 
 /// 首版内置工具集。
 ///
@@ -27,6 +28,10 @@ ToolRegistry buildBuiltInRegistry({
         ExecutionAction.inputText,
       ])
         ApplicationTool(action, platform),
+    if (platform != null) ...[
+      VisualTool(ExecutionAction.captureScreen, platform),
+      VisualTool(ExecutionAction.performGestures, platform),
+    ],
     HttpRequestTool(fetch: httpFetch, maxBytes: maxHttpBytes),
   ]);
 }

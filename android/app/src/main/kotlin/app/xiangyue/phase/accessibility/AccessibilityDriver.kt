@@ -184,9 +184,10 @@ class AccessibilityDriver(private val service: PhaseAccessibilityService) {
         return node.isClickable && node.text?.toString() in setOf("确认支付", "立即支付", "付款", "支付")
     }
 
-    private class UiBlocked(val reason: String) : Exception()
     companion object {
         private fun success(request: ExecutionRequest, result: Map<String, Any?>) = ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED, result, emptyList())
         private fun failure(request: ExecutionRequest, error: ChannelError, reason: String, accepted: Boolean) = ExecutionResult(request.toolCallId, ExecutionStatus.FAILED, mapOf("reason" to reason, "actionAccepted" to accepted), emptyList(), error)
     }
 }
+
+class UiBlocked(val reason: String) : Exception()

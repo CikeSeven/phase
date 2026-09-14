@@ -132,7 +132,10 @@ void main() {
         }),
         ToolPolicy.deny,
       );
-      if (tool.name != 'list_apps') {
+      if (tool.name == 'capture_screen') {
+        expect(tool.inputSchema['properties'], isEmpty);
+        expect(tool.inputSchema['required'], isEmpty);
+      } else if (tool.name != 'list_apps') {
         expect(tool.inputSchema['required'], contains('packageName'));
       }
     }

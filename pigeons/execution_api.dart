@@ -18,6 +18,8 @@ enum ExecutionAction {
   readFile,
   writeFile,
   listFiles,
+  captureScreen,
+  performGestures,
 }
 
 enum ExecutionStatus { succeeded, failed, cancelled }

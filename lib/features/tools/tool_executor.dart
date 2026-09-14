@@ -398,7 +398,7 @@ class ToolExecutor {
         }
       }
     }
-    return null;
+    return tool.validateArguments(arguments);
   }
 
   Future<ToolCallRecord> _create(

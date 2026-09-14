@@ -29,6 +29,16 @@ class ApplicationAccessTest {
         assertTrue(ApplicationAccess.allows(white(listOf("system")), "system", true))
     }
 
+    @Test fun phaseUsesTheSamePolicyAsAnyOtherThirdPartyApplication() {
+        for (name in listOf("app.xiangyue.phase", "app.fixture.third")) {
+            assertTrue(ApplicationAccess.allows(black(), black(), name, false))
+            assertFalse(ApplicationAccess.allows(black(), black(listOf(name)), name, false))
+            assertFalse(ApplicationAccess.allows(black(listOf(name)), black(), name, false))
+            assertFalse(ApplicationAccess.allows(white(emptyList()), name, false))
+            assertTrue(ApplicationAccess.allows(white(listOf(name)), white(listOf(name)), name, false))
+        }
+    }
+
     @Test fun bothDiscoveryAndDispatchUseTheSameLiveAndRunPolicyIntersection() {
         val snapshot = black(system = listOf("system"))
         val current = black(listOf("denied"), listOf("system"))
