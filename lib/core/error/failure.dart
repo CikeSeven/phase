@@ -34,6 +34,23 @@ final class OperationFailure extends Failure {
   String get userMessage => message;
 }
 
+/// 系统的应用列表授权或可见范围不足，不能作为正常名单展示。
+enum ApplicationListFailureCode { permissionRequired, restricted }
+
+final class ApplicationListFailure extends Failure {
+  const ApplicationListFailure(this.code) : super('Application list access');
+
+  final ApplicationListFailureCode code;
+
+  @override
+  String get userMessage => switch (code) {
+    ApplicationListFailureCode.permissionRequired =>
+      '未授权获取应用列表，请在系统应用权限设置中允许“获取应用列表”后重试',
+    ApplicationListFailureCode.restricted =>
+      '系统仅返回相月或基础系统应用，应用列表访问受限，请检查“获取应用列表”权限后重试',
+  };
+}
+
 /// 网络不可达、超时、DNS 等连接层错误。
 final class NetworkFailure extends Failure {
   const NetworkFailure(super.message, {super.cause});

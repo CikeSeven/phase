@@ -3,11 +3,24 @@ package app.xiangyue.phase
 import io.flutter.embedding.android.FlutterActivity
 import android.content.Context
 import android.content.Intent
+import android.os.Bundle
+import app.xiangyue.phase.applications.ApplicationListPermission
 import app.xiangyue.phase.execution.ExecutionSetup
 import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
     private val runtime get() = (application as PhaseApplication).runtime
+    private var checkedApplicationListPermission = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        checkedApplicationListPermission = savedInstanceState?.getBoolean("applicationListPermissionChecked") ?: false
+        super.onCreate(savedInstanceState)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("applicationListPermissionChecked", checkedApplicationListPermission)
+        super.onSaveInstanceState(outState)
+    }
 
     override fun provideFlutterEngine(context: Context): FlutterEngine = runtime.engine
 
@@ -17,6 +30,11 @@ class MainActivity : FlutterActivity() {
         super.onResume()
         runtime.coordinator.setup.attach(this)
         runtime.coordinator.setActivityResumed(true)
+        if (!checkedApplicationListPermission) {
+            // Set before dispatch: dismissing the permission dialog resumes this Activity again.
+            checkedApplicationListPermission = true
+            ApplicationListPermission(this).requestOnLaunch(this)
+        }
     }
 
     override fun onPause() {

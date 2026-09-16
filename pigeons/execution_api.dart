@@ -189,7 +189,7 @@ class InstalledApplication {
   int? sizeBytes;
 }
 
-enum PermissionScreen { notifications, accessibility }
+enum PermissionScreen { notifications, accessibility, applications }
 
 class ExecutionConfirmation {
   ExecutionConfirmation({

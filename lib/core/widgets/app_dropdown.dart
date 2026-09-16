@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
@@ -13,12 +15,16 @@ class AppDropdown<T extends Enum> extends StatefulWidget {
     required this.options,
     required this.onChanged,
     super.key,
-  });
+    this.menuMinWidth = 0,
+  }) : assert(menuMinWidth >= 0);
 
   final String label;
   final T value;
   final Map<T, String> options;
   final ValueChanged<T>? onChanged;
+
+  /// 并排字段可扩宽菜单，避免完整选项被字段宽度挤成竖排。
+  final double menuMinWidth;
 
   @override
   State<AppDropdown<T>> createState() => _AppDropdownState<T>();
@@ -81,6 +87,10 @@ class _AppDropdownState<T extends Enum> extends State<AppDropdown<T>> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final reduced = AppMotion.reduce(context);
+    final menuMinWidth = math.min(
+      widget.menuMinWidth,
+      MediaQuery.sizeOf(context).width - AppSpacing.l,
+    );
     return LayoutBuilder(
       builder: (context, constraints) => MenuAnchor(
         controller: _menu,
@@ -94,9 +104,11 @@ class _AppDropdownState<T extends Enum> extends State<AppDropdown<T>> {
         alignmentOffset: const Offset(0, AppSpacing.xs),
         style: MenuStyle(
           backgroundColor: WidgetStatePropertyAll(colors.surfaceContainer),
-          minimumSize: WidgetStatePropertyAll(Size(constraints.maxWidth, 0)),
+          minimumSize: WidgetStatePropertyAll(
+            Size(math.max(constraints.maxWidth, menuMinWidth), 0),
+          ),
           maximumSize: WidgetStatePropertyAll(
-            Size(constraints.maxWidth, double.infinity),
+            Size(math.max(constraints.maxWidth, menuMinWidth), double.infinity),
           ),
           shape: const WidgetStatePropertyAll(
             RoundedRectangleBorder(borderRadius: AppRadius.largeAll),

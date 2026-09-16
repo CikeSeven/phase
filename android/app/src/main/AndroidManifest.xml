@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
     <!-- 应用名单是核心执行边界，需要列出无启动图标的第三方应用和系统应用。 -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+    <!-- 部分系统另设运行时权限；仅在系统实际定义为危险权限时申请。 -->
+    <uses-permission android:name="com.android.permission.GET_INSTALLED_APPS"/>
     <application
         android:label="相月"
         android:name=".PhaseApplication"

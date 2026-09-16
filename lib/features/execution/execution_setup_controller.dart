@@ -58,7 +58,7 @@ class ExecutionSetupController extends _$ExecutionSetupController {
       if (ref.mounted) state = AsyncError(error, stack);
       return;
     }
-    await Future.wait([loadGrants(), loadCapabilities()]);
+    await loadCapabilities();
   }
 
   Future<void> loadGrants() => _grantsLoading ??= _loadGrants().whenComplete(
@@ -173,6 +173,16 @@ class ExecutionSetupController extends _$ExecutionSetupController {
     try {
       return await action().timeout(timeout);
     } on PlatformException catch (error) {
+      if (error.code == 'applicationListPermissionRequired') {
+        throw const ApplicationListFailure(
+          ApplicationListFailureCode.permissionRequired,
+        );
+      }
+      if (error.code == 'applicationListRestricted') {
+        throw const ApplicationListFailure(
+          ApplicationListFailureCode.restricted,
+        );
+      }
       if (error.code == 'applicationListUnavailable') {
         throw const OperationFailure('系统未返回应用列表，请检查应用列表访问权限或稍后重试');
       }

@@ -285,7 +285,8 @@ enum class ApplicationListMode(val raw: Int) {
 
 enum class PermissionScreen(val raw: Int) {
   NOTIFICATIONS(0),
-  ACCESSIBILITY(1);
+  ACCESSIBILITY(1),
+  APPLICATIONS(2);
 
   companion object {
     fun ofRaw(raw: Int): PermissionScreen? {

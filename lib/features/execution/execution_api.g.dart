@@ -143,7 +143,7 @@ enum ConfirmationDecision { approve, reject, stop }
 
 enum ApplicationListMode { blacklist, whitelist }
 
-enum PermissionScreen { notifications, accessibility }
+enum PermissionScreen { notifications, accessibility, applications }
 
 /// 机器校验的目标，不使用动作摘要代替目标身份。节点只在对应快照内有效。
 class ExecutionTarget {

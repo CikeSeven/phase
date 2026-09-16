@@ -16,9 +16,11 @@ class ApplicationCatalog(private val context: Context) {
     private val packages get() = context.packageManager
 
     suspend fun list(): List<InstalledApplication> = withContext(Dispatchers.IO) {
-        val result = packages.getInstalledPackages(0).mapNotNull { ensureActive(); describe(it) }
-        // A full Android inventory includes framework/system packages. An empty platform response
-        // must not masquerade as an empty allowlist (filtering happens later).
+        if (ApplicationListPermission(context).isRequired()) throw ApplicationListPermissionRequired()
+        val installed = try { packages.getInstalledPackages(0) }
+            catch (_: SecurityException) { throw ApplicationListPermissionRequired() }
+        requireApplicationInventory(installed.map { it.packageName }, context.packageName)
+        val result = installed.mapNotNull { ensureActive(); describe(it) }
         if (result.isEmpty()) throw ApplicationCatalogUnavailable()
         result
     }
@@ -72,5 +74,3 @@ class ApplicationCatalog(private val context: Context) {
         )
     }
 }
-
-class ApplicationCatalogUnavailable : Exception()

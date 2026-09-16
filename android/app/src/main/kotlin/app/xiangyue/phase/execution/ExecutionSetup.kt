@@ -10,6 +10,9 @@ import app.xiangyue.phase.bridge.*
 import app.xiangyue.phase.files.AppFileDriver
 import app.xiangyue.phase.applications.ApplicationCatalog
 import app.xiangyue.phase.applications.ApplicationCatalogUnavailable
+import app.xiangyue.phase.applications.ApplicationCatalogRestricted
+import app.xiangyue.phase.applications.ApplicationListPermission
+import app.xiangyue.phase.applications.ApplicationListPermissionRequired
 import kotlinx.coroutines.*
 import java.lang.ref.WeakReference
 
@@ -56,12 +59,20 @@ class ExecutionSetup(private val context: Context, private val files: AppFileDri
     }
 
     override suspend fun installedApplications(): List<InstalledApplication> = try { applications.list() }
+        catch (error: CancellationException) { throw error }
+        catch (_: ApplicationListPermissionRequired) { throw FlutterError("applicationListPermissionRequired", "未授权获取应用列表", null) }
+        catch (_: ApplicationCatalogRestricted) { throw FlutterError("applicationListRestricted", "应用列表访问受限", null) }
         catch (_: ApplicationCatalogUnavailable) { throw FlutterError("applicationListUnavailable", "系统未返回应用列表", null) }
         catch (_: Exception) { throw FlutterError("unavailable", "读取应用列表失败", null) }
     override fun updateApplicationPolicy(policy: ApplicationPolicy) = applyPolicy(policy)
 
     override fun openPermissionSettings(screen: PermissionScreen) {
         val host = activity.get() ?: throw FlutterError("unavailable", "请返回相月", null)
+        if (screen == PermissionScreen.APPLICATIONS) {
+            try { ApplicationListPermission(context).openSettings(host) }
+            catch (_: Exception) { throw FlutterError("unavailable", "无法打开应用权限设置", null) }
+            return
+        }
         val intent = if (screen == PermissionScreen.ACCESSIBILITY) Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         else if (android.os.Build.VERSION.SDK_INT >= 26) Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
         else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))

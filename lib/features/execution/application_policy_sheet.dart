@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -53,6 +54,7 @@ Future<ApplicationAccessPolicy?> showApplicationPolicySheet(
   BuildContext context, {
   required Future<List<InstalledApplication>> Function() loadApplications,
   required ApplicationAccessPolicy initialPolicy,
+  Future<void> Function()? openPermissionSettings,
 }) => showModalBottomSheet<ApplicationAccessPolicy>(
   context: context,
   isScrollControlled: true,
@@ -60,6 +62,7 @@ Future<ApplicationAccessPolicy?> showApplicationPolicySheet(
   builder: (_) => ApplicationPolicySheet(
     loadApplications: loadApplications,
     initialPolicy: initialPolicy,
+    openPermissionSettings: openPermissionSettings,
   ),
 );
 
@@ -67,17 +70,23 @@ class ApplicationPolicySheet extends StatefulWidget {
   const ApplicationPolicySheet({
     required this.loadApplications,
     required this.initialPolicy,
+    this.openPermissionSettings,
     super.key,
   });
   final Future<List<InstalledApplication>> Function() loadApplications;
   final ApplicationAccessPolicy initialPolicy;
+  final Future<void> Function()? openPermissionSettings;
   @override
   State<ApplicationPolicySheet> createState() => _ApplicationPolicySheetState();
 }
 
-class _ApplicationPolicySheetState extends State<ApplicationPolicySheet> {
+class _ApplicationPolicySheetState extends State<ApplicationPolicySheet>
+    with WidgetsBindingObserver {
   late Future<List<InstalledApplication>> _applications;
   bool _loading = false;
+  bool _openingPermissionSettings = false;
+  bool _refreshOnResume = false;
+  String? _permissionSettingsError;
   late ApplicationAccessPolicy _policy = widget.initialPolicy;
   ApplicationFilter _filter = ApplicationFilter.all;
   ApplicationSort _sort = ApplicationSort.name;
@@ -86,7 +95,57 @@ class _ApplicationPolicySheetState extends State<ApplicationPolicySheet> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _applications = _loadApplications();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _refreshOnResume) {
+      _refreshOnResume = false;
+      _reload();
+    }
+  }
+
+  void _reload() {
+    if (_loading) return;
+    final applications = _loadApplications();
+    // 生命周期回调可能先于下一帧完成；提前监听错误，仍由 FutureBuilder 展示同一结果。
+    applications.ignore();
+    setState(() {
+      _permissionSettingsError = null;
+      _applications = applications;
+    });
+  }
+
+  Future<void> _openPermissionSettings() async {
+    final open = widget.openPermissionSettings;
+    if (_openingPermissionSettings || open == null) return;
+    setState(() {
+      _openingPermissionSettings = true;
+      _refreshOnResume = true;
+      _permissionSettingsError = null;
+    });
+    try {
+      await open();
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _refreshOnResume = false;
+          _permissionSettingsError = error is Failure
+              ? error.userMessage
+              : '无法打开系统应用权限设置，请重试';
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _openingPermissionSettings = false);
+    }
   }
 
   Future<List<InstalledApplication>> _loadApplications() async {
@@ -108,7 +167,9 @@ class _ApplicationPolicySheetState extends State<ApplicationPolicySheet> {
             key: const ValueKey('confirm-application-policy'),
             onPressed:
                 snapshot.connectionState == ConnectionState.done &&
-                    snapshot.hasData
+                    snapshot.hasData &&
+                    !snapshot.hasError &&
+                    !_openingPermissionSettings
                 ? () => Navigator.pop(context, _policy)
                 : null,
             child: const Text('确定'),
@@ -116,34 +177,60 @@ class _ApplicationPolicySheetState extends State<ApplicationPolicySheet> {
           child: snapshot.connectionState != ConnectionState.done
               ? const Center(child: CircularProgressIndicator())
               : snapshot.hasError
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.l),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          snapshot.error is Failure
-                              ? (snapshot.error! as Failure).userMessage
-                              : '读取应用名单失败',
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            if (_loading) return;
-                            final applications = _loadApplications();
-                            setState(() {
-                              _applications = applications;
-                            });
-                          },
-                          child: const Text('重试'),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
+              ? _buildLoadError(snapshot.error!)
               : _buildApplications(snapshot.requireData),
         ),
       );
+
+  Widget _buildLoadError(Object error) {
+    final permissionFailure = error is ApplicationListFailure;
+    final theme = Theme.of(context);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.l),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (permissionFailure) ...[
+              Icon(Symbols.lock, color: theme.colorScheme.error, size: 32),
+              const SizedBox(height: AppSpacing.m),
+              Text('无法读取应用列表', style: theme.textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.s),
+            ],
+            Semantics(
+              liveRegion: true,
+              child: Text(error is Failure ? error.userMessage : '读取应用名单失败'),
+            ),
+            const SizedBox(height: AppSpacing.m),
+            Wrap(
+              spacing: AppSpacing.s,
+              runSpacing: AppSpacing.s,
+              alignment: WrapAlignment.center,
+              children: [
+                if (permissionFailure && widget.openPermissionSettings != null)
+                  FilledButton.icon(
+                    key: const ValueKey('authorize-application-list'),
+                    onPressed: _openingPermissionSettings
+                        ? null
+                        : _openPermissionSettings,
+                    icon: const Icon(Symbols.open_in_new),
+                    label: const Text('去授权'),
+                  ),
+                TextButton(
+                  onPressed: _openingPermissionSettings ? null : _reload,
+                  child: const Text('重试'),
+                ),
+              ],
+            ),
+            if (_permissionSettingsError case final message?) ...[
+              const SizedBox(height: AppSpacing.s),
+              Semantics(liveRegion: true, child: Text(message)),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 
   Widget _buildApplications(List<InstalledApplication> applications) {
     final visible = filterApplications(
@@ -182,32 +269,43 @@ class _ApplicationPolicySheetState extends State<ApplicationPolicySheet> {
                   onChanged: (value) => setState(() => _query = value),
                 ),
                 const SizedBox(height: AppSpacing.m),
-                AppDropdown<ApplicationFilter>(
-                  key: const ValueKey('application-list-filter'),
-                  value: _filter,
-                  label: '应用类型',
-                  options: const {
-                    ApplicationFilter.all: '全部应用',
-                    ApplicationFilter.thirdParty: '第三方应用',
-                    ApplicationFilter.system: '系统应用',
-                  },
-                  onChanged: (value) {
-                    setState(() => _filter = value);
-                  },
-                ),
-                const SizedBox(height: AppSpacing.m),
-                AppDropdown<ApplicationSort>(
-                  key: const ValueKey('application-list-sort'),
-                  value: _sort,
-                  label: '排序',
-                  options: const {
-                    ApplicationSort.name: '名称',
-                    ApplicationSort.installedAt: '安装时间（新到旧）',
-                    ApplicationSort.size: '安装包大小（大到小）',
-                  },
-                  onChanged: (value) {
-                    setState(() => _sort = value);
-                  },
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: AppDropdown<ApplicationFilter>(
+                        key: const ValueKey('application-list-filter'),
+                        value: _filter,
+                        label: '应用类型',
+                        menuMinWidth: 280,
+                        options: const {
+                          ApplicationFilter.all: '全部应用',
+                          ApplicationFilter.thirdParty: '第三方应用',
+                          ApplicationFilter.system: '系统应用',
+                        },
+                        onChanged: (value) {
+                          setState(() => _filter = value);
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.m),
+                    Expanded(
+                      child: AppDropdown<ApplicationSort>(
+                        key: const ValueKey('application-list-sort'),
+                        value: _sort,
+                        label: '排序',
+                        menuMinWidth: 280,
+                        options: const {
+                          ApplicationSort.name: '名称',
+                          ApplicationSort.installedAt: '安装时间（新到旧）',
+                          ApplicationSort.size: '安装包大小（大到小）',
+                        },
+                        onChanged: (value) {
+                          setState(() => _sort = value);
+                        },
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.s),
                 Text('${visible.length} 个应用 · 安装包大小不含数据和缓存'),

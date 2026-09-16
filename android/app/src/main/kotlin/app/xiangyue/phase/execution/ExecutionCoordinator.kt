@@ -10,6 +10,8 @@ import app.xiangyue.phase.files.AppFileDriver
 import app.xiangyue.phase.accessibility.PhaseAccessibilityService
 import app.xiangyue.phase.accessibility.DeviceActionQueue
 import app.xiangyue.phase.applications.ApplicationCatalog
+import app.xiangyue.phase.applications.ApplicationCatalogRestricted
+import app.xiangyue.phase.applications.ApplicationListPermissionRequired
 import app.xiangyue.phase.applications.ApplicationAccess
 
 class ExecutionCoordinator(private val context: Context, private val flutter: ExecutionFlutterApi) : ExecutionHostApi {
@@ -222,7 +224,15 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     }
 
     private suspend fun listApplications(request: ExecutionRequest): ExecutionResult {
-        val all = try { applications.list() } catch (_: Exception) {
+        val all = try { applications.list() }
+        catch (error: CancellationException) { throw error }
+        catch (_: ApplicationListPermissionRequired) {
+            return ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
+                mapOf("reason" to "未授权获取应用列表，请在相月应用权限设置中允许后重试"), emptyList(), ChannelError.PERMISSION_REQUIRED)
+        } catch (_: ApplicationCatalogRestricted) {
+            return ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
+                mapOf("reason" to "系统仅返回相月或基础系统包，应用列表访问受限，请检查应用列表权限"), emptyList(), ChannelError.PERMISSION_REQUIRED)
+        } catch (_: Exception) {
             return ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
                 mapOf("reason" to "应用列表暂不可读取，请检查系统的应用列表访问权限或稍后重试"), emptyList(), ChannelError.UNAVAILABLE)
         }
