@@ -11,6 +11,7 @@ import '../../../core/theme/brand_colors.dart';
 import '../../../core/theme/frosted_surface.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../data/models/conversation.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import 'chat_controller.dart';
@@ -235,8 +236,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
               const Divider(height: 1),
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.s),
-                child: InkWell(
-                  borderRadius: AppRadius.mediumAll,
+                child: AppInteractiveSurface(
                   onTap: () {
                     // 侧栏保持打开，从设置返回后停留在原状。
                     FocusScope.of(context).unfocus();
@@ -344,149 +344,142 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
     label.dispose();
     return Semantics(
       selected: selected,
-      child: Material(
+      child: AppInteractiveSurface(
         key: ValueKey('conversation-row-${conversation.id}'),
+        selected: selected,
         color: selected
             ? colors.primaryContainer.withValues(alpha: 0.82)
             : colors.surface.withValues(alpha: 0),
-        borderRadius: AppRadius.smallAll,
-        child: InkWell(
-          borderRadius: AppRadius.smallAll,
-          onLongPress: _toggleMenu,
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            ref
-                .read(chatControllerProvider.notifier)
-                .openConversation(conversation.id);
-            Navigator.of(context).pop();
-          },
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.m,
-              AppSpacing.xs,
-              AppSpacing.xs,
-              AppSpacing.xs,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        conversation.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          color: selected
-                              ? colors.onPrimaryContainer
-                              : colors.onSurface,
-                        ),
+        onLongPress: _toggleMenu,
+        onTap: () {
+          FocusScope.of(context).unfocus();
+          ref
+              .read(chatControllerProvider.notifier)
+              .openConversation(conversation.id);
+          Navigator.of(context).pop();
+        },
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.m,
+            AppSpacing.xs,
+            AppSpacing.xs,
+            AppSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      conversation.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: selected
+                            ? colors.onPrimaryContainer
+                            : colors.onSurface,
                       ),
-                      Row(
-                        children: [
-                          if (conversation.pinned) ...[
-                            Icon(
-                              Symbols.push_pin,
-                              size: 14,
-                              color: context.brandColors.gold,
-                              semanticLabel: '已置顶',
-                            ),
-                            const SizedBox(width: AppSpacing.xs),
-                          ],
-                          Expanded(
-                            child: Text(
-                              _relativeTime(conversation.updatedAt),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: selected
-                                    ? colors.onPrimaryContainer
-                                    : colors.onSurfaceVariant,
-                              ),
+                    ),
+                    Row(
+                      children: [
+                        if (conversation.pinned) ...[
+                          Icon(
+                            Symbols.push_pin,
+                            size: 14,
+                            color: context.brandColors.gold,
+                            semanticLabel: '已置顶',
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                        ],
+                        Expanded(
+                          child: Text(
+                            _relativeTime(conversation.updatedAt),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: selected
+                                  ? colors.onPrimaryContainer
+                                  : colors.onSurfaceVariant,
                             ),
                           ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                MenuAnchor(
-                  controller: _menuController,
-                  childFocusNode: _menuFocus,
-                  animated: !AppMotion.reduce(context),
-                  onAnimationStatusChanged: (status) =>
-                      _menuAnimationStatus = status,
-                  onOpen: _menuOpened,
-                  onClose: _menuClosed,
-                  consumeOutsideTap: true,
-                  alignmentOffset: Offset(-menuWidth, AppSpacing.xs),
-                  style: MenuStyle(
-                    alignment: AlignmentDirectional.bottomEnd,
-                    minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
-                    maximumSize: WidgetStatePropertyAll(
-                      Size(menuWidth, double.infinity),
-                    ),
-                  ),
-                  menuChildren: [
-                    MenuItemButton(
-                      leadingIcon: const Icon(Symbols.edit),
-                      onPressed: () => _rename(context, ref),
-                      child: const Text('重命名'),
-                    ),
-                    MenuItemButton(
-                      key: ValueKey(
-                        'duplicate-conversation-${conversation.id}',
-                      ),
-                      leadingIcon: const Icon(Symbols.content_copy),
-                      onPressed: () =>
-                          _duplicate(context, ref, conversation.id),
-                      child: const Text('复制会话'),
-                    ),
-                    MenuItemButton(
-                      key: ValueKey('export-conversation-${conversation.id}'),
-                      leadingIcon: const Icon(Symbols.download),
-                      onPressed: () => _export(context, ref),
-                      child: const Text('导出会话'),
-                    ),
-                    MenuItemButton(
-                      key: ValueKey('tool-records-${conversation.id}'),
-                      leadingIcon: const Icon(Symbols.history),
-                      onPressed: () => context.push(
-                        '/conversations/${conversation.id}/tools',
-                      ),
-                      child: const Text('执行记录'),
-                    ),
-                    MenuItemButton(
-                      leadingIcon: const Icon(Symbols.push_pin),
-                      onPressed: () => _runGuarded(context, () async {
-                        final repository = await ref.read(
-                          conversationRepositoryProvider.future,
-                        );
-                        await repository.setPinned(
-                          conversation.id,
-                          pinned: !conversation.pinned,
-                        );
-                      }),
-                      child: Text(conversation.pinned ? '取消置顶' : '置顶'),
-                    ),
-                    MenuItemButton(
-                      leadingIcon: Icon(Symbols.delete, color: colors.error),
-                      onPressed: () => _confirmDelete(context, ref),
-                      child: Text('删除', style: TextStyle(color: colors.error)),
+                        ),
+                      ],
                     ),
                   ],
-                  builder: (context, controller, child) => IconButton(
-                    focusNode: _menuFocus,
-                    key: ValueKey('conversation-menu-${conversation.id}'),
-                    tooltip: '会话菜单',
-                    onPressed: _toggleMenu,
-                    icon: const Icon(Symbols.more_horiz),
+                ),
+              ),
+              MenuAnchor(
+                controller: _menuController,
+                childFocusNode: _menuFocus,
+                animated: !AppMotion.reduce(context),
+                onAnimationStatusChanged: (status) =>
+                    _menuAnimationStatus = status,
+                onOpen: _menuOpened,
+                onClose: _menuClosed,
+                consumeOutsideTap: true,
+                alignmentOffset: Offset(-menuWidth, AppSpacing.xs),
+                style: MenuStyle(
+                  alignment: AlignmentDirectional.bottomEnd,
+                  minimumSize: WidgetStatePropertyAll(Size(menuWidth, 0)),
+                  maximumSize: WidgetStatePropertyAll(
+                    Size(menuWidth, double.infinity),
                   ),
                 ),
-              ],
-            ),
+                menuChildren: [
+                  MenuItemButton(
+                    leadingIcon: const Icon(Symbols.edit),
+                    onPressed: () => _rename(context, ref),
+                    child: const Text('重命名'),
+                  ),
+                  MenuItemButton(
+                    key: ValueKey('duplicate-conversation-${conversation.id}'),
+                    leadingIcon: const Icon(Symbols.content_copy),
+                    onPressed: () => _duplicate(context, ref, conversation.id),
+                    child: const Text('复制会话'),
+                  ),
+                  MenuItemButton(
+                    key: ValueKey('export-conversation-${conversation.id}'),
+                    leadingIcon: const Icon(Symbols.download),
+                    onPressed: () => _export(context, ref),
+                    child: const Text('导出会话'),
+                  ),
+                  MenuItemButton(
+                    key: ValueKey('tool-records-${conversation.id}'),
+                    leadingIcon: const Icon(Symbols.history),
+                    onPressed: () =>
+                        context.push('/conversations/${conversation.id}/tools'),
+                    child: const Text('执行记录'),
+                  ),
+                  MenuItemButton(
+                    leadingIcon: const Icon(Symbols.push_pin),
+                    onPressed: () => _runGuarded(context, () async {
+                      final repository = await ref.read(
+                        conversationRepositoryProvider.future,
+                      );
+                      await repository.setPinned(
+                        conversation.id,
+                        pinned: !conversation.pinned,
+                      );
+                    }),
+                    child: Text(conversation.pinned ? '取消置顶' : '置顶'),
+                  ),
+                  MenuItemButton(
+                    leadingIcon: Icon(Symbols.delete, color: colors.error),
+                    onPressed: () => _confirmDelete(context, ref),
+                    child: Text('删除', style: TextStyle(color: colors.error)),
+                  ),
+                ],
+                builder: (context, controller, child) => IconButton(
+                  focusNode: _menuFocus,
+                  key: ValueKey('conversation-menu-${conversation.id}'),
+                  tooltip: '会话菜单',
+                  onPressed: _toggleMenu,
+                  icon: const Icon(Symbols.more_horiz),
+                ),
+              ),
+            ],
           ),
         ),
       ),

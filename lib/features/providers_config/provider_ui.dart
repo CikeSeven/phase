@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_choice_chip.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../data/models/api_protocol.dart';
 
@@ -75,28 +75,12 @@ class CapabilityChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FilterChip(
-      label: Text(label),
-      tooltip: tooltip,
+    return AppChoiceChip(
+      label: label,
       selected: selected,
       onSelected: onSelected,
-      // 默认勾选标记会叠在 avatar 图标上；选中态改用底色 + 图标变色表达。
-      showCheckmark: false,
-      avatar: icon == null
-          ? null
-          : Icon(
-              icon,
-              size: 16,
-              color: selected
-                  ? Theme.of(context).colorScheme.onSecondaryContainer
-                  : Theme.of(context).colorScheme.onSurfaceVariant,
-            ),
-      labelStyle: Theme.of(context).textTheme.labelMedium,
-      // 收紧图标与文字间距（默认 8dp，图标只有 16dp 时显得空）。
-      labelPadding: const EdgeInsets.only(left: AppSpacing.xs),
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+      icon: icon,
+      tooltip: tooltip,
     );
   }
 }

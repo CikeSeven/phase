@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/error/failure.dart';
+import 'package:phase/core/theme/app_theme.dart';
+import 'package:phase/core/widgets/app_list_tile.dart';
 import 'package:phase/data/models/application_access_policy.dart';
 import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/models/tool_policy.dart';
@@ -66,10 +67,10 @@ void main() {
       final system = find.byKey(const ValueKey('application-policy-system'));
       final third = find.byKey(const ValueKey('application-policy-third'));
       await reveal(system);
-      expect(tester.widget<CheckboxListTile>(system).value, isTrue);
+      expect(tester.widget<AppListTile>(system).selected, isTrue);
       await tester.tap(system);
       await tester.pump();
-      expect(tester.widget<CheckboxListTile>(system).value, isFalse);
+      expect(tester.widget<AppListTile>(system).selected, isFalse);
       await reveal(third);
       await tester.tap(third);
       await tester.pump();
@@ -80,7 +81,7 @@ void main() {
       await tester.tap(find.text('白名单').last);
       await tester.pumpAndSettle();
       await reveal(system);
-      expect(tester.widget<CheckboxListTile>(system).value, isFalse);
+      expect(tester.widget<AppListTile>(system).selected, isFalse);
       await tester.tap(system);
       await tester.pump();
       final filter = find.byKey(const ValueKey('application-list-filter'));
@@ -265,7 +266,7 @@ void main() {
         await tester.tap(retry);
         await tester.pumpAndSettle();
         expect(loads, 2);
-        expect(find.byType(CheckboxListTile), findsNothing);
+        expect(find.byType(AppListTile), findsNothing);
         expect(find.textContaining('未授权获取应用列表'), findsOneWidget);
         expect(
           tester
@@ -323,7 +324,7 @@ void main() {
     }
 
     await open();
-    expect(tester.widget<CheckboxListTile>(row).value, isFalse);
+    expect(tester.widget<AppListTile>(row).selected, isFalse);
     await tester.tap(row);
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('confirm-application-policy')));
@@ -333,7 +334,7 @@ void main() {
     expect(initial.blacklist, isEmpty);
     initial = const ApplicationAccessPolicy(mode: AppListMode.whitelist);
     await open();
-    expect(tester.widget<CheckboxListTile>(row).value, isFalse);
+    expect(tester.widget<AppListTile>(row).selected, isFalse);
     await tester.tap(row);
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('confirm-application-policy')));
@@ -439,8 +440,8 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
     List<String?> names() => tester
-        .widgetList<CheckboxListTile>(find.byType(CheckboxListTile))
-        .map((row) => (row.title! as Text).data)
+        .widgetList<AppListTile>(find.byType(AppListTile))
+        .map((row) => (row.title as Text).data)
         .toList();
     Future<void> choose(String key, String label) async {
       await tester.ensureVisible(find.byKey(ValueKey(key)));

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/app_selection_surface.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
 
 enum AttachmentSource { camera, gallery, file }
 
@@ -92,9 +92,8 @@ class _AttachmentSourceSheetState extends State<AttachmentSourceSheet> {
                         Symbols.folder_open_rounded,
                       ),
                     ])
-                      AppSelectionSurface(
+                      AppInteractiveSurface(
                         key: ValueKey('attach-${source.name}'),
-                        selected: false,
                         color: colors.primaryContainer.withValues(alpha: 0.55),
                         onTap: () => _select(source),
                         child: Padding(

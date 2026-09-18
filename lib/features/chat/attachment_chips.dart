@@ -102,7 +102,6 @@ class _Chip extends StatelessWidget {
           IconButton(
             tooltip: '移除附件',
             onPressed: onRemove,
-            visualDensity: VisualDensity.compact,
             icon: const Icon(Symbols.close, size: 18),
           ),
         ],

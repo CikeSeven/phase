@@ -5,9 +5,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:phase/core/theme/brand_colors.dart';
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/core/theme/app_theme.dart';
+import 'package:phase/core/theme/brand_colors.dart';
+import 'package:phase/core/widgets/app_list_tile.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/application_access_policy.dart';
 import 'package:phase/data/models/execution_scope.dart';
@@ -274,7 +275,12 @@ void main() {
         expect(find.textContaining('授权文件与目录'), findsNothing);
         expect(find.text('选择文件'), findsNothing);
         expect(find.text('选择目录'), findsNothing);
-        expect(find.byType(CheckboxListTile), findsNothing);
+        expect(
+          find.byWidgetPredicate(
+            (widget) => widget is AppListTile && widget.selected != null,
+          ),
+          findsNothing,
+        );
         expect(h.api.fileLoads, 0);
         expect(h.api.appLoads, 0);
         await tester.tap(find.text('任务通知'));

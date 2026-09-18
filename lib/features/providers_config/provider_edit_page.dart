@@ -9,6 +9,7 @@ import '../../../core/utils/id.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/api_protocol.dart';
 import '../../../data/models/openai_compat.dart';
@@ -158,11 +159,8 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                         key: const ValueKey('save-provider'),
                         onPressed: _busy ? null : _save,
                         icon: _saving
-                            ? const SizedBox.square(
-                                dimension: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                            ? const AppLoadingIndicator.small(
+                                semanticsLabel: '正在保存配置',
                               )
                             : const Icon(Symbols.check),
                         label: Text(_saving ? '保存中…' : '保存'),
@@ -173,9 +171,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
               ),
             ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: '正在读取配置'),
-            )
+          ? const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取配置'))
           : _loadError != null
           ? AppEmptyState(
               icon: Symbols.cloud_off,

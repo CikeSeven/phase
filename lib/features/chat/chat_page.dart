@@ -1,5 +1,5 @@
-import 'dart:math' as math;
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -11,6 +11,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_background.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_top_bar.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/reasoning_effort.dart';
@@ -332,9 +333,8 @@ class _ConversationMessages extends ConsumerWidget {
           bottomPadding: bottomPadding,
         );
       },
-      loading: () => const Center(
-        child: CircularProgressIndicator(semanticsLabel: '正在读取会话'),
-      ),
+      loading: () =>
+          const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取会话')),
       error: (error, _) => AppEmptyState(
         icon: Symbols.error,
         title: '暂时无法读取消息',

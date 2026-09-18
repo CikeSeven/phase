@@ -8,6 +8,8 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/assistant.dart';
 import '../chat/chat_controller.dart';
@@ -38,9 +40,8 @@ class AssistantsPage extends ConsumerWidget {
         skipLoadingOnReload: true,
         data: (assistants) =>
             _AssistantList(assistants: assistants, currentId: currentId),
-        loading: () => const Center(
-          child: CircularProgressIndicator(semanticsLabel: '正在读取助手'),
-        ),
+        loading: () =>
+            const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取助手')),
         error: (error, _) => AppEmptyState(
           icon: Symbols.error,
           title: '暂时无法读取助手',
@@ -102,57 +103,51 @@ class _AssistantRow extends StatelessWidget {
     return Semantics(
       button: true,
       label: assistant.name,
-      child: Material(
+      child: AppInteractiveSurface(
         key: ValueKey('assistant-${assistant.id}'),
         color: colors.surfaceContainerLow,
-        borderRadius: AppRadius.largeAll,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          borderRadius: AppRadius.largeAll,
-          onTap: () => context.push('/assistants/${assistant.id}'),
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.l),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        assistant.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium,
-                      ),
+        radius: AppRadius.large,
+        onTap: () => context.push('/assistants/${assistant.id}'),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.l),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      assistant.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
                     ),
-                    if (current) ...[
-                      const SizedBox(width: AppSpacing.s),
-                      _CurrentBadge(color: colors.primary),
-                    ],
+                  ),
+                  if (current) ...[
+                    const SizedBox(width: AppSpacing.s),
+                    _CurrentBadge(color: colors.primary),
                   ],
+                ],
+              ),
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                prompt.isEmpty ? '未设置系统提示词' : prompt,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
                 ),
-                const SizedBox(height: AppSpacing.xs),
-                Text(
-                  prompt.isEmpty ? '未设置系统提示词' : prompt,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
+              ),
+              const SizedBox(height: AppSpacing.s),
+              Text(
+                selection == null ? '默认模型：跟随当前选择' : '默认模型：${selection.modelId}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: colors.onSurfaceVariant,
                 ),
-                const SizedBox(height: AppSpacing.s),
-                Text(
-                  selection == null
-                      ? '默认模型：跟随当前选择'
-                      : '默认模型：${selection.modelId}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: colors.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

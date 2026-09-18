@@ -9,6 +9,7 @@ import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/assistant.dart';
 import '../../../data/models/model_selection.dart';
@@ -209,9 +210,8 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                       key: const ValueKey('save-assistant'),
                       onPressed: _saving ? null : _save,
                       icon: _saving
-                          ? const SizedBox.square(
-                              dimension: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                          ? const AppLoadingIndicator.small(
+                              semanticsLabel: '正在保存助手',
                             )
                           : const Icon(Symbols.check),
                       label: Text(_saving ? '保存中…' : '保存'),
@@ -221,9 +221,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
               ),
             ),
       body: _loading
-          ? const Center(
-              child: CircularProgressIndicator(semanticsLabel: '正在读取助手'),
-            )
+          ? const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取助手'))
           : _loadError != null
           ? AppEmptyState(
               icon: Symbols.error,

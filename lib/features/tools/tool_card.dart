@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
 import 'tool_presentation.dart';
@@ -66,11 +68,10 @@ class ToolCard extends StatelessWidget {
                   ),
                   const SizedBox(width: AppSpacing.s),
                   if (inFlight)
-                    SizedBox.square(
-                      dimension: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: statusColor,
+                    AppLoadingIndicator.small(
+                      color: statusColor,
+                      semanticsLabel: ToolPresentation.statusLabel(
+                        record.status,
                       ),
                     )
                   else
@@ -121,14 +122,11 @@ class ToolCard extends StatelessWidget {
                   runSpacing: AppSpacing.xs,
                   children: [
                     for (final artifact in artifacts)
-                      ActionChip(
+                      FilledButton.tonalIcon(
                         key: ValueKey('tool-artifact-${artifact.id}'),
-                        avatar: const Icon(Symbols.attach_file, size: 16),
-                        label: Text(
-                          artifact.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        style: AppControlStyle.compact,
+                        icon: const Icon(Symbols.attach_file, size: 20),
+                        label: Text(artifact.name),
                         onPressed: onOpenArtifact == null
                             ? null
                             : () => onOpenArtifact!(artifact),

@@ -67,6 +67,16 @@ void main() {
         tester.widget<CapabilityChip>(keyed('tools-model-219')).selected,
         isFalse,
       );
+      if (scale == 2 && size.width <= 360) {
+        final temperature = keyed('temperature-model-219');
+        final output = keyed('max-output-model-219');
+        await tester.ensureVisible(temperature);
+        await tester.pumpAndSettle();
+        expect(
+          tester.getTopLeft(output).dy,
+          greaterThan(tester.getBottomLeft(temperature).dy),
+        );
+      }
       setKeyboard(tester, keyboard);
       await settleProviderUi(tester);
       expect(tester.takeException(), isNull);

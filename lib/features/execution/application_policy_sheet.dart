@@ -3,9 +3,11 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_dropdown.dart';
+import '../../../core/widgets/app_list_tile.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../data/models/application_access_policy.dart';
-import '../../../core/widgets/app_dropdown.dart';
 import 'execution_api.g.dart';
 
 enum ApplicationFilter { all, thirdParty, system }
@@ -175,7 +177,7 @@ class _ApplicationPolicySheetState extends State<ApplicationPolicySheet>
             child: const Text('确定'),
           ),
           child: snapshot.connectionState != ConnectionState.done
-              ? const Center(child: CircularProgressIndicator())
+              ? const Center(child: AppLoadingIndicator())
               : snapshot.hasError
               ? _buildLoadError(snapshot.error!)
               : _buildApplications(snapshot.requireData),
@@ -330,25 +332,31 @@ class _ApplicationPolicySheetState extends State<ApplicationPolicySheet>
             final size = app.sizeBytes == null
                 ? '大小未知'
                 : '${(app.sizeBytes! / (1024 * 1024)).toStringAsFixed(1)} MB';
-            return CheckboxListTile(
-              key: ValueKey('application-policy-${app.packageName}'),
-              controlAffinity: ListTileControlAffinity.leading,
-              title: Text(app.label),
-              subtitle: Text(
-                '${app.packageName}\n${app.isSystem ? '系统' : '第三方'} · $size · $date${app.launchable ? '' : '\n无启动图标'}',
+            final selected = black ? !allowed : allowed;
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.l,
+                AppSpacing.xs,
+                AppSpacing.l,
+                AppSpacing.xs,
               ),
-              value: black ? !allowed : allowed,
-              onChanged: (value) {
-                if (value != null) {
+              child: AppListTile(
+                key: ValueKey('application-policy-${app.packageName}'),
+                title: Text(app.label),
+                subtitle: Text(
+                  '${app.packageName}\n${app.isSystem ? '系统' : '第三方'} · $size · $date${app.launchable ? '' : '\n无启动图标'}',
+                ),
+                selected: selected,
+                onTap: () {
                   setState(
                     () => _policy = _policy.select(
                       app.packageName,
                       isSystem: app.isSystem,
-                      selected: value,
+                      selected: !selected,
                     ),
                   );
-                }
-              },
+                },
+              ),
             );
           },
         ),

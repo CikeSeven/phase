@@ -4,11 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/provider_profile.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
@@ -70,7 +71,7 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
             : _buildProfiles(profiles),
         loading: () => _buildStatus(
           title: '正在读取配置',
-          action: const SizedBox(width: 160, child: LinearProgressIndicator()),
+          action: const AppLoadingIndicator(semanticsLabel: '正在读取服务商'),
         ),
         error: (error, _) => AppEmptyState(
           icon: Symbols.cloud_off,
@@ -234,69 +235,65 @@ class _ProfileRow extends StatelessWidget {
     );
     return Semantics(
       button: true,
-      child: Material(
-        color: theme.colorScheme.surface.withValues(alpha: 0),
-        borderRadius: AppRadius.mediumAll,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          key: ValueKey('provider-${profile.id}'),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s,
-              vertical: AppSpacing.l,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AppIconBadge(
-                  icon: ProviderUi.icon(profile.presetId),
-                  tone: AppTone.teal,
-                  size: 40,
-                  iconSize: 22,
+      child: AppInteractiveSurface(
+        color: theme.colorScheme.surfaceContainerLow,
+        key: ValueKey('provider-${profile.id}'),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.s,
+            vertical: AppSpacing.l,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppIconBadge(
+                icon: ProviderUi.icon(profile.presetId),
+                tone: AppTone.teal,
+                size: 40,
+                iconSize: 22,
+              ),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      profile.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.s,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        Text(
+                          ProviderUi.protocolLabel(profile.protocol),
+                          style: secondaryStyle,
+                        ),
+                        Text('$count 个模型', style: secondaryStyle),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      profile.baseUrl,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: secondaryStyle,
+                    ),
+                  ],
                 ),
-                const SizedBox(width: AppSpacing.m),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        profile.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Wrap(
-                        spacing: AppSpacing.s,
-                        runSpacing: AppSpacing.xs,
-                        children: [
-                          Text(
-                            ProviderUi.protocolLabel(profile.protocol),
-                            style: secondaryStyle,
-                          ),
-                          Text('$count 个模型', style: secondaryStyle),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        profile.baseUrl,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: secondaryStyle,
-                      ),
-                    ],
-                  ),
+              ),
+              const SizedBox(width: AppSpacing.s),
+              ExcludeSemantics(
+                child: Icon(
+                  Symbols.chevron_right,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
-                const SizedBox(width: AppSpacing.s),
-                ExcludeSemantics(
-                  child: Icon(
-                    Symbols.chevron_right,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

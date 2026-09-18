@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/app_selection_surface.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
 
 class ChatSheetAction<T> {
   const ChatSheetAction({
@@ -91,9 +91,8 @@ class _ChatActionSheetState<T> extends State<ChatActionSheet<T>> {
                     ),
                   ),
                   for (final action in widget.actions)
-                    AppSelectionSurface(
+                    AppInteractiveSurface(
                       key: action.key,
-                      selected: false,
                       onTap: action.enabled
                           ? () => _select(action.value)
                           : null,

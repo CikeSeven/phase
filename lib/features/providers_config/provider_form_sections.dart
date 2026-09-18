@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_section.dart';
 import '../../../data/models/api_protocol.dart';
 import '../../../providers/presets/provider_preset.dart';
@@ -64,34 +65,29 @@ class ProviderFormSections extends StatelessWidget {
       children: [
         AppSection(
           title: '服务商',
-          child: Material(
-            color: theme.colorScheme.surface.withValues(alpha: 0),
-            borderRadius: AppRadius.mediumAll,
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              key: const ValueKey('choose-provider-preset'),
-              onTap: enabled ? onChoosePreset : null,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
-                child: Row(
-                  children: [
-                    AppIconBadge(
-                      icon: ProviderUi.icon(preset.id),
-                      tone: AppTone.teal,
+          child: AppInteractiveSurface(
+            key: const ValueKey('choose-provider-preset'),
+            onTap: enabled ? onChoosePreset : null,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+              child: Row(
+                children: [
+                  AppIconBadge(
+                    icon: ProviderUi.icon(preset.id),
+                    tone: AppTone.teal,
+                  ),
+                  const SizedBox(width: AppSpacing.m),
+                  Expanded(
+                    child: Text(
+                      preset.name,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleMedium,
                     ),
-                    const SizedBox(width: AppSpacing.m),
-                    Expanded(
-                      child: Text(
-                        preset.name,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.s),
-                    const Icon(Symbols.expand_more),
-                  ],
-                ),
+                  ),
+                  const SizedBox(width: AppSpacing.s),
+                  const Icon(Symbols.expand_more),
+                ],
               ),
             ),
           ),
@@ -209,9 +205,8 @@ class ProviderFormSections extends StatelessWidget {
                   key: const ValueKey('test-provider'),
                   onPressed: enabled && !testing ? onTest : null,
                   icon: testing
-                      ? const SizedBox.square(
-                          dimension: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                      ? const AppLoadingIndicator.small(
+                          semanticsLabel: '正在测试连接',
                         )
                       : const Icon(Symbols.cloud_download),
                   label: Text(testing ? '获取中…' : '获取模型'),

@@ -10,6 +10,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../data/models/profile_model.dart';
@@ -627,8 +628,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               icon: _saving
                   ? SizedBox.square(
                       dimension: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
+                      child: AppLoadingIndicator(
                         color: theme.colorScheme.onPrimary,
                       ),
                     )
@@ -684,7 +684,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   }
 
   Widget _loading() =>
-      const Center(child: CircularProgressIndicator(semanticsLabel: '正在加载模型'));
+      const Center(child: AppLoadingIndicator(semanticsLabel: '正在加载模型'));
 
   void _clearSearch() {
     _searchController.clear();

@@ -8,10 +8,12 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
+import '../../../core/widgets/app_list_tile.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
-import 'application_policy_sheet.dart';
 import '../../../data/models/application_access_policy.dart';
 import '../../../data/models/execution_scope.dart';
+import 'application_policy_sheet.dart';
 import 'execution_api.g.dart';
 import 'execution_setup_controller.dart';
 
@@ -110,7 +112,7 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
           child: const Text('保存执行设置'),
         ),
         body: data.when(
-          loading: () => const Center(child: CircularProgressIndicator()),
+          loading: () => const Center(child: AppLoadingIndicator()),
           error: (error, _) => Center(
             child: _LoadError(
               error: error,
@@ -137,6 +139,7 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
                           ),
                         ),
                 ),
+                const SizedBox(height: AppSpacing.s),
                 _PermissionTile(
                   title: '无障碍服务',
                   statusKey: const ValueKey('accessibility-permission-status'),
@@ -159,7 +162,7 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
                     onRetry: _busy ? null : controller.loadCapabilities,
                   ),
                 const SizedBox(height: AppSpacing.l),
-                ListTile(
+                AppListTile(
                   key: const ValueKey('edit-application-policy'),
                   title: const Text('应用名单'),
                   subtitle: Text(
@@ -226,7 +229,7 @@ class _PermissionTile extends StatelessWidget {
               colors.onErrorContainer,
             ),
     );
-    return ListTile(
+    return AppListTile(
       title: Text(title),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: AppSpacing.s),

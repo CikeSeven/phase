@@ -18,9 +18,11 @@ import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/message_part.dart';
+import 'package:phase/data/models/model_selection.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
+import 'package:phase/features/assistants/assistant_model_sheet.dart';
 import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/model_picker_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -126,7 +128,12 @@ void main() {
             parentId: 'preview-m1',
             role: ChatRole.assistant,
             parts: const [
-              TextPart(text: '可以先确定优先顺序，再为每件事留一个明确的时间段。先从最需要专注的小工具原型开始。'),
+              TextPart(
+                text:
+                    '可以先确定优先顺序，再为每件事留一个明确的时间段。先从最需要专注的小工具原型开始。\n\n'
+                    '上午先把核心流程跑通，记录还需要处理的问题。中午休息后整理读书笔记，只摘录最有启发的三个观点，写下它们与当前工作的联系。\n\n'
+                    '下午再安排周末出行：确认目的地、交通和住宿，并预留机动时间。每完成一项就暂停几分钟，看看接下来的安排是否需要调整。',
+              ),
             ],
             modelLabel: 'gpt-5.6-sol',
             createdAt: DateTime.now(),
@@ -267,10 +274,38 @@ void main() {
       router.push('/settings/providers/$gatewayId');
       await _settleDatabase(tester);
       await _save(tester, '$mode-provider-edit');
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('tools-gpt-5.6-sol')),
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byKey(const ValueKey('provider-edit-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await _save(tester, '$mode-model-capabilities');
 
       router.go('/assistants');
       await tester.pumpAndSettle();
       await _save(tester, '$mode-assistants');
+      final assistantSheet = showAssistantModelSheet(
+        tester.element(find.byType(Scaffold).first),
+        current: ModelSelection(profileId: gatewayId, modelId: 'gpt-5.6-sol'),
+      );
+      await tester.pumpAndSettle();
+      final effort = find.byKey(const ValueKey('assistant-effort-high'));
+      await tester.ensureVisible(effort);
+      await tester.pumpAndSettle();
+      await tester.tap(effort);
+      await tester.pumpAndSettle();
+      await _save(tester, '$mode-assistant-effort');
+      await tester.ensureVisible(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('关闭'));
+      await tester.pumpAndSettle();
+      expect(await assistantSheet, isNull);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
       container.dispose();

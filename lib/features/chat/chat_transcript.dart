@@ -284,10 +284,8 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                     fixedSize: const Size.square(48),
                     backgroundColor: colors.surfaceContainerHigh,
                     foregroundColor: colors.onSurface,
-                    shape: CircleBorder(
-                      side: BorderSide(
-                        color: colors.outlineVariant.withValues(alpha: 0.56),
-                      ),
+                    side: BorderSide(
+                      color: colors.outlineVariant.withValues(alpha: 0.56),
                     ),
                   ),
                 ),

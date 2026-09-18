@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_choice_chip.dart';
 import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../data/models/model_selection.dart';
@@ -69,6 +70,10 @@ class _AssistantModelSheetState extends ConsumerState<_AssistantModelSheet> {
       titleTrailing: widget.current == null
           ? const Text('跟随当前选择')
           : Text(widget.current!.modelId),
+      footer: _EffortRow(
+        effort: _effort,
+        onChanged: (effort) => setState(() => _effort = effort),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -125,10 +130,6 @@ class _AssistantModelSheetState extends ConsumerState<_AssistantModelSheet> {
                       );
                     },
                   ),
-          ),
-          _EffortRow(
-            effort: _effort,
-            onChanged: (effort) => setState(() => _effort = effort),
           ),
         ],
       ),
@@ -213,36 +214,29 @@ class _EffortRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.l,
-        AppSpacing.m,
-        AppSpacing.l,
-        AppSpacing.l,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('推理等级', style: theme.textTheme.labelLarge),
-          const SizedBox(height: AppSpacing.s),
-          Wrap(
-            spacing: AppSpacing.s,
-            runSpacing: AppSpacing.s,
-            children: [
-              for (final value in [
-                ReasoningEffort.off,
-                ...ReasoningEffort.levels,
-              ])
-                ChoiceChip(
-                  key: ValueKey('assistant-effort-${value.name}'),
-                  label: Text(value.label),
-                  selected: value == effort,
-                  onSelected: (_) => onChanged(value),
-                ),
-            ],
-          ),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('推理等级', style: theme.textTheme.labelLarge),
+        const SizedBox(height: AppSpacing.s),
+        Wrap(
+          spacing: AppSpacing.s,
+          runSpacing: AppSpacing.s,
+          children: [
+            for (final value in [
+              ReasoningEffort.off,
+              ...ReasoningEffort.levels,
+            ])
+              AppChoiceChip(
+                key: ValueKey('assistant-effort-${value.name}'),
+                label: value.label,
+                selected: value == effort,
+                onSelected: (_) => onChanged(value),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }

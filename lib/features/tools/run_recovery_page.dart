@@ -8,6 +8,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../chat/chat_controller.dart';
@@ -83,7 +84,7 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
     return AppScaffold(
       title: '中断任务',
       body: entries.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: AppLoadingIndicator()),
         error: (error, _) => AppEmptyState(
           icon: Symbols.error,
           title: '无法读取中断任务',

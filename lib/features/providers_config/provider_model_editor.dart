@@ -248,7 +248,7 @@ class _ModelCard extends StatelessWidget {
             ),
           ),
           // 采样参数：留空表示不下发，由服务端默认决定。
-          _ModelParametersRow(
+          _ModelParameters(
             model: model,
             enabled: enabled,
             onModelChanged: onModelChanged,
@@ -260,8 +260,8 @@ class _ModelCard extends StatelessWidget {
 }
 
 /// 单个模型的采样参数：温度与输出上限，留空即不下发。
-class _ModelParametersRow extends StatefulWidget {
-  const _ModelParametersRow({
+class _ModelParameters extends StatefulWidget {
+  const _ModelParameters({
     required this.model,
     required this.enabled,
     required this.onModelChanged,
@@ -272,10 +272,10 @@ class _ModelParametersRow extends StatefulWidget {
   final ValueChanged<ProfileModel> onModelChanged;
 
   @override
-  State<_ModelParametersRow> createState() => _ModelParametersRowState();
+  State<_ModelParameters> createState() => _ModelParametersState();
 }
 
-class _ModelParametersRowState extends State<_ModelParametersRow> {
+class _ModelParametersState extends State<_ModelParameters> {
   late final _temperatureController = TextEditingController(
     text: widget.model.temperature?.toString() ?? '',
   );
@@ -311,55 +311,70 @@ class _ModelParametersRowState extends State<_ModelParametersRow> {
         AppSpacing.s,
         0,
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              key: ValueKey('temperature-${widget.model.id}'),
-              controller: _temperatureController,
-              enabled: widget.enabled,
-              keyboardType: const TextInputType.numberWithOptions(
-                decimal: true,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final minimumWidth =
+              MediaQuery.textScalerOf(context).scale(96) + AppSpacing.xxl;
+          final halfWidth = (constraints.maxWidth - AppSpacing.s) / 2;
+          final fieldWidth = halfWidth >= minimumWidth
+              ? halfWidth
+              : constraints.maxWidth;
+          return Wrap(
+            spacing: AppSpacing.s,
+            runSpacing: AppSpacing.m,
+            children: [
+              SizedBox(
+                width: fieldWidth,
+                child: TextField(
+                  key: ValueKey('temperature-${widget.model.id}'),
+                  controller: _temperatureController,
+                  enabled: widget.enabled,
+                  keyboardType: const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+                  textInputAction: TextInputAction.next,
+                  onSubmitted: (_) => _apply(),
+                  onTapOutside: (_) {
+                    FocusScope.of(context).unfocus();
+                    _apply();
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '温度',
+                    hintText: '默认',
+                    isDense: true,
+                    helperText: '0–2，留空由服务端决定',
+                    helperStyle: TextStyle(fontSize: 11),
+                    helperMaxLines: 3,
+                  ),
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
-              textInputAction: TextInputAction.next,
-              onSubmitted: (_) => _apply(),
-              onTapOutside: (_) {
-                FocusScope.of(context).unfocus();
-                _apply();
-              },
-              decoration: const InputDecoration(
-                labelText: '温度',
-                hintText: '默认',
-                isDense: true,
-                helperText: '0–2，留空由服务端决定',
-                helperStyle: TextStyle(fontSize: 11),
+              SizedBox(
+                width: fieldWidth,
+                child: TextField(
+                  key: ValueKey('max-output-${widget.model.id}'),
+                  controller: _maxOutputController,
+                  enabled: widget.enabled,
+                  keyboardType: TextInputType.number,
+                  onSubmitted: (_) => _apply(),
+                  onTapOutside: (_) {
+                    FocusScope.of(context).unfocus();
+                    _apply();
+                  },
+                  decoration: const InputDecoration(
+                    labelText: '输出上限',
+                    hintText: '默认',
+                    isDense: true,
+                    helperText: 'token 数，留空用默认',
+                    helperStyle: TextStyle(fontSize: 11),
+                    helperMaxLines: 3,
+                  ),
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.s),
-          Expanded(
-            child: TextField(
-              key: ValueKey('max-output-${widget.model.id}'),
-              controller: _maxOutputController,
-              enabled: widget.enabled,
-              keyboardType: TextInputType.number,
-              onSubmitted: (_) => _apply(),
-              onTapOutside: (_) {
-                FocusScope.of(context).unfocus();
-                _apply();
-              },
-              decoration: const InputDecoration(
-                labelText: '输出上限',
-                hintText: '默认',
-                isDense: true,
-                helperText: 'token 数，留空用默认',
-                helperStyle: TextStyle(fontSize: 11),
-              ),
-              style: theme.textTheme.bodySmall,
-            ),
-          ),
-        ],
+            ],
+          );
+        },
       ),
     );
   }

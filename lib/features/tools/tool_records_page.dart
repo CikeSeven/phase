@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
@@ -84,7 +85,7 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
           }
           if (!snapshot.hasData) {
             return const Center(
-              child: CircularProgressIndicator(semanticsLabel: '正在读取记录'),
+              child: AppLoadingIndicator(semanticsLabel: '正在读取记录'),
             );
           }
           final (records, attachments) = snapshot.data!;

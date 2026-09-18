@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
-import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_motion.dart';
+import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
 
 /// 用户主动切换思考区时，由阅读区保留标题位置。
 class ThinkingPanelToggleNotification extends Notification {
@@ -199,7 +200,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
       color: context.brandColors.lavender.withValues(
         alpha: theme.brightness == Brightness.dark ? 0.06 : 0.045,
       ),
-      borderRadius: AppRadius.smallAll,
+      borderRadius: AppRadius.mediumAll,
       clipBehavior: Clip.antiAlias,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -209,8 +210,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
             key: _headerKey,
             button: true,
             expanded: _expanded,
-            child: InkWell(
-              borderRadius: AppRadius.smallAll,
+            child: AppInteractiveSurface(
               onTap: _toggle,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),

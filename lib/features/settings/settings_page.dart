@@ -7,6 +7,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import 'settings_entry.dart';
 import 'theme_mode_controller.dart';
@@ -40,7 +41,7 @@ class SettingsPage extends ConsumerWidget {
             title: '服务商配置',
             onTap: () => context.push('/settings/providers'),
           ),
-          const SizedBox(height: AppSpacing.xxxl),
+          const SizedBox(height: AppSpacing.s),
           SettingsEntry(
             icon: Symbols.touch_app,
             tone: AppTone.teal,
@@ -91,60 +92,53 @@ class _AppearanceSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final brand = context.brandColors;
-    return Material(
+    return AppInteractiveSurface(
       color: brand.lavenderContainer.withValues(alpha: 0.48),
-      borderRadius: AppRadius.extraLargeAll,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => showDialog<void>(
-          context: context,
-          builder: (context) => ThemeModeDialog(initialMode: mode),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  ExcludeSemantics(
-                    child: Icon(
-                      Symbols.palette,
-                      size: 24,
-                      color: brand.lavender,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.m),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('主题模式', style: theme.textTheme.titleMedium),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          themeModeLabel(mode),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
+      radius: AppRadius.extraLarge,
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (context) => ThemeModeDialog(initialMode: mode),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.xl),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ExcludeSemantics(
+                  child: Icon(Symbols.palette, size: 24, color: brand.lavender),
+                ),
+                const SizedBox(width: AppSpacing.m),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('主题模式', style: theme.textTheme.titleMedium),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        themeModeLabel(mode),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: AppSpacing.s),
-                  ExcludeSemantics(
-                    child: Icon(
-                      Symbols.chevron_right,
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
+                ),
+                const SizedBox(width: AppSpacing.s),
+                ExcludeSemantics(
+                  child: Icon(
+                    Symbols.chevron_right,
+                    color: theme.colorScheme.onSurfaceVariant,
                   ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.l),
-              ExcludeSemantics(child: ThemePreview(mode: mode)),
-            ],
-          ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.l),
+            ExcludeSemantics(child: ThemePreview(mode: mode)),
+          ],
         ),
       ),
     );
