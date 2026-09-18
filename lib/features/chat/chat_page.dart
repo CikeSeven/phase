@@ -89,7 +89,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     return PopScope<void>(
       canPop: !_drawerOpen,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _scaffoldKey.currentState?.closeDrawer();
+        if (didPop || !_drawerOpen) return;
+        // 根页面的返回拦截仍按本地历史逐层关闭菜单、侧栏。
+        if (ModalRoute.of(context)?.willHandlePopInternally ?? false) {
+          Navigator.of(context).pop();
+        } else {
+          _scaffoldKey.currentState?.closeDrawer();
+        }
       },
       child: AppBackground(
         child: Scaffold(

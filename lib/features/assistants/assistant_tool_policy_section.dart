@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../data/models/assistant.dart';
 import '../../../data/models/tool_policy.dart';
 import '../tools/tool.dart';
@@ -39,29 +40,20 @@ class AssistantToolPolicySection extends StatelessWidget {
               tool.policyKey: tool,
           }.values) ...[
             const SizedBox(height: AppSpacing.m),
-            DropdownButtonFormField<ToolPolicy>(
+            AppDropdown<ToolPolicy>(
               key: ValueKey('tool-policy-${tool.policyKey}'),
-              initialValue: policy.policies[tool.policyKey] ?? ToolPolicy.deny,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: tool.policyKey == applicationOperationsPolicyKey
-                    ? '应用操作'
-                    : ToolPresentation.toolLabel(tool.name),
-              ),
-              items: [
+              value: policy.policies[tool.policyKey] ?? ToolPolicy.deny,
+              label: tool.policyKey == applicationOperationsPolicyKey
+                  ? '应用操作'
+                  : ToolPresentation.toolLabel(tool.name),
+              options: {
                 for (final value in ToolPolicy.values)
-                  DropdownMenuItem(
-                    value: value,
-                    child: Text(ToolPresentation.policyLabel(value)),
-                  ),
-              ],
+                  value: ToolPresentation.policyLabel(value),
+              },
               onChanged: onChanged == null
                   ? null
-                  : (value) {
-                      if (value != null) {
-                        onChanged!(policy.withPolicy(tool.policyKey, value));
-                      }
-                    },
+                  : (value) =>
+                        onChanged!(policy.withPolicy(tool.policyKey, value)),
             ),
           ],
         ],

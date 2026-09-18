@@ -49,6 +49,9 @@ class AppMotionTheme extends StatelessWidget {
               segmentedButtonTheme: SegmentedButtonThemeData(
                 style: immediate(theme.segmentedButtonTheme.style),
               ),
+              menuButtonTheme: MenuButtonThemeData(
+                style: immediate(theme.menuButtonTheme.style),
+              ),
             )
           : theme,
       child: child,

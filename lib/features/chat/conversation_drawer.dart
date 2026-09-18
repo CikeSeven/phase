@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/error/failure.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
@@ -283,11 +284,45 @@ class _ConversationTile extends ConsumerStatefulWidget {
 
 class _ConversationTileState extends ConsumerState<_ConversationTile> {
   final _menuController = MenuController();
+  final _menuFocus = FocusNode();
+  AnimationStatus _menuAnimationStatus = AnimationStatus.dismissed;
+  LocalHistoryEntry? _menuHistory;
 
   Conversation get conversation => widget.conversation;
 
-  void _toggleMenu() =>
-      _menuController.isOpen ? _menuController.close() : _menuController.open();
+  void _toggleMenu() => _menuAnimationStatus.isForwardOrCompleted
+      ? _menuController.close()
+      : _menuController.open();
+
+  void _menuOpened() {
+    final route = ModalRoute.of(context);
+    if (route == null || _menuHistory != null) return;
+    late final LocalHistoryEntry entry;
+    entry = LocalHistoryEntry(
+      impliesAppBarDismissal: false,
+      onRemove: () {
+        if (_menuHistory == entry) {
+          _menuHistory = null;
+          _menuController.close();
+        }
+      },
+    );
+    _menuHistory = entry;
+    route.addLocalHistoryEntry(entry);
+  }
+
+  void _menuClosed() {
+    final entry = _menuHistory;
+    _menuHistory = null;
+    entry?.remove();
+  }
+
+  @override
+  void dispose() {
+    _menuClosed();
+    _menuFocus.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -379,6 +414,12 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                 ),
                 MenuAnchor(
                   controller: _menuController,
+                  childFocusNode: _menuFocus,
+                  animated: !AppMotion.reduce(context),
+                  onAnimationStatusChanged: (status) =>
+                      _menuAnimationStatus = status,
+                  onOpen: _menuOpened,
+                  onClose: _menuClosed,
                   consumeOutsideTap: true,
                   alignmentOffset: Offset(-menuWidth, AppSpacing.xs),
                   style: MenuStyle(
@@ -437,6 +478,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                     ),
                   ],
                   builder: (context, controller, child) => IconButton(
+                    focusNode: _menuFocus,
                     key: ValueKey('conversation-menu-${conversation.id}'),
                     tooltip: '会话菜单',
                     onPressed: _toggleMenu,

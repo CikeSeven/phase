@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'app_control_style.dart';
+import 'app_motion.dart';
 import 'app_radius.dart';
 import 'app_spacing.dart';
 import 'brand_colors.dart';
@@ -114,10 +115,7 @@ abstract final class AppTheme {
         .apply(bodyColor: colors.onSurface, displayColor: colors.onSurface);
     final outline = colors.outlineVariant.withValues(alpha: 0.68);
     final transparent = colors.surface.withValues(alpha: 0);
-    final menuShape = RoundedRectangleBorder(
-      borderRadius: AppRadius.mediumAll,
-      side: BorderSide(color: outline),
-    );
+    const menuShape = RoundedRectangleBorder(borderRadius: AppRadius.largeAll);
     OutlineInputBorder inputBorder(Color color, [double width = 1]) =>
         OutlineInputBorder(
           borderRadius: AppRadius.mediumAll,
@@ -327,7 +325,7 @@ abstract final class AppTheme {
       ),
       menuTheme: MenuThemeData(
         style: MenuStyle(
-          backgroundColor: WidgetStatePropertyAll(colors.surfaceContainerLow),
+          backgroundColor: WidgetStatePropertyAll(colors.surfaceContainer),
           surfaceTintColor: WidgetStatePropertyAll(transparent),
           shape: WidgetStatePropertyAll(menuShape),
           elevation: const WidgetStatePropertyAll(2),
@@ -338,13 +336,22 @@ abstract final class AppTheme {
         style: ButtonStyle(
           minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
           textStyle: WidgetStatePropertyAll(text.bodyMedium),
-          shape: const WidgetStatePropertyAll(
-            RoundedRectangleBorder(borderRadius: AppRadius.smallAll),
+          shape: WidgetStateProperty.resolveWith(
+            (states) => RoundedRectangleBorder(
+              borderRadius:
+                  !states.contains(WidgetState.disabled) &&
+                      states.contains(WidgetState.pressed)
+                  ? AppRadius.smallAll
+                  : states.contains(WidgetState.selected)
+                  ? AppRadius.largeAll
+                  : AppRadius.mediumAll,
+            ),
           ),
+          animationDuration: AppMotion.effects,
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: colors.surfaceContainerLow,
+        color: colors.surfaceContainer,
         surfaceTintColor: transparent,
         shape: menuShape,
         elevation: 2,

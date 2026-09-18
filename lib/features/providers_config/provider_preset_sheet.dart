@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/app_card.dart';
+import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../providers/presets/provider_preset.dart';
@@ -103,60 +102,66 @@ class _ProviderPresetSheetState extends State<ProviderPresetSheet> {
               itemBuilder: (context, index) {
                 final preset = presets[index];
                 final selected = preset.id == widget.selectedId;
-                return AppCard(
+                return AppSelectionSurface(
                   key: ValueKey('preset-${preset.id}'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.m,
-                    vertical: AppSpacing.s,
-                  ),
-                  borderRadius: AppRadius.mediumAll,
+                  selected: selected,
                   onTap: () {
                     if (_closed) return;
                     _closed = true;
                     Navigator.of(context).pop(preset);
                   },
-                  child: Row(
-                    children: [
-                      AppIconBadge(
-                        icon: ProviderUi.icon(preset.id),
-                        tone: ProviderUi.tone(preset.id),
-                        size: 32,
-                        iconSize: 18,
-                      ),
-                      const SizedBox(width: AppSpacing.m),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              preset.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.titleSmall,
-                            ),
-                            Text(
-                              // 自定义预设的协议可随意修改，不展示默认协议标签。
-                              preset.baseUrl.isEmpty
-                                  ? '自定义 API 地址'
-                                  : '${ProviderUi.protocolLabel(preset.protocol)} · ${preset.baseUrl}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.m,
+                      vertical: AppSpacing.m,
+                    ),
+                    child: Row(
+                      children: [
+                        AppIconBadge(
+                          icon: ProviderUi.icon(preset.id),
+                          tone: ProviderUi.tone(preset.id),
+                          size: 32,
+                          iconSize: 18,
                         ),
-                      ),
-                      const SizedBox(width: AppSpacing.s),
-                      Icon(
-                        selected ? Symbols.check_circle : Symbols.chevron_right,
-                        color: selected
-                            ? theme.colorScheme.primary
-                            : theme.colorScheme.onSurfaceVariant,
-                        semanticLabel: selected ? '当前预设' : null,
-                      ),
-                    ],
+                        const SizedBox(width: AppSpacing.m),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                preset.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.titleSmall,
+                              ),
+                              Text(
+                                // 自定义预设的协议可随意修改，不展示默认协议标签。
+                                preset.baseUrl.isEmpty
+                                    ? '自定义 API 地址'
+                                    : '${ProviderUi.protocolLabel(preset.protocol)} · ${preset.baseUrl}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.s),
+                        SizedBox.square(
+                          dimension: 24,
+                          child: selected
+                              ? Icon(
+                                  Symbols.check_circle,
+                                  fill: 1,
+                                  color: theme.colorScheme.onPrimaryContainer,
+                                  semanticLabel: '当前预设',
+                                )
+                              : null,
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },

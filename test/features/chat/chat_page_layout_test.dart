@@ -10,6 +10,8 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/core/theme/app_spacing.dart';
+import 'package:phase/core/theme/app_motion.dart';
+import 'package:phase/core/theme/app_radius.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/theme/frosted_surface.dart';
 import 'package:phase/core/widgets/app_background.dart';
@@ -510,7 +512,7 @@ void main() {
               textScaler: TextScaler.linear(scale),
               disableAnimations: reducedEffects,
             ),
-            child: child!,
+            child: AppMotionTheme(child: child!),
           ),
         ),
       ),
@@ -725,6 +727,126 @@ void main() {
     expect(first.top, lessThan(buttonRect.top));
     expect(tester.takeException(), isNull);
   });
+
+  for (final dark in [false, true]) {
+    testWidgets('会话菜单 ${dark ? "深色" : "浅色"} 按压形变、反向开关与逐层返回', (tester) async {
+      final host = await pumpChat(
+        tester,
+        dark: dark,
+        reducedEffects: false,
+        repository: _MemoryConversations()..seed(20),
+      );
+      await openDrawer(tester);
+      final button = find.byKey(const ValueKey('conversation-menu-seed-0'));
+      final row = find.byKey(const ValueKey('conversation-row-seed-0'));
+      final item = find.widgetWithText(MenuItemButton, '重命名');
+      await tester.longPress(row);
+      await tester.pumpAndSettle();
+
+      Material itemMaterial() => tester.widget<Material>(
+        find.descendant(of: item, matching: find.byType(Material)).first,
+      );
+      expect(
+        (itemMaterial().shape! as RoundedRectangleBorder).borderRadius,
+        AppRadius.mediumAll,
+      );
+      final rect = tester.getRect(item);
+      final press = await tester.startGesture(rect.center);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.pump(AppMotion.effects);
+      expect(tester.getRect(item), rect);
+      expect(
+        (itemMaterial().shape! as RoundedRectangleBorder).borderRadius,
+        AppRadius.smallAll,
+      );
+      await press.cancel();
+      await tester.pumpAndSettle();
+      expect(host.repository.renameCalls, 0);
+
+      await tester.tap(button);
+      await tester.pump(const Duration(milliseconds: 40));
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(item, findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(item, findsNothing);
+      expect(find.byType(Drawer), findsOneWidget);
+
+      // 点击其他会话只关闭菜单，不能透传成切换会话。
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      final active = host.container.read(activeConversationProvider);
+      await tester.tapAt(
+        tester.getTopLeft(
+              find.byKey(const ValueKey('conversation-row-seed-1')),
+            ) +
+            const Offset(8, 8),
+      );
+      await tester.pumpAndSettle();
+      expect(host.container.read(activeConversationProvider), active);
+      expect(find.byType(Drawer), findsOneWidget);
+      expect(item, findsNothing);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(Drawer), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final size in [const Size(320, 760), const Size(780, 360)]) {
+    testWidgets('会话菜单 $size 两倍字号、减少动画下仍可取消与置顶', (tester) async {
+      final host = await pumpChat(
+        tester,
+        size: size,
+        scale: 2,
+        repository: _MemoryConversations()..seed(20),
+      );
+      await openDrawer(tester);
+      final button = find.byKey(const ValueKey('conversation-menu-seed-0'));
+      await tester.scrollUntilVisible(
+        button,
+        100,
+        scrollable: find
+            .descendant(
+              of: find.descendant(
+                of: find.byType(Drawer),
+                matching: find.byType(CustomScrollView),
+              ),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      final anchor = tester.widget<MenuAnchor>(
+        find.ancestor(of: button, matching: find.byType(MenuAnchor)),
+      );
+      expect(anchor.animated, isFalse);
+      final item = find.widgetWithText(MenuItemButton, '重命名');
+      expect(tester.getRect(item).left, greaterThanOrEqualTo(0));
+      expect(tester.getRect(item).right, lessThanOrEqualTo(size.width));
+      expect(
+        Theme.of(tester.element(item)).menuButtonTheme.style!.animationDuration,
+        Duration.zero,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(host.repository.pinCalls, 0);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      final pin = find.widgetWithText(MenuItemButton, '置顶');
+      await tester.ensureVisible(pin);
+      await tester.pumpAndSettle();
+      await tester.tap(pin);
+      await tester.pumpAndSettle();
+      expect(host.repository.pinCalls, 1);
+      expect(find.byType(MenuItemButton), findsNothing);
+      expect(find.byType(Drawer), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('输入栏和侧栏不再展示重复教程或标语', (tester) async {
     await pumpChat(tester);

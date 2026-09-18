@@ -9,6 +9,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/widgets/app_scaffold.dart';
+import 'package:phase/core/widgets/app_dropdown.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
@@ -234,7 +235,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(field);
     await tester.pumpAndSettle();
-    await tester.tap(find.text(label).last);
+    await tester.tap(find.widgetWithText(MenuItemButton, label));
     await tester.pumpAndSettle();
   }
 
@@ -256,10 +257,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<DropdownButtonFormField<ToolPolicy>>(
+          .widget<AppDropdown<ToolPolicy>>(
             find.byKey(const ValueKey('tool-policy-write_file')),
           )
-          .initialValue,
+          .value,
       ToolPolicy.ask,
     );
     await changeWritePolicy(tester, '禁止使用');
@@ -275,10 +276,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<DropdownButtonFormField<ToolPolicy>>(
+          .widget<AppDropdown<ToolPolicy>>(
             find.byKey(const ValueKey('tool-policy-write_file')),
           )
-          .initialValue,
+          .value,
       ToolPolicy.deny,
     );
     await closeHost(tester, host.container);
@@ -298,10 +299,10 @@ void main() {
     expect(find.byType(AssistantEditPage), findsOneWidget);
     expect(
       tester
-          .widget<DropdownButtonFormField<ToolPolicy>>(
+          .widget<AppDropdown<ToolPolicy>>(
             find.byKey(const ValueKey('tool-policy-write_file')),
           )
-          .initialValue,
+          .value,
       ToolPolicy.allow,
     );
     expect(
