@@ -185,9 +185,12 @@ void main() {
           first.add(_reasoningFixture(protocol, reasoning));
           await _until(
             tester,
-            () => find.text(reasoning).evaluate().isNotEmpty,
+            () => find.textContaining('思考中…').evaluate().isNotEmpty,
           );
           expect(find.textContaining('思考中…'), findsOneWidget);
+          expect(find.text(reasoning), findsNothing);
+          await tester.tap(find.textContaining('思考中…'));
+          await tester.pump();
           expect(find.text(reasoning), findsOneWidget);
           expect(_reasoningOf(_assistant(tester)), reasoning);
           expect(_assistant(tester).status, MessageStatus.streaming);
@@ -207,6 +210,26 @@ void main() {
           expect(_reasoningOf(_messageOf(rows.last)), reasoning);
           expect(rows.last.partsJson, contains('正文答案'));
           expect(rows.last.status, MessageStatus.completed);
+          final recorded = _messageOf(rows.last).parts
+              .whereType<ReasoningPart>()
+              .where((part) => part.publicText.isNotEmpty)
+              .single;
+          expect(recorded.startedAt, isNotNull);
+          expect(recorded.durationMs, isNotNull);
+          expect(rows.last.thinkingDurationMs, recorded.durationMs);
+          expect(find.textContaining('已思考'), findsOneWidget);
+          // 正文到达后完成当前段计时；手动展开仍保留，重建消息后来自落库数据。
+          final recordedDuration = recorded.durationMs;
+          await _settleUi(tester);
+          rows = (await tester.runAsync(() => _messageRows(db)))!;
+          expect(
+            _messageOf(rows.last).parts
+                .whereType<ReasoningPart>()
+                .where((part) => part.publicText.isNotEmpty)
+                .single
+                .durationMs,
+            recordedDuration,
+          );
 
           await _send(tester, '测试停止');
           await _until(tester, () => adapter.requests.length == 2);
@@ -231,6 +254,14 @@ void main() {
           rows = (await tester.runAsync(() => _messageRows(db)))!;
           expect(rows, hasLength(4));
           expect(_reasoningOf(_messageOf(rows.last)), '停止前公开摘要');
+          expect(
+            _messageOf(rows.last).parts
+                .whereType<ReasoningPart>()
+                .where((part) => part.publicText.isNotEmpty)
+                .single
+                .durationMs,
+            isNotNull,
+          );
           expect(rows.last.partsJson, contains('部分正文'));
           expect(rows.last.status, MessageStatus.cancelled);
 

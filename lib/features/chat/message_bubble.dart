@@ -48,6 +48,7 @@ class MessageBubble extends StatelessWidget {
     final segments = <_ContentSegment>[];
     final text = StringBuffer();
     final thinking = StringBuffer();
+    final thinkingParts = <ReasoningPart>[];
     var pending = _SegmentKind.none;
 
     void flushText() {
@@ -58,8 +59,11 @@ class MessageBubble extends StatelessWidget {
 
     void flushThinking() {
       if (thinking.isEmpty) return;
-      segments.add(_ThinkingSegment(thinking.toString()));
+      segments.add(
+        _ThinkingSegment(thinking.toString(), List.of(thinkingParts)),
+      );
       thinking.clear();
+      thinkingParts.clear();
     }
 
     /// 按内容出现的先后收口：先出现的那一类先成段。
@@ -87,6 +91,7 @@ class MessageBubble extends StatelessWidget {
           if (pending != _SegmentKind.thinking) flush();
           pending = _SegmentKind.thinking;
           thinking.write(publicText);
+          thinkingParts.add(part);
         case ToolCallPart(:final toolCallId):
           flush();
           segments.add(_ToolSegment(toolCallId));
@@ -188,9 +193,13 @@ class MessageBubble extends StatelessWidget {
                 // 思考区的稳定身份用「第几个思考区」，不用段序号：正文与思考
                 // 的先后一变，段序号就会跳，面板会重建、用户的折叠偏好丢失。
                 var thinkingOrdinal = 0;
-                // 正在接收增量的思考段：只有最后一段在思考中，前面几轮的
-                // 思考随它那一轮结束（工具卡片插进来）而收起。
-                final liveThinkingIndex = streaming ? lastThinkingIndex : -1;
+                // 正文或工具开始后，前面的思考不再处于接收状态。
+                final liveThinkingIndex =
+                    streaming && lastThinkingIndex == segments.length - 1
+                    ? lastThinkingIndex
+                    : -1;
+                final onlyThinking =
+                    segments.whereType<_ThinkingSegment>().length == 1;
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -236,7 +245,7 @@ class MessageBubble extends StatelessWidget {
                                 color: colors.error.withValues(alpha: 0.24),
                               ),
                             )
-                          : null,
+                          : const BoxDecoration(),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -281,29 +290,35 @@ class MessageBubble extends StatelessWidget {
                                           code: code,
                                         ),
                               ),
-                              _ThinkingSegment(:final reasoning) => Padding(
-                                key: ValueKey(
-                                  'thinking-${message.id}-${thinkingOrdinal++}',
+                              _ThinkingSegment(
+                                :final reasoning,
+                                :final parts,
+                              ) =>
+                                Padding(
+                                  key: ValueKey(
+                                    'thinking-${message.id}-${thinkingOrdinal++}',
+                                  ),
+                                  padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.xs,
+                                  ),
+                                  child: ThinkingPanel(
+                                    reasoning: reasoning,
+                                    // 已结束的块不会因后续模型轮仍在运行而重新计时。
+                                    streaming:
+                                        index == liveThinkingIndex &&
+                                        parts.last.durationMs == null,
+                                    startedAt: parts.last.durationMs == null
+                                        ? parts.last.startedAt
+                                        : null,
+                                    // 逐段汇总；仅有一段且无块级计时时，沿用消息已记录的总值。
+                                    duration: _thinkingDuration(
+                                      parts,
+                                      fallback: onlyThinking && !streaming
+                                          ? message.thinkingDurationMs
+                                          : null,
+                                    ),
+                                  ),
                                 ),
-                                padding: const EdgeInsets.only(
-                                  bottom: AppSpacing.m,
-                                ),
-                                child: ThinkingPanel(
-                                  reasoning: reasoning,
-                                  // 跨轮合并后只有最后一段还在接收增量：
-                                  // 前面的思考随它那一轮结束，自动收起。
-                                  streaming: index == liveThinkingIndex,
-                                  // 思考耗时是整个回答区的统计，挂在最后一段。
-                                  duration: index == lastThinkingIndex
-                                      ? message.thinkingDurationMs == null
-                                            ? null
-                                            : Duration(
-                                                milliseconds:
-                                                    message.thinkingDurationMs!,
-                                              )
-                                      : null,
-                                ),
-                              ),
                               _ToolSegment(:final toolCallId) => ToolCallCard(
                                 toolCallId: toolCallId,
                                 attachments: attachments,
@@ -432,9 +447,20 @@ class _TextSegment extends _ContentSegment {
 }
 
 class _ThinkingSegment extends _ContentSegment {
-  const _ThinkingSegment(this.reasoning);
+  const _ThinkingSegment(this.reasoning, this.parts);
 
   final String reasoning;
+  final List<ReasoningPart> parts;
+}
+
+Duration? _thinkingDuration(List<ReasoningPart> parts, {int? fallback}) {
+  final known = parts.where((part) => part.durationMs != null);
+  if (known.isEmpty) {
+    return fallback == null ? null : Duration(milliseconds: fallback);
+  }
+  return Duration(
+    milliseconds: known.fold(0, (total, part) => total + part.durationMs!),
+  );
 }
 
 class _ToolSegment extends _ContentSegment {

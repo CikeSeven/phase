@@ -13,7 +13,12 @@ void main() {
     test('各类型编码后可按原类型解码', () {
       final parts = <MessagePart>[
         const TextPart(text: '正文', partId: 'text_0'),
-        const ReasoningPart(publicText: '思考', providerData: {'signature': 's'}),
+        ReasoningPart(
+          publicText: '思考',
+          providerData: const {'signature': 's'},
+          startedAt: DateTime(2026, 9, 18, 12),
+          durationMs: 1350,
+        ),
         const ImagePart(attachmentId: 'a1'),
         const DocumentPart(attachmentId: 'a2'),
         const ToolCallPart(toolCallId: 'call_1'),
@@ -39,6 +44,11 @@ void main() {
       ]);
       expect((decoded[0] as TextPart).text, '正文');
       expect((decoded[1] as ReasoningPart).providerData, {'signature': 's'});
+      expect(
+        (decoded[1] as ReasoningPart).startedAt,
+        DateTime(2026, 9, 18, 12),
+      );
+      expect((decoded[1] as ReasoningPart).durationMs, 1350);
       expect((decoded[4] as ToolCallPart).toolCallId, 'call_1');
       expect((decoded[5] as ToolResultPart).toolCallId, 'call_1');
     });

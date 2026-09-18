@@ -5,9 +5,9 @@ import 'package:flutter/rendering.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
-import '../../../core/theme/frosted_surface.dart';
 
 /// 用户主动切换思考区时，由阅读区保留标题位置。
 class ThinkingPanelToggleNotification extends Notification {
@@ -16,28 +16,24 @@ class ThinkingPanelToggleNotification extends Notification {
   final BuildContext anchor;
 }
 
-/// 思考结束自动收起时通知阅读区：保留标题位置，但不像手动切换那样
-/// 解除底部跟随。
-class ThinkingPanelAutoCollapseNotification extends Notification {
-  const ThinkingPanelAutoCollapseNotification({required this.anchor});
-
-  final BuildContext anchor;
-}
-
-/// 真实思考内容默认展开，思考结束自动收起，手动选择优先保留。
+/// 思考默认收起，用户主动展开后保留选择；计时来自消息，不从挂载时刻推算。
 class ThinkingPanel extends StatefulWidget {
   const ThinkingPanel({
     required this.reasoning,
     required this.streaming,
     super.key,
     this.duration,
+    this.startedAt,
   });
 
   final String reasoning;
   final bool streaming;
 
-  /// 思考耗时（持久化在消息上）；未知时为 null，只显示「已思考」。
+  /// 该段已结束的思考块耗时之和；未知时为 null，只显示「已思考」。
   final Duration? duration;
+
+  /// 该段最后一个、仍在接收的思考块开始时间。
+  final DateTime? startedAt;
 
   @override
   State<ThinkingPanel> createState() => _ThinkingPanelState();
@@ -46,7 +42,7 @@ class ThinkingPanel extends StatefulWidget {
 class _ThinkingPanelState extends State<ThinkingPanel>
     with AutomaticKeepAliveClientMixin {
   /// 展开内容的最大高度，超出部分内部滚动，不再无限撑开。
-  static const _maxContentHeight = 260.0;
+  static const _maxContentHeight = 160.0;
 
   /// 超过这么多字才在流式期间只渲染尾部。
   ///
@@ -64,8 +60,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
 
   final _headerKey = GlobalKey();
   final _innerController = ScrollController();
-  late final DateTime _startedAt = DateTime.now();
-  bool _expanded = true;
+  bool _expanded = false;
   bool _userToggled = false;
 
   /// 内部滚动跟随尾部：流式增量时停在最新内容；用户上翻则暂停跟随，
@@ -75,13 +70,6 @@ class _ThinkingPanelState extends State<ThinkingPanel>
 
   @override
   bool get wantKeepAlive => _userToggled;
-
-  @override
-  void initState() {
-    super.initState();
-    // 打开一条正在流式中的消息时，直接定位到最新内容底部。
-    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollInnerToEnd());
-  }
 
   @override
   void didChangeDependencies() {
@@ -96,18 +84,10 @@ class _ThinkingPanelState extends State<ThinkingPanel>
     if (oldWidget.streaming && !widget.streaming) {
       _ticker?.cancel();
       _ticker = null;
-      // 思考结束自动收起；用户手动操作过则以用户选择为准。
-      if (!_userToggled) {
-        final anchor = _headerKey.currentContext;
-        if (anchor != null) {
-          ThinkingPanelAutoCollapseNotification(anchor: anchor)
-              .dispatch(context);
-        }
-        setState(() => _expanded = false);
-      }
     }
     // 流式增量时跟随到最新思考内容底部。
-    if (widget.streaming &&
+    if (_expanded &&
+        widget.streaming &&
         _followInner &&
         widget.reasoning != oldWidget.reasoning) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollInnerToEnd());
@@ -161,12 +141,16 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   /// 流式期间每秒刷新计时；disableAnimations 下保持静止（也避免
   /// pumpAndSettle 类等待永不稳定）。
   void _syncTicker() {
-    final reduce = MediaQuery.maybeDisableAnimationsOf(context) ?? false;
-    if (widget.streaming && !reduce && _ticker == null) {
+    final running =
+        widget.streaming &&
+        widget.startedAt != null &&
+        !AppMotion.reduce(context) &&
+        TickerMode.valuesOf(context).enabled;
+    if (running && _ticker == null) {
       _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
         if (mounted) setState(() {});
       });
-    } else if ((!widget.streaming || reduce) && _ticker != null) {
+    } else if (!running && _ticker != null) {
       _ticker?.cancel();
       _ticker = null;
     }
@@ -180,11 +164,18 @@ class _ThinkingPanelState extends State<ThinkingPanel>
       _userToggled = true;
     });
     updateKeepAlive();
+    if (_expanded && widget.streaming && _followInner) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _scrollInnerToEnd());
+    }
   }
 
   String get _headerLabel {
     if (widget.streaming) {
-      final elapsed = DateTime.now().difference(_startedAt);
+      final started = widget.startedAt;
+      if (started == null) return '思考中…';
+      final elapsed =
+          (widget.duration ?? Duration.zero) +
+          DateTime.now().difference(started);
       return '思考中… ${_formatDuration(elapsed)}';
     }
     final duration = widget.duration;
@@ -192,6 +183,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   }
 
   static String _formatDuration(Duration duration) {
+    if (duration.inMilliseconds < 100) return '少于 0.1 秒';
     if (duration.inSeconds < 10) {
       return '${(duration.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
     }
@@ -202,14 +194,13 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   Widget build(BuildContext context) {
     super.build(context);
     final theme = Theme.of(context);
-    final brand = context.brandColors;
-    return FrostedSurface(
-      blur: 0,
-      borderRadius: AppRadius.mediumAll,
-      color: brand.lavenderContainer.withValues(
-        alpha: theme.brightness == Brightness.dark ? 0.60 : 0.64,
+    final colors = theme.colorScheme;
+    return Material(
+      color: context.brandColors.lavender.withValues(
+        alpha: theme.brightness == Brightness.dark ? 0.06 : 0.045,
       ),
-      borderColor: brand.lavender.withValues(alpha: 0.24),
+      borderRadius: AppRadius.smallAll,
+      clipBehavior: Clip.antiAlias,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -219,35 +210,37 @@ class _ThinkingPanelState extends State<ThinkingPanel>
             button: true,
             expanded: _expanded,
             child: InkWell(
-              borderRadius: AppRadius.mediumAll,
+              borderRadius: AppRadius.smallAll,
               onTap: _toggle,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),
                 child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.m),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xs,
+                  ),
                   child: Row(
                     children: [
                       Icon(
-                        Symbols.psychology,
-                        size: 20,
-                        color: brand.onLavenderContainer,
+                        Symbols.cognition_rounded,
+                        size: 18,
+                        color: colors.onSurfaceVariant,
                       ),
                       const SizedBox(width: AppSpacing.s),
                       Expanded(
                         child: Text(
                           _headerLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.labelLarge?.copyWith(
-                            color: brand.onLavenderContainer,
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: colors.onSurfaceVariant,
                           ),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.s),
                       Icon(
-                        _expanded ? Symbols.expand_less : Symbols.expand_more,
-                        size: 20,
-                        color: brand.onLavenderContainer,
+                        _expanded
+                            ? Symbols.expand_less_rounded
+                            : Symbols.expand_more_rounded,
+                        size: 18,
+                        color: colors.onSurfaceVariant,
                       ),
                     ],
                   ),
@@ -257,13 +250,17 @@ class _ThinkingPanelState extends State<ThinkingPanel>
           ),
           if (_expanded)
             Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.m,
-                0,
-                AppSpacing.m,
-                AppSpacing.m,
+              padding: const EdgeInsets.only(
+                bottom: AppSpacing.s,
+                left: AppSpacing.m,
               ),
-              child: ConstrainedBox(
+              child: Container(
+                padding: const EdgeInsets.only(left: AppSpacing.m),
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(color: colors.outlineVariant),
+                  ),
+                ),
                 constraints: const BoxConstraints(maxHeight: _maxContentHeight),
                 child: NotificationListener<ScrollNotification>(
                   onNotification: _onInnerScroll,
@@ -273,7 +270,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                     child: Text(
                       _renderedReasoning,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: brand.onLavenderContainer,
+                        color: colors.onSurfaceVariant,
                         height: 1.5,
                       ),
                     ),

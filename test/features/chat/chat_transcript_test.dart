@@ -239,7 +239,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('流式思考完成自动收起全文且无越界，未回看时保持末端', (tester) async {
+  testWidgets('流式到完成思考保持默认收起且无越界，未回看时保持末端', (tester) async {
     tester.view.physicalSize = const Size(320, 600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -260,7 +260,7 @@ void main() {
       reply.withParts(status: MessageStatus.completed),
     ], scale: 1.3);
     expect(find.text('已思考'), findsOneWidget);
-    // 无手动操作时思考结束自动收起，内容不再展示。
+    // 没有手动展开时，思考结束也保持收起。
     expect(find.text(reply.thinkingText), findsNothing);
     expect(tester.state(find.byType(ThinkingPanel)), same(panelState));
     expect(position(tester).outOfRange, isFalse);
@@ -273,7 +273,7 @@ void main() {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    // 思考内容远高于 260dp 的限高，内层一定有可滚范围。
+    // 思考内容远高于 160dp 的限高，内层一定有可滚范围。
     final longReasoning = List.generate(
       120,
       (index) => '推演第 $index 行',
@@ -282,6 +282,10 @@ void main() {
       ..._history(count: 12),
       _message(id: 'long', text: '短答', thinking: longReasoning),
     ]);
+    await tester.tap(find.text('已思考'));
+    await tester.pumpAndSettle();
+    position(tester).jumpTo(position(tester).maxScrollExtent);
+    await tester.pumpAndSettle();
   }
 
   testWidgets('思考区滚到顶后继续向下拖，整条消息跟着回滚', (tester) async {
@@ -304,28 +308,33 @@ void main() {
     await pumpLongThinking(tester);
     // 先让整条消息离开底部，给「继续前进」留出空间。手指要落在消息区
     // （思考区上方），落在思考区里会被内层接走。
-    await tester.dragFrom(const Offset(180, 120), const Offset(0, 240));
+    await tester.dragFrom(const Offset(180, 120), const Offset(0, 120));
     await tester.pumpAndSettle();
     final reading = position(tester).pixels;
     // 手指落在思考区的内容里（避开标题行），位置要在屏幕内。
-    final rect = tester.getRect(find.byType(ThinkingPanel));
+    final inner = find.descendant(
+      of: find.byType(ThinkingPanel),
+      matching: find.byType(SingleChildScrollView),
+    );
+    final rect = tester
+        .getRect(inner)
+        .intersect(
+          tester.getRect(find.byKey(const ValueKey('transcript-first'))),
+        );
 
     // 内层此刻可能停在中间：先把它拖到底，多出来的位移再交给外层。
-    await tester.dragFrom(
-      Offset(rect.center.dx, rect.top + 120),
-      const Offset(0, -4000),
-    );
+    await tester.dragFrom(rect.center, const Offset(0, -4000));
     await tester.pumpAndSettle();
 
     expect(
       position(tester).pixels,
-      greaterThan(reading + 100),
+      greaterThan(reading + 50),
       reason: '内层到底后，整条消息应当继续向前滚',
     );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('回看时下方思考完成自动收起，但阅读位置不被打断', (tester) async {
+  testWidgets('回看时下方思考完成保持收起，阅读位置不被打断', (tester) async {
     final history = _history(count: 50);
     final reply = _message(
       id: 'reasoning',
@@ -340,14 +349,14 @@ void main() {
     await tester.dragFrom(const Offset(180, 120), const Offset(0, 200));
     await tester.pumpAndSettle();
 
+    final readingOffset = position(tester).pixels;
     await pumpTranscript(tester, [
       ...history,
       reply.withParts(status: MessageStatus.completed),
     ]);
-    // 收起的是列表末端内容：滚动范围随内容收窄，位置自然落到新末端，
-    // 不发生动画式强拉（按钮不再出现=没有更多未读内容），内容已收起。
+    // 思考始终收起，结束不改变当前回看位置。
     expect(find.text(reply.thinkingText), findsNothing);
-    expect(position(tester).pixels, position(tester).maxScrollExtent);
+    expect(position(tester).pixels, closeTo(readingOffset, 1));
     expect(position(tester).outOfRange, isFalse);
     expect(tester.takeException(), isNull);
   });
@@ -369,10 +378,10 @@ void main() {
         status: MessageStatus.streaming,
       );
       await pumpTranscript(tester, [...history, reply]);
-      await tester.tap(find.textContaining('思考中…'));
+      await tester.tap(find.text('已思考'));
       await tester.pumpAndSettle();
-      if (expanded) {
-        await tester.tap(find.textContaining('思考中…'));
+      if (!expanded) {
+        await tester.tap(find.text('已思考'));
         await tester.pumpAndSettle();
       }
       final thinkingState = tester.state(find.byType(ThinkingPanel));
@@ -425,8 +434,6 @@ void main() {
         (index) => '推演第 $index 行',
       ).join('\n');
       await pumpTranscript(tester, [...history, reply], scale: 1.3);
-      await tester.tap(find.textContaining('思考中…'));
-      await tester.pumpAndSettle();
       final updated = reply.withParts(
         thinking: longReasoning,
         status: MessageStatus.completed,
@@ -451,8 +458,8 @@ void main() {
         lessThan(viewport.bottom),
       );
       expect(position(tester).pixels, closeTo(oldOffset, 0.5));
-      // 思考内容限高 260：展开 300 行也只增加一个限高视口的滚动范围。
-      expect(position(tester).extentAfter, greaterThan(200));
+      // 思考内容限高 160：展开 300 行也只增加一个限高视口的滚动范围。
+      expect(position(tester).extentAfter, greaterThanOrEqualTo(160));
       expect(position(tester).extentAfter, lessThan(400));
       expect(
         tester
@@ -463,7 +470,7 @@ void main() {
               ),
             )
             .height,
-        lessThanOrEqualTo(260),
+        lessThanOrEqualTo(160),
       );
       expect(find.byTooltip('回到底部'), findsOneWidget);
 

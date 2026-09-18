@@ -225,6 +225,7 @@ void main() {
             id: 'm1',
             runId: 'run-1',
             text: '第一轮',
+            thinking: '第一轮思考',
             modelLabel: 'model-a',
             usage: firstUsage,
             thinkingDurationMs: 1200,
@@ -233,6 +234,7 @@ void main() {
             id: 'm2',
             runId: 'run-1',
             text: '第二轮',
+            thinking: '第二轮思考',
             usage: lastUsage,
             thinkingDurationMs: 800,
           ),
@@ -244,6 +246,10 @@ void main() {
       expect(merged.modelLabel, 'model-a');
       expect(merged.usage, same(lastUsage));
       expect(merged.thinkingDurationMs, 2000);
+      expect(
+        merged.parts.whereType<ReasoningPart>().map((part) => part.durationMs),
+        [1200, 800],
+      );
     });
 
     test('模型名只有后一轮有值时取它，思考耗时缺一轮时为有值的那轮', () {
@@ -518,7 +524,13 @@ void main() {
 
       // 两个思考区，不是一个：第二轮的思考不叠到第一轮上面去。
       expect(find.byType(ThinkingPanel), findsNWidgets(2));
+      expect(find.text('先想第一步'), findsNothing);
+      await tester.tap(find.textContaining('已思考').first);
+      await tester.pumpAndSettle();
       expect(find.text('先想第一步'), findsOneWidget);
+      expect(find.text('再想第二步'), findsNothing);
+      await tester.tap(find.textContaining('已思考').last);
+      await tester.pumpAndSettle();
       expect(find.text('再想第二步'), findsOneWidget);
       expect(find.byType(ToolCard), findsOneWidget);
       // 顺序：第一轮思考 → 正文 → 卡片 → 第二轮思考 → 正文。

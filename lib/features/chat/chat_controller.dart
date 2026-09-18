@@ -138,8 +138,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 流式期间的块缓冲：partId → 已累积内容。
   final List<_LivePart> _liveParts = [];
 
-  DateTime? _thinkingStartedAt;
-  DateTime? _firstTextAt;
   bool _stoppedManually = false;
 
   /// 当前运行：一次发送（或重新生成）对应一个 AgentRun，配置在开始时固定。
@@ -852,8 +850,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _stoppedManually = isCancelled;
     _responseComplete = false;
     _flushFailure = null;
-    _thinkingStartedAt = null;
-    _firstTextAt = null;
+    _turnThinkingDurationMs = null;
     _turnParts = const [];
     _turnUsage = null;
     _turnFailure = null;
@@ -869,6 +866,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         await _consume(provider, request);
       }
     } finally {
+      _finishThinking();
       _flushTimer?.cancel();
       _flushTimer = null;
       await _pendingFlush;
@@ -1137,6 +1135,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 工具实际返回的结果如实记录（design 第二部分 §6）。
   void stop() {
     if (_cancellation == null) return;
+    _finishThinking();
     _stoppedManually = true;
     _cancellation?.cancel();
     _acceptingChunks = false;
@@ -1220,6 +1219,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             onError: (Object error, StackTrace stackTrace) {
               if (!_acceptingChunks || !identical(_doneCompleter, done)) return;
               _acceptingChunks = false;
+              _finishThinking();
               if (error is StorageFailure) {
                 if (!done.isCompleted) done.completeError(error, stackTrace);
               } else {
@@ -1228,6 +1228,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               }
             },
             onDone: () {
+              _finishThinking();
               if (!done.isCompleted) done.complete();
             },
             cancelOnError: true,
@@ -1240,6 +1241,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _streamError = mapProviderException(error);
     } finally {
       _acceptingChunks = false;
+      _finishThinking();
       try {
         await subscription?.cancel();
       } catch (error) {
@@ -1364,6 +1366,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     switch (chunk) {
       case PartStart():
         if (chunk.kind == PartKind.toolCall) {
+          _finishThinking();
           _liveParts.add(_LivePart.toolCall(chunk.partId));
         } else if (chunk.kind == PartKind.provider) {
           _liveParts.add(_LivePart.provider(chunk.partId));
@@ -1371,17 +1374,19 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           final part = _LivePart(chunk.partId, chunk.kind);
           if (chunk.initialContent?.isNotEmpty == true) {
             part.buffer.write(chunk.initialContent);
+            _markProgress(part);
           }
           _liveParts.add(part);
-          _markProgress(chunk.kind);
         }
       case TextDelta():
         _livePart(chunk.partId, PartKind.text).buffer.write(chunk.text);
-        _markProgress(PartKind.text);
+        if (chunk.text.isNotEmpty) _finishThinking();
       case ReasoningDelta():
-        _livePart(chunk.partId, PartKind.reasoning).buffer.write(chunk.text);
-        _markProgress(PartKind.reasoning);
+        final part = _livePart(chunk.partId, PartKind.reasoning);
+        part.buffer.write(chunk.text);
+        if (chunk.text.isNotEmpty) _markProgress(part);
       case ToolCallDelta():
+        _finishThinking();
         final part = _livePart(chunk.partId, PartKind.toolCall);
         part.callId = chunk.callId ?? part.callId;
         part.toolName = chunk.toolName ?? part.toolName;
@@ -1398,11 +1403,14 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             part.first.buffer
               ..clear()
               ..write(text);
+            if (text.isNotEmpty) _finishThinking();
           case ReasoningPart(:final publicText, :final providerData):
             part.first.buffer
               ..clear()
               ..write(publicText);
             part.first.providerData = providerData ?? part.first.providerData;
+            if (publicText.isNotEmpty) _markProgress(part.first);
+            part.first.finishThinking();
           case ToolCallPart(:final toolCallId, :final providerData):
             // 协议收口的调用 id 是回填配对的依据。
             part.first.callId = toolCallId;
@@ -1413,6 +1421,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       case UsageChunk(:final usage):
         _turnUsage = usage;
       case ResponseEnd(:final complete):
+        _finishThinking();
         _responseComplete = complete;
         if (!complete) {
           _streamError = const ProviderError(
@@ -1423,6 +1432,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         _acceptingChunks = false;
         _completeRequest();
       case ResponseError(:final error):
+        _finishThinking();
         // 流内错误即本次响应结束：保留已收内容，按失败收口。
         _streamError = error;
         _acceptingChunks = false;
@@ -1440,23 +1450,32 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     return part;
   }
 
-  void _markProgress(PartKind kind) {
-    switch (kind) {
+  void _markProgress(_LivePart part) {
+    switch (part.kind) {
       case PartKind.reasoning:
-        _thinkingStartedAt ??= DateTime.now();
+        if (part.thinkingStartedAt != null) return;
+        _finishThinking();
+        part.thinkingStartedAt = DateTime.now();
       case PartKind.text:
-        if (_thinkingStartedAt != null) {
-          _firstTextAt ??= DateTime.now();
-        }
+        _finishThinking();
       default:
         break;
     }
   }
 
+  void _finishThinking() {
+    for (final part in _liveParts) {
+      part.finishThinking();
+    }
+  }
+
   int? get _currentThinkingDurationMs {
-    final started = _thinkingStartedAt;
-    if (started == null) return null;
-    return (_firstTextAt ?? DateTime.now()).difference(started).inMilliseconds;
+    int? total;
+    for (final part in _liveParts) {
+      final duration = part.currentThinkingDurationMs;
+      if (duration != null) total = (total ?? 0) + duration;
+    }
+    return total;
   }
 
   void _scheduleFlush() {
@@ -1726,6 +1745,19 @@ class _LivePart {
   final StringBuffer buffer = StringBuffer();
   String? callId;
   String? toolName;
+  DateTime? thinkingStartedAt;
+  int? thinkingDurationMs;
+
+  int? get currentThinkingDurationMs {
+    final started = thinkingStartedAt;
+    if (started == null) return null;
+    final elapsed = DateTime.now().difference(started).inMilliseconds;
+    return thinkingDurationMs ?? (elapsed < 0 ? 0 : elapsed);
+  }
+
+  void finishThinking() {
+    thinkingDurationMs ??= currentThinkingDurationMs;
+  }
 
   /// 协议块收口时带回来的状态：思考签名、加密推理、工具签名等。
   /// 它必须落在消息里，否则下一轮无法原样回传（design 第五部分 §4.3）。
@@ -1739,6 +1771,8 @@ class _LivePart {
         publicText: text,
         partId: partId,
         providerData: providerData,
+        startedAt: thinkingStartedAt,
+        durationMs: thinkingDurationMs,
       ),
       // 工具调用以 ToolCallPart（引用记录 id）补进消息，协议块不落库。
       PartKind.toolCall ||
@@ -1850,6 +1884,38 @@ List<ChatMessage> visibleMessages(ConversationThread thread, ChatState state) {
   return _mergeAnswerRuns(visible);
 }
 
+/// 合并工具轮之前，把仅含一个公开思考块的消息总耗时归还给该块。
+/// 多块且没有逐块计时的记录无法拆分，不把整轮耗时冒充任一段的时间。
+ChatMessage _withRecordedThinkingDuration(ChatMessage message) {
+  final duration = message.thinkingDurationMs;
+  if (duration == null || message.status == MessageStatus.streaming) {
+    return message;
+  }
+  final reasoning = message.parts
+      .whereType<ReasoningPart>()
+      .where((part) => part.publicText.isNotEmpty)
+      .toList();
+  if (reasoning.length != 1 || reasoning.single.durationMs != null) {
+    return message;
+  }
+  final part = reasoning.single;
+  return message.copyWith(
+    parts: [
+      for (final entry in message.parts)
+        if (identical(entry, part))
+          ReasoningPart(
+            publicText: part.publicText,
+            partId: part.partId,
+            providerData: part.providerData,
+            startedAt: part.startedAt,
+            durationMs: duration,
+          )
+        else
+          entry,
+    ],
+  );
+}
+
 /// 把同一次运行的连续助手消息合并为一个回答区。
 ///
 /// 只看相邻两条：中间夹着用户消息（另一次运行的输入）或 runId 不同
@@ -1877,6 +1943,8 @@ List<ChatMessage> _mergeAnswerRuns(List<ChatMessage> messages) {
 /// 手动展开状态都保留。状态取最后一次终态，任一还在流式则按流式展示
 /// （生成光标留在回答区末尾）；用量取最后一次有值的；思考耗时按各轮合计。
 ChatMessage _mergeAnswers(ChatMessage head, ChatMessage tail) {
+  head = _withRecordedThinkingDuration(head);
+  tail = _withRecordedThinkingDuration(tail);
   final headThinking = head.thinkingDurationMs;
   final tailThinking = tail.thinkingDurationMs;
   return ChatMessage(

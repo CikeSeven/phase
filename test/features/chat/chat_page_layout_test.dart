@@ -962,6 +962,42 @@ void main() {
     );
   });
 
+  testWidgets('切换会话后思考默认收起，已记录耗时仍显示且正文可读', (tester) async {
+    final repository = _MemoryConversations()..seed(2);
+    repository.messages['seed-0'] = [
+      ChatMessage(
+        id: 'reasoning-history',
+        conversationId: 'seed-0',
+        role: ChatRole.assistant,
+        parts: const [
+          ReasoningPart(publicText: '历史公开思考'),
+          TextPart(text: '历史正文'),
+        ],
+        thinkingDurationMs: 1300,
+        createdAt: DateTime(2026),
+      ),
+    ];
+    await pumpChat(tester, repository: repository);
+    await openDrawer(tester);
+    await tester.tap(find.text('旅行灵感'));
+    await tester.pumpAndSettle();
+    expect(find.text('已思考 1.3 秒'), findsOneWidget);
+    expect(find.text('历史公开思考'), findsNothing);
+    await tester.tap(find.text('已思考 1.3 秒'));
+    await tester.pumpAndSettle();
+    expect(find.text('历史公开思考'), findsOneWidget);
+    await openDrawer(tester);
+    await tester.tap(find.text('历史会话 1'));
+    await tester.pumpAndSettle();
+    await openDrawer(tester);
+    await tester.tap(find.text('旅行灵感'));
+    await tester.pumpAndSettle();
+    expect(find.text('已思考 1.3 秒'), findsOneWidget);
+    expect(find.text('历史公开思考'), findsNothing);
+    expect(find.text('历史正文', findRichText: true), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('模型下拉入口保留 showModelPickerSheet 接口', (tester) async {
     await pumpChat(tester);
     await tester.tap(find.byKey(const ValueKey('chat-model-picker')));
@@ -1213,8 +1249,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 120));
     await tester.pumpAndSettle();
     expect(find.text('答案', findRichText: true), findsOneWidget);
-    expect(find.textContaining('思考中…'), findsOneWidget);
-    expect(find.text('推演过程'), findsOneWidget);
+    expect(find.textContaining('已思考'), findsOneWidget);
+    expect(find.text('推演过程'), findsNothing);
 
     await tester.tap(find.byTooltip('停止生成'));
     await tester.pumpAndSettle();
@@ -1239,7 +1275,7 @@ void main() {
     expect(reply.text, '答案');
     expect(reply.parts.whereType<ReasoningPart>().single.publicText, '推演过程');
     expect(find.textContaining('已思考'), findsOneWidget);
-    // 停止=思考结束：自动收起，思考耗时已随消息落库。
+    // 停止后保持默认收起，思考耗时已随消息落库。
     expect(find.text('推演过程'), findsNothing);
     expect(reply.thinkingDurationMs, isNotNull);
     await tester.tap(find.textContaining('已思考'));

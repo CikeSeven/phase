@@ -858,7 +858,7 @@ ChatMessage
 
 ContentPart =
   TextPart       { text }
-  ReasoningPart  { publicText, providerData }
+  ReasoningPart  { publicText, providerData, startedAt?, durationMs? }
   ImagePart      { attachmentId }
   DocumentPart   { attachmentId }
   ToolCallPart   { toolCallId }
@@ -867,6 +867,8 @@ ContentPart =
 ```
 
 TextPart 与 ReasoningPart 分别用于正文和实际公开思考。ProviderPart/各块的 providerData 保存协议要求的不透明状态，不显示为思考。
+
+ReasoningPart 的计时由应用记录：startedAt 是首次收到该块公开文本的本地时间，durationMs 在块结束、后续正文/工具开始或响应终止时固定；表示公开思考接收阶段，不是服务端推理总耗时。消息 thinkingDurationMs 汇总各块，合并工具轮时仍按块展示。只有消息总耗时且仅一段公开思考时可以展示该总值；缺少可归属的计时则不补造。
 
 工具 Part 只引用 ToolCallRecord，参数和结果不再复制进另一份消息 JSON。Provider 构建请求时解析这些引用，得到完整的 tool call/result。
 

@@ -42,6 +42,8 @@ class ReasoningPart extends MessagePart {
     required this.publicText,
     this.partId,
     this.providerData,
+    this.startedAt,
+    this.durationMs,
   });
 
   final String? partId;
@@ -52,6 +54,12 @@ class ReasoningPart extends MessagePart {
   /// 该块需要随后续请求回传的协议状态。
   final Map<String, dynamic>? providerData;
 
+  /// 本地首次收到该块公开文本的时间；供流式视图在重建后继续计时。
+  final DateTime? startedAt;
+
+  /// 公开思考接收阶段的耗时；未结束或没有计时依据时为 null。
+  final int? durationMs;
+
   @override
   String get type => 'reasoning';
 
@@ -61,12 +69,18 @@ class ReasoningPart extends MessagePart {
     if (partId != null) 'partId': partId,
     'publicText': publicText,
     if (providerData != null) 'providerData': providerData,
+    if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
+    if (durationMs != null) 'durationMs': durationMs,
   };
 
   factory ReasoningPart.fromJson(Map<String, dynamic> json) => ReasoningPart(
     partId: json['partId'] as String?,
     publicText: json['publicText'] as String? ?? '',
     providerData: json['providerData'] as Map<String, dynamic>?,
+    startedAt: json['startedAt'] == null
+        ? null
+        : DateTime.parse(json['startedAt'] as String),
+    durationMs: json['durationMs'] as int?,
   );
 }
 

@@ -9,6 +9,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../data/models/attachment.dart';
 import 'attachment_chips.dart';
 import 'attachment_picker.dart';
+import 'attachment_source_sheet.dart';
 import 'chat_controller.dart';
 import 'chat_input_surface.dart';
 import 'chat_send_button.dart';
@@ -251,41 +252,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   /// 附件来源面板：拍照 / 相册 / 文件。
   Future<void> _showAttachmentSheet() async {
     FocusScope.of(context).unfocus();
-    final source = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      useSafeArea: true,
-      builder: (context) => SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              key: const ValueKey('attach-camera'),
-              leading: const Icon(Symbols.photo_camera),
-              title: const Text('拍照'),
-              onTap: () => Navigator.of(context).pop('camera'),
-            ),
-            ListTile(
-              key: const ValueKey('attach-gallery'),
-              leading: const Icon(Symbols.photo_library),
-              title: const Text('相册'),
-              onTap: () => Navigator.of(context).pop('gallery'),
-            ),
-            ListTile(
-              key: const ValueKey('attach-file'),
-              leading: const Icon(Symbols.description),
-              title: const Text('文件'),
-              subtitle: const Text('文本类文件，内容随消息发送'),
-              onTap: () => Navigator.of(context).pop('file'),
-            ),
-            const SizedBox(height: AppSpacing.s),
-          ],
-        ),
-      ),
-    );
+    final source = await showAttachmentSourceSheet(context);
     if (source == null || !mounted) return;
-    if (source != 'file' && !_modelSupportsImages()) {
+    if (source != AttachmentSource.file && !_modelSupportsImages()) {
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('当前模型未标记支持图片输入')));
       return;
@@ -294,9 +263,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       final picker = await ref.read(attachmentPickerProvider.future);
       if (!mounted) return;
       final picked = switch (source) {
-        'camera' => [?await picker.pickCameraImage()],
-        'gallery' => await picker.pickImages(),
-        _ => await picker.pickFiles(),
+        AttachmentSource.camera => [?await picker.pickCameraImage()],
+        AttachmentSource.gallery => await picker.pickImages(),
+        AttachmentSource.file => await picker.pickFiles(),
       };
       if (picked.isEmpty || !mounted) return;
       setState(() {

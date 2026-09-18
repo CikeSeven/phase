@@ -82,6 +82,47 @@ void main() {
   });
 
   group('思考区块', () {
+    testWidgets('分段耗时分别展示、无记录不伪造，持续接收的计时跨重建不归零', (tester) async {
+      final startedAt = DateTime.now().subtract(const Duration(seconds: 4));
+      final message = _aiMessage('', MessageStatus.streaming).copyWith(
+        parts: [
+          const ReasoningPart(publicText: '第一段', durationMs: 1200),
+          const TextPart(text: '中间正文'),
+          ReasoningPart(publicText: '还在接收', startedAt: startedAt),
+        ],
+      );
+      await pumpBubble(tester, message);
+      expect(find.text('已思考 1.2 秒'), findsOneWidget);
+      final active = tester
+          .widgetList<ThinkingPanel>(find.byType(ThinkingPanel))
+          .last;
+      expect(active.startedAt, startedAt);
+      expect(active.streaming, isTrue);
+      expect(find.textContaining('思考中… 4.'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await pumpBubble(tester, message);
+      expect(find.textContaining('思考中… 4.'), findsOneWidget);
+      await pumpBubble(
+        tester,
+        message.copyWith(
+          status: MessageStatus.completed,
+          parts: const [
+            ReasoningPart(publicText: '第一段', durationMs: 1200),
+            TextPart(text: '中间正文'),
+            ReasoningPart(publicText: '第二段', durationMs: 2400),
+            TextPart(text: '下一轮'),
+            ReasoningPart(publicText: '没有计时的段落'),
+          ],
+        ),
+      );
+      expect(find.text('已思考 1.2 秒'), findsOneWidget);
+      expect(find.text('已思考 2.4 秒'), findsOneWidget);
+      expect(find.text('已思考'), findsOneWidget);
+      expect(find.text('第一段'), findsNothing);
+      expect(find.text('第二段'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     ChatMessage reasoningMessage({
       String? reasoning = '推演过程',
       MessageStatus status = MessageStatus.completed,
@@ -112,31 +153,34 @@ void main() {
       );
     }
 
-    testWidgets('完成的历史消息有 reasoning 时默认展示全文，可手动收起和展开', (tester) async {
+    testWidgets('历史思考默认收起，展开可读全文，再次进入会话仍收起', (tester) async {
       await tester.pumpWidget(buildBubble(reasoningMessage()));
-
-      expect(find.byIcon(Symbols.psychology), findsOneWidget);
+      expect(find.byIcon(Symbols.cognition_rounded), findsOneWidget);
       expect(find.text('已思考'), findsOneWidget);
-      expect(find.text('推演过程'), findsOneWidget);
-      expect(find.text('答案', findRichText: true), findsOneWidget);
-
-      await tester.tap(find.text('已思考'));
-      await tester.pumpAndSettle();
       expect(find.text('推演过程'), findsNothing);
       expect(find.text('答案', findRichText: true), findsOneWidget);
       await tester.tap(find.text('已思考'));
       await tester.pumpAndSettle();
       expect(find.text('推演过程'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(buildBubble(reasoningMessage()));
+      expect(find.text('推演过程'), findsNothing);
     });
 
-    testWidgets('reasoning 流式中显示「思考中…」且默认展开', (tester) async {
+    testWidgets('流式思考默认收起，正文开始后不再标记思考中', (tester) async {
+      final streaming = reasoningMessage(status: MessageStatus.streaming)
+          .copyWith(parts: const [ReasoningPart(publicText: '推演过程')]);
+      await tester.pumpWidget(buildBubble(streaming));
+      expect(find.textContaining('思考中…'), findsOneWidget);
+      expect(find.text('推演过程'), findsNothing);
+      await tester.tap(find.textContaining('思考中…'));
+      await tester.pump();
+      expect(find.text('推演过程'), findsOneWidget);
       await tester.pumpWidget(
         buildBubble(reasoningMessage(status: MessageStatus.streaming)),
       );
-      // 有持续的光标动画，不能 pumpAndSettle。
-      await tester.pump();
-
-      expect(find.textContaining('思考中…'), findsOneWidget);
+      expect(find.textContaining('思考中…'), findsNothing);
+      expect(find.text('已思考'), findsOneWidget);
       expect(find.text('推演过程'), findsOneWidget);
     });
 
@@ -150,7 +194,7 @@ void main() {
             ).copyWith(modelLabel: 'reasoning-thinking-model'),
           ),
         );
-        expect(find.byIcon(Symbols.psychology), findsNothing);
+        expect(find.byIcon(Symbols.cognition_rounded), findsNothing);
         expect(find.byType(ThinkingPanel), findsNothing);
         expect(find.text('已思考'), findsNothing);
         expect(find.textContaining('思考中…'), findsNothing);
@@ -162,30 +206,23 @@ void main() {
         await tester.pumpWidget(
           buildBubble(reasoningMessage(reasoning: '', status: status)),
         );
-        expect(find.byIcon(Symbols.psychology), findsNothing);
+        expect(find.byIcon(Symbols.cognition_rounded), findsNothing);
         expect(find.byType(ThinkingPanel), findsNothing);
         expect(find.text('答案', findRichText: true), findsOneWidget);
       }
     });
 
-    testWidgets('同一消息 streaming 到 done 保持父结构与思考全文', (tester) async {
+    testWidgets('流式到完成保持思考区身份与默认折叠，展开后可读全文', (tester) async {
       final streaming = reasoningMessage(status: MessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
       final panelState = tester.state(find.byType(ThinkingPanel));
       expect(find.text('答案', findRichText: true), findsOneWidget);
-      expect(find.textContaining('思考中…'), findsOneWidget);
-      expect(find.byIcon(Symbols.psychology), findsOneWidget);
-      expect(find.text('推演过程'), findsOneWidget);
-
+      expect(find.text('推演过程'), findsNothing);
       await tester.pumpWidget(
         buildBubble(streaming.copyWith(status: MessageStatus.completed)),
       );
       await tester.pumpAndSettle();
       expect(tester.state(find.byType(ThinkingPanel)), same(panelState));
-      // 思考结束自动收起，正文不受影响；手动展开恢复全文。
-      expect(find.text('推演过程'), findsNothing);
-      expect(find.text('已思考'), findsOneWidget);
-      expect(find.text('答案', findRichText: true), findsOneWidget);
       await tester.tap(find.text('已思考'));
       await tester.pumpAndSettle();
       expect(find.text('推演过程'), findsOneWidget);
@@ -193,7 +230,7 @@ void main() {
         of: find.byType(ThinkingPanel),
         matching: find.byType(InkWell),
       );
-      expect(tester.getSize(header).height, greaterThanOrEqualTo(48));
+      expect(tester.getSize(header).height, 48);
     });
 
     testWidgets('思考限高内容在流式期间跟随最新底部，上翻暂停、回底恢复', (tester) async {
@@ -222,6 +259,8 @@ void main() {
         ),
       );
       await tester.pump();
+      await tester.tap(find.textContaining('思考中…'));
+      await tester.pumpAndSettle();
       final inner = find.descendant(
         of: find.byType(ThinkingPanel),
         matching: find.byType(SingleChildScrollView),
@@ -256,7 +295,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('100ms 内完成且首次带 reasoning 的 done 快照直接显示全文', (tester) async {
+    testWidgets('100ms 内完成的 reasoning 快照默认收起，手动展开可读全文', (tester) async {
       final message = ValueNotifier(_aiMessage('', MessageStatus.streaming));
       addTearDown(message.dispose);
       await tester.pumpWidget(
@@ -269,7 +308,7 @@ void main() {
           ),
         ),
       );
-      expect(find.byIcon(Symbols.psychology), findsNothing);
+      expect(find.byIcon(Symbols.cognition_rounded), findsNothing);
       await tester.pump(const Duration(milliseconds: 80));
       message.value = message.value.withParts(
         text: '快速回复正文',
@@ -277,17 +316,22 @@ void main() {
         status: MessageStatus.completed,
       );
       await tester.pump(const Duration(milliseconds: 16));
+      expect(find.text('完整推演第一行\n完整推演第二行'), findsNothing);
+      await tester.tap(find.text('已思考'));
+      await tester.pump();
       expect(find.text('完整推演第一行\n完整推演第二行'), findsOneWidget);
       expect(find.text('快速回复正文', findRichText: true), findsOneWidget);
       expect(find.text('已思考'), findsOneWidget);
-      expect(find.byIcon(Symbols.psychology), findsOneWidget);
+      expect(find.byIcon(Symbols.cognition_rounded), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('手动收起后正文和思考增量及状态切换都不覆盖偏好', (tester) async {
       final streaming = reasoningMessage(status: MessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
-      await tester.tap(find.textContaining('思考中…'));
+      await tester.tap(find.text('已思考'));
+      await tester.pump();
+      await tester.tap(find.text('已思考'));
       await tester.pump();
       expect(find.text('推演过程'), findsNothing);
       final updated = streaming.withParts(thinking: '完整思考：先分析，再校验。');
@@ -315,9 +359,7 @@ void main() {
     testWidgets('手动重新展开后完成时不自动折叠，错误正文仍显示', (tester) async {
       final streaming = reasoningMessage(status: MessageStatus.streaming);
       await tester.pumpWidget(buildBubble(streaming));
-      await tester.tap(find.textContaining('思考中…'));
-      await tester.pump();
-      await tester.tap(find.textContaining('思考中…'));
+      await tester.tap(find.text('已思考'));
       await tester.pump();
       await tester.pumpWidget(
         buildBubble(streaming.copyWith(status: MessageStatus.completed)),
@@ -445,7 +487,7 @@ void main() {
           final label = tester.widget<Text>(find.text(modelName));
           expect(label.maxLines, 1);
           expect(label.overflow, TextOverflow.ellipsis);
-          expect(find.byIcon(Symbols.psychology), findsOneWidget);
+          expect(find.byIcon(Symbols.cognition_rounded), findsOneWidget);
         }
       });
     }

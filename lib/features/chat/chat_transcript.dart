@@ -179,21 +179,6 @@ class _ChatTranscriptState extends State<ChatTranscript> {
     });
   }
 
-  bool _onThinkingAutoCollapse(
-    ThinkingPanelAutoCollapseNotification notification,
-  ) {
-    // 只保留标题位置，不解除底部跟随（与手动切换区分）。
-    final box = notification.anchor.findRenderObject();
-    if (box is RenderBox && box.attached && box.hasSize) {
-      _readingAnchor = (
-        context: notification.anchor,
-        y: box.localToGlobal(Offset.zero).dy,
-      );
-    }
-    _scheduleReconcile();
-    return true;
-  }
-
   bool _onThinkingToggle(ThinkingPanelToggleNotification notification) {
     _followTail = false;
     _userScrolling = false;
@@ -269,31 +254,20 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                 },
                 child: NotificationListener<ScrollNotification>(
                   onNotification: _onScroll,
-                  child:
-                      NotificationListener<
-                        ThinkingPanelAutoCollapseNotification
-                      >(
-                        onNotification: _onThinkingAutoCollapse,
-                        child:
-                            NotificationListener<
-                              ThinkingPanelToggleNotification
-                            >(
-                              onNotification: _onThinkingToggle,
-                              child: ListView.builder(
-                                key: ValueKey(
-                                  'transcript-${widget.conversationId}',
-                                ),
-                                controller: _scrollController,
-                                padding: EdgeInsets.only(
-                                  top: AppSpacing.m,
-                                  bottom: AppSpacing.m + widget.bottomPadding,
-                                ),
-                                itemCount: widget.messages.length,
-                                findChildIndexCallback: (key) => indices[key],
-                                itemBuilder: (context, index) => _bubble(index),
-                              ),
-                            ),
+                  child: NotificationListener<ThinkingPanelToggleNotification>(
+                    onNotification: _onThinkingToggle,
+                    child: ListView.builder(
+                      key: ValueKey('transcript-${widget.conversationId}'),
+                      controller: _scrollController,
+                      padding: EdgeInsets.only(
+                        top: AppSpacing.m,
+                        bottom: AppSpacing.m + widget.bottomPadding,
                       ),
+                      itemCount: widget.messages.length,
+                      findChildIndexCallback: (key) => indices[key],
+                      itemBuilder: (context, index) => _bubble(index),
+                    ),
+                  ),
                 ),
               ),
             ),

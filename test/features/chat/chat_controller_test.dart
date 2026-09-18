@@ -708,6 +708,150 @@ void main() {
     expect(answer.text, '答案');
     expect(answer.status, MessageStatus.completed);
     expect(answer.thinkingDurationMs, isNotNull);
+    final reasoning = answer.parts.whereType<ReasoningPart>().single;
+    expect(reasoning.durationMs, answer.thinkingDurationMs);
+    expect(reasoning.startedAt, isNotNull);
+  });
+
+  test('多段思考各自计时并落库，结束后的正文等待不计入任一段', () async {
+    final chunks = StreamController<ChatChunk>();
+    fakeProvider.streamFactory = () => chunks.stream;
+    final send = controller().send('逐段计时');
+    await waitUntil(() => fakeProvider.lastRequest != null);
+    chunks.add(const PartStart(partId: 'r0', kind: PartKind.reasoning));
+    chunks.add(const ReasoningDelta(partId: 'r0', text: '第一段'));
+    await waitUntil(
+      () => state().streamingParts.whereType<ReasoningPart>().isNotEmpty,
+    );
+    final started = state().streamingParts
+        .whereType<ReasoningPart>()
+        .single
+        .startedAt;
+    expect(started, isNotNull);
+    // 正文开始应结束第一段，无需等待协议在响应末尾补 PartEnd。
+    chunks.add(const TextDelta(partId: 't0', text: '中间正文'));
+    await waitUntil(
+      () =>
+          state().streamingParts.whereType<ReasoningPart>().single.durationMs !=
+          null,
+    );
+    final firstDuration = state().streamingParts
+        .whereType<ReasoningPart>()
+        .single
+        .durationMs!;
+    expect(firstDuration, greaterThan(0));
+    chunks.add(const ReasoningDelta(partId: 'r1', text: '第二段'));
+    await waitUntil(
+      () => state().streamingParts.whereType<ReasoningPart>().length == 2,
+    );
+    chunks.add(
+      const PartEnd(
+        partId: 'r1',
+        part: ReasoningPart(publicText: '第二段'),
+      ),
+    );
+    await waitUntil(
+      () =>
+          state().streamingParts.whereType<ReasoningPart>().last.durationMs !=
+          null,
+    );
+    final secondDuration = state().streamingParts
+        .whereType<ReasoningPart>()
+        .last
+        .durationMs!;
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    chunks.add(const TextDelta(partId: 't1', text: '最终正文'));
+    chunks.add(const ResponseEnd());
+    await chunks.close();
+    await send;
+    final message = (await threadOf(activeConversation()!)).branch.last;
+    final parts = message.parts.whereType<ReasoningPart>().toList();
+    expect(parts.map((part) => part.durationMs), [
+      firstDuration,
+      secondDuration,
+    ]);
+    expect(parts.first.startedAt, started);
+    expect(message.thinkingDurationMs, firstDuration + secondDuration);
+    expect(message.status, MessageStatus.completed);
+  });
+
+  for (final finish in ['tool', 'stop', 'error']) {
+    test('公开思考在 $finish 边界结束计时并保留落库结果', () async {
+      final chunks = StreamController<ChatChunk>();
+      fakeProvider.streamFactory = () => chunks.stream;
+      final send = controller().send('结束计时');
+      await waitUntil(() => fakeProvider.lastRequest != null);
+      chunks.add(const ReasoningDelta(partId: 'r0', text: '已收思考'));
+      await waitUntil(
+        () => state().streamingParts.whereType<ReasoningPart>().isNotEmpty,
+      );
+      int? durationAtBoundary;
+      if (finish == 'tool') {
+        chunks.add(const PartStart(partId: 'call', kind: PartKind.toolCall));
+        await waitUntil(
+          () =>
+              state().streamingParts
+                  .whereType<ReasoningPart>()
+                  .single
+                  .durationMs !=
+              null,
+        );
+        durationAtBoundary = state().streamingParts
+            .whereType<ReasoningPart>()
+            .single
+            .durationMs;
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        // 停止不执行只有部分参数的调用，工具生成时间不算思考。
+        controller().stop();
+      } else if (finish == 'stop') {
+        controller().stop();
+      } else {
+        chunks.add(
+          const ResponseError(
+            error: ProviderError(ProviderErrorCategory.auth, 'fixture'),
+          ),
+        );
+      }
+      await send;
+      await chunks.close();
+      final message = (await threadOf(activeConversation()!)).branch.last;
+      final reasoning = message.parts.whereType<ReasoningPart>().single;
+      expect(reasoning.durationMs, greaterThan(0));
+      expect(message.thinkingDurationMs, reasoning.durationMs);
+      if (durationAtBoundary != null) {
+        expect(reasoning.durationMs, durationAtBoundary);
+      }
+      expect(
+        message.status,
+        finish == 'error' ? MessageStatus.failed : MessageStatus.cancelled,
+      );
+    });
+  }
+
+  test('仅完成快照提供公开思考也记录耗时，隐藏推理不伪造计时', () async {
+    fakeProvider.streamFactory = () => Stream.fromIterable(const [
+      PartStart(partId: 'hidden', kind: PartKind.reasoning),
+      PartEnd(
+        partId: 'hidden',
+        part: ReasoningPart(
+          publicText: '',
+          providerData: {'signature': 'fixture'},
+        ),
+      ),
+      PartStart(partId: 'snapshot', kind: PartKind.reasoning),
+      PartEnd(
+        partId: 'snapshot',
+        part: ReasoningPart(publicText: '公开摘要快照'),
+      ),
+      ResponseEnd(),
+    ]);
+    await controller().send('完成快照');
+    final message = (await threadOf(activeConversation()!)).branch.last;
+    final parts = message.parts.whereType<ReasoningPart>().toList();
+    expect(parts.first.durationMs, isNull);
+    expect(parts.first.startedAt, isNull);
+    expect(parts.last.durationMs, isNotNull);
+    expect(message.thinkingDurationMs, parts.last.durationMs);
   });
 
   test('停止保留已收内容并标记 cancelled，不继续追加迟到增量', () async {
