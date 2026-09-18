@@ -110,7 +110,10 @@ void main() {
     expect(File('${h.tempDir.path}/native-screen-1.png').existsSync(), isFalse);
     expect(File('${h.tempDir.path}/native-screen-2.png').existsSync(), isFalse);
     expect(driver.deviceTasks, [true]);
-    expect(ToolPresentation.summary(records['capture']!), contains('3 × 4'));
+    expect(
+      ToolPresentation.outputText(records['capture']!),
+      records['capture']!.result,
+    );
     expect(
       jsonDecode(records['capture']!.result!)['screenshot']['packageName'],
       _package,
@@ -375,8 +378,7 @@ void main() {
     for (final record in records.values) {
       expect(record.status, ToolCallStatus.succeeded);
       expect(jsonDecode(record.result!)['completedCount'], 1);
-      expect(ToolPresentation.summary(record), contains('系统已完成 1 步手势'));
-      expect(ToolPresentation.summary(record), contains('操作后截图不可用'));
+      expect(ToolPresentation.outputText(record), record.result);
     }
     expect((await h.latestRun()).status, RunStatus.completed);
   });

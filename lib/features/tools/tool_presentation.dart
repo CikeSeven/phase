@@ -181,19 +181,13 @@ class ToolPresentation {
         '……（共 ${text.length} 字，以上为前 $_previewChars 字）';
   }
 
-  /// 结果摘要只展示用户能理解的状态，不把协议 JSON 或恢复规则当提示。
-  static String summary(ToolCallRecord record) {
-    if (record.errorCode == 'storageError') {
-      return '相月未能保存这次对话，任务已停止。';
-    }
-    final result = record.result?.trim();
-    if (result != null && result.isNotEmpty) {
-      final text =
-          _visualSummary(record, result) ??
-          _fileSummary(record, result) ??
-          result;
-      return text.length > 160 ? '${text.substring(0, 160)}…' : text;
-    }
+  static const storageFailureMessage = '相月未能保存这次对话，任务已停止。';
+
+  /// 完整展示本次工具返回的内容；没有输出时才使用状态说明。
+  static String outputText(ToolCallRecord record) {
+    final result = record.result;
+    if (result != null && result.trim().isNotEmpty) return result;
+    if (record.errorCode == 'storageError') return storageFailureMessage;
     return switch (record.status) {
       ToolCallStatus.prepared => '参数已就绪，等待执行',
       ToolCallStatus.awaitingConfirmation => '等待你确认这次动作',
@@ -202,62 +196,6 @@ class ToolPresentation {
       ToolCallStatus.failed => '执行失败',
       ToolCallStatus.rejected => '未执行（已拒绝）',
       ToolCallStatus.cancelled => '已取消',
-    };
-  }
-
-  static String? _visualSummary(ToolCallRecord record, String result) {
-    if (!visualOperationTools.contains(record.toolName)) return null;
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(result);
-    } on FormatException {
-      return null;
-    }
-    if (decoded is! Map) return null;
-    final count = decoded['completedCount'];
-    final prefix = count is num ? '系统已完成 $count 步手势。' : '';
-    if (decoded['observationError'] case final String error) {
-      return '$prefix操作后截图不可用：$error';
-    }
-    if (decoded['reason'] case final String reason) {
-      return '$prefix$reason';
-    }
-    if (decoded['screenshot'] case final Map screenshot) {
-      return '$prefix已获取 ${screenshot['imageWidth']} × ${screenshot['imageHeight']} 的窗口截图';
-    }
-    return prefix.isEmpty ? null : prefix;
-  }
-
-  static String? _fileSummary(ToolCallRecord record, String result) {
-    if (!const {
-      'read_file',
-      'write_file',
-      'list_files',
-    }.contains(record.toolName)) {
-      return null;
-    }
-    final Object? decoded;
-    try {
-      decoded = jsonDecode(result);
-    } on FormatException {
-      return null;
-    }
-    if (decoded is! Map<String, dynamic>) return null;
-    for (final key in const ['reason', 'warning', 'extractionError']) {
-      final message = decoded[key];
-      if (message is String && message.trim().isNotEmpty) return message;
-    }
-    if (record.status != ToolCallStatus.succeeded) return null;
-    final name = decoded['name'];
-    final label = name is String && name.isNotEmpty ? '「$name」' : '文件';
-    return switch (record.toolName) {
-      'read_file' => '已读取$label',
-      'write_file' => '已写入$label',
-      'list_files' =>
-        decoded['files'] is List
-            ? '找到 ${(decoded['files'] as List).length} 个项目'
-            : '已读取目录',
-      _ => null,
     };
   }
 }

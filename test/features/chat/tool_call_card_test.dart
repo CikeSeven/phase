@@ -1,16 +1,22 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/models/attachment.dart';
+import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/repositories/tool_call_repository.dart';
+import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/tool_call_card.dart';
+import 'package:phase/features/tools/tool_card.dart';
 
 /// 聊天流里的工具卡片：记录从仓储读，产物按文件真实内容查看。
 void main() {
@@ -75,6 +81,8 @@ void main() {
     WidgetTester tester, {
     required ToolCallRecord? stored,
     Map<String, Attachment> attachments = const {},
+    bool expanded = false,
+    double trailingSpace = 0,
   }) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -93,6 +101,7 @@ void main() {
             body: ListView(
               children: [
                 ToolCallCard(toolCallId: 'tool-1', attachments: attachments),
+                if (trailingSpace > 0) SizedBox(height: trailingSpace),
               ],
             ),
           ),
@@ -100,23 +109,42 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    if (expanded) {
+      await tester.tap(find.byKey(const ValueKey('tool-toggle-tool-1')));
+      await tester.pumpAndSettle();
+    }
   }
 
-  testWidgets('卡片显示状态、动作摘要与结果，不显示模型的原始参数 JSON', (tester) async {
+  testWidgets('卡片默认紧凑收起，点击展开详情，再次点击收起', (tester) async {
     await pumpCard(tester, stored: record(), attachments: const {});
 
     expect(find.text('写入文件'), findsOneWidget);
-    expect(find.text('写入文件「summary.md」（8 字，新文件）'), findsOneWidget);
-    expect(find.text('已创建「summary.md」（8 字）'), findsOneWidget);
+    expect(find.text('写入文件「summary.md」（8 字，新文件）'), findsNothing);
+    expect(find.text('已创建「summary.md」（8 字）'), findsNothing);
     expect(
       tester
           .widget<Text>(find.byKey(const ValueKey('tool-status-tool-1')))
           .data,
       '已完成',
     );
+    final toggle = find.byKey(const ValueKey('tool-toggle-tool-1'));
+    final collapsedHeight = tester.getSize(find.byType(ToolCard)).height;
+    expect(tester.getSize(toggle).height, 48);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(find.text('写入文件「summary.md」（8 字，新文件）'), findsNothing);
+    expect(find.text('已创建「summary.md」（8 字）'), findsOneWidget);
+    expect(
+      tester.getSize(find.byType(ToolCard)).height,
+      greaterThan(collapsedHeight),
+    );
     // 参数与结果留在记录里：卡片不展示参数 JSON。
     expect(find.textContaining('"path"'), findsNothing);
     expect(find.textContaining('{"'), findsNothing);
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(find.text('已创建「summary.md」（8 字）'), findsNothing);
+    expect(tester.getSize(find.byType(ToolCard)).height, collapsedHeight);
     expect(tester.takeException(), isNull);
   });
 
@@ -127,27 +155,225 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('读取失败显示文件名与原因，不直接显示工具 JSON', (tester) async {
+  for (final status in [ToolCallStatus.succeeded, ToolCallStatus.failed]) {
+    testWidgets('$status 长输出完整保留并可滚到末尾，收起再展开保留位置', (tester) async {
+      tester.view.physicalSize = const Size(320, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final result = List.generate(
+        100,
+        (index) => '第 $index 行：工具返回的完整文本',
+      ).join('\n');
+      await pumpCard(
+        tester,
+        stored: record(toolName: 'read_file', status: status, result: result),
+        expanded: true,
+      );
+      final output = find.byKey(const ValueKey('tool-result-tool-1'));
+      expect(tester.widget<Text>(output).data, result);
+      expect(find.text('读取文件：notes.txt'), findsNothing);
+      final scroll = find.byKey(const PageStorageKey('tool-output-tool-1'));
+      final controller = tester
+          .widget<SingleChildScrollView>(scroll)
+          .controller!;
+      expect(tester.getSize(scroll).height, lessThanOrEqualTo(240));
+      expect(controller.position.extentAfter, greaterThan(0));
+      await tester.drag(scroll, const Offset(0, -5000));
+      await tester.pumpAndSettle();
+      expect(controller.position.extentAfter, lessThan(1));
+      final paragraph = tester.renderObject<RenderParagraph>(
+        find.descendant(of: output, matching: find.byType(RichText)),
+      );
+      final lastLine = paragraph.getBoxesForSelection(
+        TextSelection(
+          baseOffset: result.lastIndexOf('\n') + 1,
+          extentOffset: result.length,
+        ),
+      );
+      final viewport = tester.getRect(scroll);
+      for (final box in lastLine) {
+        expect(
+          viewport.contains(paragraph.localToGlobal(box.toRect().center)),
+          isTrue,
+        );
+      }
+      final offset = controller.offset;
+      final toggle = find.byKey(const ValueKey('tool-toggle-tool-1'));
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(scroll, findsNothing);
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(controller.offset, closeTo(offset, 0.5));
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('输出滚到边界后继续拖动可以滚动外层列表', (tester) async {
+    await pumpCard(
+      tester,
+      stored: record(result: '工具输出\n' * 100),
+      expanded: true,
+      trailingSpace: 1000,
+    );
+    final inner = find.byKey(const PageStorageKey('tool-output-tool-1'));
+    final innerController = tester
+        .widget<SingleChildScrollView>(inner)
+        .controller!;
+    final outer = tester
+        .state<ScrollableState>(
+          find
+              .descendant(
+                of: find.byType(ListView),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        )
+        .position;
+    await tester.drag(inner, const Offset(0, -100));
+    await tester.pumpAndSettle();
+    expect(innerController.offset, greaterThan(0));
+    expect(outer.pixels, 0);
+    await tester.drag(inner, const Offset(0, -5000));
+    await tester.pumpAndSettle();
+    expect(innerController.position.extentAfter, lessThan(1));
+    expect(outer.pixels, greaterThan(0));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('文件结构化输出保留完整正文和元信息，不替换成摘要', (tester) async {
+    final result = jsonEncode({
+      'name': 'notes.txt',
+      'text': '${'完整正文\n' * 80}文件末尾',
+      'totalLines': 81,
+    });
+    await pumpCard(
+      tester,
+      stored: record(toolName: 'read_file', result: result),
+      expanded: true,
+    );
+    expect(
+      tester
+          .widget<Text>(find.byKey(const ValueKey('tool-result-tool-1')))
+          .data,
+      result,
+    );
+    expect(find.text('已读取「notes.txt」'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final expanded in [false, true]) {
+    testWidgets('手动${expanded ? '展开' : '收起'}跨记录更新与滚动回看保留，切换不抢阅读位置', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final updates = StreamController<ToolCallRecord>();
+      addTearDown(updates.close);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            toolCallRecordProvider('tool-1').overrideWith((ref) async* {
+              yield record(status: ToolCallStatus.executing, result: null);
+              yield* updates.stream;
+            }),
+          ],
+          child: MaterialApp(
+            theme: AppTheme.light(),
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(disableAnimations: true),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: ChatTranscript(
+                conversationId: 'c1',
+                messages: [
+                  for (var i = 0; i < 30; i++)
+                    ChatMessage(
+                      id: 'history-$i',
+                      conversationId: 'c1',
+                      role: ChatRole.user,
+                      parts: [TextPart(text: '历史消息 $i\n用于回看与滚动')],
+                      createdAt: DateTime(2026),
+                    ),
+                  ChatMessage(
+                    id: 'msg-1',
+                    conversationId: 'c1',
+                    role: ChatRole.assistant,
+                    parts: const [
+                      ToolCallPart(toolCallId: 'tool-1'),
+                      TextPart(text: '正在处理文件'),
+                    ],
+                    createdAt: DateTime(2026),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final toggle = find.byKey(const ValueKey('tool-toggle-tool-1'));
+      final before = tester.getTopLeft(toggle).dy;
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(tester.getTopLeft(toggle).dy, closeTo(before, 0.5));
+      expect(find.text('正在执行'), findsOneWidget);
+      if (!expanded) {
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(tester.getTopLeft(toggle).dy, closeTo(before, 0.5));
+      }
+      final state = tester.state(find.byType(ToolCard));
+      await tester.dragFrom(const Offset(180, 120), const Offset(0, 1800));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('回到底部'), findsOneWidget);
+      updates.add(record());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('回到底部'));
+      await tester.pumpAndSettle();
+      expect(tester.state(find.byType(ToolCard)), same(state));
+      expect(find.text('已完成'), findsOneWidget);
+      expect(
+        find.text('已创建「summary.md」（8 字）'),
+        expanded ? findsOneWidget : findsNothing,
+      );
+      // 快速重复切换后仍回到原状态，不留下隐藏的附件触区。
+      for (var i = 0; i < 4; i++) {
+        await tester.tap(toggle);
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(
+        find.text('已创建「summary.md」（8 字）'),
+        expanded ? findsOneWidget : findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('读取失败保留完整工具输出，包括文件名与原因', (tester) async {
+    final result = jsonEncode({
+      'uri': 'content://fixture/tree/root/document/notes.txt',
+      'name': 'notes.txt',
+      'reason': '未能读取「notes.txt」的内容。',
+    });
     await pumpCard(
       tester,
       stored: record(
         toolName: 'read_file',
         status: ToolCallStatus.failed,
         errorCode: 'fileReadFailed',
-        result: jsonEncode({
-          'uri': 'content://fixture/tree/root/document/notes.txt',
-          'name': 'notes.txt',
-          'reason': '未能读取「notes.txt」的内容。',
-        }),
+        result: result,
       ),
+      expanded: true,
     );
-    expect(find.text('未能读取「notes.txt」的内容。'), findsOneWidget);
-    expect(find.textContaining('content://'), findsNothing);
-    expect(find.textContaining('"reason"'), findsNothing);
+    expect(find.text(result), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('实际记录保存失败明确说明对话未保存，不显示 AI 恢复规则', (tester) async {
+  testWidgets('实际记录保存失败另行说明对话未保存，保留已有工具输出', (tester) async {
     final stored = record(
       status: ToolCallStatus.failed,
       errorCode: 'storageError',
@@ -156,11 +382,11 @@ void main() {
         'actionAccepted': true,
       }),
     );
-    await pumpCard(tester, stored: stored);
+    await pumpCard(tester, stored: stored, expanded: true);
     expect(find.text('相月未能保存这次对话，任务已停止。'), findsOneWidget);
     expect(find.textContaining('自动重发'), findsNothing);
     expect(find.textContaining('当前状态'), findsNothing);
-    expect(find.textContaining('actionAccepted'), findsNothing);
+    expect(find.text(stored.result!), findsOneWidget);
     expect(stored.result, contains('actionAccepted'));
     expect(tester.takeException(), isNull);
   });
@@ -173,6 +399,7 @@ void main() {
       tester,
       stored: record(artifacts: [stored.id]),
       attachments: {stored.id: stored},
+      expanded: true,
     );
 
     await tester.tap(find.byKey(ValueKey('tool-artifact-${stored.id}')));
@@ -204,6 +431,7 @@ void main() {
       tester,
       stored: record(artifacts: [stored.id]),
       attachments: {stored.id: stored},
+      expanded: true,
     );
 
     await tester.tap(find.byKey(ValueKey('tool-artifact-${stored.id}')));
@@ -222,6 +450,7 @@ void main() {
       tester,
       stored: record(artifacts: [stored.id]),
       attachments: {stored.id: stored},
+      expanded: true,
     );
 
     await tester.tap(find.byKey(ValueKey('tool-artifact-${stored.id}')));
@@ -244,6 +473,7 @@ void main() {
       tester,
       stored: record(artifacts: [stored.id]),
       attachments: {stored.id: stored},
+      expanded: true,
     );
 
     await tester.tap(find.byKey(ValueKey('tool-artifact-${stored.id}')));

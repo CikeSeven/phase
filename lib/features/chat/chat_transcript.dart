@@ -3,10 +3,10 @@ import 'package:flutter/rendering.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/content_expansion_notification.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
 import 'message_bubble.dart';
-import 'thinking_panel.dart';
 
 /// 一条消息的气泡缓存项：记录生成它时的输入，用于判断能否复用。
 class _BubbleEntry {
@@ -179,7 +179,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
     });
   }
 
-  bool _onThinkingToggle(ThinkingPanelToggleNotification notification) {
+  bool _onContentExpansion(ContentExpansionNotification notification) {
     _followTail = false;
     _userScrolling = false;
     final box = notification.anchor.findRenderObject();
@@ -254,8 +254,8 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                 },
                 child: NotificationListener<ScrollNotification>(
                   onNotification: _onScroll,
-                  child: NotificationListener<ThinkingPanelToggleNotification>(
-                    onNotification: _onThinkingToggle,
+                  child: NotificationListener<ContentExpansionNotification>(
+                    onNotification: _onContentExpansion,
                     child: ListView.builder(
                       key: ValueKey('transcript-${widget.conversationId}'),
                       controller: _scrollController,

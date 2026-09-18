@@ -22,7 +22,7 @@ Stream<ToolCallRecord> toolCallRecord(Ref ref, String toolCallId) async* {
 /// 聊天流里的工具卡片：工具记录按 [toolCallId] 从仓储读。
 ///
 /// 消息只保存记录 id（design 第五部分 §2.3），参数与结果留在 tool_calls；
-/// 卡片只展示动作摘要与结果，不显示模型的原始参数 JSON。
+/// 卡片展开后展示完整工具结果，不显示动作说明或模型的原始参数 JSON。
 class ToolCallCard extends ConsumerWidget {
   const ToolCallCard({
     required this.toolCallId,

@@ -17,6 +17,7 @@ class AppDialog extends StatelessWidget {
     required this.content,
     super.key,
     this.description,
+    this.titleStyle,
     this.icon,
     this.tone = AppTone.primary,
     this.actions = const [],
@@ -25,6 +26,7 @@ class AppDialog extends StatelessWidget {
 
   final String title;
   final String? description;
+  final TextStyle? titleStyle;
   final IconData? icon;
   final AppTone tone;
   final Widget content;
@@ -58,7 +60,10 @@ class AppDialog extends StatelessWidget {
               Expanded(
                 child: Semantics(
                   header: true,
-                  child: Text(title, style: theme.textTheme.titleLarge),
+                  child: Text(
+                    title,
+                    style: titleStyle ?? theme.textTheme.titleLarge,
+                  ),
                 ),
               ),
             ],

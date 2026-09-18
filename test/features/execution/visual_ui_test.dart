@@ -32,7 +32,7 @@ void main() {
       final attachment = Attachment(
         id: 'image',
         kind: AttachmentKind.artifact,
-        name: 'screen.png',
+        name: 'screenshot_2026-09-18_192030_long_filename.png',
         mimeType: 'image/png',
         size: bytes.length,
         localPath: file.path,
@@ -116,13 +116,19 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.textContaining('30 × 60'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tool-artifact-image')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('tool-toggle-capture')));
+      await tester.pumpAndSettle();
+      expect(find.text(record.result!), findsOneWidget);
       expect(find.textContaining('screenshotId'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('tool-artifact-image')));
       await tester.pumpAndSettle();
       expect(find.byType(InteractiveViewer), findsOneWidget);
       await tester.tap(find.text('关闭'));
       await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('tool-toggle-capture')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('tool-artifact-image')), findsNothing);
       await tester.tap(find.text('确认组合'));
       await tester.pumpAndSettle();
       expect(find.text('执行手势组合'), findsOneWidget);

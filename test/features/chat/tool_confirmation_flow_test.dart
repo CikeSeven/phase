@@ -260,6 +260,9 @@ void main() {
           .data,
       '已完成',
     );
+    expect(find.textContaining('已创建「summary.md」'), findsNothing);
+    await tester.tap(find.byKey(ValueKey('tool-toggle-${record.id}')));
+    await _settle(tester);
     expect(find.textContaining('已创建「summary.md」'), findsOneWidget);
     expect(find.textContaining('{"path"'), findsNothing);
 

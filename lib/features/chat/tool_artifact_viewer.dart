@@ -24,6 +24,7 @@ Future<void> showToolArtifact(BuildContext context, Attachment attachment) {
       context: context,
       builder: (context) => AppDialog(
         title: attachment.name,
+        titleStyle: Theme.of(context).textTheme.bodyMedium,
         icon: Symbols.error,
         tone: AppTone.gold,
         description: '产物文件不存在，可能已被删除或移动。',
@@ -42,6 +43,7 @@ Future<void> showToolArtifact(BuildContext context, Attachment attachment) {
       context: context,
       builder: (context) => AppDialog(
         title: attachment.name,
+        titleStyle: Theme.of(context).textTheme.bodyMedium,
         description: _sizeLabel(attachment.size),
         content: InteractiveViewer(
           child: Image.file(
@@ -66,6 +68,7 @@ Future<void> showToolArtifact(BuildContext context, Attachment attachment) {
       context: context,
       builder: (context) => AppDialog(
         title: attachment.name,
+        titleStyle: Theme.of(context).textTheme.bodyMedium,
         icon: Symbols.description,
         description: '这是二进制文件，不能按文本预览。',
         content: _FileFacts(attachment: attachment),
@@ -104,6 +107,7 @@ Future<void> _showTextPreview(
       context: context,
       builder: (context) => AppDialog(
         title: attachment.name,
+        titleStyle: Theme.of(context).textTheme.bodyMedium,
         icon: Symbols.error,
         tone: AppTone.gold,
         description: '读取产物文件失败。',

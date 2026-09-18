@@ -9,13 +9,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
-
-/// 用户主动切换思考区时，由阅读区保留标题位置。
-class ThinkingPanelToggleNotification extends Notification {
-  const ThinkingPanelToggleNotification({required this.anchor});
-
-  final BuildContext anchor;
-}
+import '../../../core/widgets/content_expansion_notification.dart';
 
 /// 思考默认收起，用户主动展开后保留选择；计时来自消息，不从挂载时刻推算。
 class ThinkingPanel extends StatefulWidget {
@@ -158,7 +152,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   }
 
   void _toggle() {
-    ThinkingPanelToggleNotification(anchor: _headerKey.currentContext!)
+    ContentExpansionNotification(anchor: _headerKey.currentContext!)
         .dispatch(context);
     setState(() {
       _expanded = !_expanded;
