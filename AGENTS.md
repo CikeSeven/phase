@@ -5,8 +5,8 @@
 ## 1. 项目范围
 
 - 产品「相月」，取自《尔雅》中农历七月的雅称；工程名 `phase`，仅支持 Android，应用 ID 为 `app.xiangyue.phase`。
-- 当前为尚未发布、0 用户的初版建设阶段；已有代码是起步原型，可按目标设计直接调整或替换，不维护开发期接口、模型或数据库的向后兼容，不建设旧格式转换与双写过渡。
-- 产品与数据契约见 [初版设计](./docs/product_and_technical_design.md)，建设顺序见 [实施计划](./docs/implementation_plan.md)。原型已实现什么不限制首版范围，规划功能也不描述为已经完成。
+- 当前为尚未发布、0 用户的初版建设阶段；已有聊天、工具和 Android 执行基线，按目标设计继续建设，不维护开发期接口、模型或数据库的向后兼容，不建设旧格式转换与双写过渡。
+- 产品现状与有效契约见 [产品设计](./docs/product_and_technical_design.md)，新增能力见 [Agent 与扩展设计](./docs/agent_extensions_design.md)，建设顺序见 [实施计划](./docs/implementation_plan.md)。已有实现、自动化验证、真机验收和发行状态分别记录，不把规划描述为完成。
 - 应用身份与平台范围按产品设计确定；修改聚焦当前任务，不顺带重构无关模块。设备安装与数据操作仍遵循第 6 节，不因项目处于初版阶段自动执行破坏性操作。
 
 ## 2. 技术与依赖
@@ -59,7 +59,7 @@ flutter test
 git diff --check
 ```
 
-Android 桥接定义位于 `pigeons/execution_api.dart`；修改后执行 `bash tool/generate_execution_bridge.sh`（Pigeon 生成、Dart 格式化、Kotlin 行尾空白归一化），随定义维护 Dart/Kotlin 生成物。原生执行代码变更另运行 `cd android && ./gradlew :app:testDebugUnitTest`；JVM 测试不替代真机服务、权限、Activity 与线程验收。
+Android 桥接当前定义位于 `pigeons/execution_api.dart`；新增进程 API 时同步扩展 `pigeons/` 与生成脚本。定义修改后执行 `bash tool/generate_execution_bridge.sh`（Pigeon 生成、Dart 格式化、Kotlin 行尾空白归一化），随定义维护 Dart/Kotlin 生成物。原生执行代码变更另运行 `cd android && ./gradlew :app:testDebugUnitTest`；JVM 测试不替代真机服务、权限、Activity 与线程验收。
 
 真机 UI/性能验收使用 Profile；先用 `adb devices -l` 确认授权设备，将 `DEVICE` 设为其 ID：
 
@@ -87,3 +87,12 @@ adb -s "$DEVICE" shell am start -W -n app.xiangyue.phase/.MainActivity
 - 配置测试覆盖保存、模型管理、免 Key、失败与取消；数据测试覆盖初版模型读写、关系和事务，不建设历史开发格式的升级用例。
 - UI 验收按 DESIGN 第 9 节；保留显式 `MaterialPage` 与 Android 预测返回，验证打开、取消、提交及页面状态恢复。
 - 交付只陈述实际执行的检查和未验证范围；构建、截图生成、模拟响应分别不是视觉、性能或真实网关验收。纯文档改动核对事实、引用、命令及 diff，无需为此装机。
+
+## 9. Agent、命令与插件扩展
+
+- 保留 Dart `AgentLoop` 为统一循环；MCP、Skills、命令与插件工具复用 `ToolRegistry` / `ToolExecutor`、运行快照、确认、取消和结果记录。原生或 Node 进程不另建 Agent 循环与会话事实库。
+- 动态工具按稳定来源 ID 和定义修订注册；未加入助手范围的工具默认 deny，用户启用的第三方工具默认 ask。服务器说明、Skill 指导和插件清单不授予权限；运行中收紧权限立即生效，新增许可不扩大旧快照。
+- 本地命令按需使用 Ubuntu PRoot 工作区，MCP stdio 使用独立 stdin/stdout/stderr 管道，PTY 只用于交互终端。进程按运行/调用归属，取消和超时回收受管理子进程与 FD，重启不重放命令。Termux/Shizuku 是显式选择的独立通道。
+- PRoot 执行文件通过 ABI 对应的 JNI 库目录交付，验证当前 targetSdk，不降低 SDK 绕过运行问题。PRoot 与同 UID 插件进程不是强隔离沙箱，不宣称工作区路径检查可以限制任意脚本访问。
+- MCP 凭据、敏感头和环境机密按用途与 ID 存入 `SecureKeyStorage`，业务模型只保存引用；不传给模型、诊断或备份。插件不得直接读取通用密钥存储。
+- 新增模型/接口随对应功能建立，不预建插件市场、兼容 Pi/ToolPkg 的包装层或多代理调度框架。文档更新压缩已有步骤，保留有效契约、源码入口和实际验收范围。
