@@ -188,6 +188,7 @@ class ConversationRepository {
         id: generateId(),
         title: '${source.conversation.title}（副本）',
         assistantId: source.conversation.assistantId,
+        workspaceId: source.conversation.workspaceId,
         modelSelectionOverride: source.conversation.modelSelectionOverride,
         createdAt: now,
         updatedAt: now,

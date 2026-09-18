@@ -1,3 +1,4 @@
+import 'workspace.dart';
 import 'chat_message.dart';
 import 'skill_installation.dart';
 import 'model_selection.dart';
@@ -60,6 +61,7 @@ class RunConfiguration {
     this.toolSnapshots = const [],
     this.mcpServers = const [],
     this.skills = const [],
+    this.workspace,
     this.toolPolicies = const {},
     this.supportsReasoning = false,
     this.supportsImages = true,
@@ -75,6 +77,7 @@ class RunConfiguration {
   final List<ToolSnapshot> toolSnapshots;
   final List<McpServerProfile> mcpServers;
   final List<SkillSnapshot> skills;
+  final WorkspaceSnapshot? workspace;
 
   /// 工具级策略覆盖；未列出的工具按定义的默认策略。
   final Map<String, ToolPolicy> toolPolicies;
@@ -91,6 +94,7 @@ class RunConfiguration {
     'enabledTools': enabledTools.toList(),
     'toolSnapshots': toolSnapshots.map((t) => t.toJson()).toList(),
     'mcpServers': mcpServers.map((s) => s.toJson()).toList(),
+    'workspace': workspace?.toJson(),
     'skills': skills.map((s) => s.toJson()).toList(),
     'toolPolicies': {
       for (final entry in toolPolicies.entries) entry.key: entry.value.name,
@@ -104,6 +108,11 @@ class RunConfiguration {
 
   factory RunConfiguration.fromJson(Map<String, dynamic> json) =>
       RunConfiguration(
+        workspace: json['workspace'] == null
+            ? null
+            : WorkspaceSnapshot.fromJson(
+                json['workspace'] as Map<String, dynamic>,
+              ),
         executionScope: ExecutionScope.fromJson(
           (json['executionScope'] as Map<String, dynamic>?) ?? {},
         ),

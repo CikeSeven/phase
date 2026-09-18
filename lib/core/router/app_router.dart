@@ -1,3 +1,6 @@
+import '../../features/workspace/workspaces_page.dart';
+import '../../features/workspace/workspace_files_page.dart';
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -120,6 +123,27 @@ GoRouter appRouter(Ref ref) {
                     ),
                   ),
                 ],
+              ),
+            ],
+          ),
+          GoRoute(
+            path: 'workspaces',
+            pageBuilder: (context, state) => materialPage(
+              state,
+              WorkspacesPage(
+                conversationId: state.uri.queryParameters['conversation'],
+              ),
+            ),
+            routes: [
+              GoRoute(
+                path: ':id',
+                pageBuilder: (context, state) => materialPage(
+                  state,
+                  WorkspaceFilesPage(
+                    id: state.pathParameters['id']!,
+                    path: state.uri.queryParameters['path'] ?? '.',
+                  ),
+                ),
               ),
             ],
           ),

@@ -1,3 +1,5 @@
+import 'package:go_router/go_router.dart';
+
 import 'dart:async';
 import 'dart:math' as math;
 
@@ -213,6 +215,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ],
             ),
             actions: [
+              if (conversationId != null)
+                IconButton(
+                  tooltip: '会话工作区',
+                  icon: const Icon(Symbols.folder_open),
+                  onPressed: () => context.push(
+                    '/settings/workspaces?conversation=$conversationId',
+                  ),
+                ),
               IconButton(
                 tooltip: '新会话',
                 onPressed: () => ref

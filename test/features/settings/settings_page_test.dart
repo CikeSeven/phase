@@ -46,7 +46,7 @@ void main() {
     expect(provider, findsOneWidget);
     expect(find.text('执行与权限'), findsOneWidget);
     expect(find.text('扩展'), findsOneWidget);
-    expect(find.byIcon(Symbols.chevron_right), findsNWidgets(4));
+    expect(find.byIcon(Symbols.chevron_right), findsNWidgets(5));
     expect(find.text('开发预览版'), findsOneWidget);
     expect(find.text('版本 1.0.0+1'), findsOneWidget);
     expect(find.text('你的多模型 AI 对话助手'), findsNothing);

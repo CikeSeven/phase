@@ -22,6 +22,7 @@ import '../models/tool_source.dart';
 /// 解码失败抛出 [FormatException]（数据损坏），由 repository 转成 Failure。
 
 Conversation conversationFromRow(ConversationRow row) => Conversation(
+  workspaceId: row.workspaceId,
   id: row.id,
   title: row.title,
   assistantId: row.assistantId,
@@ -172,6 +173,7 @@ ConversationsCompanion conversationCompanion(Conversation conversation) =>
     ConversationsCompanion(
       id: Value(conversation.id),
       assistantId: Value(conversation.assistantId),
+      workspaceId: Value(conversation.workspaceId),
       title: Value(conversation.title),
       currentMessageId: Value(conversation.currentMessageId),
       selectionJson: Value(

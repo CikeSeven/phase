@@ -253,6 +253,8 @@ class SkillDirectoryCopy {
 @HostApi()
 abstract class ExecutionSetupApi {
   @async
+  bool exportWorkspaceFile(String path, String name, String mimeType);
+  @async
   SkillDirectoryCopy? importSkillDirectory(SkillDirectoryImport request);
   void cancelSkillImport(String id);
   @async

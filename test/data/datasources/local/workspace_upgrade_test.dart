@@ -6,6 +6,9 @@ import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/attachment.dart';
+import 'package:phase/data/models/skill_installation.dart';
+import 'package:phase/data/models/workspace.dart';
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/mcp_server_profile.dart';
 import 'package:phase/data/models/message_part.dart';
@@ -23,11 +26,11 @@ import 'package:phase/data/repositories/tool_call_repository.dart';
 
 import '../../../support/fake_secure_storage.dart';
 
-/// 本次装机的 v4 → v5 增量例外。只使用假配置、假密钥和临时加密库。
+/// 本次装机的 v5 → v6 增量例外。只使用假配置、假密钥和临时加密库。
 void main() {
-  test('Skills 覆盖升级保留全部旧表、MCP 与凭据，重开不重复建表', () async {
+  test('E3 覆盖升级保留十张旧表、Skills、MCP 和凭据，重开不重复建表', () async {
     final directory = Directory.systemTemp.createTempSync(
-      'phase_skills_upgrade',
+      'phase_workspace_upgrade',
     );
     final path = '${directory.path}/phase.sqlite';
     const key =
@@ -66,9 +69,32 @@ void main() {
       'inputSchema': {'type': 'object', 'properties': <String, dynamic>{}},
     });
     await mcp.saveCatalog(server, [tool], '2025-06-18');
+    final skillFile = File('${directory.path}/installed-skill/SKILL.md');
+    await skillFile.parent.create(recursive: true);
+    await skillFile.writeAsString('fixture skill original');
+    final skill = SkillSnapshot(
+      id: 'fixture-skill',
+      name: '样本 Skill',
+      description: '固定版本指导',
+      revision: 'fixture-revision',
+      source: '本地测试',
+      installedPath: skillFile.parent.path,
+      resources: {},
+    );
+    await db
+        .into(db.skillInstallations)
+        .insert(
+          SkillInstallationsCompanion.insert(
+            id: skill.id,
+            name: skill.name,
+            snapshotJson: jsonEncode(skill.toJson()),
+            installedAt: DateTime(2026),
+          ),
+        );
     final assistants = AssistantRepository(db);
     final assistant = (await assistants.ensureDefault()).copyWith(
       systemPrompt: '保留系统提示词',
+      skillIds: {skill.id},
       defaultModelSelection: ModelSelection(
         profileId: profile.id,
         modelId: 'fixture-model',
@@ -129,6 +155,7 @@ void main() {
           enabledTools: {tool.name},
           toolSnapshots: [tool],
           mcpServers: [server],
+          skills: [skill],
         ),
       ),
     );
@@ -164,21 +191,23 @@ void main() {
       ),
     );
 
-    // E2 与已安装 E1 的 schema 差异只有这张表和这一列。
+    // 按 E2 正式字段构造本次安装前的 schema 5；未生成历史升级链。
     final run =
         (await db
                 .customSelect('SELECT configuration_json FROM agent_runs')
                 .getSingle())
             .read<String>('configuration_json');
-    final config = jsonDecode(run) as Map<String, dynamic>..remove('skills');
+    final config = jsonDecode(run) as Map<String, dynamic>..remove('workspace');
     await db.customStatement('UPDATE agent_runs SET configuration_json = ?', [
       jsonEncode(config),
     ]);
-    await db.customStatement('DROP TABLE skill_installations');
+    await db.customStatement('DROP TABLE workspace_copies');
     await db.customStatement(
-      'ALTER TABLE assistants DROP COLUMN skill_ids_json',
+      'ALTER TABLE conversations DROP COLUMN workspace_id',
     );
-    await db.customStatement('PRAGMA user_version = 4');
+    await db.customStatement('DROP TABLE workspaces');
+    await db.customStatement('DROP TABLE runtime_environments');
+    await db.customStatement('PRAGMA user_version = 5');
     const tables = [
       'provider_profiles',
       'models',
@@ -189,6 +218,7 @@ void main() {
       'agent_runs',
       'tool_calls',
       'mcp_servers',
+      'skill_installations',
     ];
     final before = <String, List<Map<String, dynamic>>>{};
     for (final table in tables) {
@@ -209,18 +239,22 @@ void main() {
             (await db.customSelect('SELECT * FROM $table ORDER BY rowid').get())
                 .map((row) {
                   final values = {...row.data};
-                  if (table == 'assistants') values.remove('skill_ids_json');
+                  if (table == 'conversations') values.remove('workspace_id');
                   return values;
                 })
                 .toList();
         expect(after, before[table], reason: '$table 的所有旧列必须保持');
       }
       final restored = (await AssistantRepository(db).getById(assistant.id))!;
-      expect(restored.skillIds, isEmpty);
+      expect(restored.skillIds, {skill.id});
       expect(restored.toolPolicy.policies[tool.name], ToolPolicy.ask);
       expect(
-        (await AgentRunRepository(db).getById('run'))!.configuration.skills,
-        isEmpty,
+        (await AgentRunRepository(db).getById('run'))!
+            .configuration
+            .skills
+            .single
+            .toJson(),
+        skill.toJson(),
       );
       expect(
         (await McpServerRepository(db, keys).get(server.id))!
@@ -231,9 +265,26 @@ void main() {
         tool.source.definitionRevision,
       );
       expect(
-        await SkillRepository(db, Directory('${directory.path}/skills')).list(),
-        isEmpty,
+        (await SkillRepository(
+          db,
+          Directory('${directory.path}/skills'),
+        ).list()).single.snapshot.toJson(),
+        skill.toJson(),
       );
+      expect(
+        (await ConversationRepository(db).getThread(conversation.id))!
+            .conversation
+            .workspaceId,
+        isNull,
+      );
+      expect(
+        (await AgentRunRepository(db).getById('run'))!.configuration.workspace,
+        isNull,
+      );
+      expect(await db.select(db.runtimeEnvironments).get(), isEmpty);
+      expect(await db.select(db.workspaces).get(), isEmpty);
+      expect(await db.select(db.workspaceCopies).get(), isEmpty);
+      expect(await skillFile.readAsString(), 'fixture skill original');
       expect(fakeKeys.values, secretsBefore);
       expect(await keys.read(profile.id), 'fixture-model-key');
       expect(await keys.readMcp(server.credentialRef!), 'fixture-mcp-key');
@@ -241,7 +292,7 @@ void main() {
         (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
           'user_version',
         ),
-        5,
+        6,
       );
       expect(await db.customSelect('PRAGMA foreign_key_check').get(), isEmpty);
       expect(
@@ -252,6 +303,39 @@ void main() {
         'ok',
       );
       if (reopen == 0) await db.close();
+      if (reopen == 1) {
+        final workspaces = WorkspaceRepository(
+          db,
+          Directory('${directory.path}/linux'),
+        );
+        final workspace = await workspaces.create('升级后工作区');
+        await workspaces.bind(conversation.id, workspace.id);
+        expect(
+          (await ConversationRepository(db).getThread(conversation.id))!
+              .conversation
+              .workspaceId,
+          workspace.id,
+        );
+        await workspaces.saveEnvironment(
+          const RuntimeEnvironment(
+            phase: EnvironmentPhase.ready,
+            rootPath: '/fixture',
+            revision: 'fixture',
+          ),
+        );
+        await workspaces.recordCopy(workspace.id, 'sample.txt', {
+          'kind': 'fixture',
+        });
+        expect(await db.select(db.workspaceCopies).get(), hasLength(1));
+        await workspaces.delete(workspace.id);
+        expect(
+          (await ConversationRepository(db).getThread(conversation.id))!
+              .conversation
+              .workspaceId,
+          isNull,
+        );
+        expect(await db.select(db.workspaceCopies).get(), isEmpty);
+      }
     }
   });
 }

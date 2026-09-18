@@ -175,11 +175,16 @@ class ToolCallRepository {
     });
   }
 
-  Future<ToolCallRecord> markCancelled(String id, {String? result}) {
+  Future<ToolCallRecord> markCancelled(
+    String id, {
+    String? result,
+    List<String>? artifacts,
+  }) {
     return _apply(id, '记录取消失败', (record) {
       return record.copyWith(
         status: ToolCallStatus.cancelled,
         result: result ?? '本次调用已取消，未继续执行。',
+        artifacts: artifacts ?? record.artifacts,
         finishedAt: DateTime.now(),
       );
     });

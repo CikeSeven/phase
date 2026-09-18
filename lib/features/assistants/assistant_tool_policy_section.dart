@@ -32,7 +32,7 @@ class AssistantToolPolicySection extends StatelessWidget {
           '文件与屏幕读取结果会发送给所选模型。“应用操作”统一控制应用列表、打开、控件与截图观察、点击、滚动、输入和手势组合；实际可用应用受黑白名单限制。',
           style: theme.textTheme.bodySmall,
         ),
-        for (final group in const ['文件', '网络', '系统信息', '应用操作']) ...[
+        for (final group in const ['文件', '网络', '系统信息', '应用操作', 'Linux 命令']) ...[
           const SizedBox(height: AppSpacing.l),
           Text(group, style: theme.textTheme.labelLarge),
           for (final tool in {
@@ -61,7 +61,10 @@ class AssistantToolPolicySection extends StatelessWidget {
     );
   }
 
-  String _group(Tool tool) => tool.policyKey == applicationOperationsPolicyKey
+  String _group(Tool tool) =>
+      tool.requiredCapabilities.contains('linux_process')
+      ? 'Linux 命令'
+      : tool.policyKey == applicationOperationsPolicyKey
       ? '应用操作'
       : tool.requiredCapabilities.contains('network')
       ? '网络'

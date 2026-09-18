@@ -29,6 +29,9 @@ android {
         testInstrumentationRunner = "app.xiangyue.phase.ExecutionSmokeRunner"
     }
 
+    sourceSets.getByName("main").jniLibs.srcDir("../../build/linux-native/jniLibs")
+    packaging.jniLibs.useLegacyPackaging = true
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -53,3 +56,9 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation("junit:junit:4.13.2")
 }
+
+val buildLinuxNative by tasks.registering(Exec::class) {
+    workingDir(rootProject.projectDir.parentFile)
+    commandLine("bash", "tool/build_linux_native.sh", "${android.sdkDirectory}/ndk/${android.ndkVersion}")
+}
+tasks.named("preBuild").configure { dependsOn(buildLinuxNative) }

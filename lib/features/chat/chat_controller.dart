@@ -1,3 +1,10 @@
+import '../../../data/repositories/workspace_repository.dart';
+import '../workspace/workspace_controller.dart';
+import '../workspace/workspace_files.dart';
+import '../workspace/shell_tool.dart';
+import '../workspace/prepare_skill_tool.dart';
+import '../workspace/process_driver.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -523,7 +530,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         ? await (await ref.read(skillRepositoryProvider.future))
               .acquire(assistant!.skillIds)
         : null;
+    WorkspaceLease? workspaceLease;
     try {
+      final thread = await repository.getThread(conversationId);
+      final workspaceId = thread?.conversation.workspaceId;
+      if (workspaceId != null && enabled.contains('shell')) {
+        workspaceLease = await (await ref.read(
+          workspaceRepositoryProvider.future,
+        )).acquire(workspaceId);
+      }
+      final workspace = workspaceLease?.snapshot;
       final skills = skillLease?.skills ?? const [];
       final skillTool = skills.isEmpty
           ? null
@@ -532,11 +548,24 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               repository: await ref.read(skillRepositoryProvider.future),
               assistants: await ref.read(assistantRepositoryProvider.future),
               assistantId: assistant?.id,
+              linuxAvailable: workspace != null,
+            );
+      final prepareSkill = skillTool == null || workspace == null
+          ? null
+          : PrepareSkillTool(
+              skillTool,
+              workspace,
+              WorkspaceFiles(
+                await ref.read(workspaceRepositoryProvider.future),
+              ),
             );
       final snapshots = <ToolSnapshot>[
         if (skillTool != null) skillTool.snapshot,
+        if (prepareSkill != null) prepareSkill.snapshot,
         for (final tool in baseRegistry.tools)
-          if (enabled.contains(tool.name)) tool.snapshot,
+          if (enabled.contains(tool.name) &&
+              (tool.name != 'shell' || workspace != null))
+            tool.snapshot,
         for (final entry in mcpEntries)
           if (entry.profile.enabled && !entry.profile.deleting)
             for (final tool in entry.tools)
@@ -567,6 +596,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             systemPrompt: assistant?.systemPrompt ?? '',
             toolSnapshots: snapshots,
             skills: skills,
+            workspace: workspace,
             mcpServers: [
               for (final entry in mcpEntries)
                 if (snapshots.any(
@@ -582,9 +612,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             enabledTools: selection.supportsTools
                 ? {
                     if (skills.isNotEmpty) 'read_skill',
+                    if (prepareSkill != null) 'prepare_skill',
                     for (final name
                         in assistant?.toolPolicy.enabledTools ?? <String>{})
-                      if (selection.supportsImages || name != 'capture_screen')
+                      if ((selection.supportsImages ||
+                              name != 'capture_screen') &&
+                          (name != 'shell' || workspace != null))
                         name,
                   }
                 : const {},
@@ -614,6 +647,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         rethrow;
       }
     } finally {
+      workspaceLease?.close();
       await skillLease?.close();
     }
   }
@@ -645,9 +679,29 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             repository: await ref.read(skillRepositoryProvider.future),
             assistants: await ref.read(assistantRepositoryProvider.future),
             assistantId: run.assistantId,
+            linuxAvailable: run.configuration.workspace != null,
           );
+    final binding = run.configuration.workspace;
+    final workspaceRepository = binding == null
+        ? null
+        : await ref.read(workspaceRepositoryProvider.future);
+    final workspaceFiles = workspaceRepository == null
+        ? null
+        : WorkspaceFiles(workspaceRepository);
+    final processDriver = binding == null
+        ? null
+        : ref.read(processDriverProvider);
     final registry = ToolRegistry([
-      ...base.tools,
+      for (final tool in base.tools)
+        if (tool.name != 'shell') tool,
+      if (binding != null)
+        ShellTool(
+          workspace: binding,
+          driver: processDriver,
+          files: workspaceFiles,
+        ),
+      if (binding != null && skillTool != null)
+        PrepareSkillTool(skillTool, binding, workspaceFiles!),
       ...?mcp?.tools(),
       ?skillTool,
     ]);
@@ -658,6 +712,14 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       runs: runs,
       currentPolicy: (tool) async {
         if (tool is ReadSkillTool) return tool.currentPolicy();
+        if (tool is PrepareSkillTool) return tool.currentPolicy();
+        if (tool is ShellTool) {
+          final assistant = run.assistantId == null
+              ? null
+              : await (await ref.read(assistantRepositoryProvider.future))
+                    .getById(run.assistantId!);
+          return assistant?.toolPolicy.policies['shell'] ?? ToolPolicy.deny;
+        }
         if (tool.source.kind != ToolSourceKind.mcp) {
           return registry.policyFor(
             tool,
@@ -669,6 +731,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         return mcp.currentPolicy(tool.snapshot);
       },
       prepareChannel: (tool, arguments) async {
+        if (tool is ShellTool) await processDriver!.beginTask(run.id, '工作区命令');
         if (tool.usesPlatform(arguments)) {
           await execution.ensureDeviceHost(
             run.id,
@@ -691,7 +754,20 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _turnFailure = null;
     _turnTailId = null;
     recovery.runStarted(run.id);
+    WorkspaceLease? resumedWorkspace;
+    final processStops = processDriver?.stops.listen((owner) {
+      if (owner == run.id) stop();
+    });
     try {
+      if (resuming && binding != null) {
+        resumedWorkspace = await workspaceRepository!.acquire(
+          binding.id,
+          expected: binding,
+        );
+        if (resumedWorkspace == null) {
+          throw const OperationFailure('运行所用 Linux 环境不可用');
+        }
+      }
       execution.beginRun(
         run.id,
         stop: stop,
@@ -737,6 +813,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _streamingMessageId = null;
       _cancellation?.cancel();
       await mcp?.close();
+      try {
+        if (processDriver != null) await processDriver.endTask(run.id);
+      } on Failure {
+        AppLogger.warning('Linux 任务服务未确认结束');
+      }
+      await processStops?.cancel();
+      resumedWorkspace?.close();
       try {
         await execution.endRun(run.id);
       } on Failure {
@@ -1111,6 +1194,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         channel: channel,
         conversationId: run.conversationId,
         attachments: await _storage!.attachments(run.conversationId),
+        workspaceDirectory: run.configuration.workspace?.rootPath ?? '',
         storage: _storage!,
         enabledTools: run.configuration.enabledTools,
         toolPolicies: run.configuration.toolPolicies,
@@ -1262,7 +1346,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final request = ChatRequest(
       modelId: selection.model,
       systemPrompt:
-          '${_run?.configuration.systemPrompt ?? ''}${skillDiscoveryPrompt(_run!.configuration.skills)}${executionScopePrompt(_run!.configuration.executionScope, toolExecution: _run!.configuration.enabledTools.isNotEmpty, applicationOperations: _run!.configuration.enabledTools.any(applicationOperationTools.contains))}',
+          '${_run?.configuration.systemPrompt ?? ''}${skillDiscoveryPrompt(_run!.configuration.skills, linuxAvailable: _run!.configuration.workspace != null)}${workspacePrompt(_run!.configuration.workspace)}${executionScopePrompt(_run!.configuration.executionScope, toolExecution: _run!.configuration.enabledTools.isNotEmpty, applicationOperations: _run!.configuration.enabledTools.any(applicationOperationTools.contains))}',
       messages: messages,
       tools: _toolDefinitions(),
       // 模型不支持推理时不下发任何推理字段。

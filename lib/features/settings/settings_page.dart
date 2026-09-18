@@ -50,6 +50,13 @@ class SettingsPage extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.s),
           SettingsEntry(
+            icon: Symbols.folder_open,
+            tone: AppTone.teal,
+            title: '环境与工作区',
+            onTap: () => context.push('/settings/workspaces'),
+          ),
+          const SizedBox(height: AppSpacing.s),
+          SettingsEntry(
             icon: Symbols.extension,
             tone: AppTone.teal,
             title: '扩展',

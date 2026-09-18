@@ -1,3 +1,4 @@
+import '../workspace/shell_tool.dart';
 import 'file_tools.dart';
 import 'http_tool.dart';
 import 'tool.dart';
@@ -16,6 +17,7 @@ ToolRegistry buildBuiltInRegistry({
 }) {
   return ToolRegistry([
     const SystemInfoTool(),
+    const ShellTool(),
     for (final tool in const [ReadFileTool(), WriteFileTool(), ListFilesTool()])
       if (platform == null) tool else ScopedFileTool(tool, platform),
     if (platform != null)

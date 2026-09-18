@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -8,11 +6,8 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
-import '../../../core/widgets/app_sheet.dart';
+import 'artifact_text_sheet.dart';
 import '../../../data/models/attachment.dart';
-
-/// 文本预览上限：超出部分不读进内存，提示按原文件查看。
-const _previewBytes = 256 * 1024;
 
 /// 查看一份工具产物：文本直接显示内容，图片显示缩略图。
 ///
@@ -89,18 +84,9 @@ Future<void> _showTextPreview(
   Attachment attachment,
   File file,
 ) async {
-  final String text;
-  final bool truncated;
+  final ({String text, int? next}) page;
   try {
-    final length = file.lengthSync();
-    final limit = length > _previewBytes ? _previewBytes : length;
-    final buffer = BytesBuilder(copy: false);
-    await for (final chunk in file.openRead(0, limit)) {
-      buffer.add(chunk);
-    }
-    // 读取失败的字节按替换字符展示，不整段丢弃已读内容。
-    text = utf8.decode(buffer.takeBytes(), allowMalformed: true);
-    truncated = length > limit;
+    page = await readArtifactPage(file, 0);
   } on FileSystemException {
     if (!context.mounted) return;
     await showDialog<void>(
@@ -128,18 +114,10 @@ Future<void> _showTextPreview(
     isScrollControlled: true,
     useSafeArea: true,
     // 拖动杆由 AppSheet 自己画，这里不能再让框架画一个（会变成两根）。
-    builder: (context) => AppSheet(
-      title: attachment.name,
-      subtitle: truncated
-          ? '${_sizeLabel(attachment.size)}；只显示前 ${_previewBytes ~/ 1024}KB'
-          : _sizeLabel(attachment.size),
-      child: ListView(
-        key: const ValueKey('tool-artifact-content'),
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.l),
-        children: [
-          SelectableText(text, style: Theme.of(context).textTheme.bodyMedium),
-        ],
-      ),
+    builder: (context) => ArtifactTextSheet(
+      attachment: attachment,
+      initialText: page.text,
+      nextOffset: page.next,
     ),
   );
 }

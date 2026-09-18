@@ -46,6 +46,7 @@
 - 会话、结构化消息、工具记录与运行状态使用初版 Drift schema，偏好用 `SettingsStorage`；数据模型、schema 与生成物同步。初版直接建表并测试正式数据契约，不补开发期旧 schema/JSON 迁移；正式发行后再针对实际发行版本维护数据变更。
 - 2026-09-19 用户明确允许一次安装例外：现有测试包的 schema 3 → 4 仅新增 MCP 表和工具来源可空列，保留设备数据，并验证覆盖升级；不据此扩展其他开发期兼容链。
 - 2026-09-19 用户在 E2 实现后要求装机，授权本次 schema 4 → 5 增量覆盖升级：仅新增 Skill 安装表和助手启用 ID 列，保留设备数据并验证；不扩展其他开发期兼容链。
+- 2026-09-19 用户在 E3 实现后要求安装新版，授权本次 schema 5 → 6 增量覆盖升级：仅新增环境、工作区、资源副本来源表和会话工作区可空列，保留设备数据并验证；不扩展其他开发期兼容链。
 - API Key 只经 `SecureKeyStorage` 按配置 ID 存取，不进入模型序列化或普通存储；空 Key 编辑保留原值，免 Key 调用不使用旧凭据，也不因隐藏字段删除它。删除配置需处理对应凭据及部分失败的重试。
 - 日志使用 `AppLogger`，禁止直接 `print`；不得记录密钥、鉴权头、用户对话或原始请求/响应正文。URL 查询参数、userinfo 和异常对象也可能泄密，不假设日志设施会自动脱敏。
 - UI 行为遵循 DESIGN，不能为解决布局问题改动协议、存储或用户选择。
@@ -61,7 +62,7 @@ flutter test
 git diff --check
 ```
 
-Android 桥接当前定义位于 `pigeons/execution_api.dart`；新增进程 API 时同步扩展 `pigeons/` 与生成脚本。定义修改后执行 `bash tool/generate_execution_bridge.sh`（Pigeon 生成、Dart 格式化、Kotlin 行尾空白归一化），随定义维护 Dart/Kotlin 生成物。原生执行代码变更另运行 `cd android && ./gradlew :app:testDebugUnitTest`；JVM 测试不替代真机服务、权限、Activity 与线程验收。
+Android 设备桥接定义位于 `pigeons/execution_api.dart`，Linux 原始进程桥接位于 `pigeons/process_api.dart`；新增进程 API 时同步扩展 `pigeons/` 与生成脚本。定义修改后执行 `bash tool/generate_execution_bridge.sh`（Pigeon 生成、Dart 格式化、Kotlin 行尾空白归一化），随定义维护 Dart/Kotlin 生成物。原生执行代码变更另运行 `cd android && ./gradlew :app:testDebugUnitTest`；JVM 测试不替代真机服务、权限、Activity 与线程验收。
 
 真机 UI/性能验收使用 Profile；先用 `adb devices -l` 确认授权设备，将 `DEVICE` 设为其 ID：
 

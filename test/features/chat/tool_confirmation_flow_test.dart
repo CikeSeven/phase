@@ -241,11 +241,12 @@ void main() {
     await _settle(tester);
 
     final artifact = artifactFile(harness);
-    await _until(tester, () => artifact.existsSync(), reason: '产物未写入');
+    // 文件创建早于异步写入完成；以运行收口作为核对内容的边界。
+    await _until(tester, () => !harness.state().isGenerating, reason: '运行未收口');
+    expect(artifact.existsSync(), isTrue);
     expect(artifact.readAsStringSync(), '# 摘要\n第一条');
 
-    // 运行继续到下一轮：状态回到运行中，工具记录为已完成的批准调用。
-    await _until(tester, () => !harness.state().isGenerating, reason: '运行未收口');
+    // 运行已完成下一轮，工具记录为已完成的批准调用。
     await _settle(tester);
     final record = await _record(harness, 'call_1');
     expect(record.status, ToolCallStatus.succeeded);

@@ -16,6 +16,7 @@ import app.xiangyue.phase.applications.ApplicationListPermission
 import app.xiangyue.phase.applications.ApplicationListPermissionRequired
 import kotlinx.coroutines.*
 import java.lang.ref.WeakReference
+import java.io.File
 
 /** User-driven setup only. Picker cancellation does not change the saved selection. */
 class ExecutionSetup(private val context: Context, private val files: AppFileDriver,
@@ -36,7 +37,7 @@ class ExecutionSetup(private val context: Context, private val files: AppFileDri
             ?: throw FlutterError("permissionRequired", "文件授权未保留", null)
     }
 
-    private suspend fun pick(directory: Boolean, persist: Boolean): Uri? {
+    private suspend fun pick(directory: Boolean, persist: Boolean, exportName: String? = null, exportMime: String? = null): Uri? {
         if (pending != null) throw FlutterError("unavailable", "已有文件选择器", null)
         val host = activity.get() ?: throw FlutterError("unavailable", "请返回相月", null)
         val result = CompletableDeferred<Uri?>()
@@ -44,8 +45,9 @@ class ExecutionSetup(private val context: Context, private val files: AppFileDri
         persistSelection = persist
         pendingCode = if (pendingCode == 65534) PICK_FILE else pendingCode + 1
         try {
-            host.startActivityForResult(Intent(if (directory) Intent.ACTION_OPEN_DOCUMENT_TREE else Intent.ACTION_OPEN_DOCUMENT).apply {
-                if (!directory) { type = "*/*"; addCategory(Intent.CATEGORY_OPENABLE) }
+            host.startActivityForResult(Intent(if (exportName != null) Intent.ACTION_CREATE_DOCUMENT else if (directory) Intent.ACTION_OPEN_DOCUMENT_TREE else Intent.ACTION_OPEN_DOCUMENT).apply {
+                if (!directory) { type = exportMime ?: "*/*"; addCategory(Intent.CATEGORY_OPENABLE) }
+                if (exportName != null) { putExtra(Intent.EXTRA_TITLE, exportName); addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 if (persist) addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
             }, pendingCode)
@@ -67,6 +69,35 @@ class ExecutionSetup(private val context: Context, private val files: AppFileDri
             }
             request.complete(data.data)
         } catch (_: Exception) { request.completeExceptionally(FlutterError("permissionRequired", "无法读取所选目录", null)) }
+    }
+
+    override suspend fun exportWorkspaceFile(path: String, name: String, mimeType: String): Boolean {
+        val root = File(context.noBackupFilesDir, "linux/workspaces").canonicalPath + File.separator
+        val source = File(path).canonicalFile
+        if (!source.path.startsWith(root) || !source.isFile || source.length() > 64L * 1024 * 1024)
+            throw FlutterError("invalidArguments", "文件路径无效或超过 64 MiB 导出上限", null)
+        val uri = pick(directory = false, persist = false, exportName = File(name).name, exportMime = mimeType) ?: return false
+        try {
+            withContext(Dispatchers.IO) {
+                // Recheck after the external picker; no large bytes cross Pigeon.
+                check(File(path).canonicalPath == source.path && source.length() <= 64L * 1024 * 1024)
+                source.inputStream().use { input ->
+                    (context.contentResolver.openOutputStream(uri, "wt") ?: error("outputUnavailable")).use { output ->
+                        val buffer = ByteArray(65536)
+                        var total = 0L
+                        while (true) {
+                            ensureActive()
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            total += count
+                            check(total <= 64L * 1024 * 1024)
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                }
+            }
+            return true
+        } catch (_: Exception) { throw FlutterError("exportFailed", "文件导出未完整保存，请检查目标位置后重试", null) }
     }
 
     override suspend fun importSkillDirectory(request: SkillDirectoryImport): SkillDirectoryCopy? {

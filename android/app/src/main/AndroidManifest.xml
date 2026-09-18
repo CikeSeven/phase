@@ -25,7 +25,7 @@
             android:stopWithTask="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-initiated cross-app device automation with visible task control and cancellation"/>
+                android:value="User-initiated device automation, Linux environment installation and local commands with visible task control and cancellation"/>
         </service>
         <activity
             android:name=".MainActivity"

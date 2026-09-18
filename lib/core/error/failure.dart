@@ -141,3 +141,11 @@ final class SkillFailure extends Failure {
   @override
   String get userMessage => message;
 }
+
+/// Linux 环境、进程和工作区文件失败；应用记录写入仍使用 StorageFailure。
+final class WorkspaceFailure extends Failure {
+  const WorkspaceFailure(this.code, super.message);
+  final String code;
+  @override
+  String get userMessage => message;
+}

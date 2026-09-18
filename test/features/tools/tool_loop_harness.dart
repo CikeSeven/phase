@@ -1,3 +1,7 @@
+import 'package:phase/features/workspace/process_driver.dart';
+import 'package:phase/features/workspace/workspace_controller.dart';
+import 'package:phase/data/repositories/workspace_repository.dart';
+
 import 'dart:async';
 
 import 'package:phase/features/mcp/mcp_connections.dart';
@@ -224,6 +228,7 @@ class ToolLoopHarness {
   /// [registry] 替换内置工具集；[models] 替换模型列表（能力开关）。
   static Future<ToolLoopHarness> create({
     ToolRegistry? registry,
+    ProcessDriver? processes,
     McpConnections? mcpConnections,
     List<ProfileModel>? models,
     AiProvider Function(ProviderProfile profile, String apiKey)? factory,
@@ -271,6 +276,14 @@ class ToolLoopHarness {
     }
     final container = ProviderContainer(
       overrides: [
+        if (processes != null)
+          processDriverProvider.overrideWith((ref) => processes),
+        workspaceRepositoryProvider.overrideWith(
+          (ref) => WorkspaceRepository(
+            database,
+            Directory(p.join(tempDir.path, 'linux')),
+          ),
+        ),
         if (mcpConnections != null)
           mcpConnectionsProvider.overrideWith((ref) => mcpConnections),
         modelRetryPolicyProvider.overrideWith((ref) => retryPolicy),

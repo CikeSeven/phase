@@ -16,6 +16,8 @@ class ToolPresentation {
   static IconData icon(String toolName) => switch (toolName) {
     'system_info' => Symbols.schedule,
     'read_file' => Symbols.description,
+    'shell' => Symbols.terminal,
+    'prepare_skill' => Symbols.folder_copy,
     'read_skill' => Symbols.auto_stories,
     'write_file' => Symbols.save,
     'list_files' => Symbols.folder_open,
@@ -39,6 +41,8 @@ class ToolPresentation {
     'system_info' => '时间与设备信息',
     'read_file' => '读取文件',
     'read_skill' => '读取 Skill',
+    'shell' => '执行命令',
+    'prepare_skill' => '准备 Skill 资源',
     'write_file' => '写入文件',
     'list_files' => '列出文件',
     'http_request' => 'HTTP 请求',

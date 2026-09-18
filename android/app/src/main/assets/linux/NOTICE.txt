@@ -1,0 +1,13 @@
+PRoot 5.1.107.92 (Termux fork), GPL-2.0
+https://github.com/termux/proot/tree/v5.1.107.92
+Source archive SHA-256: a1b070f55ec32b78e5033621476533d7230eb110275fe0cc3ee79c4fb334cfaa
+Build patch: add missing <string.h> include in extension/ashmem_memfd/ashmem_memfd.c.
+
+libtalloc 2.4.3, LGPL-3.0-or-later (separate shared library)
+https://www.samba.org/ftp/talloc/talloc-2.4.3.tar.gz
+Source archive SHA-256: dc46c40b9f46bb34dd97fe41f548b0e8b247b77a918576733c528e83abd854dd
+Build adaptation: tool/native/talloc_replace.h supplies Android bionic headers and feature macros.
+
+Reproducible build inputs: tool/build_linux_native.sh, tool/native/ in the phase source distribution.
+The unbundled PRoot loader and process supervisor are packaged as executable ELF files in nativeLibraryDir.
+Ubuntu Base is downloaded separately; its package licenses are retained in /usr/share/doc.

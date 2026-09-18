@@ -328,6 +328,7 @@ class ToolExecutor {
         ToolOutcome(cancelled: true) => await toolCalls.markCancelled(
           record.id,
           result: outcome.content,
+          artifacts: outcome.artifacts,
         ),
         ToolOutcome(ok: true) => await toolCalls.markSucceeded(
           record.id,

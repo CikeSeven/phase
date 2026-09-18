@@ -1,6 +1,9 @@
 package app.xiangyue.phase.execution
 
 import android.content.Context
+import app.xiangyue.phase.bridge.process.LinuxProcessHostApi
+import app.xiangyue.phase.bridge.process.LinuxProcessFlutterApi
+import app.xiangyue.phase.workspace.LinuxProcessHost
 import app.xiangyue.phase.bridge.ExecutionHostApi
 import app.xiangyue.phase.bridge.ExecutionFlutterApi
 import app.xiangyue.phase.bridge.ExecutionSetupApi
@@ -15,7 +18,10 @@ class ExecutionRuntime(context: Context) {
         ExecutionFlutterApi(engine.dartExecutor.binaryMessenger),
     )
 
+    val processes = LinuxProcessHost(context.applicationContext, LinuxProcessFlutterApi(engine.dartExecutor.binaryMessenger))
+
     init {
+        LinuxProcessHostApi.setUp(engine.dartExecutor.binaryMessenger, processes)
         ExecutionHostApi.setUp(engine.dartExecutor.binaryMessenger, coordinator)
         ExecutionSetupApi.setUp(engine.dartExecutor.binaryMessenger, coordinator.setup)
         FlutterEngineCache.getInstance().put(ENGINE_ID, engine)

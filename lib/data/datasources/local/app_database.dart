@@ -87,6 +87,11 @@ class Assistants extends Table {
 /// 会话；currentMessageId 指向当前分支末尾。
 @DataClassName('ConversationRow')
 class Conversations extends Table {
+  TextColumn get workspaceId => text().nullable().references(
+    Workspaces,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
   TextColumn get id => text()();
 
   /// 助手被删除后置空，会话保留并允许重新选择助手。
@@ -240,6 +245,35 @@ class SkillInstallations extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+@DataClassName('RuntimeEnvironmentRow')
+class RuntimeEnvironments extends Table {
+  TextColumn get id => text()();
+  TextColumn get configurationJson => text()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('WorkspaceRow')
+class Workspaces extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text().withLength(min: 1, max: 100)();
+  TextColumn get environmentId => text()();
+  BoolColumn get deleting => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('WorkspaceCopyRow')
+class WorkspaceCopies extends Table {
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get relativePath => text()();
+  TextColumn get sourceJson => text()();
+  @override
+  Set<Column> get primaryKey => {workspaceId, relativePath};
+}
+
 /// 当前初版业务库。
 ///
 /// 数据库从创建时加密；schema 变更随初版演进，不保留开发期旧 schema 的
@@ -256,25 +290,32 @@ class SkillInstallations extends Table {
     ToolCalls,
     McpServers,
     SkillInstallations,
+    RuntimeEnvironments,
+    Workspaces,
+    WorkspaceCopies,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区。
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    // 本次装机只允许已安装 E1 测试包的增量升级，不补历史开发期链。
+    // 本次 E3 装机仅允许已安装 E2 测试包的增量升级，不补历史开发期链。
     onUpgrade: (migrator, from, to) async {
-      if (from != 4 || to != 5) {
+      if (from != 5 || to != 6) {
         throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
       }
-      await migrator.createTable(skillInstallations);
-      await migrator.addColumn(assistants, assistants.skillIdsJson);
+      await transaction(() async {
+        await migrator.createTable(runtimeEnvironments);
+        await migrator.createTable(workspaces);
+        await migrator.createTable(workspaceCopies);
+        await migrator.addColumn(conversations, conversations.workspaceId);
+      });
     },
     beforeOpen: _prepareDatabase,
   );

@@ -1741,12 +1741,396 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
   }
 }
 
+class $WorkspacesTable extends Workspaces
+    with TableInfo<$WorkspacesTable, WorkspaceRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WorkspacesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 100,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _environmentIdMeta = const VerificationMeta(
+    'environmentId',
+  );
+  @override
+  late final GeneratedColumn<String> environmentId = GeneratedColumn<String>(
+    'environment_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _deletingMeta = const VerificationMeta(
+    'deleting',
+  );
+  @override
+  late final GeneratedColumn<bool> deleting = GeneratedColumn<bool>(
+    'deleting',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleting" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    environmentId,
+    deleting,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'workspaces';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WorkspaceRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('environment_id')) {
+      context.handle(
+        _environmentIdMeta,
+        environmentId.isAcceptableOrUnknown(
+          data['environment_id']!,
+          _environmentIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_environmentIdMeta);
+    }
+    if (data.containsKey('deleting')) {
+      context.handle(
+        _deletingMeta,
+        deleting.isAcceptableOrUnknown(data['deleting']!, _deletingMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  WorkspaceRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WorkspaceRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      environmentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}environment_id'],
+      )!,
+      deleting: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleting'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $WorkspacesTable createAlias(String alias) {
+    return $WorkspacesTable(attachedDatabase, alias);
+  }
+}
+
+class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
+  final String id;
+  final String name;
+  final String environmentId;
+  final bool deleting;
+  final DateTime createdAt;
+  const WorkspaceRow({
+    required this.id,
+    required this.name,
+    required this.environmentId,
+    required this.deleting,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['environment_id'] = Variable<String>(environmentId);
+    map['deleting'] = Variable<bool>(deleting);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  WorkspacesCompanion toCompanion(bool nullToAbsent) {
+    return WorkspacesCompanion(
+      id: Value(id),
+      name: Value(name),
+      environmentId: Value(environmentId),
+      deleting: Value(deleting),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory WorkspaceRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WorkspaceRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      environmentId: serializer.fromJson<String>(json['environmentId']),
+      deleting: serializer.fromJson<bool>(json['deleting']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'environmentId': serializer.toJson<String>(environmentId),
+      'deleting': serializer.toJson<bool>(deleting),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  WorkspaceRow copyWith({
+    String? id,
+    String? name,
+    String? environmentId,
+    bool? deleting,
+    DateTime? createdAt,
+  }) => WorkspaceRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    environmentId: environmentId ?? this.environmentId,
+    deleting: deleting ?? this.deleting,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  WorkspaceRow copyWithCompanion(WorkspacesCompanion data) {
+    return WorkspaceRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      environmentId: data.environmentId.present
+          ? data.environmentId.value
+          : this.environmentId,
+      deleting: data.deleting.present ? data.deleting.value : this.deleting,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkspaceRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('environmentId: $environmentId, ')
+          ..write('deleting: $deleting, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, environmentId, deleting, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WorkspaceRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.environmentId == this.environmentId &&
+          other.deleting == this.deleting &&
+          other.createdAt == this.createdAt);
+}
+
+class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> environmentId;
+  final Value<bool> deleting;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const WorkspacesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.environmentId = const Value.absent(),
+    this.deleting = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WorkspacesCompanion.insert({
+    required String id,
+    required String name,
+    required String environmentId,
+    this.deleting = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       environmentId = Value(environmentId),
+       createdAt = Value(createdAt);
+  static Insertable<WorkspaceRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? environmentId,
+    Expression<bool>? deleting,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (environmentId != null) 'environment_id': environmentId,
+      if (deleting != null) 'deleting': deleting,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WorkspacesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? environmentId,
+    Value<bool>? deleting,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return WorkspacesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      environmentId: environmentId ?? this.environmentId,
+      deleting: deleting ?? this.deleting,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (environmentId.present) {
+      map['environment_id'] = Variable<String>(environmentId.value);
+    }
+    if (deleting.present) {
+      map['deleting'] = Variable<bool>(deleting.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkspacesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('environmentId: $environmentId, ')
+          ..write('deleting: $deleting, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $ConversationsTable extends Conversations
     with TableInfo<$ConversationsTable, ConversationRow> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $ConversationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES workspaces (id) ON DELETE SET NULL',
+    ),
+  );
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -1839,6 +2223,7 @@ class $ConversationsTable extends Conversations
   );
   @override
   List<GeneratedColumn> get $columns => [
+    workspaceId,
     id,
     assistantId,
     title,
@@ -1860,6 +2245,15 @@ class $ConversationsTable extends Conversations
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    }
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     } else if (isInserting) {
@@ -1931,6 +2325,10 @@ class $ConversationsTable extends Conversations
   ConversationRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ConversationRow(
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      ),
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -1973,6 +2371,7 @@ class $ConversationsTable extends Conversations
 }
 
 class ConversationRow extends DataClass implements Insertable<ConversationRow> {
+  final String? workspaceId;
   final String id;
 
   /// 助手被删除后置空，会话保留并允许重新选择助手。
@@ -1986,6 +2385,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   final DateTime createdAt;
   final DateTime updatedAt;
   const ConversationRow({
+    this.workspaceId,
     required this.id,
     this.assistantId,
     required this.title,
@@ -1998,6 +2398,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (!nullToAbsent || workspaceId != null) {
+      map['workspace_id'] = Variable<String>(workspaceId);
+    }
     map['id'] = Variable<String>(id);
     if (!nullToAbsent || assistantId != null) {
       map['assistant_id'] = Variable<String>(assistantId);
@@ -2017,6 +2420,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   ConversationsCompanion toCompanion(bool nullToAbsent) {
     return ConversationsCompanion(
+      workspaceId: workspaceId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(workspaceId),
       id: Value(id),
       assistantId: assistantId == null && nullToAbsent
           ? const Value.absent()
@@ -2040,6 +2446,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return ConversationRow(
+      workspaceId: serializer.fromJson<String?>(json['workspaceId']),
       id: serializer.fromJson<String>(json['id']),
       assistantId: serializer.fromJson<String?>(json['assistantId']),
       title: serializer.fromJson<String>(json['title']),
@@ -2054,6 +2461,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'workspaceId': serializer.toJson<String?>(workspaceId),
       'id': serializer.toJson<String>(id),
       'assistantId': serializer.toJson<String?>(assistantId),
       'title': serializer.toJson<String>(title),
@@ -2066,6 +2474,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   }
 
   ConversationRow copyWith({
+    Value<String?> workspaceId = const Value.absent(),
     String? id,
     Value<String?> assistantId = const Value.absent(),
     String? title,
@@ -2075,6 +2484,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ConversationRow(
+    workspaceId: workspaceId.present ? workspaceId.value : this.workspaceId,
     id: id ?? this.id,
     assistantId: assistantId.present ? assistantId.value : this.assistantId,
     title: title ?? this.title,
@@ -2090,6 +2500,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   );
   ConversationRow copyWithCompanion(ConversationsCompanion data) {
     return ConversationRow(
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
       id: data.id.present ? data.id.value : this.id,
       assistantId: data.assistantId.present
           ? data.assistantId.value
@@ -2110,6 +2523,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   @override
   String toString() {
     return (StringBuffer('ConversationRow(')
+          ..write('workspaceId: $workspaceId, ')
           ..write('id: $id, ')
           ..write('assistantId: $assistantId, ')
           ..write('title: $title, ')
@@ -2124,6 +2538,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   @override
   int get hashCode => Object.hash(
+    workspaceId,
     id,
     assistantId,
     title,
@@ -2137,6 +2552,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ConversationRow &&
+          other.workspaceId == this.workspaceId &&
           other.id == this.id &&
           other.assistantId == this.assistantId &&
           other.title == this.title &&
@@ -2148,6 +2564,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 }
 
 class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
+  final Value<String?> workspaceId;
   final Value<String> id;
   final Value<String?> assistantId;
   final Value<String> title;
@@ -2158,6 +2575,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const ConversationsCompanion({
+    this.workspaceId = const Value.absent(),
     this.id = const Value.absent(),
     this.assistantId = const Value.absent(),
     this.title = const Value.absent(),
@@ -2169,6 +2587,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
+    this.workspaceId = const Value.absent(),
     required String id,
     this.assistantId = const Value.absent(),
     required String title,
@@ -2183,6 +2602,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
        createdAt = Value(createdAt),
        updatedAt = Value(updatedAt);
   static Insertable<ConversationRow> custom({
+    Expression<String>? workspaceId,
     Expression<String>? id,
     Expression<String>? assistantId,
     Expression<String>? title,
@@ -2194,6 +2614,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (workspaceId != null) 'workspace_id': workspaceId,
       if (id != null) 'id': id,
       if (assistantId != null) 'assistant_id': assistantId,
       if (title != null) 'title': title,
@@ -2207,6 +2628,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   }
 
   ConversationsCompanion copyWith({
+    Value<String?>? workspaceId,
     Value<String>? id,
     Value<String?>? assistantId,
     Value<String>? title,
@@ -2218,6 +2640,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
+      workspaceId: workspaceId ?? this.workspaceId,
       id: id ?? this.id,
       assistantId: assistantId ?? this.assistantId,
       title: title ?? this.title,
@@ -2233,6 +2656,9 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
     if (id.present) {
       map['id'] = Variable<String>(id.value);
     }
@@ -2266,6 +2692,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   @override
   String toString() {
     return (StringBuffer('ConversationsCompanion(')
+          ..write('workspaceId: $workspaceId, ')
           ..write('id: $id, ')
           ..write('assistantId: $assistantId, ')
           ..write('title: $title, ')
@@ -6748,6 +7175,515 @@ class SkillInstallationsCompanion
   }
 }
 
+class $RuntimeEnvironmentsTable extends RuntimeEnvironments
+    with TableInfo<$RuntimeEnvironmentsTable, RuntimeEnvironmentRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RuntimeEnvironmentsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _configurationJsonMeta = const VerificationMeta(
+    'configurationJson',
+  );
+  @override
+  late final GeneratedColumn<String> configurationJson =
+      GeneratedColumn<String>(
+        'configuration_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  @override
+  List<GeneratedColumn> get $columns => [id, configurationJson];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'runtime_environments';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RuntimeEnvironmentRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('configuration_json')) {
+      context.handle(
+        _configurationJsonMeta,
+        configurationJson.isAcceptableOrUnknown(
+          data['configuration_json']!,
+          _configurationJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_configurationJsonMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  RuntimeEnvironmentRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RuntimeEnvironmentRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      configurationJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}configuration_json'],
+      )!,
+    );
+  }
+
+  @override
+  $RuntimeEnvironmentsTable createAlias(String alias) {
+    return $RuntimeEnvironmentsTable(attachedDatabase, alias);
+  }
+}
+
+class RuntimeEnvironmentRow extends DataClass
+    implements Insertable<RuntimeEnvironmentRow> {
+  final String id;
+  final String configurationJson;
+  const RuntimeEnvironmentRow({
+    required this.id,
+    required this.configurationJson,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['configuration_json'] = Variable<String>(configurationJson);
+    return map;
+  }
+
+  RuntimeEnvironmentsCompanion toCompanion(bool nullToAbsent) {
+    return RuntimeEnvironmentsCompanion(
+      id: Value(id),
+      configurationJson: Value(configurationJson),
+    );
+  }
+
+  factory RuntimeEnvironmentRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RuntimeEnvironmentRow(
+      id: serializer.fromJson<String>(json['id']),
+      configurationJson: serializer.fromJson<String>(json['configurationJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'configurationJson': serializer.toJson<String>(configurationJson),
+    };
+  }
+
+  RuntimeEnvironmentRow copyWith({String? id, String? configurationJson}) =>
+      RuntimeEnvironmentRow(
+        id: id ?? this.id,
+        configurationJson: configurationJson ?? this.configurationJson,
+      );
+  RuntimeEnvironmentRow copyWithCompanion(RuntimeEnvironmentsCompanion data) {
+    return RuntimeEnvironmentRow(
+      id: data.id.present ? data.id.value : this.id,
+      configurationJson: data.configurationJson.present
+          ? data.configurationJson.value
+          : this.configurationJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RuntimeEnvironmentRow(')
+          ..write('id: $id, ')
+          ..write('configurationJson: $configurationJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, configurationJson);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RuntimeEnvironmentRow &&
+          other.id == this.id &&
+          other.configurationJson == this.configurationJson);
+}
+
+class RuntimeEnvironmentsCompanion
+    extends UpdateCompanion<RuntimeEnvironmentRow> {
+  final Value<String> id;
+  final Value<String> configurationJson;
+  final Value<int> rowid;
+  const RuntimeEnvironmentsCompanion({
+    this.id = const Value.absent(),
+    this.configurationJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RuntimeEnvironmentsCompanion.insert({
+    required String id,
+    required String configurationJson,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       configurationJson = Value(configurationJson);
+  static Insertable<RuntimeEnvironmentRow> custom({
+    Expression<String>? id,
+    Expression<String>? configurationJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (configurationJson != null) 'configuration_json': configurationJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RuntimeEnvironmentsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? configurationJson,
+    Value<int>? rowid,
+  }) {
+    return RuntimeEnvironmentsCompanion(
+      id: id ?? this.id,
+      configurationJson: configurationJson ?? this.configurationJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (configurationJson.present) {
+      map['configuration_json'] = Variable<String>(configurationJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RuntimeEnvironmentsCompanion(')
+          ..write('id: $id, ')
+          ..write('configurationJson: $configurationJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $WorkspaceCopiesTable extends WorkspaceCopies
+    with TableInfo<$WorkspaceCopiesTable, WorkspaceCopyRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $WorkspaceCopiesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES workspaces (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _relativePathMeta = const VerificationMeta(
+    'relativePath',
+  );
+  @override
+  late final GeneratedColumn<String> relativePath = GeneratedColumn<String>(
+    'relative_path',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceJsonMeta = const VerificationMeta(
+    'sourceJson',
+  );
+  @override
+  late final GeneratedColumn<String> sourceJson = GeneratedColumn<String>(
+    'source_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [workspaceId, relativePath, sourceJson];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'workspace_copies';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<WorkspaceCopyRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('relative_path')) {
+      context.handle(
+        _relativePathMeta,
+        relativePath.isAcceptableOrUnknown(
+          data['relative_path']!,
+          _relativePathMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_relativePathMeta);
+    }
+    if (data.containsKey('source_json')) {
+      context.handle(
+        _sourceJsonMeta,
+        sourceJson.isAcceptableOrUnknown(data['source_json']!, _sourceJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceJsonMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {workspaceId, relativePath};
+  @override
+  WorkspaceCopyRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return WorkspaceCopyRow(
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      relativePath: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}relative_path'],
+      )!,
+      sourceJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_json'],
+      )!,
+    );
+  }
+
+  @override
+  $WorkspaceCopiesTable createAlias(String alias) {
+    return $WorkspaceCopiesTable(attachedDatabase, alias);
+  }
+}
+
+class WorkspaceCopyRow extends DataClass
+    implements Insertable<WorkspaceCopyRow> {
+  final String workspaceId;
+  final String relativePath;
+  final String sourceJson;
+  const WorkspaceCopyRow({
+    required this.workspaceId,
+    required this.relativePath,
+    required this.sourceJson,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['relative_path'] = Variable<String>(relativePath);
+    map['source_json'] = Variable<String>(sourceJson);
+    return map;
+  }
+
+  WorkspaceCopiesCompanion toCompanion(bool nullToAbsent) {
+    return WorkspaceCopiesCompanion(
+      workspaceId: Value(workspaceId),
+      relativePath: Value(relativePath),
+      sourceJson: Value(sourceJson),
+    );
+  }
+
+  factory WorkspaceCopyRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return WorkspaceCopyRow(
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      relativePath: serializer.fromJson<String>(json['relativePath']),
+      sourceJson: serializer.fromJson<String>(json['sourceJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'relativePath': serializer.toJson<String>(relativePath),
+      'sourceJson': serializer.toJson<String>(sourceJson),
+    };
+  }
+
+  WorkspaceCopyRow copyWith({
+    String? workspaceId,
+    String? relativePath,
+    String? sourceJson,
+  }) => WorkspaceCopyRow(
+    workspaceId: workspaceId ?? this.workspaceId,
+    relativePath: relativePath ?? this.relativePath,
+    sourceJson: sourceJson ?? this.sourceJson,
+  );
+  WorkspaceCopyRow copyWithCompanion(WorkspaceCopiesCompanion data) {
+    return WorkspaceCopyRow(
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      relativePath: data.relativePath.present
+          ? data.relativePath.value
+          : this.relativePath,
+      sourceJson: data.sourceJson.present
+          ? data.sourceJson.value
+          : this.sourceJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkspaceCopyRow(')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('relativePath: $relativePath, ')
+          ..write('sourceJson: $sourceJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(workspaceId, relativePath, sourceJson);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is WorkspaceCopyRow &&
+          other.workspaceId == this.workspaceId &&
+          other.relativePath == this.relativePath &&
+          other.sourceJson == this.sourceJson);
+}
+
+class WorkspaceCopiesCompanion extends UpdateCompanion<WorkspaceCopyRow> {
+  final Value<String> workspaceId;
+  final Value<String> relativePath;
+  final Value<String> sourceJson;
+  final Value<int> rowid;
+  const WorkspaceCopiesCompanion({
+    this.workspaceId = const Value.absent(),
+    this.relativePath = const Value.absent(),
+    this.sourceJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  WorkspaceCopiesCompanion.insert({
+    required String workspaceId,
+    required String relativePath,
+    required String sourceJson,
+    this.rowid = const Value.absent(),
+  }) : workspaceId = Value(workspaceId),
+       relativePath = Value(relativePath),
+       sourceJson = Value(sourceJson);
+  static Insertable<WorkspaceCopyRow> custom({
+    Expression<String>? workspaceId,
+    Expression<String>? relativePath,
+    Expression<String>? sourceJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (relativePath != null) 'relative_path': relativePath,
+      if (sourceJson != null) 'source_json': sourceJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  WorkspaceCopiesCompanion copyWith({
+    Value<String>? workspaceId,
+    Value<String>? relativePath,
+    Value<String>? sourceJson,
+    Value<int>? rowid,
+  }) {
+    return WorkspaceCopiesCompanion(
+      workspaceId: workspaceId ?? this.workspaceId,
+      relativePath: relativePath ?? this.relativePath,
+      sourceJson: sourceJson ?? this.sourceJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (relativePath.present) {
+      map['relative_path'] = Variable<String>(relativePath.value);
+    }
+    if (sourceJson.present) {
+      map['source_json'] = Variable<String>(sourceJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('WorkspaceCopiesCompanion(')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('relativePath: $relativePath, ')
+          ..write('sourceJson: $sourceJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6756,6 +7692,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final $ModelsTable models = $ModelsTable(this);
   late final $AssistantsTable assistants = $AssistantsTable(this);
+  late final $WorkspacesTable workspaces = $WorkspacesTable(this);
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
   late final $AttachmentsTable attachments = $AttachmentsTable(this);
@@ -6764,6 +7701,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $McpServersTable mcpServers = $McpServersTable(this);
   late final $SkillInstallationsTable skillInstallations =
       $SkillInstallationsTable(this);
+  late final $RuntimeEnvironmentsTable runtimeEnvironments =
+      $RuntimeEnvironmentsTable(this);
+  late final $WorkspaceCopiesTable workspaceCopies = $WorkspaceCopiesTable(
+    this,
+  );
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6772,6 +7714,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     providerProfiles,
     models,
     assistants,
+    workspaces,
     conversations,
     messages,
     attachments,
@@ -6779,6 +7722,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     toolCalls,
     mcpServers,
     skillInstallations,
+    runtimeEnvironments,
+    workspaceCopies,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -6788,6 +7733,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('models', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'workspaces',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('conversations', kind: UpdateKind.update)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -6816,6 +7768,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('tool_calls', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'workspaces',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('workspace_copies', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -7893,8 +8852,410 @@ typedef $$AssistantsTableProcessedTableManager =
       AssistantRow,
       PrefetchHooks Function()
     >;
+typedef $$WorkspacesTableCreateCompanionBuilder = WorkspacesCompanion Function({
+  required String id,
+  required String name,
+  required String environmentId,
+  Value<bool> deleting,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$WorkspacesTableUpdateCompanionBuilder = WorkspacesCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String> environmentId,
+  Value<bool> deleting,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+final class $$WorkspacesTableReferences
+    extends BaseReferences<_$AppDatabase, $WorkspacesTable, WorkspaceRow> {
+  $$WorkspacesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$ConversationsTable, List<ConversationRow>>
+  _conversationsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.conversations,
+    aliasName: 'workspaces__id__conversations__workspace_id',
+  );
+
+  $$ConversationsTableProcessedTableManager get conversationsRefs {
+    final manager = $$ConversationsTableTableManager(
+      $_db,
+      $_db.conversations,
+    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_conversationsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$WorkspaceCopiesTable, List<WorkspaceCopyRow>>
+  _workspaceCopiesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.workspaceCopies,
+    aliasName: 'workspaces__id__workspace_copies__workspace_id',
+  );
+
+  $$WorkspaceCopiesTableProcessedTableManager get workspaceCopiesRefs {
+    final manager = $$WorkspaceCopiesTableTableManager(
+      $_db,
+      $_db.workspaceCopies,
+    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(
+      _workspaceCopiesRefsTable($_db),
+    );
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$WorkspacesTableFilterComposer
+    extends Composer<_$AppDatabase, $WorkspacesTable> {
+  $$WorkspacesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get environmentId => $composableBuilder(
+    column: $table.environmentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deleting => $composableBuilder(
+    column: $table.deleting,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  Expression<bool> conversationsRefs(
+    Expression<bool> Function($$ConversationsTableFilterComposer f) f,
+  ) {
+    final $$ConversationsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableFilterComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> workspaceCopiesRefs(
+    Expression<bool> Function($$WorkspaceCopiesTableFilterComposer f) f,
+  ) {
+    final $$WorkspaceCopiesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.workspaceCopies,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspaceCopiesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaceCopies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$WorkspacesTableOrderingComposer
+    extends Composer<_$AppDatabase, $WorkspacesTable> {
+  $$WorkspacesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get environmentId => $composableBuilder(
+    column: $table.environmentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deleting => $composableBuilder(
+    column: $table.deleting,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$WorkspacesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WorkspacesTable> {
+  $$WorkspacesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get environmentId => $composableBuilder(
+    column: $table.environmentId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get deleting =>
+      $composableBuilder(column: $table.deleting, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> conversationsRefs<T extends Object>(
+    Expression<T> Function($$ConversationsTableAnnotationComposer a) f,
+  ) {
+    final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> workspaceCopiesRefs<T extends Object>(
+    Expression<T> Function($$WorkspaceCopiesTableAnnotationComposer a) f,
+  ) {
+    final $$WorkspaceCopiesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.workspaceCopies,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspaceCopiesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaceCopies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$WorkspacesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WorkspacesTable,
+          WorkspaceRow,
+          $$WorkspacesTableFilterComposer,
+          $$WorkspacesTableOrderingComposer,
+          $$WorkspacesTableAnnotationComposer,
+          $$WorkspacesTableCreateCompanionBuilder,
+          $$WorkspacesTableUpdateCompanionBuilder,
+          (WorkspaceRow, $$WorkspacesTableReferences),
+          WorkspaceRow,
+          PrefetchHooks Function({
+            bool conversationsRefs,
+            bool workspaceCopiesRefs,
+          })
+        > {
+  $$WorkspacesTableTableManager(_$AppDatabase db, $WorkspacesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WorkspacesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WorkspacesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WorkspacesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> environmentId = const Value.absent(),
+                Value<bool> deleting = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WorkspacesCompanion(
+                id: id,
+                name: name,
+                environmentId: environmentId,
+                deleting: deleting,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String environmentId,
+                Value<bool> deleting = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => WorkspacesCompanion.insert(
+                id: id,
+                name: name,
+                environmentId: environmentId,
+                deleting: deleting,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WorkspacesTable, WorkspaceRow>(table),
+                  $$WorkspacesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({conversationsRefs = false, workspaceCopiesRefs = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (conversationsRefs) db.conversations,
+                    if (workspaceCopiesRefs) db.workspaceCopies,
+                  ],
+                  addJoins: null,
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (conversationsRefs)
+                        await $_getPrefetchedData<
+                          WorkspaceRow,
+                          $WorkspacesTable,
+                          ConversationRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WorkspacesTableReferences
+                              ._conversationsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WorkspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).conversationsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.workspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (workspaceCopiesRefs)
+                        await $_getPrefetchedData<
+                          WorkspaceRow,
+                          $WorkspacesTable,
+                          WorkspaceCopyRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WorkspacesTableReferences
+                              ._workspaceCopiesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WorkspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).workspaceCopiesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.workspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$WorkspacesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WorkspacesTable,
+      WorkspaceRow,
+      $$WorkspacesTableFilterComposer,
+      $$WorkspacesTableOrderingComposer,
+      $$WorkspacesTableAnnotationComposer,
+      $$WorkspacesTableCreateCompanionBuilder,
+      $$WorkspacesTableUpdateCompanionBuilder,
+      (WorkspaceRow, $$WorkspacesTableReferences),
+      WorkspaceRow,
+      PrefetchHooks Function({bool conversationsRefs, bool workspaceCopiesRefs})
+    >;
 typedef $$ConversationsTableCreateCompanionBuilder =
     ConversationsCompanion Function({
+      Value<String?> workspaceId,
       required String id,
       Value<String?> assistantId,
       required String title,
@@ -7907,6 +9268,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
     ConversationsCompanion Function({
+      Value<String?> workspaceId,
       Value<String> id,
       Value<String?> assistantId,
       Value<String> title,
@@ -7926,6 +9288,23 @@ final class $$ConversationsTableReferences
     super.$_table,
     super.$_typedResult,
   );
+
+  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
+      db.workspaces.createAlias('conversations__workspace_id__workspaces__id');
+
+  $$WorkspacesTableProcessedTableManager? get workspaceId {
+    final $_column = $_itemColumn<String>('workspace_id');
+    if ($_column == null) return null;
+    final manager = $$WorkspacesTableTableManager(
+      $_db,
+      $_db.workspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 
   static MultiTypedResultKey<$MessagesTable, List<MessageRow>>
   _messagesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
@@ -8030,6 +9409,29 @@ class $$ConversationsTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$WorkspacesTableFilterComposer get workspaceId {
+    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   Expression<bool> messagesRefs(
     Expression<bool> Function($$MessagesTableFilterComposer f) f,
@@ -8155,6 +9557,29 @@ class $$ConversationsTableOrderingComposer
     column: $table.updatedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  $$WorkspacesTableOrderingComposer get workspaceId {
+    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$ConversationsTableAnnotationComposer
@@ -8195,6 +9620,29 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$WorkspacesTableAnnotationComposer get workspaceId {
+    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   Expression<T> messagesRefs<T extends Object>(
     Expression<T> Function($$MessagesTableAnnotationComposer a) f,
@@ -8286,6 +9734,7 @@ class $$ConversationsTableTableManager
           (ConversationRow, $$ConversationsTableReferences),
           ConversationRow,
           PrefetchHooks Function({
+            bool workspaceId,
             bool messagesRefs,
             bool attachmentsRefs,
             bool agentRunsRefs,
@@ -8304,6 +9753,7 @@ class $$ConversationsTableTableManager
               $$ConversationsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<String?> workspaceId = const Value.absent(),
                 Value<String> id = const Value.absent(),
                 Value<String?> assistantId = const Value.absent(),
                 Value<String> title = const Value.absent(),
@@ -8314,6 +9764,7 @@ class $$ConversationsTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
+                workspaceId: workspaceId,
                 id: id,
                 assistantId: assistantId,
                 title: title,
@@ -8326,6 +9777,7 @@ class $$ConversationsTableTableManager
               ),
           createCompanionCallback:
               ({
+                Value<String?> workspaceId = const Value.absent(),
                 required String id,
                 Value<String?> assistantId = const Value.absent(),
                 required String title,
@@ -8336,6 +9788,7 @@ class $$ConversationsTableTableManager
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
+                workspaceId: workspaceId,
                 id: id,
                 assistantId: assistantId,
                 title: title,
@@ -8356,6 +9809,7 @@ class $$ConversationsTableTableManager
               .toList(),
           prefetchHooksCallback:
               ({
+                workspaceId = false,
                 messagesRefs = false,
                 attachmentsRefs = false,
                 agentRunsRefs = false,
@@ -8367,7 +9821,36 @@ class $$ConversationsTableTableManager
                     if (attachmentsRefs) db.attachments,
                     if (agentRunsRefs) db.agentRuns,
                   ],
-                  addJoins: null,
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (workspaceId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.workspaceId,
+                            referencedTable: $$ConversationsTableReferences
+                                ._workspaceIdTable(db),
+                            referencedColumn: $$ConversationsTableReferences
+                                ._workspaceIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+
+                        return state;
+                      },
                   getPrefetchedDataCallback: (items) async {
                     return [
                       if (messagesRefs)
@@ -8454,6 +9937,7 @@ typedef $$ConversationsTableProcessedTableManager =
       (ConversationRow, $$ConversationsTableReferences),
       ConversationRow,
       PrefetchHooks Function({
+        bool workspaceId,
         bool messagesRefs,
         bool attachmentsRefs,
         bool agentRunsRefs,
@@ -11101,6 +12585,466 @@ typedef $$SkillInstallationsTableProcessedTableManager =
       SkillInstallationRow,
       PrefetchHooks Function()
     >;
+typedef $$RuntimeEnvironmentsTableCreateCompanionBuilder =
+    RuntimeEnvironmentsCompanion Function({
+      required String id,
+      required String configurationJson,
+      Value<int> rowid,
+    });
+typedef $$RuntimeEnvironmentsTableUpdateCompanionBuilder =
+    RuntimeEnvironmentsCompanion Function({
+      Value<String> id,
+      Value<String> configurationJson,
+      Value<int> rowid,
+    });
+
+class $$RuntimeEnvironmentsTableFilterComposer
+    extends Composer<_$AppDatabase, $RuntimeEnvironmentsTable> {
+  $$RuntimeEnvironmentsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get configurationJson => $composableBuilder(
+    column: $table.configurationJson,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RuntimeEnvironmentsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RuntimeEnvironmentsTable> {
+  $$RuntimeEnvironmentsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get configurationJson => $composableBuilder(
+    column: $table.configurationJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RuntimeEnvironmentsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RuntimeEnvironmentsTable> {
+  $$RuntimeEnvironmentsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get configurationJson => $composableBuilder(
+    column: $table.configurationJson,
+    builder: (column) => column,
+  );
+}
+
+class $$RuntimeEnvironmentsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RuntimeEnvironmentsTable,
+          RuntimeEnvironmentRow,
+          $$RuntimeEnvironmentsTableFilterComposer,
+          $$RuntimeEnvironmentsTableOrderingComposer,
+          $$RuntimeEnvironmentsTableAnnotationComposer,
+          $$RuntimeEnvironmentsTableCreateCompanionBuilder,
+          $$RuntimeEnvironmentsTableUpdateCompanionBuilder,
+          (
+            RuntimeEnvironmentRow,
+            BaseReferences<
+              _$AppDatabase,
+              $RuntimeEnvironmentsTable,
+              RuntimeEnvironmentRow
+            >,
+          ),
+          RuntimeEnvironmentRow,
+          PrefetchHooks Function()
+        > {
+  $$RuntimeEnvironmentsTableTableManager(
+    _$AppDatabase db,
+    $RuntimeEnvironmentsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RuntimeEnvironmentsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RuntimeEnvironmentsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$RuntimeEnvironmentsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> configurationJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RuntimeEnvironmentsCompanion(
+                id: id,
+                configurationJson: configurationJson,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String configurationJson,
+                Value<int> rowid = const Value.absent(),
+              }) => RuntimeEnvironmentsCompanion.insert(
+                id: id,
+                configurationJson: configurationJson,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$RuntimeEnvironmentsTable, RuntimeEnvironmentRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $RuntimeEnvironmentsTable,
+                    RuntimeEnvironmentRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RuntimeEnvironmentsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RuntimeEnvironmentsTable,
+      RuntimeEnvironmentRow,
+      $$RuntimeEnvironmentsTableFilterComposer,
+      $$RuntimeEnvironmentsTableOrderingComposer,
+      $$RuntimeEnvironmentsTableAnnotationComposer,
+      $$RuntimeEnvironmentsTableCreateCompanionBuilder,
+      $$RuntimeEnvironmentsTableUpdateCompanionBuilder,
+      (
+        RuntimeEnvironmentRow,
+        BaseReferences<
+          _$AppDatabase,
+          $RuntimeEnvironmentsTable,
+          RuntimeEnvironmentRow
+        >,
+      ),
+      RuntimeEnvironmentRow,
+      PrefetchHooks Function()
+    >;
+typedef $$WorkspaceCopiesTableCreateCompanionBuilder =
+    WorkspaceCopiesCompanion Function({
+      required String workspaceId,
+      required String relativePath,
+      required String sourceJson,
+      Value<int> rowid,
+    });
+typedef $$WorkspaceCopiesTableUpdateCompanionBuilder =
+    WorkspaceCopiesCompanion Function({
+      Value<String> workspaceId,
+      Value<String> relativePath,
+      Value<String> sourceJson,
+      Value<int> rowid,
+    });
+
+final class $$WorkspaceCopiesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $WorkspaceCopiesTable, WorkspaceCopyRow> {
+  $$WorkspaceCopiesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) => db.workspaces
+      .createAlias('workspace_copies__workspace_id__workspaces__id');
+
+  $$WorkspacesTableProcessedTableManager get workspaceId {
+    final $_column = $_itemColumn<String>('workspace_id')!;
+
+    final manager = $$WorkspacesTableTableManager(
+      $_db,
+      $_db.workspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$WorkspaceCopiesTableFilterComposer
+    extends Composer<_$AppDatabase, $WorkspaceCopiesTable> {
+  $$WorkspaceCopiesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceJson => $composableBuilder(
+    column: $table.sourceJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$WorkspacesTableFilterComposer get workspaceId {
+    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkspaceCopiesTableOrderingComposer
+    extends Composer<_$AppDatabase, $WorkspaceCopiesTable> {
+  $$WorkspaceCopiesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceJson => $composableBuilder(
+    column: $table.sourceJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$WorkspacesTableOrderingComposer get workspaceId {
+    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkspaceCopiesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $WorkspaceCopiesTable> {
+  $$WorkspaceCopiesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get relativePath => $composableBuilder(
+    column: $table.relativePath,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceJson => $composableBuilder(
+    column: $table.sourceJson,
+    builder: (column) => column,
+  );
+
+  $$WorkspacesTableAnnotationComposer get workspaceId {
+    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$WorkspaceCopiesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $WorkspaceCopiesTable,
+          WorkspaceCopyRow,
+          $$WorkspaceCopiesTableFilterComposer,
+          $$WorkspaceCopiesTableOrderingComposer,
+          $$WorkspaceCopiesTableAnnotationComposer,
+          $$WorkspaceCopiesTableCreateCompanionBuilder,
+          $$WorkspaceCopiesTableUpdateCompanionBuilder,
+          (WorkspaceCopyRow, $$WorkspaceCopiesTableReferences),
+          WorkspaceCopyRow,
+          PrefetchHooks Function({bool workspaceId})
+        > {
+  $$WorkspaceCopiesTableTableManager(
+    _$AppDatabase db,
+    $WorkspaceCopiesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$WorkspaceCopiesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$WorkspaceCopiesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$WorkspaceCopiesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> workspaceId = const Value.absent(),
+                Value<String> relativePath = const Value.absent(),
+                Value<String> sourceJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => WorkspaceCopiesCompanion(
+                workspaceId: workspaceId,
+                relativePath: relativePath,
+                sourceJson: sourceJson,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String workspaceId,
+                required String relativePath,
+                required String sourceJson,
+                Value<int> rowid = const Value.absent(),
+              }) => WorkspaceCopiesCompanion.insert(
+                workspaceId: workspaceId,
+                relativePath: relativePath,
+                sourceJson: sourceJson,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$WorkspaceCopiesTable, WorkspaceCopyRow>(table),
+                  $$WorkspaceCopiesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({workspaceId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (workspaceId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.workspaceId,
+                        referencedTable: $$WorkspaceCopiesTableReferences
+                            ._workspaceIdTable(db),
+                        referencedColumn: $$WorkspaceCopiesTableReferences
+                            ._workspaceIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$WorkspaceCopiesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $WorkspaceCopiesTable,
+      WorkspaceCopyRow,
+      $$WorkspaceCopiesTableFilterComposer,
+      $$WorkspaceCopiesTableOrderingComposer,
+      $$WorkspaceCopiesTableAnnotationComposer,
+      $$WorkspaceCopiesTableCreateCompanionBuilder,
+      $$WorkspaceCopiesTableUpdateCompanionBuilder,
+      (WorkspaceCopyRow, $$WorkspaceCopiesTableReferences),
+      WorkspaceCopyRow,
+      PrefetchHooks Function({bool workspaceId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -11111,6 +13055,8 @@ class $AppDatabaseManager {
       $$ModelsTableTableManager(_db, _db.models);
   $$AssistantsTableTableManager get assistants =>
       $$AssistantsTableTableManager(_db, _db.assistants);
+  $$WorkspacesTableTableManager get workspaces =>
+      $$WorkspacesTableTableManager(_db, _db.workspaces);
   $$ConversationsTableTableManager get conversations =>
       $$ConversationsTableTableManager(_db, _db.conversations);
   $$MessagesTableTableManager get messages =>
@@ -11125,6 +13071,10 @@ class $AppDatabaseManager {
       $$McpServersTableTableManager(_db, _db.mcpServers);
   $$SkillInstallationsTableTableManager get skillInstallations =>
       $$SkillInstallationsTableTableManager(_db, _db.skillInstallations);
+  $$RuntimeEnvironmentsTableTableManager get runtimeEnvironments =>
+      $$RuntimeEnvironmentsTableTableManager(_db, _db.runtimeEnvironments);
+  $$WorkspaceCopiesTableTableManager get workspaceCopies =>
+      $$WorkspaceCopiesTableTableManager(_db, _db.workspaceCopies);
 }
 
 // **************************************************************************

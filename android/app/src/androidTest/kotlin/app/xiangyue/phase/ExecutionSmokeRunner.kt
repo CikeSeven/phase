@@ -36,6 +36,7 @@ class ExecutionSmokeRunner : Instrumentation() {
     private fun session(id: String, device: Boolean, roots: List<String> = emptyList()) = ExecutionSession(id, device, roots, policy(), policy())
     private suspend fun runScenario(report: Bundle) {
         val scenario = options.getString("scenario") ?: "fixture"
+        if (scenario == "linux-native") { LinuxNativeSmokeScenario(this).run(report); return }
         val target = if (scenario.startsWith("bili")) "tv.danmaku.bili" else "app.xiangyue.phase.fixture"
         targetPackage = target
         val id = "smoke-${UUID.randomUUID()}"
