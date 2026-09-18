@@ -6,11 +6,12 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/theme/frosted_surface.dart';
 import '../../../data/models/attachment.dart';
 import 'attachment_chips.dart';
 import 'attachment_picker.dart';
 import 'chat_controller.dart';
+import 'chat_input_surface.dart';
+import 'chat_send_button.dart';
 import 'model_selection.dart';
 
 /// 文本与动作分层的输入栏；由页面 Scaffold 处理键盘位移。
@@ -82,13 +83,17 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       maxLines: 5,
       textInputAction: TextInputAction.newline,
       style: theme.textTheme.bodyLarge,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         hintText: '输入消息…',
+        // 更透的玻璃上加强提示文字，避免背后内容降低对比度。
+        hintStyle: theme.textTheme.bodyLarge?.copyWith(
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+        ),
         border: InputBorder.none,
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
         filled: false,
-        contentPadding: EdgeInsets.symmetric(
+        contentPadding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.xs,
           vertical: AppSpacing.m,
         ),
@@ -108,6 +113,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               alignment: Alignment.centerLeft,
               child: TextButton.icon(
                 onPressed: () => context.push('/settings/providers'),
+                style: TextButton.styleFrom(
+                  foregroundColor: theme.colorScheme.onSurface,
+                ),
                 icon: Icon(
                   selection.hasError ? Symbols.error : Symbols.tune,
                   size: 18,
@@ -123,15 +131,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         else
           const Spacer(),
         const SizedBox(width: AppSpacing.s),
-        IconButton.filled(
-          icon: Icon(isGenerating ? Symbols.stop : Symbols.arrow_upward),
-          tooltip: isGenerating ? '停止生成' : '发送',
-          style: ButtonStyle(
-            minimumSize: const WidgetStatePropertyAll(
-              Size.square(AppControlStyle.mediumHeight),
-            ),
-            shape: AppControlStyle.shape(active: isGenerating),
-          ),
+        ChatSendButton(
+          isGenerating: isGenerating,
           onPressed: isGenerating
               ? () => ref.read(chatControllerProvider.notifier).stop()
               : _canSend && !_submitting
@@ -150,14 +151,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           AppSpacing.l,
           AppSpacing.m,
         ),
-        child: FrostedSurface(
-          borderColor: _focusNode.hasFocus ? theme.colorScheme.primary : null,
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.m,
-            0,
-            AppSpacing.m,
-            AppSpacing.s,
-          ),
+        child: ChatInputSurface(
+          focused: _focusNode.hasFocus,
           child: LayoutBuilder(
             builder: (context, constraints) {
               final scaler = MediaQuery.textScalerOf(context);

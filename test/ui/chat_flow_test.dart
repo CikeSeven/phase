@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:material_loading_indicator/loading_indicator.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/app.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
@@ -21,6 +21,7 @@ import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
+import 'package:phase/features/chat/chat_send_button.dart';
 import 'package:phase/features/chat/message_bubble.dart';
 import 'package:phase/features/chat/model_selection.dart';
 import 'package:phase/providers/ai_provider.dart';
@@ -109,7 +110,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField).first, '帮我安排今天的任务');
     await tester.pump();
-    final sendRect = tester.getRect(find.byTooltip('发送'));
+    final sendRect = tester.getRect(find.byType(ChatSendButton));
     expect(sendRect.size, const Size.square(56));
     await tester.tap(find.byTooltip('发送'));
     await _until(tester, () => provider.requests.length == 1);
@@ -122,12 +123,16 @@ void main() {
       '帮我安排今天的任务',
     );
     expect(find.byTooltip('停止生成'), findsOneWidget);
-    expect(tester.getRect(find.byTooltip('停止生成')), sendRect);
+    expect(tester.getRect(find.byType(ChatSendButton)), sendRect);
+    expect(find.byType(LoadingIndicator), findsOneWidget);
     final stopButton = tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Symbols.stop),
+      find.descendant(
+        of: find.byType(ChatSendButton),
+        matching: find.byType(IconButton),
+      ),
     );
     expect(stopButton.isSelected, isNull);
-    expect(stopButton.style!.shape!.resolve({}), isA<RoundedRectangleBorder>());
+    expect(stopButton.style!.shape!.resolve({}), isA<StadiumBorder>());
 
     provider.response!.add(
       const PartStart(partId: 'reasoning_0', kind: PartKind.reasoning),

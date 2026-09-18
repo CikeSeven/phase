@@ -37,6 +37,7 @@ import 'package:phase/data/repositories/tool_call_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
 import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/chat/chat_page.dart';
+import 'package:phase/features/chat/chat_send_button.dart';
 import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/model_picker_sheet.dart';
 import 'package:phase/providers/ai_provider.dart';
@@ -444,6 +445,7 @@ void main() {
     Size size = const Size(360, 780),
     double scale = 1,
     bool dark = false,
+    bool reducedEffects = true,
     bool configured = true,
     _MemoryConversations? repository,
     Stream<List<ProviderProfile>>? profiles,
@@ -506,7 +508,7 @@ void main() {
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context).copyWith(
               textScaler: TextScaler.linear(scale),
-              disableAnimations: true,
+              disableAnimations: reducedEffects,
             ),
             child: child!,
           ),
@@ -746,7 +748,20 @@ void main() {
         // 附件按钮在输入栏内，不挤压发送触区。
         expect(
           tester.getRect(attach).right,
-          lessThanOrEqualTo(tester.getRect(find.byTooltip('发送')).left),
+          lessThanOrEqualTo(tester.getRect(find.byType(ChatSendButton)).left),
+        );
+        final sendIcon = find.byIcon(Symbols.arrow_upward);
+        final attachIcon = find.byIcon(Symbols.attach_file);
+        expect(tester.getSize(sendIcon), tester.getSize(attachIcon));
+        expect(tester.getCenter(sendIcon).dy, tester.getCenter(attachIcon).dy);
+        final sendSurface = find.descendant(
+          of: find.byType(ChatSendButton),
+          matching: find.byType(Material),
+        );
+        expect(tester.getSize(sendSurface), const Size.square(40));
+        expect(
+          tester.getSize(find.byType(ChatSendButton)),
+          const Size.square(56),
         );
         // 助手行与模型行各有一个展开图标：模型行的那个在模型选择器内。
         final modelIcon = find.descendant(
@@ -958,6 +973,99 @@ void main() {
   });
 
   for (final dark in [false, true]) {
+    testWidgets('透明玻璃上的正文、提示和配置入口保持对比度 ${dark ? '深色' : '浅色'}', (tester) async {
+      await pumpChat(
+        tester,
+        dark: dark,
+        reducedEffects: false,
+        configured: false,
+      );
+      final input = find.byKey(const ValueKey('chat-message-input'));
+      final field = tester.widget<TextField>(input);
+      final surface = find.ancestor(
+        of: input,
+        matching: find.byType(FrostedSurface),
+      );
+      final material = tester.widget<Material>(
+        find.descendant(of: surface, matching: find.byType(Material)).first,
+      );
+      final ink = tester.widget<Ink>(
+        find.descendant(of: surface, matching: find.byType(Ink)).first,
+      );
+      final glaze = (ink.decoration! as BoxDecoration).gradient!;
+      final configure = tester.widget<TextButton>(
+        find.widgetWithText(TextButton, '配置模型'),
+      );
+      final colors = Theme.of(tester.element(input)).colorScheme;
+      for (final backdrop in [Colors.black, Colors.white, colors.surface]) {
+        for (final highlight in glaze.colors) {
+          final background = Color.alphaBlend(
+            highlight,
+            Color.alphaBlend(material.color!, backdrop),
+          );
+          for (final foreground in [
+            field.style!.color!,
+            field.decoration!.hintStyle!.color!,
+            configure.style!.foregroundColor!.resolve({})!,
+          ]) {
+            final text = Color.alphaBlend(foreground, background);
+            final a = text.computeLuminance();
+            final b = background.computeLuminance();
+            final contrast = a > b
+                ? (a + 0.05) / (b + 0.05)
+                : (b + 0.05) / (a + 0.05);
+            expect(contrast, greaterThanOrEqualTo(4.5));
+          }
+        }
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('玻璃输入栏保留草稿、附件取消与键盘焦点 ${dark ? '深色' : '浅色'}', (tester) async {
+      await pumpChat(tester, dark: dark, reducedEffects: false);
+      final input = find.byKey(const ValueKey('chat-message-input'));
+      final surface = find.ancestor(
+        of: input,
+        matching: find.byType(FrostedSurface),
+      );
+      expect(
+        find.descendant(of: surface, matching: find.byType(BackdropFilter)),
+        findsOneWidget,
+      );
+      await enterDraft(tester, '透过月色，继续输入\n保留第二行');
+      final editor = find.descendant(
+        of: input,
+        matching: find.byType(EditableText),
+      );
+      final editorState = tester.state(editor);
+      final field = tester.widget<TextField>(input);
+      final draft = field.controller!.text;
+
+      await tester.tap(find.byTooltip('附件'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('attach-file')), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(field.controller!.text, draft);
+      expect(tester.state(editor), same(editorState));
+
+      await tester.tap(input);
+      tester.view.viewInsets = const FakeViewPadding(bottom: 260);
+      await tester.pumpAndSettle();
+      expect(field.focusNode!.hasFocus, isTrue);
+      expect(field.controller!.text, draft);
+      expect(tester.state(editor), same(editorState));
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Symbols.arrow_upward),
+            )
+            .onPressed,
+        isNotNull,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('输入框聚焦时外边框变为主色，失焦后恢复 ${dark ? '深色' : '浅色'}', (tester) async {
       await pumpChat(tester, dark: dark);
       final input = find.byKey(const ValueKey('chat-message-input'));

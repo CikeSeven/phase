@@ -44,6 +44,7 @@ dependencies:
   json_annotation: ^4.12.0
   gpt_markdown: ^1.2.1
   material_symbols_icons: ^4.2960.0
+  material_loading_indicator: ^1.0.0
 
   # 附件：相册/拍照/文件选择、图片压缩转码（纯 Dart）、MIME 推断、落盘路径
   image_picker: ^1.2.3
