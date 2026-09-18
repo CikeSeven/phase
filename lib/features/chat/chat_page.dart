@@ -36,10 +36,9 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage> {
-  /// 顶栏默认高度；两行紧凑排布的固定行高与行间距。
+  /// 顶栏默认高度；两行紧凑排布的最小行高。
   static const _defaultToolbarHeight = 64.0;
   static const _compactRowHeight = 24.0;
-  static const _rowGap = 2.0;
 
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerOpen = false;
@@ -66,14 +65,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final scaler = MediaQuery.textScalerOf(context);
-    final titleStyle = theme.textTheme.labelLarge;
+    final titleStyle = theme.textTheme.titleMedium;
     final modelStyle = theme.textTheme.labelMedium;
     // 顶栏保持默认高度：两行紧凑排布，只有大字号时按文字实际高度略微增高。
     final contentHeight =
-        scaler.scale(titleStyle?.fontSize ?? 14) * (titleStyle?.height ?? 1.4) +
+        scaler.scale(titleStyle?.fontSize ?? 16) * (titleStyle?.height ?? 1.4) +
         scaler.scale(modelStyle?.fontSize ?? 12) *
             (modelStyle?.height ?? 1.45) +
-        _rowGap +
         AppSpacing.xs * 2;
     final toolbarHeight = math.max(_defaultToolbarHeight, contentHeight);
     // 已经有值就不再退回加载态：重新解析期间标题不闪。
@@ -159,7 +157,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: _rowGap),
                 // 模型一行：点击选择模型。
                 Tooltip(
                   message: '选择模型',
