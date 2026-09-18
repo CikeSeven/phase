@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
+import 'package:phase/core/error/failure.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/models/agent_run.dart';
@@ -441,21 +442,67 @@ void main() {
     expect(failed.arguments['nodeId'], 'n3');
   });
 
-  test('默认助手只创建一次；删除后会话引用被置空', () async {
+  test('默认相月使用固定身份，重复初始化保留编辑，改名后仍不可删除', () async {
+    await assistants.save(
+      Assistant(
+        id: 'custom-assistant',
+        name: '相月',
+        systemPrompt: '',
+        createdAt: DateTime(2026),
+      ),
+    );
     final first = await assistants.ensureDefault();
+    expect(first.id, defaultAssistantId);
+    expect(first.name, '相月');
+    await assistants.save(
+      first.copyWith(name: '我的助手', systemPrompt: '保留修改后的提示词'),
+    );
     final second = await assistants.ensureDefault();
     expect(second.id, first.id);
+    expect(second.name, '我的助手');
+    expect(second.systemPrompt, '保留修改后的提示词');
+    expect(
+      (await assistants.getAssistants()).map((assistant) => assistant.id),
+      [defaultAssistantId, 'custom-assistant'],
+    );
+    expect(
+      (await assistants.watchAssistants().first).first.id,
+      defaultAssistantId,
+    );
 
     final conversation = await conversations.createConversation(
       assistantId: first.id,
     );
-    await assistants.delete(first.id);
+    await expectLater(
+      assistants.delete(first.id),
+      throwsA(isA<OperationFailure>()),
+    );
+    expect((await assistants.getById(first.id))!.name, '我的助手');
+    final thread = await conversations.getThread(conversation.id);
+    expect(thread!.conversation.assistantId, first.id);
+  });
+
+  test('自建同名相月可删除，已有会话保留并解除绑定', () async {
+    await assistants.ensureDefault();
+    final custom = await assistants.save(
+      Assistant(
+        id: 'custom-assistant',
+        name: '相月',
+        systemPrompt: '',
+        createdAt: DateTime(2026),
+      ),
+    );
+    final conversation = await conversations.createConversation(
+      assistantId: custom.id,
+    );
+    await assistants.delete(custom.id);
 
     final thread = await conversations
         .watchThread(conversation.id)
         .firstWhere((value) => value != null);
     expect(thread!.conversation.assistantId, isNull);
-    expect(await assistants.getAssistants(), isEmpty);
+    expect(await assistants.getById(custom.id), isNull);
+    expect((await assistants.getAssistants()).single.id, defaultAssistantId);
   });
 
   test('工具策略：deny 的工具不开放，ask 用默认策略', () async {

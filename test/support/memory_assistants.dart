@@ -11,8 +11,8 @@ class MemoryAssistants implements AssistantRepository {
           seed ??
           [
             Assistant(
-              id: 'assistant-default',
-              name: '普通助手',
+              id: defaultAssistantId,
+              name: defaultAssistantName,
               systemPrompt: '',
               createdAt: DateTime(2026),
             ),

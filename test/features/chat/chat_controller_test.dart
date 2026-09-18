@@ -403,6 +403,7 @@ void main() {
       systemPrompt: '只回答与代码有关的问题。',
     );
 
+    await controller().selectAssistant(assistant.id);
     await controller().send('你好');
     expect(
       fakeProvider.lastRequest!.systemPrompt,

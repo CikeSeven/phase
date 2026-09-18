@@ -387,12 +387,12 @@ final class ConversationThreadFamily extends $Family
   String toString() => r'conversationThreadProvider';
 }
 
-/// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
+/// 助手列表；先确保内置助手存在再发出。
 
 @ProviderFor(assistants)
 final assistantsProvider = AssistantsProvider._();
 
-/// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
+/// 助手列表；先确保内置助手存在再发出。
 
 final class AssistantsProvider
     extends
@@ -402,7 +402,7 @@ final class AssistantsProvider
           Stream<List<Assistant>>
         >
     with $FutureModifier<List<Assistant>>, $StreamProvider<List<Assistant>> {
-  /// 助手列表；空库时先写入内置助手再发出，保证始终至少有一个助手。
+  /// 助手列表；先确保内置助手存在再发出。
   AssistantsProvider._()
     : super(
         from: null,
@@ -434,7 +434,7 @@ String _$assistantsHash() => r'e669126c276bb39598993f28b6ad81678621ab97';
 /// 当前生效的助手。
 ///
 /// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
-/// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+/// 或绑定的助手已被删除时回退到列表第一个（内置助手）。
 ///
 /// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
 /// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
@@ -445,7 +445,7 @@ final currentAssistantProvider = CurrentAssistantFamily._();
 /// 当前生效的助手。
 ///
 /// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
-/// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+/// 或绑定的助手已被删除时回退到列表第一个（内置助手）。
 ///
 /// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
 /// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
@@ -456,7 +456,7 @@ final class CurrentAssistantProvider
   /// 当前生效的助手。
   ///
   /// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
-  /// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+  /// 或绑定的助手已被删除时回退到列表第一个（内置助手）。
   ///
   /// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
   /// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
@@ -519,7 +519,7 @@ String _$currentAssistantHash() => r'22256fa8d478f1e00d6839666171601a5a4f4038';
 /// 当前生效的助手。
 ///
 /// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
-/// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+/// 或绑定的助手已被删除时回退到列表第一个（内置助手）。
 ///
 /// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
 /// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。
@@ -544,7 +544,7 @@ final class CurrentAssistantFamily extends $Family
   /// 当前生效的助手。
   ///
   /// 已打开的会话用会话绑定的助手；新会话用草稿助手；两者都没有、
-  /// 或绑定的助手已被删除时回退到列表第一个（首次建库时为内置普通助手）。
+  /// 或绑定的助手已被删除时回退到列表第一个（内置助手）。
   ///
   /// 只读内存中的列表与线程：调用方先 await 好这两路数据（见
   /// [awaitAssistantContext]），避免把「尚未加载」误判成「没有助手」。

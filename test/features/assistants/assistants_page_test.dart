@@ -157,7 +157,13 @@ void main() {
 
     expect(find.text('代码助手'), findsOneWidget);
     expect(find.text('只回答与代码有关的问题。'), findsOneWidget);
-    expect(find.text('未设置系统提示词'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(ValueKey('assistant-${seeded.id}')),
+        matching: find.text('未设置系统提示词'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('默认模型：deepseek-chat'), findsOneWidget);
     // 列表里第一个助手是当前助手（内置默认排在更前，这里只有一个「当前」）。
     expect(
@@ -178,6 +184,23 @@ void main() {
     expect(find.byType(AssistantEditPage), findsOneWidget);
     expect(find.text('编辑助手'), findsOneWidget);
     expect(find.byKey(const ValueKey('delete-assistant')), findsOneWidget);
+    final topBar = find.byType(AppTopBar);
+    for (final (key, tooltip) in [
+      ('delete-assistant', '删除助手'),
+      ('save-assistant', '保存助手'),
+    ]) {
+      final action = find.descendant(
+        of: topBar,
+        matching: find.byKey(ValueKey(key)),
+      );
+      expect(action.hitTestable(), findsOneWidget);
+      expect(tester.widget<IconButton>(action).tooltip, tooltip);
+      expect(tester.getSize(action).shortestSide, greaterThanOrEqualTo(48));
+    }
+    expect(
+      tester.widget<AppScaffold>(find.byType(AppScaffold)).bottomBar,
+      isNull,
+    );
 
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -187,6 +210,31 @@ void main() {
     expect(find.byKey(const ValueKey('delete-assistant')), findsNothing);
     expect(find.byKey(const ValueKey('save-assistant')), findsOneWidget);
 
+    await closeHost(tester, host.container);
+  });
+
+  testWidgets('默认相月可编辑和保存，改名后再次打开仍没有删除入口', (tester) async {
+    final host = await pumpHost(tester);
+    final row = find.byKey(const ValueKey('assistant-$defaultAssistantId'));
+    expect(find.text('相月'), findsOneWidget);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('delete-assistant')), findsNothing);
+    expect(find.byTooltip('保存助手').hitTestable(), findsOneWidget);
+    await tester.enterText(
+      find.byKey(const ValueKey('assistant-name')),
+      '我的助手',
+    );
+    await tester.tap(find.byKey(const ValueKey('save-assistant')));
+    await tester.pumpAndSettle();
+    expect(
+      (await AssistantRepository(db).getById(defaultAssistantId))!.name,
+      '我的助手',
+    );
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('delete-assistant')), findsNothing);
+    expect(find.byTooltip('保存助手').hitTestable(), findsOneWidget);
     await closeHost(tester, host.container);
   });
 
@@ -204,8 +252,8 @@ void main() {
     await closeHost(tester, host.container);
   });
 
-  testWidgets('删除助手后列表更新，会话保留（解除绑定）', (tester) async {
-    final assistant = await seedAssistant();
+  testWidgets('自建同名相月保留删除入口，取消不删除，确认后列表更新', (tester) async {
+    final assistant = await seedAssistant(name: '相月');
     final host = await pumpHost(tester);
 
     await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
@@ -214,11 +262,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('删除助手'), findsOneWidget);
 
+    await tester.tap(find.byKey(const ValueKey('cancel-delete-assistant')));
+    await tester.pumpAndSettle();
+    expect(await AssistantRepository(db).getById(assistant.id), isNotNull);
+    await tester.tap(find.byKey(const ValueKey('delete-assistant')));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.byKey(const ValueKey('confirm-delete-assistant')));
     await tester.pumpAndSettle();
 
     // 回到列表：该助手已不在列表里（内置默认助手仍在）。
-    expect(find.text('代码助手'), findsNothing);
+    expect(find.byKey(ValueKey('assistant-${assistant.id}')), findsNothing);
+    expect(find.text('相月'), findsOneWidget);
     expect(find.byType(AppScaffold), findsOneWidget);
 
     await closeHost(tester, host.container);

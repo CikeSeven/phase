@@ -4,7 +4,6 @@ import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/error/failure.dart';
-import '../../core/utils/id.dart';
 import '../../core/utils/logger.dart';
 import '../datasources/local/app_database.dart';
 import '../models/assistant.dart';
@@ -20,14 +19,20 @@ class AssistantRepository {
 
   Stream<List<Assistant>> watchAssistants() {
     final query = _db.select(_db.assistants)
-      ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]);
+      ..orderBy([
+        (t) => OrderingTerm.desc(t.id.equals(defaultAssistantId)),
+        (t) => OrderingTerm.asc(t.createdAt),
+      ]);
     return query.watch().map((rows) => rows.map(assistantFromRow).toList());
   }
 
   Future<List<Assistant>> getAssistants() async {
-    final rows = await (_db.select(
-      _db.assistants,
-    )..orderBy([(t) => OrderingTerm.asc(t.createdAt)])).get();
+    final rows =
+        await (_db.select(_db.assistants)..orderBy([
+              (t) => OrderingTerm.desc(t.id.equals(defaultAssistantId)),
+              (t) => OrderingTerm.asc(t.createdAt),
+            ]))
+            .get();
     return rows.map(assistantFromRow).toList();
   }
 
@@ -38,13 +43,13 @@ class AssistantRepository {
     return row == null ? null : assistantFromRow(row);
   }
 
-  /// 首次建库时写入内置的普通助手；已存在时不重复创建。
+  /// 确保内置助手存在；已存在时保留用户编辑。
   Future<Assistant> ensureDefault() async {
     return _guard('创建默认助手失败', () async {
-      final existing = await getAssistants();
-      if (existing.isNotEmpty) return existing.first;
+      final existing = await getById(defaultAssistantId);
+      if (existing != null) return existing;
       final assistant = Assistant(
-        id: generateId(),
+        id: defaultAssistantId,
         name: defaultAssistantName,
         systemPrompt: '',
         createdAt: DateTime.now(),
@@ -66,6 +71,9 @@ class AssistantRepository {
   /// 删除助手并把引用它的会话置空，会话本身保留。
   Future<void> delete(String id) {
     return _guard('删除助手失败', () async {
+      if (id == defaultAssistantId) {
+        throw const OperationFailure('默认助手不能删除');
+      }
       await _db.transaction(() async {
         await (_db.delete(_db.assistants)..where((t) => t.id.equals(id))).go();
         await (_db.update(_db.conversations)

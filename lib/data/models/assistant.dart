@@ -93,8 +93,11 @@ class Assistant {
   }
 }
 
+/// 内置助手使用固定身份，改名后仍不可删除。
+const defaultAssistantId = 'assistant-default';
+
 /// 初始助手：首次创建数据库时写入，未配置模型时由界面引导去配置。
-const defaultAssistantName = '普通助手';
+const defaultAssistantName = '相月';
 
 /// 新助手的显式默认范围；空 ToolPolicyConfig 始终表示全部禁止。
 const defaultToolPolicyConfig = ToolPolicyConfig(

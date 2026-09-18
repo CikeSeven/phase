@@ -5,7 +5,6 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
@@ -46,6 +45,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
   String? _loadError;
 
   bool get _isNew => widget.assistantId == null;
+  bool get _canDelete => !_isNew && widget.assistantId != defaultAssistantId;
 
   @override
   void initState() {
@@ -153,13 +153,14 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
   }
 
   Future<void> _confirmDelete() async {
+    if (!_canDelete || _saving || _loading || _loadError != null) return;
     final assistant = widget.assistantId;
     if (assistant == null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: '删除助手',
-        description: '已有会话会保留，只解除与该助手的绑定。',
+        description: '确定删除此助手吗？',
         icon: Symbols.delete,
         tone: AppTone.lavender,
         content: const SizedBox.shrink(),
@@ -199,34 +200,27 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
     final theme = Theme.of(context);
     return AppScaffold(
       title: _isNew ? '新建助手' : '编辑助手',
-      bottomBar: _loading || _loadError != null
-          ? null
-          : AppBottomBar(
-              child: Row(
-                children: [
-                  if (!_isNew)
-                    IconButton.filledTonal(
-                      key: const ValueKey('delete-assistant'),
-                      tooltip: '删除助手',
-                      onPressed: _saving ? null : _confirmDelete,
-                      icon: const Icon(Symbols.delete),
-                    ),
-                  if (!_isNew) const SizedBox(width: AppSpacing.m),
-                  Expanded(
-                    child: FilledButton.icon(
-                      key: const ValueKey('save-assistant'),
-                      onPressed: _saving ? null : _save,
-                      icon: _saving
-                          ? const AppLoadingIndicator.small(
-                              semanticsLabel: '正在保存助手',
-                            )
-                          : const Icon(Symbols.check),
-                      label: Text(_saving ? '保存中…' : '保存'),
-                    ),
-                  ),
-                ],
-              ),
+      actions: [
+        if (!_loading && _loadError == null) ...[
+          if (_canDelete)
+            IconButton(
+              key: const ValueKey('delete-assistant'),
+              tooltip: '删除助手',
+              onPressed: _saving ? null : _confirmDelete,
+              color: theme.colorScheme.error,
+              icon: const Icon(Symbols.delete),
             ),
+          IconButton(
+            key: const ValueKey('save-assistant'),
+            tooltip: _saving ? '正在保存助手' : '保存助手',
+            onPressed: _saving ? null : _save,
+            color: theme.colorScheme.primary,
+            icon: _saving
+                ? const AppLoadingIndicator.small(semanticsLabel: '正在保存助手')
+                : const Icon(Symbols.save),
+          ),
+        ],
+      ],
       body: _loading
           ? const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取助手'))
           : _loadError != null
