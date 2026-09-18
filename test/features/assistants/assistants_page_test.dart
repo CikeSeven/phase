@@ -17,6 +17,7 @@ import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/models/model_selection.dart';
 import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
+import 'package:phase/data/repositories/skill_repository.dart';
 import 'package:phase/features/assistants/assistant_edit_page.dart';
 import 'package:phase/features/assistants/assistants_page.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -77,6 +78,9 @@ void main() {
       overrides: [
         sharedPreferencesProvider.overrideWith((ref) => preferences),
         appDatabaseProvider.overrideWith((ref) => db),
+        skillRepositoryProvider.overrideWith(
+          (ref) => SkillRepository(db, Directory(p.join(temp.path, 'skills'))),
+        ),
         secureKeyStorageProvider.overrideWith(
           (ref) => SecureKeyStorage(FakeSecureStorage()),
         ),

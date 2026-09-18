@@ -1,4 +1,5 @@
 import 'chat_message.dart';
+import 'skill_installation.dart';
 import 'model_selection.dart';
 import 'tool_policy.dart';
 import 'openai_compat.dart';
@@ -58,6 +59,7 @@ class RunConfiguration {
     this.enabledTools = const {},
     this.toolSnapshots = const [],
     this.mcpServers = const [],
+    this.skills = const [],
     this.toolPolicies = const {},
     this.supportsReasoning = false,
     this.supportsImages = true,
@@ -72,6 +74,7 @@ class RunConfiguration {
   final Set<String> enabledTools;
   final List<ToolSnapshot> toolSnapshots;
   final List<McpServerProfile> mcpServers;
+  final List<SkillSnapshot> skills;
 
   /// 工具级策略覆盖；未列出的工具按定义的默认策略。
   final Map<String, ToolPolicy> toolPolicies;
@@ -88,6 +91,7 @@ class RunConfiguration {
     'enabledTools': enabledTools.toList(),
     'toolSnapshots': toolSnapshots.map((t) => t.toJson()).toList(),
     'mcpServers': mcpServers.map((s) => s.toJson()).toList(),
+    'skills': skills.map((s) => s.toJson()).toList(),
     'toolPolicies': {
       for (final entry in toolPolicies.entries) entry.key: entry.value.name,
     },
@@ -121,6 +125,10 @@ class RunConfiguration {
         toolSnapshots: [
           for (final t in json['toolSnapshots'] as List? ?? [])
             ToolSnapshot.fromJson(t as Map<String, dynamic>),
+        ],
+        skills: [
+          for (final s in json['skills'] as List? ?? [])
+            SkillSnapshot.fromJson(s as Map<String, dynamic>),
         ],
         mcpServers: [
           for (final s in json['mcpServers'] as List? ?? [])

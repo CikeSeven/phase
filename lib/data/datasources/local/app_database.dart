@@ -77,6 +77,7 @@ class Assistants extends Table {
 
   /// 工具名 → 策略 的 JSON 对象。
   TextColumn get toolPolicyJson => text().withDefault(const Constant('{}'))();
+  TextColumn get skillIdsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -226,7 +227,20 @@ class McpServers extends Table {
   Set<Column> get primaryKey => {id};
 }
 
-/// 应用数据库（初版 schema 1）。
+/// Skill 当前安装版本，旧版本由运行快照与文件保留规则管理。
+@DataClassName('SkillInstallationRow')
+class SkillInstallations extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text().unique()();
+  TextColumn get snapshotJson => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  BoolColumn get deleting => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get installedAt => dateTime()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// 当前初版业务库。
 ///
 /// 数据库从创建时加密；schema 变更随初版演进，不保留开发期旧 schema 的
 /// 升级链（见 AGENTS.md §5）。
@@ -241,29 +255,26 @@ class McpServers extends Table {
     AgentRuns,
     ToolCalls,
     McpServers,
+    SkillInstallations,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills。
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
+    // 本次装机只允许已安装 E1 测试包的增量升级，不补历史开发期链。
     onUpgrade: (migrator, from, to) async {
-      if (from < 2) {
-        await migrator.addColumn(attachments, attachments.extractionError);
+      if (from != 4 || to != 5) {
+        throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
       }
-      if (from < 3) {
-        await migrator.addColumn(models, models.temperature);
-      }
-      if (from < 4) {
-        await migrator.createTable(mcpServers);
-        await migrator.addColumn(toolCalls, toolCalls.sourceJson);
-      }
+      await migrator.createTable(skillInstallations);
+      await migrator.addColumn(assistants, assistants.skillIdsJson);
     },
     beforeOpen: _prepareDatabase,
   );

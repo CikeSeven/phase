@@ -13,6 +13,11 @@ import '../../features/tools/tool_records_page.dart';
 import '../../features/execution/execution_settings_page.dart';
 import '../../features/mcp/mcp_servers_page.dart';
 import '../../features/mcp/mcp_edit_page.dart';
+import '../../features/settings/extensions_page.dart';
+import '../../features/skills/skills_page.dart';
+import '../../features/skills/skill_import_page.dart';
+import '../../features/skills/skill_detail_page.dart';
+import '../../features/skills/skill_resource_page.dart';
 
 part 'app_router.g.dart';
 
@@ -56,6 +61,47 @@ GoRouter appRouter(Ref ref) {
             pageBuilder: (context, state) =>
                 materialPage(state, const ExtensionsPage()),
             routes: [
+              GoRoute(
+                path: 'skills',
+                pageBuilder: (context, state) =>
+                    materialPage(state, const SkillsPage()),
+                routes: [
+                  GoRoute(
+                    path: 'import',
+                    pageBuilder: (context, state) =>
+                        materialPage(state, const SkillImportPage()),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    pageBuilder: (context, state) => materialPage(
+                      state,
+                      SkillDetailPage(id: state.pathParameters['id']!),
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: 'update',
+                        pageBuilder: (context, state) => materialPage(
+                          state,
+                          SkillImportPage(
+                            replaceId: state.pathParameters['id']!,
+                          ),
+                        ),
+                      ),
+                      GoRoute(
+                        path: 'resource',
+                        pageBuilder: (context, state) => materialPage(
+                          state,
+                          SkillResourcePage(
+                            id: state.pathParameters['id']!,
+                            path:
+                                state.uri.queryParameters['path'] ?? 'SKILL.md',
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
               GoRoute(
                 path: 'mcp',
                 pageBuilder: (context, state) =>

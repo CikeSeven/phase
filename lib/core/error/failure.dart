@@ -133,3 +133,11 @@ final class McpFailure extends Failure {
   @override
   String get userMessage => message;
 }
+
+/// Skill 安装和资源操作失败；业务库故障仍使用 StorageFailure。
+final class SkillFailure extends Failure {
+  const SkillFailure(this.code, super.message);
+  final String code;
+  @override
+  String get userMessage => message;
+}

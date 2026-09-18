@@ -4,8 +4,13 @@ import 'package:phase/data/models/api_protocol.dart';
 
 String _sse(Object value) => 'data: ${jsonEncode(value)}\n\n';
 
-String mcpCallSse(ApiProtocol protocol, String toolName) {
-  final calls = [(id: 'sample', name: toolName, args: <String, dynamic>{})];
+String mcpCallSse(
+  ApiProtocol protocol,
+  String toolName, {
+  Map<String, dynamic> arguments = const {},
+  String callId = 'sample',
+}) {
+  final calls = [(id: callId, name: toolName, args: arguments)];
   return switch (protocol) {
     ApiProtocol.openaiCompletions =>
       '${_sse({

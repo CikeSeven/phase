@@ -39,6 +39,8 @@ import '../../../providers/ai_provider.dart';
 import '../../../providers/dio_failure_mapper.dart';
 import '../../../providers/provider_factory.dart';
 import '../tools/agent_loop.dart';
+import '../skills/read_skill_tool.dart';
+import '../../../data/repositories/skill_repository.dart';
 import '../tools/http_transport.dart';
 import '../tools/run_recovery_controller.dart';
 import '../tools/tool.dart';
@@ -234,6 +236,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     String systemPrompt = '',
     model.ModelSelection? defaultModelSelection,
     ToolPolicyConfig toolPolicy = defaultToolPolicyConfig,
+    Set<String> skillIds = const {},
   }) {
     return _guardAssistant('创建助手失败', () async {
       final repository = await ref.read(assistantRepositoryProvider.future);
@@ -243,6 +246,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         systemPrompt: systemPrompt.trim(),
         defaultModelSelection: defaultModelSelection,
         toolPolicy: toolPolicy,
+        skillIds: skillIds,
         createdAt: DateTime.now(),
       );
       await repository.save(assistant);
@@ -260,6 +264,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     model.ModelSelection? defaultModelSelection,
     bool clearDefaultModel = false,
     ToolPolicyConfig? toolPolicy,
+    Set<String>? skillIds,
   }) {
     return _guardAssistant('保存助手失败', () async {
       final repository = await ref.read(assistantRepositoryProvider.future);
@@ -275,6 +280,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             ? null
             : (defaultModelSelection ?? existing.defaultModelSelection),
         toolPolicy: toolPolicy ?? existing.toolPolicy,
+        skillIds: skillIds ?? existing.skillIds,
         createdAt: existing.createdAt,
       );
       await repository.save(updated);
@@ -512,82 +518,103 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final mcpEntries = enabled.any((name) => name.startsWith('mcp_'))
         ? await (await ref.read(mcpServerRepositoryProvider.future)).list()
         : const [];
-    final snapshots = <ToolSnapshot>[
-      for (final tool in baseRegistry.tools)
-        if (enabled.contains(tool.name)) tool.snapshot,
-      for (final entry in mcpEntries)
-        if (entry.profile.enabled && !entry.profile.deleting)
-          for (final tool in entry.tools)
-            if (enabled.contains(tool.name)) tool,
-    ];
-
-    // 连接快照只存服务商 id、协议与地址，密钥按 id 在调用时读取。
-    final run = await runs.create(
-      AgentRun(
-        id: generateId(),
-        conversationId: conversationId,
-        assistantId: assistant?.id,
-        inputMessageId: inputMessageId,
-        configuration: RunConfiguration(
-          connection: RunConnection(
-            profileId: selection.profile.id,
-            protocol: selection.profile.protocol.name,
-            baseUrl: selection.profile.baseUrl,
-            requiresKey: selection.profile.requiresKey,
-          ),
-          modelSelection: model.ModelSelection(
-            profileId: selection.profile.id,
-            modelId: selection.model,
-            reasoningEffort: selection.effort,
-            temperature: modelConfig?.temperature,
-            maxOutputTokens: modelConfig?.maxOutputTokens,
-          ),
-          systemPrompt: assistant?.systemPrompt ?? '',
-          toolSnapshots: snapshots,
-          mcpServers: [
-            for (final entry in mcpEntries)
-              if (snapshots.any(
-                (tool) =>
-                    tool.source.kind == ToolSourceKind.mcp &&
-                    tool.source.id == entry.profile.id,
-              ))
-                entry.profile,
-          ],
-          executionScope: ref
-              .read(settingsStorageProvider)
-              .readExecutionScope(),
-          enabledTools: selection.supportsTools
-              ? {
-                  for (final name
-                      in assistant?.toolPolicy.enabledTools ?? <String>{})
-                    if (selection.supportsImages || name != 'capture_screen')
-                      name,
-                }
-              : const {},
-          toolPolicies: selection.supportsTools
-              ? assistant?.toolPolicy.overrides ?? const {}
-              : const {},
-          supportsReasoning: selection.supportsReasoning,
-          supportsImages: selection.supportsImages,
-          supportsTools: selection.supportsTools,
-          compatOverrides: selection.profile.compatOverrides,
-        ),
-        createdAt: DateTime.now(),
-      ),
-    );
-
+    final skillLease =
+        selection.supportsTools && (assistant?.skillIds.isNotEmpty ?? false)
+        ? await (await ref.read(skillRepositoryProvider.future))
+              .acquire(assistant!.skillIds)
+        : null;
     try {
-      await _driveRun(run, repository, selection);
-    } on Failure {
-      final stored = await runs.getById(run.id);
-      if (stored?.status == RunStatus.running && stored?.turnCount == 0) {
-        await runs.finish(
-          run.id,
-          status: RunStatus.failed,
-          finishReason: RunFinishReason.storageError,
-        );
+      final skills = skillLease?.skills ?? const [];
+      final skillTool = skills.isEmpty
+          ? null
+          : ReadSkillTool(
+              skills: skills,
+              repository: await ref.read(skillRepositoryProvider.future),
+              assistants: await ref.read(assistantRepositoryProvider.future),
+              assistantId: assistant?.id,
+            );
+      final snapshots = <ToolSnapshot>[
+        if (skillTool != null) skillTool.snapshot,
+        for (final tool in baseRegistry.tools)
+          if (enabled.contains(tool.name)) tool.snapshot,
+        for (final entry in mcpEntries)
+          if (entry.profile.enabled && !entry.profile.deleting)
+            for (final tool in entry.tools)
+              if (enabled.contains(tool.name)) tool,
+      ];
+
+      // 连接快照只存服务商 id、协议与地址，密钥按 id 在调用时读取。
+      final run = await runs.create(
+        AgentRun(
+          id: generateId(),
+          conversationId: conversationId,
+          assistantId: assistant?.id,
+          inputMessageId: inputMessageId,
+          configuration: RunConfiguration(
+            connection: RunConnection(
+              profileId: selection.profile.id,
+              protocol: selection.profile.protocol.name,
+              baseUrl: selection.profile.baseUrl,
+              requiresKey: selection.profile.requiresKey,
+            ),
+            modelSelection: model.ModelSelection(
+              profileId: selection.profile.id,
+              modelId: selection.model,
+              reasoningEffort: selection.effort,
+              temperature: modelConfig?.temperature,
+              maxOutputTokens: modelConfig?.maxOutputTokens,
+            ),
+            systemPrompt: assistant?.systemPrompt ?? '',
+            toolSnapshots: snapshots,
+            skills: skills,
+            mcpServers: [
+              for (final entry in mcpEntries)
+                if (snapshots.any(
+                  (tool) =>
+                      tool.source.kind == ToolSourceKind.mcp &&
+                      tool.source.id == entry.profile.id,
+                ))
+                  entry.profile,
+            ],
+            executionScope: ref
+                .read(settingsStorageProvider)
+                .readExecutionScope(),
+            enabledTools: selection.supportsTools
+                ? {
+                    if (skills.isNotEmpty) 'read_skill',
+                    for (final name
+                        in assistant?.toolPolicy.enabledTools ?? <String>{})
+                      if (selection.supportsImages || name != 'capture_screen')
+                        name,
+                  }
+                : const {},
+            toolPolicies: selection.supportsTools
+                ? assistant?.toolPolicy.overrides ?? const {}
+                : const {},
+            supportsReasoning: selection.supportsReasoning,
+            supportsImages: selection.supportsImages,
+            supportsTools: selection.supportsTools,
+            compatOverrides: selection.profile.compatOverrides,
+          ),
+          createdAt: DateTime.now(),
+        ),
+      );
+
+      try {
+        await _driveRun(run, repository, selection);
+      } on Failure {
+        final stored = await runs.getById(run.id);
+        if (stored?.status == RunStatus.running && stored?.turnCount == 0) {
+          await runs.finish(
+            run.id,
+            status: RunStatus.failed,
+            finishReason: RunFinishReason.storageError,
+          );
+        }
+        rethrow;
       }
-      rethrow;
+    } finally {
+      await skillLease?.close();
     }
   }
 
@@ -611,13 +638,26 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             connections: ref.read(mcpConnectionsProvider),
           );
     final base = ref.read(toolRegistryProvider);
-    final registry = ToolRegistry([...base.tools, ...?mcp?.tools()]);
+    final skillTool = run.configuration.skills.isEmpty
+        ? null
+        : ReadSkillTool(
+            skills: run.configuration.skills,
+            repository: await ref.read(skillRepositoryProvider.future),
+            assistants: await ref.read(assistantRepositoryProvider.future),
+            assistantId: run.assistantId,
+          );
+    final registry = ToolRegistry([
+      ...base.tools,
+      ...?mcp?.tools(),
+      ?skillTool,
+    ]);
     final execution = ref.read(executionControllerProvider.notifier);
     final executor = ToolExecutor(
       registry: registry,
       toolCalls: toolCalls,
       runs: runs,
       currentPolicy: (tool) async {
+        if (tool is ReadSkillTool) return tool.currentPolicy();
         if (tool.source.kind != ToolSourceKind.mcp) {
           return registry.policyFor(
             tool,
@@ -1222,7 +1262,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final request = ChatRequest(
       modelId: selection.model,
       systemPrompt:
-          '${_run?.configuration.systemPrompt ?? ''}${executionScopePrompt(_run!.configuration.executionScope, toolExecution: _run!.configuration.enabledTools.isNotEmpty, applicationOperations: _run!.configuration.enabledTools.any(applicationOperationTools.contains))}',
+          '${_run?.configuration.systemPrompt ?? ''}${skillDiscoveryPrompt(_run!.configuration.skills)}${executionScopePrompt(_run!.configuration.executionScope, toolExecution: _run!.configuration.enabledTools.isNotEmpty, applicationOperations: _run!.configuration.enabledTools.any(applicationOperationTools.contains))}',
       messages: messages,
       tools: _toolDefinitions(),
       // 模型不支持推理时不下发任何推理字段。

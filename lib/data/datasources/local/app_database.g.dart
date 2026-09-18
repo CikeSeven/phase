@@ -1312,6 +1312,18 @@ class $AssistantsTable extends Assistants
     requiredDuringInsert: false,
     defaultValue: const Constant('{}'),
   );
+  static const VerificationMeta _skillIdsJsonMeta = const VerificationMeta(
+    'skillIdsJson',
+  );
+  @override
+  late final GeneratedColumn<String> skillIdsJson = GeneratedColumn<String>(
+    'skill_ids_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -1330,6 +1342,7 @@ class $AssistantsTable extends Assistants
     systemPrompt,
     defaultSelectionJson,
     toolPolicyJson,
+    skillIdsJson,
     createdAt,
   ];
   @override
@@ -1384,6 +1397,15 @@ class $AssistantsTable extends Assistants
         ),
       );
     }
+    if (data.containsKey('skill_ids_json')) {
+      context.handle(
+        _skillIdsJsonMeta,
+        skillIdsJson.isAcceptableOrUnknown(
+          data['skill_ids_json']!,
+          _skillIdsJsonMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -1421,6 +1443,10 @@ class $AssistantsTable extends Assistants
         DriftSqlType.string,
         data['${effectivePrefix}tool_policy_json'],
       )!,
+      skillIdsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}skill_ids_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -1444,6 +1470,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
 
   /// 工具名 → 策略 的 JSON 对象。
   final String toolPolicyJson;
+  final String skillIdsJson;
   final DateTime createdAt;
   const AssistantRow({
     required this.id,
@@ -1451,6 +1478,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     required this.systemPrompt,
     this.defaultSelectionJson,
     required this.toolPolicyJson,
+    required this.skillIdsJson,
     required this.createdAt,
   });
   @override
@@ -1463,6 +1491,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       map['default_selection_json'] = Variable<String>(defaultSelectionJson);
     }
     map['tool_policy_json'] = Variable<String>(toolPolicyJson);
+    map['skill_ids_json'] = Variable<String>(skillIdsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -1476,6 +1505,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
           ? const Value.absent()
           : Value(defaultSelectionJson),
       toolPolicyJson: Value(toolPolicyJson),
+      skillIdsJson: Value(skillIdsJson),
       createdAt: Value(createdAt),
     );
   }
@@ -1493,6 +1523,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
         json['defaultSelectionJson'],
       ),
       toolPolicyJson: serializer.fromJson<String>(json['toolPolicyJson']),
+      skillIdsJson: serializer.fromJson<String>(json['skillIdsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -1505,6 +1536,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       'systemPrompt': serializer.toJson<String>(systemPrompt),
       'defaultSelectionJson': serializer.toJson<String?>(defaultSelectionJson),
       'toolPolicyJson': serializer.toJson<String>(toolPolicyJson),
+      'skillIdsJson': serializer.toJson<String>(skillIdsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -1515,6 +1547,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     String? systemPrompt,
     Value<String?> defaultSelectionJson = const Value.absent(),
     String? toolPolicyJson,
+    String? skillIdsJson,
     DateTime? createdAt,
   }) => AssistantRow(
     id: id ?? this.id,
@@ -1524,6 +1557,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
         ? defaultSelectionJson.value
         : this.defaultSelectionJson,
     toolPolicyJson: toolPolicyJson ?? this.toolPolicyJson,
+    skillIdsJson: skillIdsJson ?? this.skillIdsJson,
     createdAt: createdAt ?? this.createdAt,
   );
   AssistantRow copyWithCompanion(AssistantsCompanion data) {
@@ -1539,6 +1573,9 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       toolPolicyJson: data.toolPolicyJson.present
           ? data.toolPolicyJson.value
           : this.toolPolicyJson,
+      skillIdsJson: data.skillIdsJson.present
+          ? data.skillIdsJson.value
+          : this.skillIdsJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -1551,6 +1588,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
           ..write('systemPrompt: $systemPrompt, ')
           ..write('defaultSelectionJson: $defaultSelectionJson, ')
           ..write('toolPolicyJson: $toolPolicyJson, ')
+          ..write('skillIdsJson: $skillIdsJson, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -1563,6 +1601,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     systemPrompt,
     defaultSelectionJson,
     toolPolicyJson,
+    skillIdsJson,
     createdAt,
   );
   @override
@@ -1574,6 +1613,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
           other.systemPrompt == this.systemPrompt &&
           other.defaultSelectionJson == this.defaultSelectionJson &&
           other.toolPolicyJson == this.toolPolicyJson &&
+          other.skillIdsJson == this.skillIdsJson &&
           other.createdAt == this.createdAt);
 }
 
@@ -1583,6 +1623,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
   final Value<String> systemPrompt;
   final Value<String?> defaultSelectionJson;
   final Value<String> toolPolicyJson;
+  final Value<String> skillIdsJson;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const AssistantsCompanion({
@@ -1591,6 +1632,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     this.systemPrompt = const Value.absent(),
     this.defaultSelectionJson = const Value.absent(),
     this.toolPolicyJson = const Value.absent(),
+    this.skillIdsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -1600,6 +1642,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     this.systemPrompt = const Value.absent(),
     this.defaultSelectionJson = const Value.absent(),
     this.toolPolicyJson = const Value.absent(),
+    this.skillIdsJson = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -1611,6 +1654,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     Expression<String>? systemPrompt,
     Expression<String>? defaultSelectionJson,
     Expression<String>? toolPolicyJson,
+    Expression<String>? skillIdsJson,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -1621,6 +1665,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
       if (defaultSelectionJson != null)
         'default_selection_json': defaultSelectionJson,
       if (toolPolicyJson != null) 'tool_policy_json': toolPolicyJson,
+      if (skillIdsJson != null) 'skill_ids_json': skillIdsJson,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -1632,6 +1677,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     Value<String>? systemPrompt,
     Value<String?>? defaultSelectionJson,
     Value<String>? toolPolicyJson,
+    Value<String>? skillIdsJson,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -1641,6 +1687,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
       systemPrompt: systemPrompt ?? this.systemPrompt,
       defaultSelectionJson: defaultSelectionJson ?? this.defaultSelectionJson,
       toolPolicyJson: toolPolicyJson ?? this.toolPolicyJson,
+      skillIdsJson: skillIdsJson ?? this.skillIdsJson,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -1666,6 +1713,9 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     if (toolPolicyJson.present) {
       map['tool_policy_json'] = Variable<String>(toolPolicyJson.value);
     }
+    if (skillIdsJson.present) {
+      map['skill_ids_json'] = Variable<String>(skillIdsJson.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -1683,6 +1733,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
           ..write('systemPrompt: $systemPrompt, ')
           ..write('defaultSelectionJson: $defaultSelectionJson, ')
           ..write('toolPolicyJson: $toolPolicyJson, ')
+          ..write('skillIdsJson: $skillIdsJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -6274,6 +6325,429 @@ class McpServersCompanion extends UpdateCompanion<McpServerRow> {
   }
 }
 
+class $SkillInstallationsTable extends SkillInstallations
+    with TableInfo<$SkillInstallationsTable, SkillInstallationRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SkillInstallationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _snapshotJsonMeta = const VerificationMeta(
+    'snapshotJson',
+  );
+  @override
+  late final GeneratedColumn<String> snapshotJson = GeneratedColumn<String>(
+    'snapshot_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _enabledMeta = const VerificationMeta(
+    'enabled',
+  );
+  @override
+  late final GeneratedColumn<bool> enabled = GeneratedColumn<bool>(
+    'enabled',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("enabled" IN (0, 1))',
+    ),
+    defaultValue: const Constant(true),
+  );
+  static const VerificationMeta _deletingMeta = const VerificationMeta(
+    'deleting',
+  );
+  @override
+  late final GeneratedColumn<bool> deleting = GeneratedColumn<bool>(
+    'deleting',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("deleting" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _installedAtMeta = const VerificationMeta(
+    'installedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> installedAt = GeneratedColumn<DateTime>(
+    'installed_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    snapshotJson,
+    enabled,
+    deleting,
+    installedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'skill_installations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SkillInstallationRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('snapshot_json')) {
+      context.handle(
+        _snapshotJsonMeta,
+        snapshotJson.isAcceptableOrUnknown(
+          data['snapshot_json']!,
+          _snapshotJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_snapshotJsonMeta);
+    }
+    if (data.containsKey('enabled')) {
+      context.handle(
+        _enabledMeta,
+        enabled.isAcceptableOrUnknown(data['enabled']!, _enabledMeta),
+      );
+    }
+    if (data.containsKey('deleting')) {
+      context.handle(
+        _deletingMeta,
+        deleting.isAcceptableOrUnknown(data['deleting']!, _deletingMeta),
+      );
+    }
+    if (data.containsKey('installed_at')) {
+      context.handle(
+        _installedAtMeta,
+        installedAt.isAcceptableOrUnknown(
+          data['installed_at']!,
+          _installedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_installedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  SkillInstallationRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SkillInstallationRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      snapshotJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}snapshot_json'],
+      )!,
+      enabled: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}enabled'],
+      )!,
+      deleting: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}deleting'],
+      )!,
+      installedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}installed_at'],
+      )!,
+    );
+  }
+
+  @override
+  $SkillInstallationsTable createAlias(String alias) {
+    return $SkillInstallationsTable(attachedDatabase, alias);
+  }
+}
+
+class SkillInstallationRow extends DataClass
+    implements Insertable<SkillInstallationRow> {
+  final String id;
+  final String name;
+  final String snapshotJson;
+  final bool enabled;
+  final bool deleting;
+  final DateTime installedAt;
+  const SkillInstallationRow({
+    required this.id,
+    required this.name,
+    required this.snapshotJson,
+    required this.enabled,
+    required this.deleting,
+    required this.installedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['snapshot_json'] = Variable<String>(snapshotJson);
+    map['enabled'] = Variable<bool>(enabled);
+    map['deleting'] = Variable<bool>(deleting);
+    map['installed_at'] = Variable<DateTime>(installedAt);
+    return map;
+  }
+
+  SkillInstallationsCompanion toCompanion(bool nullToAbsent) {
+    return SkillInstallationsCompanion(
+      id: Value(id),
+      name: Value(name),
+      snapshotJson: Value(snapshotJson),
+      enabled: Value(enabled),
+      deleting: Value(deleting),
+      installedAt: Value(installedAt),
+    );
+  }
+
+  factory SkillInstallationRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SkillInstallationRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      snapshotJson: serializer.fromJson<String>(json['snapshotJson']),
+      enabled: serializer.fromJson<bool>(json['enabled']),
+      deleting: serializer.fromJson<bool>(json['deleting']),
+      installedAt: serializer.fromJson<DateTime>(json['installedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'snapshotJson': serializer.toJson<String>(snapshotJson),
+      'enabled': serializer.toJson<bool>(enabled),
+      'deleting': serializer.toJson<bool>(deleting),
+      'installedAt': serializer.toJson<DateTime>(installedAt),
+    };
+  }
+
+  SkillInstallationRow copyWith({
+    String? id,
+    String? name,
+    String? snapshotJson,
+    bool? enabled,
+    bool? deleting,
+    DateTime? installedAt,
+  }) => SkillInstallationRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    snapshotJson: snapshotJson ?? this.snapshotJson,
+    enabled: enabled ?? this.enabled,
+    deleting: deleting ?? this.deleting,
+    installedAt: installedAt ?? this.installedAt,
+  );
+  SkillInstallationRow copyWithCompanion(SkillInstallationsCompanion data) {
+    return SkillInstallationRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      snapshotJson: data.snapshotJson.present
+          ? data.snapshotJson.value
+          : this.snapshotJson,
+      enabled: data.enabled.present ? data.enabled.value : this.enabled,
+      deleting: data.deleting.present ? data.deleting.value : this.deleting,
+      installedAt: data.installedAt.present
+          ? data.installedAt.value
+          : this.installedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SkillInstallationRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('snapshotJson: $snapshotJson, ')
+          ..write('enabled: $enabled, ')
+          ..write('deleting: $deleting, ')
+          ..write('installedAt: $installedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(id, name, snapshotJson, enabled, deleting, installedAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SkillInstallationRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.snapshotJson == this.snapshotJson &&
+          other.enabled == this.enabled &&
+          other.deleting == this.deleting &&
+          other.installedAt == this.installedAt);
+}
+
+class SkillInstallationsCompanion
+    extends UpdateCompanion<SkillInstallationRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> snapshotJson;
+  final Value<bool> enabled;
+  final Value<bool> deleting;
+  final Value<DateTime> installedAt;
+  final Value<int> rowid;
+  const SkillInstallationsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.snapshotJson = const Value.absent(),
+    this.enabled = const Value.absent(),
+    this.deleting = const Value.absent(),
+    this.installedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SkillInstallationsCompanion.insert({
+    required String id,
+    required String name,
+    required String snapshotJson,
+    this.enabled = const Value.absent(),
+    this.deleting = const Value.absent(),
+    required DateTime installedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       snapshotJson = Value(snapshotJson),
+       installedAt = Value(installedAt);
+  static Insertable<SkillInstallationRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? snapshotJson,
+    Expression<bool>? enabled,
+    Expression<bool>? deleting,
+    Expression<DateTime>? installedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (snapshotJson != null) 'snapshot_json': snapshotJson,
+      if (enabled != null) 'enabled': enabled,
+      if (deleting != null) 'deleting': deleting,
+      if (installedAt != null) 'installed_at': installedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SkillInstallationsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? snapshotJson,
+    Value<bool>? enabled,
+    Value<bool>? deleting,
+    Value<DateTime>? installedAt,
+    Value<int>? rowid,
+  }) {
+    return SkillInstallationsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      snapshotJson: snapshotJson ?? this.snapshotJson,
+      enabled: enabled ?? this.enabled,
+      deleting: deleting ?? this.deleting,
+      installedAt: installedAt ?? this.installedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (snapshotJson.present) {
+      map['snapshot_json'] = Variable<String>(snapshotJson.value);
+    }
+    if (enabled.present) {
+      map['enabled'] = Variable<bool>(enabled.value);
+    }
+    if (deleting.present) {
+      map['deleting'] = Variable<bool>(deleting.value);
+    }
+    if (installedAt.present) {
+      map['installed_at'] = Variable<DateTime>(installedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SkillInstallationsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('snapshotJson: $snapshotJson, ')
+          ..write('enabled: $enabled, ')
+          ..write('deleting: $deleting, ')
+          ..write('installedAt: $installedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -6288,6 +6762,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AgentRunsTable agentRuns = $AgentRunsTable(this);
   late final $ToolCallsTable toolCalls = $ToolCallsTable(this);
   late final $McpServersTable mcpServers = $McpServersTable(this);
+  late final $SkillInstallationsTable skillInstallations =
+      $SkillInstallationsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -6302,6 +6778,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     agentRuns,
     toolCalls,
     mcpServers,
+    skillInstallations,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -7169,6 +7646,7 @@ typedef $$AssistantsTableCreateCompanionBuilder = AssistantsCompanion Function({
   Value<String> systemPrompt,
   Value<String?> defaultSelectionJson,
   Value<String> toolPolicyJson,
+  Value<String> skillIdsJson,
   required DateTime createdAt,
   Value<int> rowid,
 });
@@ -7178,6 +7656,7 @@ typedef $$AssistantsTableUpdateCompanionBuilder = AssistantsCompanion Function({
   Value<String> systemPrompt,
   Value<String?> defaultSelectionJson,
   Value<String> toolPolicyJson,
+  Value<String> skillIdsJson,
   Value<DateTime> createdAt,
   Value<int> rowid,
 });
@@ -7213,6 +7692,11 @@ class $$AssistantsTableFilterComposer
 
   ColumnFilters<String> get toolPolicyJson => $composableBuilder(
     column: $table.toolPolicyJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get skillIdsJson => $composableBuilder(
+    column: $table.skillIdsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7256,6 +7740,11 @@ class $$AssistantsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get skillIdsJson => $composableBuilder(
+    column: $table.skillIdsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -7289,6 +7778,11 @@ class $$AssistantsTableAnnotationComposer
 
   GeneratedColumn<String> get toolPolicyJson => $composableBuilder(
     column: $table.toolPolicyJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get skillIdsJson => $composableBuilder(
+    column: $table.skillIdsJson,
     builder: (column) => column,
   );
 
@@ -7332,6 +7826,7 @@ class $$AssistantsTableTableManager
                 Value<String> systemPrompt = const Value.absent(),
                 Value<String?> defaultSelectionJson = const Value.absent(),
                 Value<String> toolPolicyJson = const Value.absent(),
+                Value<String> skillIdsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => AssistantsCompanion(
@@ -7340,6 +7835,7 @@ class $$AssistantsTableTableManager
                 systemPrompt: systemPrompt,
                 defaultSelectionJson: defaultSelectionJson,
                 toolPolicyJson: toolPolicyJson,
+                skillIdsJson: skillIdsJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -7350,6 +7846,7 @@ class $$AssistantsTableTableManager
                 Value<String> systemPrompt = const Value.absent(),
                 Value<String?> defaultSelectionJson = const Value.absent(),
                 Value<String> toolPolicyJson = const Value.absent(),
+                Value<String> skillIdsJson = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => AssistantsCompanion.insert(
@@ -7358,6 +7855,7 @@ class $$AssistantsTableTableManager
                 systemPrompt: systemPrompt,
                 defaultSelectionJson: defaultSelectionJson,
                 toolPolicyJson: toolPolicyJson,
+                skillIdsJson: skillIdsJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -10356,6 +10854,253 @@ typedef $$McpServersTableProcessedTableManager =
       McpServerRow,
       PrefetchHooks Function()
     >;
+typedef $$SkillInstallationsTableCreateCompanionBuilder =
+    SkillInstallationsCompanion Function({
+      required String id,
+      required String name,
+      required String snapshotJson,
+      Value<bool> enabled,
+      Value<bool> deleting,
+      required DateTime installedAt,
+      Value<int> rowid,
+    });
+typedef $$SkillInstallationsTableUpdateCompanionBuilder =
+    SkillInstallationsCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<String> snapshotJson,
+      Value<bool> enabled,
+      Value<bool> deleting,
+      Value<DateTime> installedAt,
+      Value<int> rowid,
+    });
+
+class $$SkillInstallationsTableFilterComposer
+    extends Composer<_$AppDatabase, $SkillInstallationsTable> {
+  $$SkillInstallationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get snapshotJson => $composableBuilder(
+    column: $table.snapshotJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get deleting => $composableBuilder(
+    column: $table.deleting,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get installedAt => $composableBuilder(
+    column: $table.installedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SkillInstallationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $SkillInstallationsTable> {
+  $$SkillInstallationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get snapshotJson => $composableBuilder(
+    column: $table.snapshotJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get enabled => $composableBuilder(
+    column: $table.enabled,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get deleting => $composableBuilder(
+    column: $table.deleting,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get installedAt => $composableBuilder(
+    column: $table.installedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SkillInstallationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SkillInstallationsTable> {
+  $$SkillInstallationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get snapshotJson => $composableBuilder(
+    column: $table.snapshotJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get enabled =>
+      $composableBuilder(column: $table.enabled, builder: (column) => column);
+
+  GeneratedColumn<bool> get deleting =>
+      $composableBuilder(column: $table.deleting, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get installedAt => $composableBuilder(
+    column: $table.installedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$SkillInstallationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SkillInstallationsTable,
+          SkillInstallationRow,
+          $$SkillInstallationsTableFilterComposer,
+          $$SkillInstallationsTableOrderingComposer,
+          $$SkillInstallationsTableAnnotationComposer,
+          $$SkillInstallationsTableCreateCompanionBuilder,
+          $$SkillInstallationsTableUpdateCompanionBuilder,
+          (
+            SkillInstallationRow,
+            BaseReferences<
+              _$AppDatabase,
+              $SkillInstallationsTable,
+              SkillInstallationRow
+            >,
+          ),
+          SkillInstallationRow,
+          PrefetchHooks Function()
+        > {
+  $$SkillInstallationsTableTableManager(
+    _$AppDatabase db,
+    $SkillInstallationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SkillInstallationsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SkillInstallationsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SkillInstallationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> snapshotJson = const Value.absent(),
+                Value<bool> enabled = const Value.absent(),
+                Value<bool> deleting = const Value.absent(),
+                Value<DateTime> installedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SkillInstallationsCompanion(
+                id: id,
+                name: name,
+                snapshotJson: snapshotJson,
+                enabled: enabled,
+                deleting: deleting,
+                installedAt: installedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String snapshotJson,
+                Value<bool> enabled = const Value.absent(),
+                Value<bool> deleting = const Value.absent(),
+                required DateTime installedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => SkillInstallationsCompanion.insert(
+                id: id,
+                name: name,
+                snapshotJson: snapshotJson,
+                enabled: enabled,
+                deleting: deleting,
+                installedAt: installedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SkillInstallationsTable, SkillInstallationRow>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SkillInstallationsTable,
+                    SkillInstallationRow
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SkillInstallationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SkillInstallationsTable,
+      SkillInstallationRow,
+      $$SkillInstallationsTableFilterComposer,
+      $$SkillInstallationsTableOrderingComposer,
+      $$SkillInstallationsTableAnnotationComposer,
+      $$SkillInstallationsTableCreateCompanionBuilder,
+      $$SkillInstallationsTableUpdateCompanionBuilder,
+      (
+        SkillInstallationRow,
+        BaseReferences<
+          _$AppDatabase,
+          $SkillInstallationsTable,
+          SkillInstallationRow
+        >,
+      ),
+      SkillInstallationRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -10378,6 +11123,8 @@ class $AppDatabaseManager {
       $$ToolCallsTableTableManager(_db, _db.toolCalls);
   $$McpServersTableTableManager get mcpServers =>
       $$McpServersTableTableManager(_db, _db.mcpServers);
+  $$SkillInstallationsTableTableManager get skillInstallations =>
+      $$SkillInstallationsTableTableManager(_db, _db.skillInstallations);
 }
 
 // **************************************************************************

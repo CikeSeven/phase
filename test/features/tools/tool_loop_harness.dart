@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:phase/features/mcp/mcp_connections.dart';
+import 'package:phase/data/repositories/skill_repository.dart';
 
 import 'dart:io';
 
@@ -280,6 +281,12 @@ class ToolLoopHarness {
         }),
         sharedPreferencesProvider.overrideWith((ref) => preferences),
         appDatabaseProvider.overrideWith((ref) => database),
+        skillRepositoryProvider.overrideWith(
+          (ref) => SkillRepository(
+            database,
+            Directory(p.join(tempDir.path, 'skills')),
+          ),
+        ),
         secureKeyStorageProvider.overrideWith((ref) => SecureKeyStorage(keys)),
         // 附件与产物写到临时目录，不依赖平台文档目录。
         attachmentStorageProvider.overrideWith(

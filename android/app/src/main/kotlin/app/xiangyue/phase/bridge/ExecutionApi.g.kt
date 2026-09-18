@@ -922,6 +922,104 @@ data class HostReply (
     return "HostReply(error=$error)"
   }
 }
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class SkillDirectoryImport (
+  val id: String,
+  val maxEntries: Long,
+  val maxBytes: Long,
+  val maxFileBytes: Long,
+  val maxDepth: Long,
+  val maxPathLength: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SkillDirectoryImport {
+      val id = pigeonVar_list[0] as String
+      val maxEntries = pigeonVar_list[1] as Long
+      val maxBytes = pigeonVar_list[2] as Long
+      val maxFileBytes = pigeonVar_list[3] as Long
+      val maxDepth = pigeonVar_list[4] as Long
+      val maxPathLength = pigeonVar_list[5] as Long
+      return SkillDirectoryImport(id, maxEntries, maxBytes, maxFileBytes, maxDepth, maxPathLength)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      maxEntries,
+      maxBytes,
+      maxFileBytes,
+      maxDepth,
+      maxPathLength,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SkillDirectoryImport
+    return ExecutionApiPigeonUtils.deepEquals(this.id, other.id) && ExecutionApiPigeonUtils.deepEquals(this.maxEntries, other.maxEntries) && ExecutionApiPigeonUtils.deepEquals(this.maxBytes, other.maxBytes) && ExecutionApiPigeonUtils.deepEquals(this.maxFileBytes, other.maxFileBytes) && ExecutionApiPigeonUtils.deepEquals(this.maxDepth, other.maxDepth) && ExecutionApiPigeonUtils.deepEquals(this.maxPathLength, other.maxPathLength)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.id)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.maxEntries)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.maxBytes)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.maxFileBytes)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.maxDepth)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.maxPathLength)
+    return result
+  }
+  override fun toString(): String {
+    return "SkillDirectoryImport(id=$id, maxEntries=$maxEntries, maxBytes=$maxBytes, maxFileBytes=$maxFileBytes, maxDepth=$maxDepth, maxPathLength=$maxPathLength)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
+data class SkillDirectoryCopy (
+  val path: String,
+  val name: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SkillDirectoryCopy {
+      val path = pigeonVar_list[0] as String
+      val name = pigeonVar_list[1] as String
+      return SkillDirectoryCopy(path, name)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      path,
+      name,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SkillDirectoryCopy
+    return ExecutionApiPigeonUtils.deepEquals(this.path, other.path) && ExecutionApiPigeonUtils.deepEquals(this.name, other.name)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.path)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.name)
+    return result
+  }
+  override fun toString(): String {
+    return "SkillDirectoryCopy(path=$path, name=$name)"
+  }
+}
 private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -1020,6 +1118,16 @@ private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
           HostReply.fromList(it)
         }
       }
+      148.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SkillDirectoryImport.fromList(it)
+        }
+      }
+      149.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SkillDirectoryCopy.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -1099,6 +1207,14 @@ private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
       }
       is HostReply -> {
         stream.write(147)
+        writeValue(stream, value.toList())
+      }
+      is SkillDirectoryImport -> {
+        stream.write(148)
+        writeValue(stream, value.toList())
+      }
+      is SkillDirectoryCopy -> {
+        stream.write(149)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1237,6 +1353,8 @@ interface ExecutionHostApi {
 }
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface ExecutionSetupApi {
+  suspend fun importSkillDirectory(request: SkillDirectoryImport): SkillDirectoryCopy?
+  fun cancelSkillImport(id: String)
   suspend fun selectFile(directory: Boolean): FileGrant?
   suspend fun fileGrants(): List<FileGrant>
   fun releaseFileGrant(uri: String)
@@ -1253,6 +1371,43 @@ interface ExecutionSetupApi {
     @JvmOverloads
     fun setUp(binaryMessenger: BinaryMessenger, api: ExecutionSetupApi?, messageChannelSuffix: String = "") {
       val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.importSkillDirectory$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val requestArg = args[0] as SkillDirectoryImport
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.importSkillDirectory(requestArg))
+              } catch (exception: Throwable) {
+                ExecutionApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.cancelSkillImport$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val idArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.cancelSkillImport(idArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              ExecutionApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
       run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.selectFile$separatedMessageChannelSuffix", codec)
         if (api != null) {

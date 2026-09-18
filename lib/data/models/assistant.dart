@@ -61,6 +61,7 @@ class Assistant {
     required this.systemPrompt,
     this.defaultModelSelection,
     this.toolPolicy = defaultToolPolicyConfig,
+    this.skillIds = const {},
     required this.createdAt,
   });
 
@@ -69,6 +70,7 @@ class Assistant {
   final String systemPrompt;
   final ModelSelection? defaultModelSelection;
   final ToolPolicyConfig toolPolicy;
+  final Set<String> skillIds;
   final DateTime createdAt;
 
   Assistant copyWith({
@@ -76,6 +78,7 @@ class Assistant {
     String? systemPrompt,
     ModelSelection? defaultModelSelection,
     ToolPolicyConfig? toolPolicy,
+    Set<String>? skillIds,
   }) {
     return Assistant(
       id: id,
@@ -84,6 +87,7 @@ class Assistant {
       defaultModelSelection:
           defaultModelSelection ?? this.defaultModelSelection,
       toolPolicy: toolPolicy ?? this.toolPolicy,
+      skillIds: skillIds ?? this.skillIds,
       createdAt: createdAt,
     );
   }

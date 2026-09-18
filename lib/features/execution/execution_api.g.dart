@@ -916,6 +916,127 @@ class HostReply {
   }
 }
 
+class SkillDirectoryImport {
+  SkillDirectoryImport({
+    required this.id,
+    required this.maxEntries,
+    required this.maxBytes,
+    required this.maxFileBytes,
+    required this.maxDepth,
+    required this.maxPathLength,
+  });
+
+  String id;
+
+  int maxEntries;
+
+  int maxBytes;
+
+  int maxFileBytes;
+
+  int maxDepth;
+
+  int maxPathLength;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      maxEntries,
+      maxBytes,
+      maxFileBytes,
+      maxDepth,
+      maxPathLength,
+    ];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static SkillDirectoryImport decode(Object result) {
+    result as List<Object?>;
+    return SkillDirectoryImport(
+      id: result[0]! as String,
+      maxEntries: result[1]! as int,
+      maxBytes: result[2]! as int,
+      maxFileBytes: result[3]! as int,
+      maxDepth: result[4]! as int,
+      maxPathLength: result[5]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SkillDirectoryImport || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(id, other.id) &&
+        _deepEquals(maxEntries, other.maxEntries) &&
+        _deepEquals(maxBytes, other.maxBytes) &&
+        _deepEquals(maxFileBytes, other.maxFileBytes) &&
+        _deepEquals(maxDepth, other.maxDepth) &&
+        _deepEquals(maxPathLength, other.maxPathLength);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SkillDirectoryImport(id: $id, maxEntries: $maxEntries, maxBytes: $maxBytes, maxFileBytes: $maxFileBytes, maxDepth: $maxDepth, maxPathLength: $maxPathLength)';
+  }
+}
+
+class SkillDirectoryCopy {
+  SkillDirectoryCopy({required this.path, required this.name});
+
+  String path;
+
+  String name;
+
+  List<Object?> _toList() {
+    return <Object?>[path, name];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static SkillDirectoryCopy decode(Object result) {
+    result as List<Object?>;
+    return SkillDirectoryCopy(
+      path: result[0]! as String,
+      name: result[1]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SkillDirectoryCopy || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(path, other.path) && _deepEquals(name, other.name);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SkillDirectoryCopy(path: $path, name: $name)';
+  }
+}
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -980,6 +1101,12 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is HostReply) {
       buffer.putUint8(147);
       writeValue(buffer, value.encode());
+    } else if (value is SkillDirectoryImport) {
+      buffer.putUint8(148);
+      writeValue(buffer, value.encode());
+    } else if (value is SkillDirectoryCopy) {
+      buffer.putUint8(149);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -1033,6 +1160,10 @@ class _PigeonCodec extends StandardMessageCodec {
         return ExecutionConfirmation.decode(readValue(buffer)!);
       case 147:
         return HostReply.decode(readValue(buffer)!);
+      case 148:
+        return SkillDirectoryImport.decode(readValue(buffer)!);
+      case 149:
+        return SkillDirectoryCopy.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -1194,6 +1325,49 @@ class ExecutionSetupApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
   final String pigeonVar_messageChannelSuffix;
+
+  Future<SkillDirectoryCopy?> importSkillDirectory(
+    SkillDirectoryImport request,
+  ) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionSetupApi.importSkillDirectory$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[request],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+    return pigeonVar_replyValue as SkillDirectoryCopy?;
+  }
+
+  Future<void> cancelSkillImport(String id) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionSetupApi.cancelSkillImport$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[id],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
 
   Future<FileGrant?> selectFile(bool directory) async {
     final pigeonVar_channelName =

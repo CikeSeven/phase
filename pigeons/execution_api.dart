@@ -227,8 +227,34 @@ abstract class ExecutionHostApi {
   void setConfirmation(ExecutionConfirmation? confirmation);
 }
 
+class SkillDirectoryImport {
+  SkillDirectoryImport({
+    required this.id,
+    required this.maxEntries,
+    required this.maxBytes,
+    required this.maxFileBytes,
+    required this.maxDepth,
+    required this.maxPathLength,
+  });
+  String id;
+  int maxEntries;
+  int maxBytes;
+  int maxFileBytes;
+  int maxDepth;
+  int maxPathLength;
+}
+
+class SkillDirectoryCopy {
+  SkillDirectoryCopy({required this.path, required this.name});
+  String path;
+  String name;
+}
+
 @HostApi()
 abstract class ExecutionSetupApi {
+  @async
+  SkillDirectoryCopy? importSkillDirectory(SkillDirectoryImport request);
+  void cancelSkillImport(String id);
   @async
   FileGrant? selectFile(bool directory);
   @async

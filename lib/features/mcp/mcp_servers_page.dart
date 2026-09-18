@@ -10,26 +10,6 @@ import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
 
-class ExtensionsPage extends StatelessWidget {
-  const ExtensionsPage({super.key});
-  @override
-  Widget build(BuildContext context) => AppScaffold(
-    title: '扩展',
-    body: ListView(
-      padding: const EdgeInsets.all(AppSpacing.l),
-      children: [
-        ListTile(
-          leading: const Icon(Symbols.extension),
-          title: const Text('MCP 服务'),
-          subtitle: const Text('连接远程工具，为助手选择使用范围'),
-          trailing: const Icon(Symbols.chevron_right),
-          onTap: () => context.push('/settings/extensions/mcp'),
-        ),
-      ],
-    ),
-  );
-}
-
 class McpServersPage extends ConsumerWidget {
   const McpServersPage({super.key});
   @override

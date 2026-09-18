@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import app.xiangyue.phase.applications.ApplicationListPermission
-import app.xiangyue.phase.execution.ExecutionSetup
 import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
@@ -49,6 +48,6 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == ExecutionSetup.PICK_FILE) runtime.coordinator.setup.pickerResult(resultCode, data)
+        runtime.coordinator.setup.pickerResult(requestCode, resultCode, data)
     }
 }

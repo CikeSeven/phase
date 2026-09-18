@@ -16,6 +16,7 @@ class ToolPresentation {
   static IconData icon(String toolName) => switch (toolName) {
     'system_info' => Symbols.schedule,
     'read_file' => Symbols.description,
+    'read_skill' => Symbols.auto_stories,
     'write_file' => Symbols.save,
     'list_files' => Symbols.folder_open,
     'http_request' => Symbols.language,
@@ -37,6 +38,7 @@ class ToolPresentation {
   static String toolLabel(String toolName) => switch (toolName) {
     'system_info' => '时间与设备信息',
     'read_file' => '读取文件',
+    'read_skill' => '读取 Skill',
     'write_file' => '写入文件',
     'list_files' => '列出文件',
     'http_request' => 'HTTP 请求',
@@ -149,6 +151,7 @@ class ToolPresentation {
       'actions': '手势组合（按声明的坐标空间顺序执行）',
     },
     'read_file': {'reference': '引用', 'offset': '起始行', 'limit': '读取行数'},
+    'read_skill': {'skillId': 'Skill', 'relativePath': '资源', 'offset': '读取位置'},
     'write_file': {'path': '写入路径', 'content': '写入内容'},
     'http_request': {
       'url': '地址',

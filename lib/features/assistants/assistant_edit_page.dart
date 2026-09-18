@@ -18,6 +18,8 @@ import '../chat/chat_controller.dart';
 import 'assistant_model_sheet.dart';
 import 'assistant_tool_policy_section.dart';
 import '../mcp/assistant_mcp_section.dart';
+import '../skills/assistant_skills_section.dart';
+import '../../../data/models/tool_policy.dart';
 
 /// 助手新增 / 编辑：名称、系统提示词、默认模型与工具范围。
 class AssistantEditPage extends ConsumerStatefulWidget {
@@ -37,6 +39,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
 
   ModelSelection? _defaultModel;
   ToolPolicyConfig _toolPolicy = defaultToolPolicyConfig;
+  Set<String> _skillIds = {};
   bool _clearDefaultModel = false;
   bool _loading = true;
   bool _saving = false;
@@ -84,6 +87,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
         _promptController.text = assistant.systemPrompt;
         _defaultModel = assistant.defaultModelSelection;
         _toolPolicy = assistant.toolPolicy;
+        _skillIds = {...assistant.skillIds};
         _loading = false;
       });
     } catch (error) {
@@ -120,6 +124,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           systemPrompt: _promptController.text,
           defaultModelSelection: _defaultModel,
           toolPolicy: _toolPolicy,
+          skillIds: _skillIds,
         );
       } else {
         await controller.updateAssistant(
@@ -129,6 +134,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           defaultModelSelection: _defaultModel,
           clearDefaultModel: _clearDefaultModel,
           toolPolicy: _toolPolicy,
+          skillIds: _skillIds,
         );
       }
       if (!mounted) return;
@@ -294,6 +300,23 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                     onChanged: _saving
                         ? null
                         : (policy) => setState(() => _toolPolicy = policy),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  AssistantSkillsSection(
+                    ids: _skillIds,
+                    policy:
+                        _toolPolicy.policies['read_skill'] ?? ToolPolicy.ask,
+                    onChanged: _saving
+                        ? null
+                        : (ids) => setState(() => _skillIds = ids),
+                    onPolicyChanged: _saving
+                        ? null
+                        : (policy) => setState(
+                            () => _toolPolicy = _toolPolicy.withPolicy(
+                              'read_skill',
+                              policy,
+                            ),
+                          ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   AssistantMcpSection(

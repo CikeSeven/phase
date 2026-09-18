@@ -52,6 +52,7 @@ Assistant assistantFromRow(AssistantRow row) => Assistant(
   systemPrompt: row.systemPrompt,
   defaultModelSelection: _decodeSelection(row.defaultSelectionJson),
   toolPolicy: ToolPolicyConfig.decode(row.toolPolicyJson),
+  skillIds: (jsonDecode(row.skillIdsJson) as List).cast<String>().toSet(),
   createdAt: row.createdAt,
 );
 
@@ -204,6 +205,7 @@ AssistantsCompanion assistantCompanion(Assistant assistant) =>
         _encodeSelection(assistant.defaultModelSelection),
       ),
       toolPolicyJson: Value(assistant.toolPolicy.encode()),
+      skillIdsJson: Value(jsonEncode(assistant.skillIds.toList())),
       createdAt: Value(assistant.createdAt),
     );
 
