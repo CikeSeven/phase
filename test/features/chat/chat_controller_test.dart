@@ -473,7 +473,13 @@ void main() {
       if (!beforeFirstSend) await controller().send('第一轮');
       await container
           .read(modelSelectionProvider.notifier)
-          .select(other.id, 'model-b', effort: ReasoningEffort.high);
+          .saveSelection(
+            model.ModelSelection(
+              profileId: other.id,
+              modelId: 'model-b',
+              reasoningEffort: ReasoningEffort.high,
+            ),
+          );
       if (beforeFirstSend) {
         expect(activeConversation(), isNull);
         expect(await db.select(db.conversations).get(), isEmpty);
@@ -525,7 +531,13 @@ void main() {
     await controller().selectAssistant(assistant.id);
     await container
         .read(modelSelectionProvider.notifier)
-        .selectEffort(ReasoningEffort.off);
+        .saveSelection(
+          model.ModelSelection(
+            profileId: profile.id,
+            modelId: 'model-a',
+            reasoningEffort: ReasoningEffort.off,
+          ),
+        );
     await controller().send('关闭思考');
     final conversationId = activeConversation()!;
     expect(fakeProvider.lastRequest!.modelId, 'model-a');
@@ -583,7 +595,13 @@ void main() {
 
     await container
         .read(modelSelectionProvider.notifier)
-        .selectEffort(ReasoningEffort.medium);
+        .saveSelection(
+          model.ModelSelection(
+            profileId: profile.id,
+            modelId: 'model-a',
+            reasoningEffort: ReasoningEffort.medium,
+          ),
+        );
     await container.read(modelSelectionProvider.future);
 
     await controller().send('再来一次');
@@ -599,7 +617,13 @@ void main() {
     await container.refresh(providerProfilesProvider.future);
     await container
         .read(modelSelectionProvider.notifier)
-        .select(profile.id, 'model-b');
+        .saveSelection(
+          model.ModelSelection(
+            profileId: profile.id,
+            modelId: 'model-b',
+            reasoningEffort: ReasoningEffort.medium,
+          ),
+        );
     await container.read(modelSelectionProvider.future);
     await controller().send('未登记模型');
     expect(fakeProvider.lastRequest!.modelId, 'model-b');
@@ -617,7 +641,13 @@ void main() {
     await container.refresh(providerProfilesProvider.future);
     await container
         .read(modelSelectionProvider.notifier)
-        .select(profile.id, 'model-b');
+        .saveSelection(
+          model.ModelSelection(
+            profileId: profile.id,
+            modelId: 'model-b',
+            reasoningEffort: ReasoningEffort.medium,
+          ),
+        );
     await container.read(modelSelectionProvider.future);
 
     await controller().send('再来');

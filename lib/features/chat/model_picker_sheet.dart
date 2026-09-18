@@ -13,13 +13,14 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../data/models/model_selection.dart' as model;
 import '../../../data/models/profile_model.dart';
 import '../../../data/models/provider_profile.dart';
 import '../../../data/models/reasoning_effort.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
 import 'model_selection.dart';
 
-/// 打开模型与推理等级面板；只有确认才保存本轮选择。
+/// 打开模型与推理等级面板；切换后自动保存，面板保持打开。
 Future<void> showModelPickerSheet(BuildContext context) {
   return showModalBottomSheet<void>(
     context: context,
@@ -30,7 +31,7 @@ Future<void> showModelPickerSheet(BuildContext context) {
   );
 }
 
-/// 可搜索的本地模型列表与独立于列表的推理、确认操作。
+/// 可搜索的本地模型列表与独立于列表的推理设置。
 class ModelPickerSheet extends ConsumerStatefulWidget {
   const ModelPickerSheet({super.key});
 
@@ -47,13 +48,13 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   final _headerKeys = <String, GlobalKey>{};
   final _estimatedOffsets = <String, double>{};
   ChatModelSelection? _initialSelection;
-  String? _draftProfileId;
-  String? _draftModel;
-  ReasoningEffort _draftEffort = ReasoningEffort.off;
+  String? _selectedProfileId;
+  String? _selectedModel;
+  ReasoningEffort _selectedEffort = ReasoningEffort.off;
   String _query = '';
   String? _saveError;
   bool _initialized = false;
-  bool _saving = false;
+  int _saveRevision = 0;
 
   @override
   void initState() {
@@ -70,9 +71,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       setState(() {
         _initialized = true;
         _initialSelection = selection;
-        _draftProfileId = selection?.profile.id;
-        _draftModel = selection?.model;
-        _draftEffort = selection?.effort ?? ReasoningEffort.off;
+        _selectedProfileId = selection?.profile.id;
+        _selectedModel = selection?.model;
+        _selectedEffort = selection?.effort ?? ReasoningEffort.off;
       });
     }, fireImmediately: true);
   }
@@ -89,43 +90,42 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final profiles = ref.watch(providerProfilesProvider);
     final selection = ref.watch(modelSelectionProvider);
     final entries = _entriesFor(profiles.value ?? const []);
-    final draft = _selectedEntry(entries);
+    final selected = _selectedEntry(entries);
 
-    return PopScope(
-      canPop: !_saving,
-      child: AppSheet(
-        title: '选择模型',
-        titleTrailing: _initialized && draft?.model != null
-            ? _buildDraftTrailing(draft!)
-            : null,
-        showClose: !_saving,
-        footer: _initialized && !profiles.hasError && entries.isNotEmpty
-            ? _buildFooter(draft)
-            : null,
-        child: profiles.when(
-          data: (profiles) {
-            if (profiles.isEmpty) {
-              return _buildStatus(
-                icon: Symbols.cloud,
-                title: '暂无服务商',
-                action: FilledButton.tonalIcon(
-                  onPressed: () => _openConfiguration(),
-                  icon: const Icon(Symbols.add),
-                  label: const Text('去配置服务商'),
-                ),
-              );
+    return AppSheet(
+      title: '选择模型',
+      titleTrailing: _initialized && selected?.model != null
+          ? _buildSelectionTrailing(selected!)
+          : null,
+      footer:
+          _initialized &&
+              !profiles.hasError &&
+              (selected?.model?.supportsReasoning == true || _saveError != null)
+          ? _buildFooter(selected)
+          : null,
+      child: profiles.when(
+        data: (profiles) {
+          if (profiles.isEmpty) {
+            return _buildStatus(
+              icon: Symbols.cloud,
+              title: '暂无服务商',
+              action: FilledButton.tonalIcon(
+                onPressed: () => _openConfiguration(),
+                icon: const Icon(Symbols.add),
+                label: const Text('去配置服务商'),
+              ),
+            );
+          }
+          if (!_initialized) {
+            if (selection.hasError) {
+              return _buildLoadError(selection.error!);
             }
-            if (!_initialized) {
-              if (selection.hasError) {
-                return _buildLoadError(selection.error!);
-              }
-              return _loading();
-            }
-            return _buildModels(entries, draft);
-          },
-          loading: _loading,
-          error: (error, _) => _buildLoadError(error),
-        ),
+            return _loading();
+          }
+          return _buildModels(entries);
+        },
+        loading: _loading,
+        error: (error, _) => _buildLoadError(error),
       ),
     );
   }
@@ -143,7 +143,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       if (initial != null &&
           initial.profile.id == profile.id &&
           !models.containsKey(initial.model)) {
-        // 当前选择不在启用列表里（手输模型或已被取消勾选）：保留为可确认项，
+        // 当前选择不在启用列表里（手输模型或已被取消勾选）：保留为可选项，
         // 沿用它在本次选择中的能力标记。
         manualModel = initial.model;
         models[initial.model] = ProfileModel(
@@ -170,15 +170,15 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   _PickerEntry? _selectedEntry(List<_PickerEntry> entries) {
     for (final entry in entries) {
       if (entry.model != null &&
-          entry.profile.id == _draftProfileId &&
-          entry.model!.id == _draftModel) {
+          entry.profile.id == _selectedProfileId &&
+          entry.model!.id == _selectedModel) {
         return entry;
       }
     }
     return null;
   }
 
-  Widget _buildModels(List<_PickerEntry> entries, _PickerEntry? draft) {
+  Widget _buildModels(List<_PickerEntry> entries) {
     final query = _query.trim().toLowerCase();
     final searching = query.isNotEmpty;
     final profiles = <ProviderProfile>[
@@ -231,7 +231,6 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
             child: TextField(
               key: _searchFieldKey,
               controller: _searchController,
-              enabled: !_saving,
               textInputAction: TextInputAction.search,
               onChanged: (value) => setState(() => _query = value),
               onSubmitted: (_) => FocusScope.of(context).unfocus(),
@@ -250,7 +249,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           ),
         ),
         if (visibleProfiles.isNotEmpty)
-          _buildProviderTabs(visibleProfiles, counts, _draftProfileId),
+          _buildProviderTabs(visibleProfiles, counts, _selectedProfileId),
         Expanded(
           child: visible.isEmpty
               ? _buildStatus(
@@ -281,7 +280,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                     final entry = item as _PickerEntry;
                     return Padding(
                       key: ValueKey((entry.profile.id, entry.model?.id)),
-                      padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
                       child: entry.model == null
                           ? _buildUnconfiguredProfile(entry.profile)
                           : _buildModelOption(entry),
@@ -318,7 +317,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     );
   }
 
-  /// 标签点击只滚动定位到对应分组，不改草稿。
+  /// 标签点击只滚动定位到对应分组，不改变选择。
   void _scrollToProvider(String profileId) {
     FocusScope.of(context).unfocus();
     final offset = _estimatedOffsets[profileId];
@@ -345,22 +344,18 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     });
   }
 
-  /// 标题右侧的紧凑摘要：待确认/当前徽标 + 草稿模型 id。
-  Widget _buildDraftTrailing(_PickerEntry draft) {
+  /// 标题右侧的紧凑摘要：保存状态与所选模型 id。
+  Widget _buildSelectionTrailing(_PickerEntry selected) {
     final theme = Theme.of(context);
-    final changed =
-        draft.profile.id != _initialSelection?.profile.id ||
-        draft.model?.id != _initialSelection?.model ||
-        _draftEffort != _initialSelection?.effort;
     return Row(
-      key: const ValueKey('model-draft-summary'),
+      key: const ValueKey('model-selection-summary'),
       children: [
-        AppBadge(label: changed ? '待确认' : '当前'),
+        AppBadge(label: _saveError != null ? '未保存' : '当前'),
         const SizedBox(width: AppSpacing.s),
         // 占满剩余宽度，在真实边界截断，不与标题五五分。
         Expanded(
           child: Text(
-            draft.model!.id,
+            selected.model!.id,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: theme.textTheme.bodySmall,
@@ -395,9 +390,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           itemBuilder: (context, index) {
             final profile = profiles[index];
             final selected = profile.id == selectedProfileId;
-            final foreground = _saving
-                ? colors.onSurface.withValues(alpha: 0.38)
-                : selected
+            final foreground = selected
                 ? colors.onPrimaryContainer
                 : colors.onSurface;
             return Semantics(
@@ -406,15 +399,17 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               button: true,
               label: profile.name,
               child: FilledButton.tonal(
-                onPressed: _saving ? null : () => _scrollToProvider(profile.id),
+                onPressed: () => _scrollToProvider(profile.id),
                 style: AppControlStyle.compact.copyWith(
                   animationDuration: AppMotion.reduce(context)
                       ? Duration.zero
                       : AppMotion.effects,
                   shape: AppControlStyle.shape(compact: true, active: selected),
                   padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: AppSpacing.m),
+                    EdgeInsets.symmetric(horizontal: AppSpacing.s),
                   ),
+                  // 色面收紧，外层按钮仍保留 48dp 触区。
+                  minimumSize: const WidgetStatePropertyAll(Size(48, 36)),
                   backgroundColor: WidgetStateProperty.resolveWith((states) {
                     if (states.contains(WidgetState.disabled)) return null;
                     return selected
@@ -423,10 +418,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                   }),
                 ),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minWidth: 64,
-                    maxWidth: 200,
-                  ),
+                  constraints: const BoxConstraints(maxWidth: 200),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -446,7 +438,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                         '${counts[profile.id] ?? 0}',
                         maxLines: 1,
                         style: theme.textTheme.labelMedium?.copyWith(
-                          color: selected || _saving
+                          color: selected
                               ? foreground
                               : colors.onSurfaceVariant,
                         ),
@@ -467,7 +459,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final colors = theme.colorScheme;
     final model = entry.model!;
     final selected =
-        entry.profile.id == _draftProfileId && model.id == _draftModel;
+        entry.profile.id == _selectedProfileId && model.id == _selectedModel;
     final foreground = selected ? colors.onPrimaryContainer : colors.onSurface;
     final metadata = [
       if (model.supportsReasoning) '支持推理',
@@ -482,11 +474,14 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       label: entry.profile.name,
       child: AppSelectionSurface(
         selected: selected,
-        onTap: _saving ? null : () => _choose(entry),
+        onTap: () => _choose(entry),
         child: ConstrainedBox(
           constraints: const BoxConstraints(minHeight: 56),
           child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.m),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.m,
+              vertical: AppSpacing.s,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -541,7 +536,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           Text('暂无模型', style: theme.textTheme.titleMedium),
           const SizedBox(height: AppSpacing.s),
           TextButton.icon(
-            onPressed: _saving ? null : () => _openConfiguration(profile.id),
+            onPressed: () => _openConfiguration(profile.id),
             icon: const Icon(Symbols.edit),
             label: const Text('配置模型'),
           ),
@@ -550,10 +545,10 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     );
   }
 
-  Widget _buildFooter(_PickerEntry? draft) {
+  Widget _buildFooter(_PickerEntry? selected) {
     final theme = Theme.of(context);
     final brand = context.brandColors;
-    final model = draft?.model;
+    final model = selected?.model;
     return Column(
       key: const ValueKey('model-picker-footer'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -565,7 +560,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               Text('推理等级', style: theme.textTheme.labelLarge),
               const Spacer(),
               Text(
-                _draftEffort.label,
+                _selectedEffort.label,
                 key: const ValueKey('reasoning-effort-label'),
                 style: theme.textTheme.labelLarge?.copyWith(
                   color: brand.onLavenderContainer,
@@ -580,23 +575,22 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               Expanded(
                 child: Slider(
                   key: const ValueKey('reasoning-effort-slider'),
-                  value: _draftEffort.index.toDouble(),
+                  value: _selectedEffort.index.toDouble(),
                   max: (ReasoningEffort.values.length - 1).toDouble(),
                   divisions: ReasoningEffort.values.length - 1,
-                  label: _draftEffort.label,
+                  label: _selectedEffort.label,
                   activeColor: brand.lavender,
-                  onChanged: _saving
-                      ? null
-                      : (value) => setState(() {
-                          _draftEffort = ReasoningEffort.values[value.round()];
-                          _saveError = null;
-                        }),
+                  onChanged: (value) => setState(() {
+                    _selectedEffort = ReasoningEffort.values[value.round()];
+                    _saveError = null;
+                  }),
+                  // 松手后保存最终档位，后续选择无需等待这次写入。
+                  onChangeEnd: (_) => _autoSaveSelection(),
                 ),
               ),
               Text('最高', style: theme.textTheme.bodySmall),
             ],
           ),
-          const SizedBox(height: AppSpacing.s),
         ],
         if (_saveError != null) ...[
           Semantics(
@@ -609,34 +603,14 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
             ),
           ),
           const SizedBox(height: AppSpacing.s),
+          Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: TextButton(
+              onPressed: _autoSaveSelection,
+              child: const Text('重试'),
+            ),
+          ),
         ],
-        OverflowBar(
-          alignment: MainAxisAlignment.spaceBetween,
-          overflowAlignment: OverflowBarAlignment.end,
-          spacing: AppSpacing.s,
-          overflowSpacing: AppSpacing.s,
-          children: [
-            TextButton(
-              onPressed: _saving ? null : () => Navigator.of(context).pop(),
-              child: const Text('取消'),
-            ),
-            FilledButton.icon(
-              key: const ValueKey('confirm-model-selection'),
-              onPressed: _saving || draft == null
-                  ? null
-                  : () => _confirm(draft),
-              icon: _saving
-                  ? SizedBox.square(
-                      dimension: 18,
-                      child: AppLoadingIndicator(
-                        color: theme.colorScheme.onPrimary,
-                      ),
-                    )
-                  : const Icon(Symbols.check),
-              label: Text(_saving ? '保存中…' : '确认选择'),
-            ),
-          ],
-        ),
       ],
     );
   }
@@ -691,13 +665,14 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     setState(() => _query = '');
   }
 
-  void _choose(_PickerEntry entry) {
+  Future<void> _choose(_PickerEntry entry) async {
     FocusScope.of(context).unfocus();
     setState(() {
-      _draftProfileId = entry.profile.id;
-      _draftModel = entry.model!.id;
+      _selectedProfileId = entry.profile.id;
+      _selectedModel = entry.model!.id;
       _saveError = null;
     });
+    await _autoSaveSelection();
   }
 
   void _openConfiguration([String? profileId]) {
@@ -710,28 +685,34 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     );
   }
 
-  Future<void> _confirm(_PickerEntry draft) async {
-    final effort = _draftEffort;
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _saving = true;
-      _saveError = null;
-    });
+  Future<void> _autoSaveSelection() async {
+    final profileId = _selectedProfileId;
+    final modelId = _selectedModel;
+    if (profileId == null || modelId == null) return;
+    final revision = ++_saveRevision;
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _saveError = null);
     try {
       await ref
           .read(modelSelectionProvider.notifier)
-          .select(draft.profile.id, draft.model!.id, effort: effort);
-      if (!mounted) return;
-      setState(() => _saving = false);
-      Navigator.of(context).pop();
+          .saveSelection(
+            model.ModelSelection(
+              profileId: profileId,
+              modelId: modelId,
+              reasoningEffort: _selectedEffort,
+            ),
+          );
     } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _saving = false;
-        _saveError = error is Failure
-            ? '未能完整保存选择：${error.userMessage}'
-            : '未能完整保存选择，请重试。';
-      });
+      // 较早选择的失败不能覆盖用户后续选择；关闭面板不取消已提交的写入。
+      if (revision != _saveRevision) return;
+      final message = error is Failure
+          ? '未能完整保存选择：${error.userMessage}'
+          : '未能完整保存选择，请重试。';
+      if (mounted) {
+        setState(() => _saveError = message);
+      } else if (messenger.mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(message)));
+      }
     }
   }
 }

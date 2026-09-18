@@ -56,9 +56,13 @@ const _initialValues = <String, Object>{
 };
 
 void main() {
-  testWidgets('模型面板无常驻教学，保留当前选择和确认推理交互', (tester) async {
+  testWidgets('模型面板移除底部操作行，切换模型与推理后自动保存', (tester) async {
     final host = await _pumpHost(tester);
     await _openPicker(tester);
+    expect(find.text('取消'), findsNothing);
+    expect(find.text('确认选择'), findsNothing);
+    expect(_confirm, findsNothing);
+    expect(tester.widget<AppSheet>(find.byType(AppSheet)).footer, isNull);
     expect(tester.widget<AppSheet>(find.byType(AppSheet)).subtitle, isNull);
     expect(find.byType(AppCard), findsNothing);
     expect(find.byIcon(Symbols.radio_button_unchecked), findsNothing);
@@ -81,7 +85,7 @@ void main() {
     for (final phrase in ['确认后用于对话', '确认前不会更改', '先选择一个模型']) {
       expect(find.textContaining(phrase), findsNothing);
     }
-    final summary = find.byKey(const ValueKey('model-draft-summary'));
+    final summary = find.byKey(const ValueKey('model-selection-summary'));
     expect(
       find.descendant(of: summary, matching: find.text('chat-basic')),
       findsOneWidget,
@@ -97,17 +101,16 @@ void main() {
       optionHeight,
     );
     await _setEffort(tester, ReasoningEffort.high);
-    await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_model'), 'think-model');
     expect(host.preferences.getString('last_reasoning_effort'), 'high');
   });
 
-  testWidgets('模型与推理仅修改草稿，取消及关闭都不改变原选择', (tester) async {
+  testWidgets('模型与推理立即保存，关闭及返回后重开保留选择', (tester) async {
     final host = await _pumpHost(tester);
     await _openPicker(tester);
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey('model-draft-summary')),
+        of: find.byKey(const ValueKey('model-selection-summary')),
         matching: find.text('当前'),
       ),
       findsOneWidget,
@@ -116,30 +119,45 @@ void main() {
 
     await _chooseModel(tester, 'daily', 'think-model');
     expect(find.byType(ModelPickerSheet), findsOneWidget);
+    expect(host.preferences.getString('last_model'), 'think-model');
     expect(_sliderValue(tester), ReasoningEffort.low.index.toDouble());
     await _setEffort(tester, ReasoningEffort.high);
-    expect(host.preferences.getString('last_model'), 'chat-basic');
-    expect(host.preferences.getString('last_reasoning_effort'), 'low');
+    expect(host.preferences.getString('last_reasoning_effort'), 'high');
     expect(
       host.container.read(modelSelectionProvider).value!.model,
-      'chat-basic',
+      'think-model',
+    );
+    expect(
+      host.container.read(modelSelectionProvider).value!.effort,
+      ReasoningEffort.high,
     );
 
-    await _tapVisible(tester, find.text('取消'));
-    expect(find.byType(ModelPickerSheet), findsNothing);
-    expect(host.preferences.getString('last_model'), 'chat-basic');
-    expect(host.preferences.getString('last_reasoning_effort'), 'low');
-
-    await _openPicker(tester);
-    await _chooseModel(tester, 'workspace', 'think-model');
     await _tapVisible(tester, find.byTooltip('关闭'));
     expect(find.byType(ModelPickerSheet), findsNothing);
-    expect(host.preferences.getString('last_profile_id'), 'daily');
-    expect(host.preferences.getString('last_model'), 'chat-basic');
+    expect(host.preferences.getString('last_model'), 'think-model');
+    expect(host.preferences.getString('last_reasoning_effort'), 'high');
+
+    await _openPicker(tester);
+    expect(_sliderValue(tester), ReasoningEffort.high.index.toDouble());
+    await _chooseModel(tester, 'workspace', 'think-model');
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(ModelPickerSheet), findsNothing);
+    expect(host.preferences.getString('last_profile_id'), 'workspace');
+    expect(host.preferences.getString('last_model'), 'think-model');
+    await _openPicker(tester);
+    expect(
+      tester
+          .widget<Semantics>(_option('workspace', 'think-model'))
+          .properties
+          .selected,
+      isTrue,
+    );
+    await _tapVisible(tester, find.byTooltip('关闭'));
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('助手有默认模型时，取消保持默认，确认后使用显式模型与推理', (tester) async {
+  testWidgets('助手有默认模型时，切换后立即使用显式模型与推理', (tester) async {
     final host = await _pumpHost(
       tester,
       assistants: [
@@ -157,23 +175,19 @@ void main() {
       ],
     );
     await _openPicker(tester);
-    await _chooseModel(tester, 'workspace', 'think-model');
-    await _setEffort(tester, ReasoningEffort.high);
-    await _tapVisible(tester, find.text('取消'));
-    var selected = host.container.read(modelSelectionProvider).value!;
+    final selected = host.container.read(modelSelectionProvider).value!;
     expect(selected.profile.id, 'daily');
     expect(selected.effort, ReasoningEffort.medium);
     expect(host.preferences.getString('last_reasoning_effort'), 'low');
 
-    await _openPicker(tester);
     await _chooseModel(tester, 'workspace', 'think-model');
     await _setEffort(tester, ReasoningEffort.high);
-    await _tapVisible(tester, _confirm);
-    selected = host.container.read(modelSelectionProvider).value!;
-    expect(selected.profile.id, 'workspace');
-    expect(selected.model, 'think-model');
-    expect(selected.effort, ReasoningEffort.high);
+    final updated = host.container.read(modelSelectionProvider).value!;
+    expect(updated.profile.id, 'workspace');
+    expect(updated.model, 'think-model');
+    expect(updated.effort, ReasoningEffort.high);
     expect(host.preferences.getString('last_profile_id'), 'workspace');
+    await _tapVisible(tester, find.byTooltip('关闭'));
     await _openPicker(tester);
     expect(_sliderValue(tester), ReasoningEffort.high.index.toDouble());
     await _tapVisible(tester, find.byTooltip('关闭'));
@@ -215,10 +229,20 @@ void main() {
     expect(slider.max, (ReasoningEffort.values.length - 1).toDouble());
     expect(slider.divisions, ReasoningEffort.values.length - 1);
 
-    await _setEffort(tester, ReasoningEffort.max);
+    final rect = tester.getRect(_effortSlider);
+    final gesture = await tester.startGesture(rect.center);
+    await tester.pump();
+    await gesture.moveTo(Offset(rect.left + 12, rect.center.dy));
+    await tester.pump();
+    expect(_sliderValue(tester), ReasoningEffort.off.index.toDouble());
+    expect(host.preferences.getString('last_reasoning_effort'), 'high');
+    await gesture.moveTo(Offset(rect.right - 12, rect.center.dy));
+    await tester.pump();
     expect(_sliderValue(tester), ReasoningEffort.max.index.toDouble());
+    expect(host.preferences.getString('last_reasoning_effort'), 'high');
+    await gesture.up();
+    await tester.pumpAndSettle();
     expect(tester.widget<Text>(_effortLabel).data, ReasoningEffort.max.label);
-    await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_reasoning_effort'), 'max');
   });
 
@@ -238,7 +262,7 @@ void main() {
       values: const {'last_profile_id': 'daily', 'last_model': 'gpt-5-mini'},
     );
     await _openPicker(tester);
-    final summary = find.byKey(const ValueKey('model-draft-summary'));
+    final summary = find.byKey(const ValueKey('model-selection-summary'));
     final idText = find.descendant(
       of: summary,
       matching: find.text('gpt-5-mini'),
@@ -311,7 +335,7 @@ void main() {
     );
   });
 
-  testWidgets('点击服务商标签滚动定位到对应分组，不改变草稿', (tester) async {
+  testWidgets('点击服务商标签滚动定位到对应分组，不改变选择', (tester) async {
     final host = await _pumpHost(
       tester,
       profiles: [
@@ -345,24 +369,23 @@ void main() {
 
     await _tapVisible(tester, _providerTab('workspace'));
     await tester.pumpAndSettle();
-    // 列表滚动到工作空间分组，草稿仍是原模型。
+    // 列表滚动到工作空间分组，仍保留原模型。
     expect(_option('workspace', 'work-pro').hitTestable(), findsOneWidget);
-    final summary = find.byKey(const ValueKey('model-draft-summary'));
+    final summary = find.byKey(const ValueKey('model-selection-summary'));
     expect(
       find.descendant(of: summary, matching: find.text('daily-000')),
       findsOneWidget,
     );
     expect(host.preferences.getString('last_model'), 'daily-000');
 
-    // 直接点模型才改草稿。
+    // 直接点模型才保存选择。
     await _chooseModel(tester, 'workspace', 'work-pro');
-    await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_profile_id'), 'workspace');
     expect(host.preferences.getString('last_model'), 'work-pro');
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('同名服务商与模型以 ID 区分，同面板确认推理并持久化', (tester) async {
+  testWidgets('同名服务商与模型以 ID 区分，同面板切换推理并自动持久化', (tester) async {
     final host = await _pumpHost(
       tester,
       profiles: _profiles
@@ -377,10 +400,6 @@ void main() {
     expect(selected.properties.selected, isTrue);
     await _setEffort(tester, ReasoningEffort.high);
     expect(find.byType(ModelPickerSheet), findsOneWidget);
-    expect(host.preferences.getString('last_profile_id'), 'daily');
-
-    await _tapVisible(tester, _confirm);
-    expect(find.byType(ModelPickerSheet), findsNothing);
     expect(host.preferences.getString('last_profile_id'), 'workspace');
     expect(host.preferences.getString('last_model'), 'think-model');
     expect(host.preferences.getString('last_reasoning_effort'), 'high');
@@ -402,13 +421,12 @@ void main() {
     await _setEffort(tester, ReasoningEffort.medium);
     await _chooseModel(tester, 'daily', 'chat-basic');
     expect(find.byType(Slider), findsNothing);
-    await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_model'), 'chat-basic');
     expect(host.preferences.getString('last_reasoning_effort'), 'medium');
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('候选为空时保留有效手动模型，推理设置仍可确认', (tester) async {
+  testWidgets('候选为空时保留有效手动模型，推理设置仍可自动保存', (tester) async {
     const manualId = 'manual-reasoner-not-in-remote-list';
     final host = await _pumpHost(
       tester,
@@ -433,7 +451,6 @@ void main() {
     expect(find.text('暂无模型'), findsNothing);
     expect(_sliderValue(tester), ReasoningEffort.off.index.toDouble());
     await _setEffort(tester, ReasoningEffort.medium);
-    await _tapVisible(tester, _confirm);
     expect(host.preferences.getString('last_model'), manualId);
     expect(host.preferences.getString('last_reasoning_effort'), 'medium');
     expect(tester.takeException(), isNull);
@@ -474,7 +491,7 @@ void main() {
     await tester.pumpAndSettle();
     await _chooseModel(tester, 'many', 'model-599');
     expect(_option('many', 'model-001'), findsNothing);
-    expect(host.preferences.getString('last_model'), isNull);
+    expect(host.preferences.getString('last_model'), 'model-599');
 
     await tester.enterText(_search, '研究空间');
     await tester.pumpAndSettle();
@@ -497,7 +514,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(_option('many', 'model-040'), findsOneWidget);
     expect(_modelOptions.evaluate().length, inInclusiveRange(1, 19));
-    expect(_confirm.hitTestable(), findsOneWidget);
+    expect(host.preferences.getString('last_model'), 'model-599');
     expect(tester.takeException(), isNull);
   });
 
@@ -579,7 +596,7 @@ void main() {
       values: const {},
     );
     await _openPicker(tester);
-    expect(tester.widget<FilledButton>(_confirm).onPressed, isNull);
+    expect(_confirm, findsNothing);
     await _tapVisible(tester, find.text('配置模型'));
     expect(find.text('编辑服务商 empty-profile'), findsOneWidget);
     expect(
@@ -626,7 +643,6 @@ void main() {
       await _openPicker(tester);
       await _chooseModel(tester, 'workspace', 'think-model');
       await _setEffort(tester, ReasoningEffort.high);
-      await _tapVisible(tester, _confirm);
       expect(find.byType(ModelPickerSheet), findsOneWidget);
       expect(find.text('未能完整保存选择，请重试。'), findsOneWidget);
       expect(find.textContaining('private diagnostic'), findsNothing);
@@ -637,8 +653,9 @@ void main() {
       storage
         ..failModel = false
         ..failEffort = false;
-      await _tapVisible(tester, _confirm);
-      expect(find.byType(ModelPickerSheet), findsNothing);
+      await _tapVisible(tester, find.text('重试'));
+      expect(find.byType(ModelPickerSheet), findsOneWidget);
+      expect(find.text('未能完整保存选择，请重试。'), findsNothing);
       expect(host.preferences.getString('last_profile_id'), 'workspace');
       expect(host.preferences.getString('last_model'), 'think-model');
       expect(host.preferences.getString('last_reasoning_effort'), 'high');
@@ -646,7 +663,136 @@ void main() {
     });
   }
 
-  testWidgets('异步保存期间销毁面板，不使用失效的 WidgetRef 或导航上下文', (tester) async {
+  testWidgets('自动保存不改变布局和控件外观，可连续选择并关闭后完成最后一次写入', (tester) async {
+    final gate = Completer<void>();
+    late _ControlledSettings storage;
+    final host = await _pumpHost(
+      tester,
+      values: const {
+        'last_profile_id': 'daily',
+        'last_model': 'think-model',
+        'last_reasoning_effort': 'low',
+      },
+      settings: (preferences) =>
+          storage = _ControlledSettings(preferences)..modelGate = gate,
+    );
+    await _openPicker(tester);
+    final landmarks = [
+      find.byTooltip('关闭'),
+      find.byKey(const ValueKey('model-selection-summary')),
+      _search,
+      _providerTab('daily'),
+      find.byKey(const ValueKey('model-list')),
+      _effortSlider,
+    ];
+    final before = landmarks.map(tester.getRect).toList();
+    final tab = find.descendant(
+      of: _providerTab('daily'),
+      matching: find.byType(FilledButton),
+    );
+    final tabColor = tester
+        .widget<FilledButton>(tab)
+        .style!
+        .backgroundColor!
+        .resolve({});
+    final sliderColor = tester.widget<Slider>(_effortSlider).activeColor;
+    await _setEffort(tester, ReasoningEffort.high);
+    expect(landmarks.map(tester.getRect).toList(), before);
+    expect(tester.widget<FilledButton>(tab).onPressed, isNotNull);
+    expect(
+      tester.widget<FilledButton>(tab).style!.backgroundColor!.resolve({}),
+      tabColor,
+    );
+    expect(tester.widget<Slider>(_effortSlider).onChanged, isNotNull);
+    expect(tester.widget<Slider>(_effortSlider).activeColor, sliderColor);
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(of: _search, matching: find.byType(TextField)),
+          )
+          .enabled,
+      isNot(false),
+    );
+    expect(find.text('保存中…'), findsNothing);
+    expect(host.preferences.getString('last_reasoning_effort'), 'low');
+    expect(storage.modelWrites, 1);
+
+    await _chooseModel(tester, 'workspace', 'think-model');
+    await _setEffort(tester, ReasoningEffort.max);
+    expect(storage.modelWrites, 1);
+    expect(_sliderValue(tester), ReasoningEffort.max.index.toDouble());
+    expect(
+      tester
+          .widget<Semantics>(_option('workspace', 'think-model'))
+          .properties
+          .selected,
+      isTrue,
+    );
+    expect(landmarks.map(tester.getRect).toList(), before);
+    var resolved = false;
+    final selection = host.container.read(modelSelectionProvider.future).then((
+      value,
+    ) {
+      resolved = true;
+      return value;
+    });
+    await _tapVisible(tester, find.byTooltip('关闭'));
+    expect(find.byType(ModelPickerSheet), findsNothing);
+    expect(resolved, isFalse);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(storage.modelWrites, 3);
+    expect(host.preferences.getString('last_profile_id'), 'workspace');
+    expect(host.preferences.getString('last_reasoning_effort'), 'max');
+    expect((await selection)!.effort, ReasoningEffort.max);
+    await _openPicker(tester);
+    expect(_sliderValue(tester), ReasoningEffort.max.index.toDouble());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('较早写入失败后继续保存最新选择，不用过期错误覆盖当前界面', (tester) async {
+    final gate = Completer<void>();
+    late _ControlledSettings storage;
+    final host = await _pumpHost(
+      tester,
+      settings: (preferences) => storage = _ControlledSettings(preferences)
+        ..modelGate = gate
+        ..failModelWrites = 1,
+    );
+    await _openPicker(tester);
+    await _chooseModel(tester, 'daily', 'think-model');
+    await _chooseModel(tester, 'workspace', 'think-model');
+    await _setEffort(tester, ReasoningEffort.high);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(storage.modelWrites, 3);
+    expect(find.textContaining('未能完整保存选择'), findsNothing);
+    expect(host.preferences.getString('last_profile_id'), 'workspace');
+    expect(host.preferences.getString('last_reasoning_effort'), 'high');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('关闭面板后的保存失败仍显示安全错误提示', (tester) async {
+    final gate = Completer<void>();
+    await _pumpHost(
+      tester,
+      settings: (preferences) => _ControlledSettings(preferences)
+        ..modelGate = gate
+        ..failModel = true,
+    );
+    await _openPicker(tester);
+    await _chooseModel(tester, 'daily', 'think-model');
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(ModelPickerSheet), findsNothing);
+    gate.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('未能完整保存选择，请重试。'), findsOneWidget);
+    expect(find.textContaining('private diagnostic'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('异步保存期间销毁应用，不使用失效的 WidgetRef 或导航上下文', (tester) async {
     final gate = Completer<void>();
     late _ControlledSettings storage;
     await _pumpHost(
@@ -656,11 +802,6 @@ void main() {
     );
     await _openPicker(tester);
     await _chooseModel(tester, 'daily', 'think-model');
-    await tester.ensureVisible(_confirm);
-    await tester.tap(_confirm);
-    await tester.pump();
-    expect(find.text('保存中…'), findsOneWidget);
-    expect(tester.widget<FilledButton>(_confirm).onPressed, isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     gate.complete();
     await tester.pumpAndSettle();
@@ -675,7 +816,7 @@ void main() {
     (size: const Size(360, 800), scale: 2.0, keyboard: 0.0, dark: false),
     (size: const Size(800, 360), scale: 2.0, keyboard: 160.0, dark: true),
   ]) {
-    testWidgets('长 ID 窄屏/键盘可搜索并确认：$scenario', (tester) async {
+    testWidgets('长 ID 窄屏/键盘可搜索并自动保存：$scenario', (tester) async {
       final longId = 'custom-thinker-${'very-long-model-id-' * 8}';
       final host = await _pumpHost(
         tester,
@@ -724,10 +865,11 @@ void main() {
       expect(modelText.maxLines, 2);
       expect(modelText.overflow, TextOverflow.ellipsis);
       await _setEffort(tester, ReasoningEffort.high);
-      await _tapVisible(tester, _confirm);
-      expect(find.byType(ModelPickerSheet), findsNothing);
+      expect(find.byType(ModelPickerSheet), findsOneWidget);
       expect(host.preferences.getString('last_model'), longId);
       expect(host.preferences.getString('last_reasoning_effort'), 'high');
+      await _tapVisible(tester, find.byTooltip('关闭'));
+      expect(find.byType(ModelPickerSheet), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
@@ -913,6 +1055,8 @@ class _ControlledSettings extends SettingsStorage {
   bool failModel = false;
   bool failEffort = false;
   int effortWrites = 0;
+  int modelWrites = 0;
+  int failModelWrites = 0;
   Completer<void>? modelGate;
 
   @override
@@ -920,7 +1064,12 @@ class _ControlledSettings extends SettingsStorage {
     required String profileId,
     required String model,
   }) async {
+    modelWrites++;
     await modelGate?.future;
+    if (failModelWrites > 0) {
+      failModelWrites--;
+      throw StateError('private diagnostic');
+    }
     if (failModel) throw StateError('private diagnostic');
     await super.writeLastModelSelection(profileId: profileId, model: model);
   }

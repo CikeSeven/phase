@@ -49,8 +49,14 @@ class ChatModelSelection {
   ],
 )
 class ModelSelection extends _$ModelSelection {
+  Future<void> _pendingSave = Future.value();
+  int _saveRevision = 0;
+
   @override
   Future<ChatModelSelection?> build() async {
+    // 关闭面板后立即发送，也要等待本次选择落库再解析运行配置。
+    await _pendingSave;
+    if (!ref.mounted) return null;
     final active = ref.watch(activeConversationProvider);
     final profiles = await ref.watch(providerProfilesProvider.future);
     if (!ref.mounted) return null;
@@ -164,42 +170,27 @@ class ModelSelection extends _$ModelSelection {
     );
   }
 
-  /// 确认模型与推理等级后保存为会话覆盖，不修改助手默认值。
-  Future<void> select(
-    String profileId,
-    String modelId, {
-    ReasoningEffort? effort,
-  }) async {
+  /// 自动保存一份完整选择；串行写入，目标会话在点击时固定。
+  Future<void> saveSelection(model.ModelSelection selection) {
     final active = ref.read(activeConversationProvider);
-    final current = await future;
-    await _saveSelection(
-      model.ModelSelection(
-        profileId: profileId,
-        modelId: modelId,
-        reasoningEffort: effort ?? current?.effort ?? ReasoningEffort.off,
-      ),
-      active,
+    final revision = ++_saveRevision;
+    final save = _pendingSave.then((_) async {
+      if (!ref.mounted) return;
+      await _persistSelection(selection, active, revision);
+    });
+    // 错误交给本次调用者；队列继续处理后续选择或重试。
+    _pendingSave = save.then<void>(
+      (_) {},
+      onError: (Object _, StackTrace _) {},
     );
+    ref.invalidateSelf();
+    return save;
   }
 
-  /// 单独修改推理等级时保留当前模型，同样作为会话显式选择。
-  Future<void> selectEffort(ReasoningEffort effort) async {
-    final active = ref.read(activeConversationProvider);
-    final current = await future;
-    if (current == null) return;
-    await _saveSelection(
-      model.ModelSelection(
-        profileId: current.profile.id,
-        modelId: current.model,
-        reasoningEffort: effort,
-      ),
-      active,
-    );
-  }
-
-  Future<void> _saveSelection(
+  Future<void> _persistSelection(
     model.ModelSelection selection,
     ActiveConversationState active,
+    int revision,
   ) async {
     final conversationId = active.conversationId;
     if (conversationId != null) {
@@ -216,10 +207,10 @@ class ModelSelection extends _$ModelSelection {
     if (!ref.mounted) return;
     await settings.writeLastReasoningEffort(selection.reasoningEffort.name);
     if (!ref.mounted) return;
-    if (conversationId == null &&
+    if (revision == _saveRevision &&
+        conversationId == null &&
         identical(active, ref.read(activeConversationProvider))) {
       ref.read(activeConversationProvider.notifier).draftModel(selection);
     }
-    ref.invalidateSelf();
   }
 }

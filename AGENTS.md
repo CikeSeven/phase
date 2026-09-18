@@ -40,7 +40,7 @@
 ## 5. 编码、状态与数据安全
 
 - 文件 `snake_case`，类型 `PascalCase`，成员/常量 `camelCase`；按主职责拆文件。注释只解释必要原因与契约，修改行为时清理过期注释。
-- 共享业务状态使用 Riverpod 3 注解 API；可变业务状态用 `Notifier` / `AsyncNotifier`，禁止 legacy API。草稿、搜索、焦点、展开和动画可用局部 widget 状态，确认前不提前覆盖持久化选择。
+- 共享业务状态使用 Riverpod 3 注解 API；可变业务状态用 `Notifier` / `AsyncNotifier`，禁止 legacy API。草稿、搜索、焦点、展开和动画可用局部 widget 状态；需要确认的表单不提前覆盖持久化选择，主页模型与推理等级按 DESIGN 即选即存。
 - `build()` 无网络/存储副作用；优先 `async/await`。异步操作处理防重复、过期结果、`mounted` 与异常；释放 controller、监听器、订阅等资源。
 - `*.g.dart` 等生成文件不手改；修改注解、模型、表结构后重新生成并随源码维护。
 - 会话、结构化消息、工具记录与运行状态使用初版 Drift schema，偏好用 `SettingsStorage`；数据模型、schema 与生成物同步。初版直接建表并测试正式数据契约，不补开发期旧 schema/JSON 迁移；正式发行后再针对实际发行版本维护数据变更。
