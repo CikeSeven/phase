@@ -15,6 +15,7 @@ import '../models/openai_compat.dart';
 import '../models/profile_model.dart';
 import '../models/provider_profile.dart';
 import '../models/tool_call_record.dart';
+import '../models/tool_source.dart';
 
 /// drift 行与业务模型之间的映射；JSON 列在此处集中编解码。
 ///
@@ -77,6 +78,9 @@ ToolCallRecord toolCallFromRow(ToolCallRow row) => ToolCallRecord(
   resultMessageId: row.resultMessageId,
   providerCallId: row.providerCallId,
   toolName: row.toolName,
+  source: row.sourceJson == null
+      ? null
+      : ToolSource.fromJson(_decodeMap(row.sourceJson!)),
   arguments: _decodeMap(row.argumentsJson),
   providerData: row.providerDataJson == null
       ? null
@@ -229,6 +233,9 @@ ToolCallsCompanion toolCallCompanion(ToolCallRecord record) =>
       resultMessageId: Value(record.resultMessageId),
       providerCallId: Value(record.providerCallId),
       toolName: Value(record.toolName),
+      sourceJson: Value(
+        record.source == null ? null : jsonEncode(record.source!.toJson()),
+      ),
       argumentsJson: Value(jsonEncode(record.arguments)),
       providerDataJson: Value(
         record.providerData == null ? null : jsonEncode(record.providerData),

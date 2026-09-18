@@ -4684,6 +4684,17 @@ class $ToolCallsTable extends ToolCalls
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _sourceJsonMeta = const VerificationMeta(
+    'sourceJson',
+  );
+  @override
+  late final GeneratedColumn<String> sourceJson = GeneratedColumn<String>(
+    'source_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _providerDataJsonMeta = const VerificationMeta(
     'providerDataJson',
   );
@@ -4847,6 +4858,7 @@ class $ToolCallsTable extends ToolCalls
     providerCallId,
     toolName,
     argumentsJson,
+    sourceJson,
     providerDataJson,
     target,
     channel,
@@ -4935,6 +4947,12 @@ class $ToolCallsTable extends ToolCalls
       );
     } else if (isInserting) {
       context.missing(_argumentsJsonMeta);
+    }
+    if (data.containsKey('source_json')) {
+      context.handle(
+        _sourceJsonMeta,
+        sourceJson.isAcceptableOrUnknown(data['source_json']!, _sourceJsonMeta),
+      );
     }
     if (data.containsKey('provider_data_json')) {
       context.handle(
@@ -5053,6 +5071,10 @@ class $ToolCallsTable extends ToolCalls
         DriftSqlType.string,
         data['${effectivePrefix}arguments_json'],
       )!,
+      sourceJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_json'],
+      ),
       providerDataJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}provider_data_json'],
@@ -5155,6 +5177,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
   final String? providerCallId;
   final String toolName;
   final String argumentsJson;
+  final String? sourceJson;
   final String? providerDataJson;
   final String? target;
   final ExecutionChannel channel;
@@ -5180,6 +5203,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     this.providerCallId,
     required this.toolName,
     required this.argumentsJson,
+    this.sourceJson,
     this.providerDataJson,
     this.target,
     required this.channel,
@@ -5210,6 +5234,9 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     }
     map['tool_name'] = Variable<String>(toolName);
     map['arguments_json'] = Variable<String>(argumentsJson);
+    if (!nullToAbsent || sourceJson != null) {
+      map['source_json'] = Variable<String>(sourceJson);
+    }
     if (!nullToAbsent || providerDataJson != null) {
       map['provider_data_json'] = Variable<String>(providerDataJson);
     }
@@ -5279,6 +5306,9 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
           : Value(providerCallId),
       toolName: Value(toolName),
       argumentsJson: Value(argumentsJson),
+      sourceJson: sourceJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceJson),
       providerDataJson: providerDataJson == null && nullToAbsent
           ? const Value.absent()
           : Value(providerDataJson),
@@ -5332,6 +5362,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
       providerCallId: serializer.fromJson<String?>(json['providerCallId']),
       toolName: serializer.fromJson<String>(json['toolName']),
       argumentsJson: serializer.fromJson<String>(json['argumentsJson']),
+      sourceJson: serializer.fromJson<String?>(json['sourceJson']),
       providerDataJson: serializer.fromJson<String?>(json['providerDataJson']),
       target: serializer.fromJson<String?>(json['target']),
       channel: $ToolCallsTable.$converterchannel.fromJson(
@@ -5372,6 +5403,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
       'providerCallId': serializer.toJson<String?>(providerCallId),
       'toolName': serializer.toJson<String>(toolName),
       'argumentsJson': serializer.toJson<String>(argumentsJson),
+      'sourceJson': serializer.toJson<String?>(sourceJson),
       'providerDataJson': serializer.toJson<String?>(providerDataJson),
       'target': serializer.toJson<String?>(target),
       'channel': serializer.toJson<String>(
@@ -5410,6 +5442,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     Value<String?> providerCallId = const Value.absent(),
     String? toolName,
     String? argumentsJson,
+    Value<String?> sourceJson = const Value.absent(),
     Value<String?> providerDataJson = const Value.absent(),
     Value<String?> target = const Value.absent(),
     ExecutionChannel? channel,
@@ -5437,6 +5470,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
         : this.providerCallId,
     toolName: toolName ?? this.toolName,
     argumentsJson: argumentsJson ?? this.argumentsJson,
+    sourceJson: sourceJson.present ? sourceJson.value : this.sourceJson,
     providerDataJson: providerDataJson.present
         ? providerDataJson.value
         : this.providerDataJson,
@@ -5476,6 +5510,9 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
       argumentsJson: data.argumentsJson.present
           ? data.argumentsJson.value
           : this.argumentsJson,
+      sourceJson: data.sourceJson.present
+          ? data.sourceJson.value
+          : this.sourceJson,
       providerDataJson: data.providerDataJson.present
           ? data.providerDataJson.value
           : this.providerDataJson,
@@ -5516,6 +5553,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
           ..write('providerCallId: $providerCallId, ')
           ..write('toolName: $toolName, ')
           ..write('argumentsJson: $argumentsJson, ')
+          ..write('sourceJson: $sourceJson, ')
           ..write('providerDataJson: $providerDataJson, ')
           ..write('target: $target, ')
           ..write('channel: $channel, ')
@@ -5544,6 +5582,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     providerCallId,
     toolName,
     argumentsJson,
+    sourceJson,
     providerDataJson,
     target,
     channel,
@@ -5571,6 +5610,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
           other.providerCallId == this.providerCallId &&
           other.toolName == this.toolName &&
           other.argumentsJson == this.argumentsJson &&
+          other.sourceJson == this.sourceJson &&
           other.providerDataJson == this.providerDataJson &&
           other.target == this.target &&
           other.channel == this.channel &&
@@ -5596,6 +5636,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
   final Value<String?> providerCallId;
   final Value<String> toolName;
   final Value<String> argumentsJson;
+  final Value<String?> sourceJson;
   final Value<String?> providerDataJson;
   final Value<String?> target;
   final Value<ExecutionChannel> channel;
@@ -5620,6 +5661,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     this.providerCallId = const Value.absent(),
     this.toolName = const Value.absent(),
     this.argumentsJson = const Value.absent(),
+    this.sourceJson = const Value.absent(),
     this.providerDataJson = const Value.absent(),
     this.target = const Value.absent(),
     this.channel = const Value.absent(),
@@ -5645,6 +5687,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     this.providerCallId = const Value.absent(),
     required String toolName,
     required String argumentsJson,
+    this.sourceJson = const Value.absent(),
     this.providerDataJson = const Value.absent(),
     this.target = const Value.absent(),
     required ExecutionChannel channel,
@@ -5678,6 +5721,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     Expression<String>? providerCallId,
     Expression<String>? toolName,
     Expression<String>? argumentsJson,
+    Expression<String>? sourceJson,
     Expression<String>? providerDataJson,
     Expression<String>? target,
     Expression<String>? channel,
@@ -5704,6 +5748,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
       if (providerCallId != null) 'provider_call_id': providerCallId,
       if (toolName != null) 'tool_name': toolName,
       if (argumentsJson != null) 'arguments_json': argumentsJson,
+      if (sourceJson != null) 'source_json': sourceJson,
       if (providerDataJson != null) 'provider_data_json': providerDataJson,
       if (target != null) 'target': target,
       if (channel != null) 'channel': channel,
@@ -5733,6 +5778,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     Value<String?>? providerCallId,
     Value<String>? toolName,
     Value<String>? argumentsJson,
+    Value<String?>? sourceJson,
     Value<String?>? providerDataJson,
     Value<String?>? target,
     Value<ExecutionChannel>? channel,
@@ -5758,6 +5804,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
       providerCallId: providerCallId ?? this.providerCallId,
       toolName: toolName ?? this.toolName,
       argumentsJson: argumentsJson ?? this.argumentsJson,
+      sourceJson: sourceJson ?? this.sourceJson,
       providerDataJson: providerDataJson ?? this.providerDataJson,
       target: target ?? this.target,
       channel: channel ?? this.channel,
@@ -5802,6 +5849,9 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     }
     if (argumentsJson.present) {
       map['arguments_json'] = Variable<String>(argumentsJson.value);
+    }
+    if (sourceJson.present) {
+      map['source_json'] = Variable<String>(sourceJson.value);
     }
     if (providerDataJson.present) {
       map['provider_data_json'] = Variable<String>(providerDataJson.value);
@@ -5876,6 +5926,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
           ..write('providerCallId: $providerCallId, ')
           ..write('toolName: $toolName, ')
           ..write('argumentsJson: $argumentsJson, ')
+          ..write('sourceJson: $sourceJson, ')
           ..write('providerDataJson: $providerDataJson, ')
           ..write('target: $target, ')
           ..write('channel: $channel, ')
@@ -5897,6 +5948,332 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
   }
 }
 
+class $McpServersTable extends McpServers
+    with TableInfo<$McpServersTable, McpServerRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $McpServersTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _profileJsonMeta = const VerificationMeta(
+    'profileJson',
+  );
+  @override
+  late final GeneratedColumn<String> profileJson = GeneratedColumn<String>(
+    'profile_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _toolsJsonMeta = const VerificationMeta(
+    'toolsJson',
+  );
+  @override
+  late final GeneratedColumn<String> toolsJson = GeneratedColumn<String>(
+    'tools_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _protocolVersionMeta = const VerificationMeta(
+    'protocolVersion',
+  );
+  @override
+  late final GeneratedColumn<String> protocolVersion = GeneratedColumn<String>(
+    'protocol_version',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    profileJson,
+    toolsJson,
+    protocolVersion,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'mcp_servers';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<McpServerRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('profile_json')) {
+      context.handle(
+        _profileJsonMeta,
+        profileJson.isAcceptableOrUnknown(
+          data['profile_json']!,
+          _profileJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_profileJsonMeta);
+    }
+    if (data.containsKey('tools_json')) {
+      context.handle(
+        _toolsJsonMeta,
+        toolsJson.isAcceptableOrUnknown(data['tools_json']!, _toolsJsonMeta),
+      );
+    }
+    if (data.containsKey('protocol_version')) {
+      context.handle(
+        _protocolVersionMeta,
+        protocolVersion.isAcceptableOrUnknown(
+          data['protocol_version']!,
+          _protocolVersionMeta,
+        ),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  McpServerRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return McpServerRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      profileJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}profile_json'],
+      )!,
+      toolsJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}tools_json'],
+      )!,
+      protocolVersion: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}protocol_version'],
+      ),
+    );
+  }
+
+  @override
+  $McpServersTable createAlias(String alias) {
+    return $McpServersTable(attachedDatabase, alias);
+  }
+}
+
+class McpServerRow extends DataClass implements Insertable<McpServerRow> {
+  final String id;
+  final String profileJson;
+  final String toolsJson;
+  final String? protocolVersion;
+  const McpServerRow({
+    required this.id,
+    required this.profileJson,
+    required this.toolsJson,
+    this.protocolVersion,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['profile_json'] = Variable<String>(profileJson);
+    map['tools_json'] = Variable<String>(toolsJson);
+    if (!nullToAbsent || protocolVersion != null) {
+      map['protocol_version'] = Variable<String>(protocolVersion);
+    }
+    return map;
+  }
+
+  McpServersCompanion toCompanion(bool nullToAbsent) {
+    return McpServersCompanion(
+      id: Value(id),
+      profileJson: Value(profileJson),
+      toolsJson: Value(toolsJson),
+      protocolVersion: protocolVersion == null && nullToAbsent
+          ? const Value.absent()
+          : Value(protocolVersion),
+    );
+  }
+
+  factory McpServerRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return McpServerRow(
+      id: serializer.fromJson<String>(json['id']),
+      profileJson: serializer.fromJson<String>(json['profileJson']),
+      toolsJson: serializer.fromJson<String>(json['toolsJson']),
+      protocolVersion: serializer.fromJson<String?>(json['protocolVersion']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'profileJson': serializer.toJson<String>(profileJson),
+      'toolsJson': serializer.toJson<String>(toolsJson),
+      'protocolVersion': serializer.toJson<String?>(protocolVersion),
+    };
+  }
+
+  McpServerRow copyWith({
+    String? id,
+    String? profileJson,
+    String? toolsJson,
+    Value<String?> protocolVersion = const Value.absent(),
+  }) => McpServerRow(
+    id: id ?? this.id,
+    profileJson: profileJson ?? this.profileJson,
+    toolsJson: toolsJson ?? this.toolsJson,
+    protocolVersion: protocolVersion.present
+        ? protocolVersion.value
+        : this.protocolVersion,
+  );
+  McpServerRow copyWithCompanion(McpServersCompanion data) {
+    return McpServerRow(
+      id: data.id.present ? data.id.value : this.id,
+      profileJson: data.profileJson.present
+          ? data.profileJson.value
+          : this.profileJson,
+      toolsJson: data.toolsJson.present ? data.toolsJson.value : this.toolsJson,
+      protocolVersion: data.protocolVersion.present
+          ? data.protocolVersion.value
+          : this.protocolVersion,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('McpServerRow(')
+          ..write('id: $id, ')
+          ..write('profileJson: $profileJson, ')
+          ..write('toolsJson: $toolsJson, ')
+          ..write('protocolVersion: $protocolVersion')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, profileJson, toolsJson, protocolVersion);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is McpServerRow &&
+          other.id == this.id &&
+          other.profileJson == this.profileJson &&
+          other.toolsJson == this.toolsJson &&
+          other.protocolVersion == this.protocolVersion);
+}
+
+class McpServersCompanion extends UpdateCompanion<McpServerRow> {
+  final Value<String> id;
+  final Value<String> profileJson;
+  final Value<String> toolsJson;
+  final Value<String?> protocolVersion;
+  final Value<int> rowid;
+  const McpServersCompanion({
+    this.id = const Value.absent(),
+    this.profileJson = const Value.absent(),
+    this.toolsJson = const Value.absent(),
+    this.protocolVersion = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  McpServersCompanion.insert({
+    required String id,
+    required String profileJson,
+    this.toolsJson = const Value.absent(),
+    this.protocolVersion = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       profileJson = Value(profileJson);
+  static Insertable<McpServerRow> custom({
+    Expression<String>? id,
+    Expression<String>? profileJson,
+    Expression<String>? toolsJson,
+    Expression<String>? protocolVersion,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (profileJson != null) 'profile_json': profileJson,
+      if (toolsJson != null) 'tools_json': toolsJson,
+      if (protocolVersion != null) 'protocol_version': protocolVersion,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  McpServersCompanion copyWith({
+    Value<String>? id,
+    Value<String>? profileJson,
+    Value<String>? toolsJson,
+    Value<String?>? protocolVersion,
+    Value<int>? rowid,
+  }) {
+    return McpServersCompanion(
+      id: id ?? this.id,
+      profileJson: profileJson ?? this.profileJson,
+      toolsJson: toolsJson ?? this.toolsJson,
+      protocolVersion: protocolVersion ?? this.protocolVersion,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (profileJson.present) {
+      map['profile_json'] = Variable<String>(profileJson.value);
+    }
+    if (toolsJson.present) {
+      map['tools_json'] = Variable<String>(toolsJson.value);
+    }
+    if (protocolVersion.present) {
+      map['protocol_version'] = Variable<String>(protocolVersion.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('McpServersCompanion(')
+          ..write('id: $id, ')
+          ..write('profileJson: $profileJson, ')
+          ..write('toolsJson: $toolsJson, ')
+          ..write('protocolVersion: $protocolVersion, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -5910,6 +6287,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $AttachmentsTable attachments = $AttachmentsTable(this);
   late final $AgentRunsTable agentRuns = $AgentRunsTable(this);
   late final $ToolCallsTable toolCalls = $ToolCallsTable(this);
+  late final $McpServersTable mcpServers = $McpServersTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -5923,6 +6301,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     attachments,
     agentRuns,
     toolCalls,
+    mcpServers,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -9110,6 +9489,7 @@ typedef $$ToolCallsTableCreateCompanionBuilder = ToolCallsCompanion Function({
   Value<String?> providerCallId,
   required String toolName,
   required String argumentsJson,
+  Value<String?> sourceJson,
   Value<String?> providerDataJson,
   Value<String?> target,
   required ExecutionChannel channel,
@@ -9135,6 +9515,7 @@ typedef $$ToolCallsTableUpdateCompanionBuilder = ToolCallsCompanion Function({
   Value<String?> providerCallId,
   Value<String> toolName,
   Value<String> argumentsJson,
+  Value<String?> sourceJson,
   Value<String?> providerDataJson,
   Value<String?> target,
   Value<ExecutionChannel> channel,
@@ -9211,6 +9592,11 @@ class $$ToolCallsTableFilterComposer
 
   ColumnFilters<String> get argumentsJson => $composableBuilder(
     column: $table.argumentsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceJson => $composableBuilder(
+    column: $table.sourceJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -9356,6 +9742,11 @@ class $$ToolCallsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get sourceJson => $composableBuilder(
+    column: $table.sourceJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get providerDataJson => $composableBuilder(
     column: $table.providerDataJson,
     builder: (column) => ColumnOrderings(column),
@@ -9490,6 +9881,11 @@ class $$ToolCallsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get sourceJson => $composableBuilder(
+    column: $table.sourceJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get providerDataJson => $composableBuilder(
     column: $table.providerDataJson,
     builder: (column) => column,
@@ -9607,6 +10003,7 @@ class $$ToolCallsTableTableManager
                 Value<String?> providerCallId = const Value.absent(),
                 Value<String> toolName = const Value.absent(),
                 Value<String> argumentsJson = const Value.absent(),
+                Value<String?> sourceJson = const Value.absent(),
                 Value<String?> providerDataJson = const Value.absent(),
                 Value<String?> target = const Value.absent(),
                 Value<ExecutionChannel> channel = const Value.absent(),
@@ -9631,6 +10028,7 @@ class $$ToolCallsTableTableManager
                 providerCallId: providerCallId,
                 toolName: toolName,
                 argumentsJson: argumentsJson,
+                sourceJson: sourceJson,
                 providerDataJson: providerDataJson,
                 target: target,
                 channel: channel,
@@ -9657,6 +10055,7 @@ class $$ToolCallsTableTableManager
                 Value<String?> providerCallId = const Value.absent(),
                 required String toolName,
                 required String argumentsJson,
+                Value<String?> sourceJson = const Value.absent(),
                 Value<String?> providerDataJson = const Value.absent(),
                 Value<String?> target = const Value.absent(),
                 required ExecutionChannel channel,
@@ -9681,6 +10080,7 @@ class $$ToolCallsTableTableManager
                 providerCallId: providerCallId,
                 toolName: toolName,
                 argumentsJson: argumentsJson,
+                sourceJson: sourceJson,
                 providerDataJson: providerDataJson,
                 target: target,
                 channel: channel,
@@ -9764,6 +10164,198 @@ typedef $$ToolCallsTableProcessedTableManager =
       ToolCallRow,
       PrefetchHooks Function({bool runId})
     >;
+typedef $$McpServersTableCreateCompanionBuilder = McpServersCompanion Function({
+  required String id,
+  required String profileJson,
+  Value<String> toolsJson,
+  Value<String?> protocolVersion,
+  Value<int> rowid,
+});
+typedef $$McpServersTableUpdateCompanionBuilder = McpServersCompanion Function({
+  Value<String> id,
+  Value<String> profileJson,
+  Value<String> toolsJson,
+  Value<String?> protocolVersion,
+  Value<int> rowid,
+});
+
+class $$McpServersTableFilterComposer
+    extends Composer<_$AppDatabase, $McpServersTable> {
+  $$McpServersTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get profileJson => $composableBuilder(
+    column: $table.profileJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get toolsJson => $composableBuilder(
+    column: $table.toolsJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get protocolVersion => $composableBuilder(
+    column: $table.protocolVersion,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$McpServersTableOrderingComposer
+    extends Composer<_$AppDatabase, $McpServersTable> {
+  $$McpServersTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get profileJson => $composableBuilder(
+    column: $table.profileJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get toolsJson => $composableBuilder(
+    column: $table.toolsJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get protocolVersion => $composableBuilder(
+    column: $table.protocolVersion,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$McpServersTableAnnotationComposer
+    extends Composer<_$AppDatabase, $McpServersTable> {
+  $$McpServersTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get profileJson => $composableBuilder(
+    column: $table.profileJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get toolsJson =>
+      $composableBuilder(column: $table.toolsJson, builder: (column) => column);
+
+  GeneratedColumn<String> get protocolVersion => $composableBuilder(
+    column: $table.protocolVersion,
+    builder: (column) => column,
+  );
+}
+
+class $$McpServersTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $McpServersTable,
+          McpServerRow,
+          $$McpServersTableFilterComposer,
+          $$McpServersTableOrderingComposer,
+          $$McpServersTableAnnotationComposer,
+          $$McpServersTableCreateCompanionBuilder,
+          $$McpServersTableUpdateCompanionBuilder,
+          (
+            McpServerRow,
+            BaseReferences<_$AppDatabase, $McpServersTable, McpServerRow>,
+          ),
+          McpServerRow,
+          PrefetchHooks Function()
+        > {
+  $$McpServersTableTableManager(_$AppDatabase db, $McpServersTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$McpServersTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$McpServersTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$McpServersTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> profileJson = const Value.absent(),
+                Value<String> toolsJson = const Value.absent(),
+                Value<String?> protocolVersion = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => McpServersCompanion(
+                id: id,
+                profileJson: profileJson,
+                toolsJson: toolsJson,
+                protocolVersion: protocolVersion,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String profileJson,
+                Value<String> toolsJson = const Value.absent(),
+                Value<String?> protocolVersion = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => McpServersCompanion.insert(
+                id: id,
+                profileJson: profileJson,
+                toolsJson: toolsJson,
+                protocolVersion: protocolVersion,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$McpServersTable, McpServerRow>(table),
+                  BaseReferences<_$AppDatabase, $McpServersTable, McpServerRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$McpServersTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $McpServersTable,
+      McpServerRow,
+      $$McpServersTableFilterComposer,
+      $$McpServersTableOrderingComposer,
+      $$McpServersTableAnnotationComposer,
+      $$McpServersTableCreateCompanionBuilder,
+      $$McpServersTableUpdateCompanionBuilder,
+      (
+        McpServerRow,
+        BaseReferences<_$AppDatabase, $McpServersTable, McpServerRow>,
+      ),
+      McpServerRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -9784,6 +10376,8 @@ class $AppDatabaseManager {
       $$AgentRunsTableTableManager(_db, _db.agentRuns);
   $$ToolCallsTableTableManager get toolCalls =>
       $$ToolCallsTableTableManager(_db, _db.toolCalls);
+  $$McpServersTableTableManager get mcpServers =>
+      $$McpServersTableTableManager(_db, _db.mcpServers);
 }
 
 // **************************************************************************

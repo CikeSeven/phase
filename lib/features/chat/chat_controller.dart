@@ -24,6 +24,10 @@ import '../../../data/models/model_selection.dart' as model;
 import '../../../data/models/reasoning_effort.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/tool_source.dart';
+import '../../../data/repositories/mcp_server_repository.dart';
+import '../mcp/mcp_connections.dart';
+import '../mcp/mcp_runtime.dart';
 import '../../../data/models/api_protocol.dart';
 import '../../../data/models/profile_model.dart';
 import '../../../data/models/provider_profile.dart';
@@ -500,6 +504,23 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         .where((m) => m.id == selection.model)
         .firstOrNull;
 
+    final baseRegistry = ref.read(toolRegistryProvider);
+    final enabled = selection.supportsTools
+        ? assistant?.toolPolicy.enabledTools ?? <String>{}
+        : <String>{};
+    // 仅助手选择了 MCP 时访问目录；普通聊天没有扩展连接前置。
+    final mcpEntries = enabled.any((name) => name.startsWith('mcp_'))
+        ? await (await ref.read(mcpServerRepositoryProvider.future)).list()
+        : const [];
+    final snapshots = <ToolSnapshot>[
+      for (final tool in baseRegistry.tools)
+        if (enabled.contains(tool.name)) tool.snapshot,
+      for (final entry in mcpEntries)
+        if (entry.profile.enabled && !entry.profile.deleting)
+          for (final tool in entry.tools)
+            if (enabled.contains(tool.name)) tool,
+    ];
+
     // 连接快照只存服务商 id、协议与地址，密钥按 id 在调用时读取。
     final run = await runs.create(
       AgentRun(
@@ -522,6 +543,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             maxOutputTokens: modelConfig?.maxOutputTokens,
           ),
           systemPrompt: assistant?.systemPrompt ?? '',
+          toolSnapshots: snapshots,
+          mcpServers: [
+            for (final entry in mcpEntries)
+              if (snapshots.any(
+                (tool) =>
+                    tool.source.kind == ToolSourceKind.mcp &&
+                    tool.source.id == entry.profile.id,
+              ))
+                entry.profile,
+          ],
           executionScope: ref
               .read(settingsStorageProvider)
               .readExecutionScope(),
@@ -571,12 +602,32 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final storage = await ref.read(artifactStorageProvider.future);
     final recovery = ref.read(runRecoveryControllerProvider.notifier);
 
-    final registry = ref.read(toolRegistryProvider);
+    final mcp = run.configuration.mcpServers.isEmpty
+        ? null
+        : McpRunRuntime(
+            run: run,
+            repository: await ref.read(mcpServerRepositoryProvider.future),
+            assistants: await ref.read(assistantRepositoryProvider.future),
+            connections: ref.read(mcpConnectionsProvider),
+          );
+    final base = ref.read(toolRegistryProvider);
+    final registry = ToolRegistry([...base.tools, ...?mcp?.tools()]);
     final execution = ref.read(executionControllerProvider.notifier);
     final executor = ToolExecutor(
       registry: registry,
       toolCalls: toolCalls,
       runs: runs,
+      currentPolicy: (tool) async {
+        if (tool.source.kind != ToolSourceKind.mcp) {
+          return registry.policyFor(
+            tool,
+            run.configuration.enabledTools,
+            run.configuration.toolPolicies,
+          );
+        }
+        await mcp!.checkAvailable(tool.snapshot);
+        return mcp.currentPolicy(tool.snapshot);
+      },
       prepareChannel: (tool, arguments) async {
         if (tool.usesPlatform(arguments)) {
           await execution.ensureDeviceHost(
@@ -645,6 +696,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _publishTimer = null;
       _streamingMessageId = null;
       _cancellation?.cancel();
+      await mcp?.close();
       try {
         await execution.endRun(run.id);
       } on Failure {
@@ -953,6 +1005,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           assistantMessageId: assistantMessage.id,
           providerCallId: call.callId,
           toolName: call.toolName,
+          source: _registry!.byName(call.toolName)?.source,
           arguments: call.arguments,
           providerData: call.providerData,
           target: _registry!
@@ -1028,7 +1081,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       cancellation,
     );
     final record = executed.record;
-    if (record.status == ToolCallStatus.succeeded) {
+    if (record.status == ToolCallStatus.succeeded ||
+        record.artifacts.isNotEmpty) {
       await _registerArtifacts(
         run.conversationId,
         toolReported: record.artifacts.isNotEmpty,
@@ -1549,7 +1603,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         if (record == null || callId == null) continue;
         results[part.toolCallId] = ResolvedToolResult(
           callId: callId,
-          images: record.id == latestVisualRecord?.id
+          images:
+              record.id == latestVisualRecord?.id ||
+                  record.source?.kind == ToolSourceKind.mcp
               ? [
                   for (final id in record.artifacts)
                     if (attachments[id]?.isImage == true) attachments[id]!,

@@ -17,6 +17,7 @@ import '../../../data/repositories/assistant_repository.dart';
 import '../chat/chat_controller.dart';
 import 'assistant_model_sheet.dart';
 import 'assistant_tool_policy_section.dart';
+import '../mcp/assistant_mcp_section.dart';
 
 /// 助手新增 / 编辑：名称、系统提示词、默认模型与工具范围。
 class AssistantEditPage extends ConsumerStatefulWidget {
@@ -289,6 +290,13 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                   const SizedBox(height: AppSpacing.xl),
                   AssistantToolPolicySection(
                     tools: ref.watch(toolRegistryProvider).tools.toList(),
+                    policy: _toolPolicy,
+                    onChanged: _saving
+                        ? null
+                        : (policy) => setState(() => _toolPolicy = policy),
+                  ),
+                  const SizedBox(height: AppSpacing.xl),
+                  AssistantMcpSection(
                     policy: _toolPolicy,
                     onChanged: _saving
                         ? null

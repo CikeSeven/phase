@@ -145,11 +145,13 @@ class ToolCallRepository {
     String id, {
     String? result,
     String? errorCode,
+    List<String> artifacts = const [],
   }) {
     return _apply(id, '记录工具失败结果失败', (record) {
       return record.copyWith(
         status: ToolCallStatus.failed,
         result: result,
+        artifacts: artifacts,
         errorCode: errorCode,
         finishedAt: DateTime.now(),
       );

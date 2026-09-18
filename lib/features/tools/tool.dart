@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_request.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/tool_source.dart';
 import '../../../data/models/tool_call_record.dart';
 
 /// 工具需要的存储能力：读会话附件、定位产物目录、登记产物。
@@ -41,8 +42,10 @@ class ToolContext {
     required this.storage,
     required this.attachments,
     this.workspaceDirectory = '',
+    this.confirmed = false,
   });
 
+  final bool confirmed;
   final String conversationId;
   final String runId;
 
@@ -116,6 +119,18 @@ abstract class Tool {
 
   ExecutionChannel get channel => ExecutionChannel.app;
   String get policyKey => name;
+  ToolSource get source => ToolSource(
+    kind: ToolSourceKind.builtIn,
+    id: 'builtIn',
+    originalName: name,
+    definitionRevision: definitionDigest([name, description, inputSchema]),
+  );
+  ToolSnapshot get snapshot => ToolSnapshot(
+    name: name,
+    description: description,
+    inputSchema: inputSchema,
+    source: source,
+  );
 
   bool usesPlatform(Map<String, dynamic> arguments) =>
       channel != ExecutionChannel.app;
@@ -269,8 +284,14 @@ class SystemInfoTool extends Tool {
 
 /// 按名称注册工具；未注册的工具名不会被执行。
 class ToolRegistry {
-  ToolRegistry(Iterable<Tool> tools)
-    : _tools = {for (final tool in tools) tool.name: tool};
+  ToolRegistry(Iterable<Tool> tools) : _tools = {} {
+    for (final tool in tools) {
+      if (_tools.containsKey(tool.name)) {
+        throw ArgumentError('Duplicate tool name: ${tool.name}');
+      }
+      _tools[tool.name] = tool;
+    }
+  }
 
   final Map<String, Tool> _tools;
 

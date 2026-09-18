@@ -192,6 +192,7 @@ class ToolCalls extends Table {
   TextColumn get providerCallId => text().nullable()();
   TextColumn get toolName => text()();
   TextColumn get argumentsJson => text()();
+  TextColumn get sourceJson => text().nullable()();
   TextColumn get providerDataJson => text().nullable()();
   TextColumn get target => text().nullable()();
   TextColumn get channel => textEnum<ExecutionChannel>()();
@@ -214,6 +215,17 @@ class ToolCalls extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// MCP 配置和发现目录；凭据只保存引用。
+@DataClassName('McpServerRow')
+class McpServers extends Table {
+  TextColumn get id => text()();
+  TextColumn get profileJson => text()();
+  TextColumn get toolsJson => text().withDefault(const Constant('[]'))();
+  TextColumn get protocolVersion => text().nullable()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// 应用数据库（初版 schema 1）。
 ///
 /// 数据库从创建时加密；schema 变更随初版演进，不保留开发期旧 schema 的
@@ -228,15 +240,16 @@ class ToolCalls extends Table {
     Attachments,
     AgentRuns,
     ToolCalls,
+    McpServers,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件新增抽取失败原因；3 模型新增采样温度。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源。
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -246,6 +259,10 @@ class AppDatabase extends _$AppDatabase {
       }
       if (from < 3) {
         await migrator.addColumn(models, models.temperature);
+      }
+      if (from < 4) {
+        await migrator.createTable(mcpServers);
+        await migrator.addColumn(toolCalls, toolCalls.sourceJson);
       }
     },
     beforeOpen: _prepareDatabase,

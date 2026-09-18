@@ -1,4 +1,5 @@
 import 'tool_policy.dart';
+import 'tool_source.dart';
 
 /// 一次工具调用的执行状态（design 第二部分 §5）。
 enum ToolCallStatus {
@@ -34,6 +35,7 @@ class ToolCallRecord {
     this.providerCallId,
     this.providerData,
     this.target,
+    this.source,
     this.status = ToolCallStatus.prepared,
     this.decision,
     this.confirmationRequestedAt,
@@ -60,6 +62,7 @@ class ToolCallRecord {
   final String? providerCallId;
 
   final String toolName;
+  final ToolSource? source;
   final Map<String, dynamic> arguments;
 
   /// 该调用需要回传给模型的协议状态（如 Anthropic 的 tool_use 块结构）。
@@ -108,6 +111,7 @@ class ToolCallRecord {
       resultMessageId: resultMessageId ?? this.resultMessageId,
       providerCallId: providerCallId,
       toolName: toolName,
+      source: source,
       arguments: arguments,
       providerData: providerData,
       target: target,

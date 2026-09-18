@@ -112,7 +112,7 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
 
     return AppSheet(
       footerMaxHeightFactor: 0.5,
-      title: ToolPresentation.toolLabel(record.toolName),
+      title: ToolPresentation.recordLabel(record),
       subtitle: widget.request.summary,
       // 面板只提供三个动作：关闭（含返回手势）按未决定处理。
       showClose: false,
@@ -161,7 +161,7 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
         children: [
           _InfoLine(
             label: '执行通道',
-            value: ToolPresentation.channelLabel(record.channel),
+            value: ToolPresentation.recordChannelLabel(record),
           ),
           if (target.isNotEmpty) _InfoLine(label: '目标', value: target),
           _InfoLine(

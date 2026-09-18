@@ -300,6 +300,7 @@ Map<String, dynamic> _toolCallJson(
     'resultMessageId': record.resultMessageId,
     'providerCallId': record.providerCallId,
     'toolName': record.toolName,
+    'source': record.source?.toJson(),
     'arguments': record.arguments,
     'target': record.target,
     'channel': record.channel.name,
@@ -363,7 +364,7 @@ void _writeToolCall(
   }
   buffer
     ..writeln(
-      '### 工具调用：${ToolPresentation.toolLabel(record.toolName)}'
+      '### 工具调用：${ToolPresentation.recordLabel(record)}'
       '（${record.toolName}）',
     )
     ..writeln()

@@ -125,3 +125,11 @@ final class ExecutionFailure extends Failure {
     ExecutionFailureCode.executionFailed => 'Android 执行失败，请重试',
   };
 }
+
+/// MCP 边界只携带固定的安全文案；远程错误正文不进入诊断/UI 错误提示。
+final class McpFailure extends Failure {
+  const McpFailure(this.code, super.message);
+  final String code;
+  @override
+  String get userMessage => message;
+}

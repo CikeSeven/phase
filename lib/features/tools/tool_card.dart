@@ -148,7 +148,7 @@ class _ToolCardState extends State<ToolCard>
                           constraints.maxWidth <
                           MediaQuery.textScalerOf(context).scale(14) * 18;
                       final title = Text(
-                        ToolPresentation.toolLabel(record.toolName),
+                        ToolPresentation.recordLabel(record),
                         style: theme.textTheme.labelLarge,
                       );
                       return Row(

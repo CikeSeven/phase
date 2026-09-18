@@ -11,6 +11,8 @@ import '../../features/settings/settings_page.dart';
 import '../../features/tools/run_recovery_page.dart';
 import '../../features/tools/tool_records_page.dart';
 import '../../features/execution/execution_settings_page.dart';
+import '../../features/mcp/mcp_servers_page.dart';
+import '../../features/mcp/mcp_edit_page.dart';
 
 part 'app_router.g.dart';
 
@@ -49,6 +51,32 @@ GoRouter appRouter(Ref ref) {
         pageBuilder: (context, state) =>
             materialPage(state, const SettingsPage()),
         routes: [
+          GoRoute(
+            path: 'extensions',
+            pageBuilder: (context, state) =>
+                materialPage(state, const ExtensionsPage()),
+            routes: [
+              GoRoute(
+                path: 'mcp',
+                pageBuilder: (context, state) =>
+                    materialPage(state, const McpServersPage()),
+                routes: [
+                  GoRoute(
+                    path: 'new',
+                    pageBuilder: (context, state) =>
+                        materialPage(state, const McpEditPage()),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    pageBuilder: (context, state) => materialPage(
+                      state,
+                      McpEditPage(serverId: state.pathParameters['id']),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
           GoRoute(
             path: 'execution',
             pageBuilder: (context, state) =>

@@ -36,6 +36,7 @@ dependencies:
   flutter_riverpod: ^3.4.3
   riverpod_annotation: ^4.0.7
   dio: ^5.11.1
+  crypto: ^3.0.7
   go_router: ^18.0.1
   drift: ^2.34.4
   sqlite3: ^3.5.2

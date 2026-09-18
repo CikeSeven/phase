@@ -6,6 +6,7 @@ import '../../../core/error/failure.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/tool_source.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../../../data/repositories/tool_call_repository.dart';
 import 'tool.dart';
@@ -97,9 +98,12 @@ class ToolExecutor {
     this.runs,
     this.onConfirmationRequired,
     this.prepareChannel,
+    this.currentPolicy,
     this.confirmationTimeout = ToolCallRepository.confirmationTimeout,
   });
 
+  /// 动态来源的最新撤权检查；只能收紧固定快照。
+  final Future<ToolPolicy> Function(Tool tool)? currentPolicy;
   final ToolRegistry registry;
   final ToolCallRepository toolCalls;
 
@@ -148,11 +152,38 @@ class ToolExecutor {
       );
     }
 
-    final policy = registry.policyFor(
+    if (existing?.source case final source?) {
+      if (source.kind != tool.source.kind ||
+          source.id != tool.source.id ||
+          source.originalName != tool.source.originalName ||
+          source.definitionRevision != tool.source.definitionRevision) {
+        return _rejected(
+          request,
+          reason: '工具定义与已记录调用不一致，本次调用未派发',
+          errorCode: 'definitionChanged',
+          policy: ToolPolicy.deny,
+        );
+      }
+    }
+
+    var policy = registry.policyFor(
       tool,
       request.enabledTools,
       request.toolPolicies,
     );
+    try {
+      final latest = await currentPolicy?.call(tool);
+      if (latest != null && latest.index > policy.index) policy = latest;
+    } on StorageFailure {
+      rethrow;
+    } on Failure catch (failure) {
+      return _rejected(
+        request,
+        reason: failure.userMessage,
+        errorCode: failure is McpFailure ? failure.code : 'policyUnavailable',
+        policy: ToolPolicy.deny,
+      );
+    }
     if (policy == ToolPolicy.deny) {
       return _rejected(
         request,
@@ -230,6 +261,26 @@ class ToolExecutor {
       );
     }
 
+    try {
+      final latest = await currentPolicy?.call(tool);
+      if (latest == ToolPolicy.deny ||
+          (latest == ToolPolicy.ask && policy == ToolPolicy.allow)) {
+        return await _rejectRecord(
+          record.id,
+          reason: '工具权限已收紧，本次调用未派发',
+          errorCode: 'policyChanged',
+        );
+      }
+    } on StorageFailure {
+      rethrow;
+    } on Failure catch (failure) {
+      return await _rejectRecord(
+        record.id,
+        reason: failure.userMessage,
+        errorCode: failure is McpFailure ? failure.code : 'policyUnavailable',
+      );
+    }
+
     // 先记录 executing 再派发：外部动作可能已经开始。
     await toolCalls.markExecuting(record.id);
 
@@ -240,6 +291,7 @@ class ToolExecutor {
       storage: request.storage,
       attachments: request.attachments,
       workspaceDirectory: request.workspaceDirectory,
+      confirmed: policy == ToolPolicy.ask,
     );
 
     ToolOutcome outcome;
@@ -286,6 +338,7 @@ class ToolExecutor {
           record.id,
           result: outcome.content,
           errorCode: outcome.errorCode,
+          artifacts: outcome.artifacts,
         ),
       };
     } on Failure {
@@ -294,6 +347,19 @@ class ToolExecutor {
     }
     return ToolExecutionResult(record: updated, outcome: outcome);
   }
+
+  Future<ToolExecutionResult> _rejectRecord(
+    String id, {
+    required String reason,
+    required String errorCode,
+  }) async => ToolExecutionResult(
+    record: await toolCalls.markRejected(
+      id,
+      result: reason,
+      errorCode: errorCode,
+    ),
+    outcome: ToolOutcome.failure(reason, errorCode: errorCode),
+  );
 
   ToolOutcome _failureOutcome(Failure failure) => ToolOutcome.failure(
     failure.userMessage,
@@ -363,6 +429,11 @@ class ToolExecutor {
 
   /// 参数校验：必填与声明类型由工具的 schema 决定。
   String? _validate(Tool tool, Map<String, dynamic> arguments) {
+    // 远程工具可使用组合/$ref 等完整 JSON Schema，由服务端验证。
+    // 内置工具的有限 schema 校验不能误拒绝合法的远程参数。
+    if (tool.source.kind == ToolSourceKind.mcp) {
+      return tool.validateArguments(arguments);
+    }
     final schema = tool.inputSchema;
     final required = schema['required'];
     if (required is List) {
@@ -414,6 +485,7 @@ class ToolExecutor {
         assistantMessageId: request.assistantMessageId,
         providerCallId: request.providerCallId,
         toolName: tool.name,
+        source: tool.source,
         arguments: request.arguments,
         providerData: request.providerData,
         target: request.target ?? tool.describeAction(request.arguments),

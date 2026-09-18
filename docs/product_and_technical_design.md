@@ -36,6 +36,7 @@
 | 图片、文本、PDF/DOCX 本地抽取 | [attachment_picker.dart](../lib/features/chat/attachment_picker.dart)、[document_extractor.dart](../lib/features/chat/document_extractor.dart) | [附件链路](../test/features/chat/attachment_flow_test.dart) |
 | 单代理、工具策略、确认、停止、重试、中断恢复 | [tools](../lib/features/tools/)、[chat_controller.dart](../lib/features/chat/chat_controller.dart) | [工具回归](../test/features/tools/)、[真实连接取消](../test/features/chat/model_retry_transport_test.dart) |
 | 文件、HTTP、工具记录、Markdown/JSON 导出 | [tool_registry.dart](../lib/features/tools/tool_registry.dart)、[conversation_export.dart](../lib/features/chat/conversation_export.dart) | [文件链路](../test/features/tools/file_tools_flow_test.dart)、[导出](../test/features/chat/conversation_export_test.dart) |
+| 远程 MCP、来源/修订快照、扩展管理与助手范围 | [mcp](../lib/features/mcp/)、[MCP 仓储](../lib/data/repositories/mcp_server_repository.dart) | [MCP 测试](../test/features/mcp/)；本机真实 HTTP/SSE 与四协议闭环通过；设备范围见实施计划 |
 | SAF、应用名单、无障碍、原生任务控制、设备队列 | [execution](../lib/features/execution/)、[Android 执行](../android/app/src/main/kotlin/app/xiangyue/phase/) | [Dart 执行测试](../test/features/execution/)、[JVM 测试](../android/app/src/test/kotlin/app/xiangyue/phase/) |
 | Android 14+ 窗口截图、图片回填、坐标手势组合 | [visual_tools.dart](../lib/features/execution/visual_tools.dart)、[vision](../android/app/src/main/kotlin/app/xiangyue/phase/vision/) | [四协议视觉链路](../test/features/execution/visual_protocol_flow_test.dart) |
 | 结构化消息、加密 Drift、附件与产物归属 | [models](../lib/data/models/)、[local](../lib/data/datasources/local/)、[repositories](../lib/data/repositories/) | [数据测试](../test/data/) |
@@ -44,7 +45,7 @@
 
 | 类别 | 缺口 | 详细设计 |
 |---|---|---|
-| 工具生态 | MCP、Skills、插件包及受限扩展钩子 | [MCP](./agent_extensions_design.md#extensions-mcp)、[Skills](./agent_extensions_design.md#extensions-skills)、[插件包](./agent_extensions_design.md#extensions-plugins) |
+| 工具生态 | 远程 MCP 外部服务验收、本地 MCP stdio、Skills、插件包及受限扩展钩子 | [MCP](./agent_extensions_design.md#extensions-mcp)、[Skills](./agent_extensions_design.md#extensions-skills)、[插件包](./agent_extensions_design.md#extensions-plugins) |
 | 命令环境 | PRoot 工作区、进程与 stdio、依赖安装、Termux、Shizuku | [扩展设计 §5–§7](./agent_extensions_design.md#extensions-runtime) |
 | Agent 能力 | Plan Mode、上下文预算与摘要、长期记忆、单子代理 | [扩展设计 §8、§10](./agent_extensions_design.md#extensions-planning) |
 | 聊天与数据 | 完整分支导航、加密备份恢复、原生文档上传 | [扩展设计 §11](./agent_extensions_design.md#extensions-product) |
@@ -88,7 +89,7 @@
 
 ## 6. 页面组织
 
-现有聊天、助手、服务商、任务恢复、工具记录与执行权限页面延续 DESIGN。新增“扩展”“工作区与命令环境”入口在对应功能真实可用时加入；MCP、Skills、环境安装和插件配置不堆入现有无障碍权限页。页面内容见扩展设计，布局、返回与草稿规则统一遵循 DESIGN。
+现有聊天、助手、服务商、任务恢复、工具记录与执行权限页面延续 DESIGN。“设置 → 扩展 → MCP 服务”已接入；Skills、插件及“工作区与命令环境”入口随对应实现加入，不堆入现有无障碍权限页。页面内容见扩展设计，布局、返回与草稿规则统一遵循 DESIGN。
 
 ## 7. 数据与质量边界
 

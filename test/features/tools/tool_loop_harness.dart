@@ -1,4 +1,7 @@
 import 'dart:async';
+
+import 'package:phase/features/mcp/mcp_connections.dart';
+
 import 'dart:io';
 
 import 'package:drift/drift.dart' show OrderingTerm;
@@ -220,6 +223,7 @@ class ToolLoopHarness {
   /// [registry] 替换内置工具集；[models] 替换模型列表（能力开关）。
   static Future<ToolLoopHarness> create({
     ToolRegistry? registry,
+    McpConnections? mcpConnections,
     List<ProfileModel>? models,
     AiProvider Function(ProviderProfile profile, String apiKey)? factory,
     Future<void> Function(Attachment attachment)? saveArtifact,
@@ -266,6 +270,8 @@ class ToolLoopHarness {
     }
     final container = ProviderContainer(
       overrides: [
+        if (mcpConnections != null)
+          mcpConnectionsProvider.overrideWith((ref) => mcpConnections),
         modelRetryPolicyProvider.overrideWith((ref) => retryPolicy),
         channelDriverProvider.overrideWith((ref) {
           final driver = FakeChannelDriver();

@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/tool_source.dart';
 
 /// 工具与状态的展示信息：图标、文案、色调。
 ///
@@ -22,6 +23,16 @@ class ToolPresentation {
     'perform_gestures' => Symbols.touch_app,
     _ => Symbols.build,
   };
+
+  static String recordLabel(ToolCallRecord record) =>
+      record.source?.kind == ToolSourceKind.mcp
+      ? record.target ?? record.source!.originalName
+      : toolLabel(record.toolName);
+
+  static String recordChannelLabel(ToolCallRecord record) =>
+      record.source?.kind == ToolSourceKind.mcp
+      ? '远程 MCP'
+      : channelLabel(record.channel);
 
   static String toolLabel(String toolName) => switch (toolName) {
     'system_info' => '时间与设备信息',

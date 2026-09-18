@@ -3,6 +3,8 @@ import 'model_selection.dart';
 import 'tool_policy.dart';
 import 'openai_compat.dart';
 import 'execution_scope.dart';
+import 'tool_source.dart';
+import 'mcp_server_profile.dart';
 
 enum RunStatus { running, awaitingConfirmation, completed, stopped, failed }
 
@@ -54,6 +56,8 @@ class RunConfiguration {
     required this.modelSelection,
     required this.systemPrompt,
     this.enabledTools = const {},
+    this.toolSnapshots = const [],
+    this.mcpServers = const [],
     this.toolPolicies = const {},
     this.supportsReasoning = false,
     this.supportsImages = true,
@@ -66,6 +70,8 @@ class RunConfiguration {
   final ModelSelection modelSelection;
   final String systemPrompt;
   final Set<String> enabledTools;
+  final List<ToolSnapshot> toolSnapshots;
+  final List<McpServerProfile> mcpServers;
 
   /// 工具级策略覆盖；未列出的工具按定义的默认策略。
   final Map<String, ToolPolicy> toolPolicies;
@@ -80,6 +86,8 @@ class RunConfiguration {
     'modelSelection': modelSelection.toJson(),
     'systemPrompt': systemPrompt,
     'enabledTools': enabledTools.toList(),
+    'toolSnapshots': toolSnapshots.map((t) => t.toJson()).toList(),
+    'mcpServers': mcpServers.map((s) => s.toJson()).toList(),
     'toolPolicies': {
       for (final entry in toolPolicies.entries) entry.key: entry.value.name,
     },
@@ -110,6 +118,14 @@ class RunConfiguration {
             : OpenAiCompat.fromJson(
                 json['compatOverrides'] as Map<String, dynamic>,
               ),
+        toolSnapshots: [
+          for (final t in json['toolSnapshots'] as List? ?? [])
+            ToolSnapshot.fromJson(t as Map<String, dynamic>),
+        ],
+        mcpServers: [
+          for (final s in json['mcpServers'] as List? ?? [])
+            McpServerProfile.fromJson(s as Map<String, dynamic>),
+        ],
         enabledTools: {
           for (final tool in json['enabledTools'] as List? ?? const [])
             tool as String,
