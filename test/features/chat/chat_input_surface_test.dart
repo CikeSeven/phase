@@ -52,7 +52,7 @@ void main() {
       expect(clip.borderRadius, AppRadius.largeAll);
       expect(clip.clipBehavior, Clip.antiAlias);
       expect(tester.getSize(filter), tester.getSize(find.byType(ClipRRect)));
-      expect(surfaceMaterial(tester).color!.a, inExclusiveRange(0.7, 0.8));
+      expect(surfaceMaterial(tester).color!.a, inExclusiveRange(0.55, 0.7));
 
       final ink = find.byType(Ink);
       expect(

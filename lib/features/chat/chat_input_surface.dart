@@ -27,7 +27,7 @@ class ChatInputSurface extends StatelessWidget {
         borderRadius: AppRadius.largeAll,
         boxShadow: [
           BoxShadow(
-            color: colors.shadow.withValues(alpha: dark ? 0.24 : 0.08),
+            color: colors.shadow.withValues(alpha: dark ? 0.18 : 0.06),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
@@ -37,10 +37,10 @@ class ChatInputSurface extends StatelessWidget {
         blur: 20,
         color:
             (dark ? colors.surfaceContainerLow : colors.surfaceContainerLowest)
-                .withValues(alpha: dark ? 0.74 : 0.72),
+                .withValues(alpha: dark ? 0.68 : 0.58),
         borderColor: focused
             ? colors.primary
-            : highlight.withValues(alpha: dark ? 0.20 : 0.90),
+            : highlight.withValues(alpha: dark ? 0.16 : 0.64),
         // 高光画在 Material 上，附件和动作按钮的 ink 反馈仍在其上方。
         child: Ink(
           decoration: BoxDecoration(
@@ -49,9 +49,9 @@ class ChatInputSurface extends StatelessWidget {
               end: Alignment.bottomRight,
               stops: const [0, 0.5, 1],
               colors: [
-                highlight.withValues(alpha: dark ? 0.06 : 0.26),
-                highlight.withValues(alpha: dark ? 0.01 : 0.06),
-                colors.primary.withValues(alpha: dark ? 0.04 : 0.025),
+                highlight.withValues(alpha: dark ? 0.02 : 0.12),
+                highlight.withValues(alpha: dark ? 0.005 : 0.03),
+                colors.primary.withValues(alpha: dark ? 0.02 : 0.015),
               ],
             ),
           ),

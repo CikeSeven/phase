@@ -88,7 +88,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         hintText: '输入消息…',
         // 更透的玻璃上加强提示文字，避免背后内容降低对比度。
         hintStyle: theme.textTheme.bodyLarge?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+          color: theme.colorScheme.onSurface,
         ),
         border: InputBorder.none,
         enabledBorder: InputBorder.none,

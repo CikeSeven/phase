@@ -32,7 +32,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final clear = colors.surface.withValues(alpha: 0);
     return AppBar(
       title: title,
@@ -51,12 +53,16 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       flexibleSpace: FrostedSurface(
         borderRadius: BorderRadius.zero,
         borderColor: clear,
+        color:
+            (dark ? colors.surfaceContainerLow : colors.surfaceContainerLowest)
+                .withValues(alpha: dark ? 0.64 : 0.50),
+        blur: 20,
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: showDivider
                 ? Border(
                     bottom: BorderSide(
-                      color: colors.outlineVariant.withValues(alpha: 0.48),
+                      color: colors.outlineVariant.withValues(alpha: 0.24),
                     ),
                   )
                 : null,
