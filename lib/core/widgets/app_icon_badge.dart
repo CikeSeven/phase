@@ -4,8 +4,8 @@ import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import '../theme/brand_colors.dart';
 
-/// 主操作、连接能力、次级信息和品牌点缀的语义色调。
-enum AppTone { primary, teal, lavender, gold }
+/// 主操作、连接能力、次级信息、品牌点缀和危险操作的语义色调。
+enum AppTone { primary, teal, lavender, gold, error }
 
 /// 带成对前景与底色的装饰图标，触控行为由外层有标签的控件承担。
 class AppIconBadge extends StatelessWidget {
@@ -95,6 +95,10 @@ class AppBadge extends StatelessWidget {
     AppTone.gold => (
       container: brand.goldContainer,
       onContainer: brand.onGoldContainer,
+    ),
+    AppTone.error => (
+      container: colors.errorContainer,
+      onContainer: colors.onErrorContainer,
     ),
   };
 }

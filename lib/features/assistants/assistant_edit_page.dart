@@ -162,7 +162,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
         title: '删除助手',
         description: '确定删除此助手吗？',
         icon: Symbols.delete,
-        tone: AppTone.lavender,
+        tone: AppTone.error,
         content: const SizedBox.shrink(),
         actions: [
           TextButton(
@@ -172,6 +172,10 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           ),
           FilledButton(
             key: const ValueKey('confirm-delete-assistant'),
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () => Navigator.of(context).pop(true),
             child: const Text('删除'),
           ),

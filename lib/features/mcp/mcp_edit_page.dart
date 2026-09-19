@@ -11,6 +11,7 @@ import '../../../core/utils/id.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/mcp_server_profile.dart';
@@ -189,6 +190,8 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       builder: (context) => AppDialog(
         title: '删除 MCP 服务',
         description: '关闭此服务的连接并删除凭据。历史工具记录保留。',
+        icon: Symbols.delete,
+        tone: AppTone.error,
         content: const SizedBox.shrink(),
         actions: [
           TextButton(
@@ -196,6 +199,10 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
             child: const Text('取消'),
           ),
           FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(context).colorScheme.error,
+              foregroundColor: Theme.of(context).colorScheme.onError,
+            ),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('删除'),
           ),
@@ -239,6 +246,14 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                     if (_entry != null)
                       IconButton.filledTonal(
                         tooltip: '删除 MCP 服务',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Theme.of(context)
+                              .colorScheme
+                              .errorContainer,
+                          foregroundColor: Theme.of(context)
+                              .colorScheme
+                              .onErrorContainer,
+                        ),
                         onPressed: _busy ? null : _delete,
                         icon: const Icon(Symbols.delete),
                       ),

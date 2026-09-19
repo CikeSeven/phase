@@ -7,6 +7,7 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
@@ -45,6 +46,8 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
       builder: (context) => AppDialog(
         title: '删除 Skill',
         description: '从助手范围中移除并立即停止后续读取。任务引用的版本会在任务结束后清理；已有聊天和产物保留。',
+        icon: Symbols.delete,
+        tone: AppTone.error,
         content: const SizedBox.shrink(),
         actions: [
           TextButton(

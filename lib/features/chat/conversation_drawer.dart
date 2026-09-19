@@ -466,9 +466,13 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                     child: Text(conversation.pinned ? '取消置顶' : '置顶'),
                   ),
                   MenuItemButton(
-                    leadingIcon: Icon(Symbols.delete, color: colors.error),
+                    style: MenuItemButton.styleFrom(
+                      foregroundColor: colors.error,
+                      iconColor: colors.error,
+                    ),
+                    leadingIcon: const Icon(Symbols.delete),
                     onPressed: () => _confirmDelete(context, ref),
-                    child: Text('删除', style: TextStyle(color: colors.error)),
+                    child: const Text('删除'),
                   ),
                 ],
                 builder: (context, controller, child) => IconButton(
@@ -560,14 +564,9 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
         return AppDialog(
           title: '删除会话',
           description: '该会话的所有消息将一并删除，此操作无法撤销。',
-          content: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Symbols.delete, color: colors.error),
-              const SizedBox(width: AppSpacing.m),
-              Expanded(child: Text('确定删除「${conversation.title}」吗？')),
-            ],
-          ),
+          icon: Symbols.delete,
+          tone: AppTone.error,
+          content: Text('确定删除「${conversation.title}」吗？'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),

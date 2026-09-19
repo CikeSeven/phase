@@ -10,6 +10,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/id.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_empty_state.dart';
+import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/api_protocol.dart';
@@ -239,6 +240,11 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                                     ? 'retry-delete-provider'
                                     : 'retry-save-provider',
                               ),
+                              style: _deletePending
+                                  ? TextButton.styleFrom(
+                                      foregroundColor: theme.colorScheme.error,
+                                    )
+                                  : null,
                               onPressed: _deletePending
                                   ? (_deleting ? null : _delete)
                                   : (_busy ? null : _scheduleAutoSave),
@@ -378,6 +384,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
           title: '移除模型？',
           description: _editing ? '从此配置中移除，不会删除远端模型。' : '保存后从此配置中移除，不会删除远端模型。',
           icon: Symbols.delete,
+          tone: AppTone.error,
           content: Text(model.id),
           actions: [
             TextButton(
@@ -577,6 +584,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
             title: '删除服务商？',
             description: '将删除此服务商的配置、模型和本机保存的 API Key。',
             icon: Symbols.delete,
+            tone: AppTone.error,
             content: Text(_nameController.text.trim()),
             actions: [
               TextButton(
