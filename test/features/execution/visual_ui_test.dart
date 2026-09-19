@@ -119,7 +119,10 @@ void main() {
       expect(find.byKey(const ValueKey('tool-artifact-image')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('tool-toggle-capture')));
       await tester.pumpAndSettle();
-      expect(find.text(record.result!), findsOneWidget);
+      final output = tester
+          .widget<Text>(find.byKey(const ValueKey('tool-result-capture')))
+          .data!;
+      expect(jsonDecode(output), jsonDecode(record.result!));
       expect(find.textContaining('screenshotId'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('tool-artifact-image')));
       await tester.pumpAndSettle();

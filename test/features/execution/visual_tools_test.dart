@@ -111,8 +111,8 @@ void main() {
     expect(File('${h.tempDir.path}/native-screen-2.png').existsSync(), isFalse);
     expect(driver.deviceTasks, [true]);
     expect(
-      ToolPresentation.outputText(records['capture']!),
-      records['capture']!.result,
+      jsonDecode(ToolPresentation.outputText(records['capture']!)),
+      jsonDecode(records['capture']!.result!),
     );
     expect(
       jsonDecode(records['capture']!.result!)['screenshot']['packageName'],
@@ -378,7 +378,10 @@ void main() {
     for (final record in records.values) {
       expect(record.status, ToolCallStatus.succeeded);
       expect(jsonDecode(record.result!)['completedCount'], 1);
-      expect(ToolPresentation.outputText(record), record.result);
+      expect(
+        jsonDecode(ToolPresentation.outputText(record)),
+        jsonDecode(record.result!),
+      );
     }
     expect((await h.latestRun()).status, RunStatus.completed);
   });

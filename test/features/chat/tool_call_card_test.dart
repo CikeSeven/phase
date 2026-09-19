@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -13,6 +14,7 @@ import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/tool_policy.dart';
+import 'package:phase/data/models/tool_source.dart';
 import 'package:phase/data/repositories/tool_call_repository.dart';
 import 'package:phase/features/chat/chat_transcript.dart';
 import 'package:phase/features/chat/tool_call_card.dart';
@@ -36,13 +38,19 @@ void main() {
     String? result = '已创建「summary.md」（8 字）',
     String toolName = 'write_file',
     String? errorCode,
+    Map<String, dynamic> arguments = const {
+      'path': 'summary.md',
+      'content': '# 摘要',
+    },
+    ToolSource? source,
   }) {
     return ToolCallRecord(
       id: 'tool-1',
       runId: 'run-1',
       assistantMessageId: 'msg-1',
       toolName: toolName,
-      arguments: const {'path': 'summary.md', 'content': '# 摘要'},
+      arguments: arguments,
+      source: source,
       target: toolName == 'read_file'
           ? '读取文件：notes.txt'
           : '写入文件「summary.md」（8 字，新文件）',
@@ -138,9 +146,9 @@ void main() {
       tester.getSize(find.byType(ToolCard)).height,
       greaterThan(collapsedHeight),
     );
-    // 参数与结果留在记录里：卡片不展示参数 JSON。
-    expect(find.textContaining('"path"'), findsNothing);
-    expect(find.textContaining('{"'), findsNothing);
+    expect(find.text('输入参数'), findsOneWidget);
+    expect(find.text('输出内容'), findsOneWidget);
+    expect(find.text('path: summary.md\n\ncontent: # 摘要'), findsOneWidget);
     await tester.tap(toggle);
     await tester.pumpAndSettle();
     expect(find.text('已创建「summary.md」（8 字）'), findsNothing);
@@ -152,6 +160,232 @@ void main() {
     await pumpCard(tester, stored: null);
     expect(find.text('写入文件'), findsNothing);
     expect(find.byType(Card), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('命令卡片展示实际参数、两路输出和退出码，去除执行封装', (tester) async {
+    final stored = record(
+      toolName: 'shell',
+      status: ToolCallStatus.failed,
+      arguments: const {
+        'command': 'printf "first\\nsecond\\n"; missing-command',
+        'cwd': '/workspace/project',
+        'timeoutMs': 3000,
+      },
+      result: jsonEncode({
+        'environment': '24.04-arm64',
+        'workspace': '测试空间',
+        'cwd': '/workspace/project',
+        'stdout': 'first\nsecond\n',
+        'stderr': '/bin/sh: missing-command: not found\n',
+        'exitCode': 127,
+        'signal': null,
+        'cancelled': false,
+        'timedOut': false,
+        'outputLimitExceeded': false,
+        'stdoutBytes': 13,
+        'stderrBytes': 41,
+        'previewTruncated': false,
+        'artifactIds': ['internal-artifact-id'],
+        'importedFiles': [],
+        'knownEffects': '已收集输出；工作区中的文件变化保留，失败或停止不代表撤销',
+      }),
+    );
+    await pumpCard(tester, stored: stored, expanded: true);
+    expect(
+      find.text(
+        'command: printf "first\\nsecond\\n"; missing-command\n\n'
+        'cwd: /workspace/project\n\ntimeoutMs: 3000',
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.text(
+        'stdout\nfirst\nsecond\n\n\n'
+        'stderr\n/bin/sh: missing-command: not found\n\n\n退出码：127',
+      ),
+      findsOneWidget,
+    );
+    expect(find.textContaining('knownEffects'), findsNothing);
+    expect(find.textContaining('internal-artifact-id'), findsNothing);
+    // 展示转换不能修改仓储里的完整回执。
+    expect(jsonDecode(stored.result!)['environment'], '24.04-arm64');
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final scenario in [
+    (
+      status: ToolCallStatus.cancelled,
+      flags: {'cancelled': true},
+      hint: '命令已停止',
+    ),
+    (status: ToolCallStatus.failed, flags: {'timedOut': true}, hint: '命令执行超时'),
+    (
+      status: ToolCallStatus.failed,
+      flags: {'outputLimitExceeded': true},
+      hint: '输出达到上限，进程已停止',
+    ),
+  ]) {
+    testWidgets('命令${scenario.hint}时保留部分输出、截断提示与实际错误', (tester) async {
+      await pumpCard(
+        tester,
+        stored: record(
+          toolName: 'shell',
+          arguments: const {'command': 'long-command'},
+          status: scenario.status,
+          result: jsonEncode({
+            'stdout': '已完成第一步\n',
+            'stderr': '',
+            'signal': 15,
+            'previewTruncated': true,
+            'error': '命令输出文件保存失败',
+            ...scenario.flags,
+          }),
+        ),
+        expanded: true,
+      );
+      final text = tester
+          .widget<Text>(find.byKey(const ValueKey('tool-result-tool-1')))
+          .data!;
+      expect(text, contains('stdout\n已完成第一步\n'));
+      expect(text, contains(scenario.hint));
+      expect(text, contains('终止信号：15'));
+      expect(text, contains('输出预览已截断'));
+      expect(text, contains('命令输出文件保存失败'));
+      expect(text, isNot(contains('完整输出见附件')));
+    });
+  }
+
+  testWidgets('无输出命令与派发前错误如实显示，原始异常文本不丢失', (tester) async {
+    await pumpCard(
+      tester,
+      stored: record(
+        toolName: 'shell',
+        arguments: const {'command': 'true'},
+        result: '{"stdout":"","stderr":"","exitCode":0}',
+      ),
+      expanded: true,
+    );
+    expect(find.text('（无输出）\n\n退出码：0'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await pumpCard(
+      tester,
+      stored: record(
+        toolName: 'shell',
+        status: ToolCallStatus.failed,
+        result: '请先准备 Ubuntu 环境并绑定工作区',
+      ),
+      expanded: true,
+    );
+    expect(find.text('请先准备 Ubuntu 环境并绑定工作区'), findsOneWidget);
+  });
+
+  testWidgets('MCP 参数保留空值与结构，结果不套用内置命令的过滤规则', (tester) async {
+    final result = {
+      'stdout': '工具返回的正文',
+      'stderr': '',
+      'environment': {'name': '服务端业务数据'},
+      'knownEffects': '工具定义的返回字段',
+    };
+    await pumpCard(
+      tester,
+      stored: record(
+        toolName: 'shell',
+        source: const ToolSource(
+          kind: ToolSourceKind.mcp,
+          id: 'server',
+          originalName: 'shell',
+          definitionRevision: 'revision',
+        ),
+        arguments: const {
+          'empty': '',
+          'unset': null,
+          'options': {'enabled': false, 'limit': 0},
+        },
+        result: jsonEncode(result),
+      ),
+      expanded: true,
+    );
+    expect(
+      find.text(
+        'empty: ""\n\nunset: null\n\noptions: {\n  "enabled": false,\n  "limit": 0\n}',
+      ),
+      findsOneWidget,
+    );
+    final output = tester
+        .widget<Text>(find.byKey(const ValueKey('tool-result-tool-1')))
+        .data!;
+    expect(jsonDecode(output), result);
+  });
+
+  testWidgets('Skill 直接展示资源正文和续读位置', (tester) async {
+    await pumpCard(
+      tester,
+      stored: record(
+        toolName: 'read_skill',
+        arguments: const {'skillId': 'skill', 'relativePath': 'SKILL.md'},
+        result: jsonEncode({
+          'skillId': 'skill',
+          'name': 'fixture',
+          'revision': 'digest',
+          'source': 'import',
+          'relativePath': 'SKILL.md',
+          'offset': 0,
+          'nextOffset': 4000,
+          'content': '# 指导\n\n资源内容',
+        }),
+      ),
+      expanded: true,
+    );
+    expect(
+      find.text('# 指导\n\n资源内容\n\noffset: 0\n\nnextOffset: 4000'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('长输入可滚到末尾并完整复制，收起后恢复输入位置', (tester) async {
+    final content = '${'文件内容\n' * 300}末尾内容';
+    await pumpCard(
+      tester,
+      stored: record(arguments: {'path': 'notes.txt', 'content': content}),
+      expanded: true,
+    );
+    final input = find.byKey(const PageStorageKey('tool-input-tool-1'));
+    final controller = tester.widget<SingleChildScrollView>(input).controller!;
+    expect(tester.getSize(input).height, lessThanOrEqualTo(160));
+    controller.jumpTo(controller.position.maxScrollExtent);
+    await tester.pump();
+    final offset = controller.offset;
+    final toggle = find.byKey(const ValueKey('tool-toggle-tool-1'));
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    await tester.tap(toggle);
+    await tester.pumpAndSettle();
+    expect(controller.offset, closeTo(offset, 0.5));
+    final copied = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied.add((call.arguments as Map)['text'] as String);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await tester.tap(find.byTooltip('复制输入参数'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('复制输出内容'));
+    await tester.pumpAndSettle();
+    expect(copied, [
+      'path: notes.txt\n\ncontent: $content',
+      '已创建「summary.md」（8 字）',
+    ]);
     expect(tester.takeException(), isNull);
   });
 
@@ -241,11 +475,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('文件结构化输出保留完整正文和元信息，不替换成摘要', (tester) async {
+  testWidgets('文件结构化输出直接展示完整正文与分页信息', (tester) async {
+    final content = '${'完整正文\n' * 80}文件末尾';
     final result = jsonEncode({
       'name': 'notes.txt',
-      'text': '${'完整正文\n' * 80}文件末尾',
-      'totalLines': 81,
+      'text': content,
+      'startLine': 1,
+      'endLine': 81,
+      'truncated': true,
+      'nextOffset': 82,
     });
     await pumpCard(
       tester,
@@ -256,7 +494,7 @@ void main() {
       tester
           .widget<Text>(find.byKey(const ValueKey('tool-result-tool-1')))
           .data,
-      result,
+      '$content\n\nstartLine: 1\n\nendLine: 81\n\ntruncated: true\n\nnextOffset: 82',
     );
     expect(find.text('已读取「notes.txt」'), findsNothing);
     expect(tester.takeException(), isNull);
@@ -369,7 +607,10 @@ void main() {
       ),
       expanded: true,
     );
-    expect(find.text(result), findsOneWidget);
+    final output = tester
+        .widget<Text>(find.byKey(const ValueKey('tool-result-tool-1')))
+        .data!;
+    expect(jsonDecode(output), jsonDecode(result));
     expect(tester.takeException(), isNull);
   });
 
@@ -386,7 +627,10 @@ void main() {
     expect(find.text('相月未能保存这次对话，任务已停止。'), findsOneWidget);
     expect(find.textContaining('自动重发'), findsNothing);
     expect(find.textContaining('当前状态'), findsNothing);
-    expect(find.text(stored.result!), findsOneWidget);
+    final output = tester
+        .widget<Text>(find.byKey(const ValueKey('tool-result-tool-1')))
+        .data!;
+    expect(jsonDecode(output), jsonDecode(stored.result!));
     expect(stored.result, contains('actionAccepted'));
     expect(tester.takeException(), isNull);
   });

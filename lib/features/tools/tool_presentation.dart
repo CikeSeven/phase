@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
 import '../../../data/models/tool_source.dart';
+import 'tool_output_presentation.dart';
 
 /// 工具与状态的展示信息：图标、文案、色调。
 ///
@@ -125,8 +126,7 @@ class ToolPresentation {
 
   /// 确认面板展示的参数：标签 + 真实值。
   ///
-  /// 与工具卡片不同，确认面板必须让用户看到这次动作的实际参数
-  /// （design 第一部分 §5.3），因此未在下面登记的工具也逐条展示原始参数。
+  /// 未在下面登记的工具也逐条展示原始参数；长正文使用明确标注的预览。
   static List<ToolParameterDetail> parameterDetails(ToolCallRecord record) {
     final arguments = record.arguments;
     if (arguments.isEmpty) return const [];
@@ -205,16 +205,25 @@ class ToolPresentation {
 
   static const storageFailureMessage = '相月未能保存这次对话，任务已停止。';
 
-  /// 完整展示本次工具返回的内容；没有输出时才使用状态说明。
+  /// 卡片展示全部实际输入，不复用确认面板的长正文预览。
+  static String inputText(ToolCallRecord record) => record.arguments.isEmpty
+      ? '（无参数）'
+      : record.arguments.entries
+            .map((entry) => '${entry.key}: ${toolValueText(entry.value)}')
+            .join('\n\n');
+
+  /// 展示本次输出正文与必要结果信息；没有输出时才使用状态说明。
   static String outputText(ToolCallRecord record) {
     final result = record.result;
-    if (result != null && result.trim().isNotEmpty) return result;
+    if (result != null && result.isNotEmpty) {
+      return presentToolOutput(record, result);
+    }
     if (record.errorCode == 'storageError') return storageFailureMessage;
     return switch (record.status) {
       ToolCallStatus.prepared => '参数已就绪，等待执行',
       ToolCallStatus.awaitingConfirmation => '等待你确认这次动作',
       ToolCallStatus.executing => '正在执行',
-      ToolCallStatus.succeeded => '执行完成',
+      ToolCallStatus.succeeded => '（无输出）',
       ToolCallStatus.failed => '执行失败',
       ToolCallStatus.rejected => '未执行（已拒绝）',
       ToolCallStatus.cancelled => '已取消',

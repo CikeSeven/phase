@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_control_style.dart';
@@ -11,7 +12,7 @@ import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
 import 'tool_presentation.dart';
 
-/// 默认收起为工具名与状态；展开后滚动查看完整结果和产物。
+/// 默认收起为工具名与状态；展开后查看完整输入、输出和产物。
 ///
 /// 状态从 [ToolCallRecord] 读，界面不另存一份业务副本。
 class ToolCard extends StatefulWidget {
@@ -35,9 +36,8 @@ class ToolCard extends StatefulWidget {
 
 class _ToolCardState extends State<ToolCard>
     with AutomaticKeepAliveClientMixin {
-  static const _maxOutputHeight = 240.0;
-
   final _headerKey = GlobalKey();
+  final _inputController = ScrollController();
   final _outputController = ScrollController();
   bool _expanded = false;
   bool _userToggled = false;
@@ -67,13 +67,14 @@ class _ToolCardState extends State<ToolCard>
 
   @override
   void dispose() {
+    _inputController.dispose();
     _outputController.dispose();
     super.dispose();
   }
 
-  bool _onOutputOverscroll(OverscrollNotification notification) {
+  bool _onContentOverscroll(OverscrollNotification notification) {
     if (notification.depth != 0) return false;
-    // 输出滚到边界后，继续拖动交给聊天列表，避免手势卡在卡片内。
+    // 内容滚到边界后，继续拖动交给聊天列表，避免手势卡在卡片内。
     final outer = Scrollable.maybeOf(context)?.position;
     if (outer == null || !outer.hasContentDimensions) return false;
     final target = (outer.pixels + notification.overscroll).clamp(
@@ -92,7 +93,7 @@ class _ToolCardState extends State<ToolCard>
     final colors = theme.colorScheme;
     final statusColor = ToolPresentation.statusColor(context, record.status);
     final inFlight = ToolPresentation.isInFlight(record.status);
-    final output = ToolPresentation.outputText(record);
+    final output = _expanded ? ToolPresentation.outputText(record) : '';
     final status = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -212,32 +213,25 @@ class _ToolCardState extends State<ToolCard>
                       ),
                       const SizedBox(height: AppSpacing.s),
                     ],
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxHeight: _maxOutputHeight,
-                      ),
-                      child: Scrollbar(
-                        controller: _outputController,
-                        thumbVisibility: true,
-                        child: NotificationListener<OverscrollNotification>(
-                          onNotification: _onOutputOverscroll,
-                          child: SingleChildScrollView(
-                            key: PageStorageKey('tool-output-${record.id}'),
-                            controller: _outputController,
-                            primary: false,
-                            padding: const EdgeInsets.only(right: AppSpacing.s),
-                            child: Text(
-                              output,
-                              key: ValueKey('tool-result-${record.id}'),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: record.status == ToolCallStatus.failed
-                                    ? colors.error
-                                    : colors.onSurface,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                    _ToolContentSection(
+                      title: '输入参数',
+                      text: ToolPresentation.inputText(record),
+                      textKey: ValueKey('tool-arguments-${record.id}'),
+                      scrollKey: PageStorageKey('tool-input-${record.id}'),
+                      controller: _inputController,
+                      maxHeight: 160,
+                      onOverscroll: _onContentOverscroll,
+                    ),
+                    const SizedBox(height: AppSpacing.s),
+                    _ToolContentSection(
+                      title: '输出内容',
+                      text: output,
+                      textKey: ValueKey('tool-result-${record.id}'),
+                      scrollKey: PageStorageKey('tool-output-${record.id}'),
+                      controller: _outputController,
+                      maxHeight: 240,
+                      onOverscroll: _onContentOverscroll,
+                      isError: record.status == ToolCallStatus.failed,
                     ),
                     if (widget.artifacts.isNotEmpty) ...[
                       const SizedBox(height: AppSpacing.xs),
@@ -284,5 +278,95 @@ class _ToolCardState extends State<ToolCard>
         ),
       ),
     );
+  }
+}
+
+class _ToolContentSection extends StatelessWidget {
+  const _ToolContentSection({
+    required this.title,
+    required this.text,
+    required this.textKey,
+    required this.scrollKey,
+    required this.controller,
+    required this.maxHeight,
+    required this.onOverscroll,
+    this.isError = false,
+  });
+
+  final String title;
+  final String text;
+  final Key textKey;
+  final PageStorageKey<String> scrollKey;
+  final ScrollController controller;
+  final double maxHeight;
+  final bool Function(OverscrollNotification) onOverscroll;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: '复制$title',
+              onPressed: () => _copy(context),
+              icon: const Icon(Symbols.content_copy, size: 18),
+            ),
+          ],
+        ),
+        ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Scrollbar(
+            controller: controller,
+            thumbVisibility: true,
+            child: NotificationListener<OverscrollNotification>(
+              onNotification: onOverscroll,
+              child: SingleChildScrollView(
+                key: scrollKey,
+                controller: controller,
+                primary: false,
+                padding: const EdgeInsets.only(right: AppSpacing.s),
+                child: SelectionArea(
+                  child: Text(
+                    text,
+                    key: textKey,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      color: isError ? colors.error : colors.onSurface,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _copy(BuildContext context) async {
+    String feedback;
+    try {
+      await Clipboard.setData(ClipboardData(text: text));
+      feedback = '已复制$title';
+    } on PlatformException {
+      feedback = '复制失败，请重试';
+    }
+    if (!context.mounted) return;
+    ScaffoldMessenger.maybeOf(context)
+      ?..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(feedback)));
   }
 }
