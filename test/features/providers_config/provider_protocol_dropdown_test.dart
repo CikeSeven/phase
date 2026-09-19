@@ -14,7 +14,7 @@ import 'provider_test_harness.dart';
 
 void main() {
   for (final dark in [false, true]) {
-    testWidgets('协议使用共享 Expressive 下拉，窄屏大字可选全部协议且保存前不改配置 $dark', (
+    testWidgets('协议使用共享 Expressive 下拉，窄屏大字可选全部协议且选择后自动保存配置 $dark', (
       tester,
     ) async {
       final harness = ProviderTestHarness();
@@ -63,15 +63,16 @@ void main() {
           ProviderUi.protocolLabel(protocol),
         );
         expect(find.byType(MenuItemButton), findsNothing);
+        await settleProviderAutoSave(tester);
         expect(
           (await tester.runAsync(harness.repository.listProfiles))!
               .single
               .protocol,
-          ApiProtocol.openaiCompletions,
+          protocol,
         );
         expect(tester.takeException(), isNull);
       }
-      await tapProviderControl(tester, keyed('save-provider'));
+      await settleProviderAutoSave(tester);
       final saved = (await tester.runAsync(harness.repository.listProfiles))!
           .single;
       expect(saved.protocol, ApiProtocol.googleGenerativeAi);
@@ -86,13 +87,13 @@ void main() {
     });
   }
 
-  testWidgets('协议菜单不唤起键盘，系统返回先关菜单，取消编辑不保存协议草稿', (tester) async {
+  testWidgets('协议菜单不唤起键盘，系统返回先关菜单，返回保留自动保存的修改', (tester) async {
     final harness = ProviderTestHarness();
     addTearDown(harness.dispose);
     await harness.seed(tester);
     await harness.pump(tester);
     await tapProviderControl(tester, keyed('provider-p1'));
-    await fillProviderField(tester, keyed('provider-name'), '未保存的名称');
+    await fillProviderField(tester, keyed('provider-name'), '自动保存的名称');
     expect(tester.testTextInput.isVisible, isTrue);
     await tapProviderControl(tester, keyed('choose-protocol'));
     expect(tester.testTextInput.isVisible, isFalse);
@@ -110,7 +111,7 @@ void main() {
     expect(find.byType(ProviderEditPage), findsNothing);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
-    expect(saved.protocol, ApiProtocol.openaiCompletions);
-    expect(saved.name, '我的服务商');
+    expect(saved.protocol, ApiProtocol.anthropicMessages);
+    expect(saved.name, '自动保存的名称');
   });
 }

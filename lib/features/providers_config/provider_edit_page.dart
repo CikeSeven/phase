@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,7 +8,6 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/id.dart';
-import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
@@ -23,7 +24,7 @@ import 'provider_model_dialog.dart';
 import 'provider_model_editor.dart';
 import 'provider_preset_sheet.dart';
 
-/// 服务商新增 / 编辑草稿，只有保存操作会写入配置与安全存储。
+/// 新增配置确认后创建，已有配置的有效修改自动保存。
 class ProviderEditPage extends ConsumerStatefulWidget {
   const ProviderEditPage({super.key, this.profileId});
 
@@ -57,15 +58,35 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
   int _testRequestId = 0;
   int? _testedModelCount;
   String? _testError;
+  ProviderProfileRepository? _repository;
+  DateTime? _createdAt;
+  ScaffoldMessengerState? _messenger;
+  Timer? _autoSaveTimer;
+  Future<void>? _autoSaveFuture;
+  ({ProviderProfile profile, String apiKey, int revision})? _pendingSave;
+  int _revision = 0;
+  String? _saveError;
+  String? _deleteError;
+  bool _dirty = false;
+  bool _leaving = false;
+  bool _deleting = false;
+  bool _deletePending = false;
 
   ProviderPreset get _preset => presetById(_presetId);
-  bool get _busy => _saving || _modalOpen;
+  bool get _editing => widget.profileId != null;
+  bool get _busy => (!_editing && _saving) || _modalOpen || _deletePending;
 
   @override
   void initState() {
     super.initState();
     _profileId = widget.profileId;
     _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _messenger = ScaffoldMessenger.of(context);
   }
 
   Future<void> _load() async {
@@ -94,6 +115,8 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       final apiKey = await repository.readApiKey(profile.id);
       if (!mounted) return;
       setState(() {
+        _repository = repository;
+        _createdAt = profile.createdAt;
         _nameController.text = profile.name;
         _baseUrlController.text = profile.baseUrl;
         _apiKeyController.text = apiKey ?? '';
@@ -124,6 +147,14 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
 
   @override
   void dispose() {
+    _leaving = true;
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = null;
+    // 返回不阻断预测手势；已捕获的有效修改继续写入，失败由上层消息提示。
+    _startAutoSave();
+    if (_dirty && _pendingSave == null && !_saving && !_deletePending) {
+      _showSaveFailure(_saveError ?? '更改未保存，请修正表单中的错误。');
+    }
     _nameController.dispose();
     _baseUrlController.dispose();
     _apiKeyController.dispose();
@@ -135,41 +166,37 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
     final theme = Theme.of(context);
     return AppScaffold(
       title: widget.profileId == null ? '新增服务商' : '编辑服务商',
-      bottomBar: _loading || _loadError != null
+      subtitle: _loading || _loadError != null
           ? null
-          : AppBottomBar(
-              child: Center(
-                heightFactor: 1,
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 688),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          '${_models.length} 个模型',
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.m),
-                      FilledButton.icon(
-                        key: const ValueKey('save-provider'),
-                        onPressed: _busy ? null : _save,
-                        icon: _saving
-                            ? const AppLoadingIndicator.small(
-                                semanticsLabel: '正在保存配置',
-                              )
-                            : const Icon(Symbols.check),
-                        label: Text(_saving ? '保存中…' : '保存'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+          : _editing
+          ? (_deletePending
+                ? (_deleting ? '删除中…' : '删除未完成')
+                : _dirty
+                ? (_saveError != null ? '未保存' : '保存中…')
+                : '已保存')
+          : (_saving ? '保存中…' : null),
+      actions: [
+        if (!_loading && _loadError == null)
+          if (_editing)
+            IconButton(
+              key: const ValueKey('delete-provider'),
+              tooltip: '删除服务商',
+              color: theme.colorScheme.error,
+              onPressed: _deleting || _modalOpen ? null : _delete,
+              icon: _deleting
+                  ? const AppLoadingIndicator.small(semanticsLabel: '正在删除服务商')
+                  : const Icon(Symbols.delete),
+            )
+          else
+            IconButton(
+              key: const ValueKey('save-provider'),
+              tooltip: '保存',
+              onPressed: _busy ? null : _save,
+              icon: _saving
+                  ? const AppLoadingIndicator.small(semanticsLabel: '正在保存配置')
+                  : const Icon(Symbols.check),
             ),
+      ],
       body: _loading
           ? const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取配置'))
           : _loadError != null
@@ -190,6 +217,38 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                 keyboardDismissBehavior:
                     ScrollViewKeyboardDismissBehavior.onDrag,
                 slivers: [
+                  if (_saveError != null || _deleteError != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.all(AppSpacing.l),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                _deleteError ?? _saveError!,
+                                style: TextStyle(
+                                  color: theme.colorScheme.error,
+                                ),
+                              ),
+                            ),
+                            TextButton.icon(
+                              key: ValueKey(
+                                _deletePending
+                                    ? 'retry-delete-provider'
+                                    : 'retry-save-provider',
+                              ),
+                              onPressed: _deletePending
+                                  ? (_deleting ? null : _delete)
+                                  : (_busy ? null : _scheduleAutoSave),
+                              icon: const Icon(Symbols.refresh),
+                              label: const Text('重试'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   SliverToBoxAdapter(
                     child: Padding(
                       padding: const EdgeInsets.all(AppSpacing.l),
@@ -209,7 +268,10 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                         testError: _testError,
                         onChoosePreset: _choosePreset,
                         onProtocolChanged: _changeProtocol,
-                        onConnectionChanged: () => setState(_invalidateTest),
+                        onConnectionChanged: () {
+                          setState(_invalidateTest);
+                          _scheduleAutoSave(debounce: true);
+                        },
                         onToggleKeyVisibility: () =>
                             setState(() => _apiKeyVisible = !_apiKeyVisible),
                         onTest: _testConnection,
@@ -220,12 +282,15 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                     models: _models,
                     enabled: !_busy,
                     onAdd: _addModel,
-                    onModelChanged: (model) => setState(() {
-                      _models = [
-                        for (final entry in _models)
-                          if (entry.id == model.id) model else entry,
-                      ];
-                    }),
+                    onModelChanged: (model) {
+                      setState(() {
+                        _models = [
+                          for (final entry in _models)
+                            if (entry.id == model.id) model else entry,
+                        ];
+                      });
+                      _scheduleAutoSave();
+                    },
                     onRemove: _removeModel,
                   ),
                 ],
@@ -273,6 +338,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       }
       _invalidateTest();
     });
+    _scheduleAutoSave();
   }
 
   void _changeProtocol(ApiProtocol protocol) {
@@ -281,6 +347,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       _protocol = protocol;
       _invalidateTest();
     });
+    _scheduleAutoSave();
   }
 
   Future<void> _addModel() async {
@@ -299,6 +366,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       }
       _defaultModel ??= model.id;
     });
+    _scheduleAutoSave();
   }
 
   Future<void> _removeModel(ProfileModel model) async {
@@ -308,7 +376,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
         context: context,
         builder: (context) => AppDialog(
           title: '移除模型？',
-          description: '保存后从此配置中移除，不会删除远端模型。',
+          description: _editing ? '从此配置中移除，不会删除远端模型。' : '保存后从此配置中移除，不会删除远端模型。',
           icon: Symbols.delete,
           content: Text(model.id),
           actions: [
@@ -338,6 +406,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       _models = _models.where((entry) => entry.id != model.id).toList();
       if (_defaultModel == model.id) _defaultModel = null;
     });
+    _scheduleAutoSave();
   }
 
   Future<void> _testConnection() async {
@@ -396,12 +465,168 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
         _testing = false;
         _testedModelCount = ids.length;
       });
+      _scheduleAutoSave();
     } catch (error) {
       if (!mounted || requestId != _testRequestId) return;
       setState(() {
         _testing = false;
         _testError = error is Failure ? error.userMessage : '获取模型失败，请检查配置后重试。';
       });
+    }
+  }
+
+  ProviderProfile _draft() => ProviderProfile(
+    id: _profileId ??= generateId(),
+    name: _nameController.text.trim(),
+    protocol: _protocol,
+    baseUrl: _baseUrlController.text.trim(),
+    requiresKey: _preset.requiresApiKey,
+    presetId: _presetId,
+    models: List.of(_models),
+    defaultModel: _defaultModel,
+    compatOverrides: _compatOverrides,
+    createdAt: _createdAt ??= DateTime.now(),
+  );
+
+  void _scheduleAutoSave({bool debounce = false}) {
+    if (!_editing || _loading || _loadError != null || _deletePending) return;
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = null;
+    _revision++;
+    setState(() {
+      _dirty = true;
+      _saveError = null;
+    });
+    if (validateProviderName(_nameController.text) != null ||
+        validateProviderBaseUrl(_baseUrlController.text) != null) {
+      _pendingSave = null;
+      _formKey.currentState?.validate();
+      setState(() => _saveError = '更改未保存，请修正表单中的错误。');
+      return;
+    }
+    _formKey.currentState?.validate();
+    _pendingSave = (
+      profile: _draft(),
+      apiKey: _apiKeyController.text.trim(),
+      revision: _revision,
+    );
+    if (debounce) {
+      _autoSaveTimer = Timer(const Duration(milliseconds: 400), () {
+        _autoSaveTimer = null;
+        _startAutoSave();
+      });
+    } else {
+      _startAutoSave();
+    }
+  }
+
+  void _startAutoSave() {
+    if (_saving || _pendingSave == null || _deletePending) return;
+    _saving = true;
+    _autoSaveFuture = _drainAutoSave();
+  }
+
+  Future<void> _drainAutoSave() async {
+    try {
+      // 一次只写一份完整快照；写入中的新修改合并为下一份，旧完成不改回表单。
+      while (!_deletePending && _autoSaveTimer == null) {
+        final pending = _pendingSave;
+        if (pending == null) break;
+        _pendingSave = null;
+        try {
+          await _repository!.saveProfile(pending.profile);
+          if (pending.profile.requiresKey &&
+              pending.apiKey.isNotEmpty &&
+              pending.apiKey != _savedApiKey) {
+            await _repository!.writeApiKey(pending.profile.id, pending.apiKey);
+            _savedApiKey = pending.apiKey;
+          }
+          if (pending.revision == _revision) {
+            _dirty = false;
+            _saveError = null;
+          }
+        } catch (error) {
+          if (_deletePending || pending.revision != _revision) continue;
+          _saveError = error is Failure ? error.userMessage : '自动保存失败，请重试。';
+          if (_leaving || !mounted) _showSaveFailure(_saveError!);
+        }
+      }
+    } finally {
+      _saving = false;
+      if (mounted && !_leaving) setState(() {});
+    }
+  }
+
+  void _showSaveFailure(String message) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final messenger = _messenger;
+      if (messenger != null && messenger.mounted) {
+        messenger.showSnackBar(SnackBar(content: Text(message)));
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _delete() async {
+    if (_deleting || _modalOpen || _profileId == null) return;
+    if (!_deletePending) {
+      final confirmed = await _showEditorModal(
+        () => showDialog<bool>(
+          context: context,
+          builder: (context) => AppDialog(
+            title: '删除服务商？',
+            description: '将删除此服务商的配置、模型和本机保存的 API Key。',
+            icon: Symbols.delete,
+            content: Text(_nameController.text.trim()),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              FilledButton(
+                key: const ValueKey('confirm-delete-provider'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                  foregroundColor: Theme.of(context).colorScheme.onError,
+                ),
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('删除'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+    setState(() {
+      _deleting = true;
+      _deletePending = true;
+      _deleteError = null;
+      _saveError = null;
+      _pendingSave = null;
+      _invalidateTest();
+    });
+    _autoSaveTimer?.cancel();
+    _autoSaveTimer = null;
+    try {
+      // 先收尾已派发的写入，再删除，避免迟到写入重新创建已删除配置。
+      await _autoSaveFuture;
+      await _repository!.deleteProfile(_profileId!);
+      if (!mounted) return;
+      _close();
+    } catch (error) {
+      _deleteError = error is Failure ? error.userMessage : '删除服务商失败，请重试。';
+      if (!mounted) _showSaveFailure(_deleteError!);
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
+
+  void _close() {
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go('/settings/providers');
     }
   }
 
@@ -414,43 +639,23 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
     }
     FocusScope.of(context).unfocus();
     final apiKey = _apiKeyController.text.trim();
-    final requiresApiKey = _preset.requiresApiKey;
-    final repository = await ref.read(providerProfileRepositoryProvider.future);
-    if (!mounted) return;
+    final draft = _draft();
     setState(() {
       _saving = true;
       _invalidateTest();
     });
     try {
-      final existing = _profileId == null
-          ? null
-          : await repository.getProfile(_profileId!);
-      final profile = await repository.saveProfile(
-        ProviderProfile(
-          id: _profileId ?? generateId(),
-          name: _nameController.text.trim(),
-          protocol: _protocol,
-          baseUrl: _baseUrlController.text.trim(),
-          requiresKey: requiresApiKey,
-          presetId: _presetId,
-          models: List.of(_models),
-          defaultModel: _defaultModel,
-          compatOverrides: _compatOverrides,
-          createdAt: existing?.createdAt ?? DateTime.now(),
-        ),
+      final repository = await ref.read(
+        providerProfileRepositoryProvider.future,
       );
-      _profileId = profile.id;
-      if (requiresApiKey && apiKey.isNotEmpty) {
+      final profile = await repository.saveProfile(draft);
+      if (profile.requiresKey && apiKey.isNotEmpty) {
         await repository.writeApiKey(profile.id, apiKey);
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context)
           .showSnackBar(const SnackBar(content: Text('已保存服务商配置')));
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go('/settings/providers');
-      }
+      _close();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

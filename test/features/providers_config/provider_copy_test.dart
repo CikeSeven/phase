@@ -65,7 +65,7 @@ void main() {
     await tapProviderControl(tester, keyed('test-provider'));
     expect(find.text('已获取 1 个模型'), findsOneWidget);
     _expectNoTutorials();
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
     expect(

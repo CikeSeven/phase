@@ -18,7 +18,7 @@ void main() {
     ('浅色 360 放大', const Size(360, 720), 1.3, 240.0, AppTheme.light()),
     ('深色横屏', const Size(640, 360), 2.0, 100.0, AppTheme.dark()),
   ]) {
-    testWidgets('$name 长 URL、长 ID、多模型、键盘和固定保存的完整交互无溢出', (tester) async {
+    testWidgets('$name 长 URL、长 ID、多模型、键盘和顶栏删除的完整交互无溢出', (tester) async {
       final harness = ProviderTestHarness();
       addTearDown(harness.dispose);
       final longId =
@@ -46,13 +46,14 @@ void main() {
       );
       expect(tester.takeException(), isNull);
       expect(keyed('provider-model-model-219'), findsNothing);
-      expect(keyed('save-provider').hitTestable(), findsOneWidget);
-      final barBefore = tester.getRect(find.byType(AppBottomBar));
+      expect(keyed('delete-provider').hitTestable(), findsOneWidget);
+      expect(find.byType(AppBottomBar), findsNothing);
+      final deleteBefore = tester.getRect(keyed('delete-provider'));
 
       await searchModels(tester, 'long-model-id');
       await tapProviderControl(tester, keyed('enabled-$longId'));
       expect(tester.widget<Checkbox>(keyed('enabled-$longId')).value, isFalse);
-      expect(tester.getRect(find.byType(AppBottomBar)), barBefore);
+      expect(tester.getRect(keyed('delete-provider')), deleteBefore);
       expect(tester.takeException(), isNull);
 
       await searchModels(tester, 'model-219');
@@ -80,11 +81,9 @@ void main() {
       setKeyboard(tester, keyboard);
       await settleProviderUi(tester);
       expect(tester.takeException(), isNull);
-      expect(
-        tester.getRect(find.byType(AppBottomBar)).bottom,
-        closeTo(size.height - keyboard, 0.1),
-      );
-      expect(keyed('save-provider').hitTestable(), findsOneWidget);
+      expect(tester.getRect(keyed('delete-provider')), deleteBefore);
+      expect(keyed('delete-provider').hitTestable(), findsOneWidget);
+      expect(find.byType(AppBottomBar), findsNothing);
 
       await tapProviderControl(tester, keyed('add-provider-model'));
       expect(find.byType(AppDialog), findsOneWidget);
@@ -94,12 +93,13 @@ void main() {
       await tapProviderControl(tester, keyed('confirm-add-model'));
       expect(find.byType(AppDialog), findsNothing);
       expect(tester.takeException(), isNull);
-      expect(keyed('save-provider').hitTestable(), findsOneWidget);
+      expect(keyed('delete-provider').hitTestable(), findsOneWidget);
+      expect(find.byType(AppBottomBar), findsNothing);
       expect(
-        tester.getRect(keyed('save-provider')).bottom,
+        tester.getRect(keyed('delete-provider')).bottom,
         lessThanOrEqualTo(size.height - keyboard),
       );
-      await tapProviderControl(tester, keyed('save-provider'));
+      await settleProviderAutoSave(tester);
       expect(tester.takeException(), isNull);
       final saved = (await tester.runAsync(harness.repository.listProfiles))!
           .single;

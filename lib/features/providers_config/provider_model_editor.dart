@@ -24,7 +24,7 @@ class ProviderModelEditor extends StatefulWidget {
 
   final List<ProfileModel> models;
 
-  /// 表单是否可编辑（保存中锁定）。
+  /// 表单是否可编辑，由页面的提交、弹层和删除状态决定。
   final bool enabled;
   final VoidCallback onAdd;
   final ValueChanged<ProfileModel> onModelChanged;
@@ -164,7 +164,7 @@ class _ModelCard extends StatelessWidget {
 
   final ProfileModel model;
 
-  /// 表单是否可编辑（保存中锁定）。
+  /// 表单是否可编辑，由页面的提交、弹层和删除状态决定。
   final bool enabled;
   final ValueChanged<ProfileModel> onModelChanged;
   final ValueChanged<ProfileModel> onRemove;

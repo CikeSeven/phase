@@ -172,7 +172,7 @@ void main() {
     expect(tester.widget<Checkbox>(keyed('enabled-gpt-5')).value, isTrue);
     await searchModels(tester, 'legacy');
     expect(keyed('provider-model-legacy/reasoner'), findsOneWidget);
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final saved = (await tester.runAsync(
       () => harness.repository.getProfile('p1'),
     ))!;
@@ -223,7 +223,7 @@ void main() {
     await tapProviderControl(tester, find.text('重新加载'));
     expect(find.text('无法读取服务商配置'), findsNothing);
     await fillProviderField(tester, keyed('provider-name'), '重试后编辑');
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
     expect(saved.id, 'p1');
@@ -241,7 +241,7 @@ void main() {
     await harness.seed(tester, id: 'missing', name: '恢复的配置');
     await tapProviderControl(tester, find.text('重新加载'));
     await fillProviderField(tester, keyed('provider-name'), '恢复后保存');
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     expect(
       (await tester.runAsync(harness.repository.listProfiles))!.single.name,
       '恢复后保存',
@@ -281,7 +281,7 @@ void main() {
       harness.requests.single.profile.baseUrl,
       presetById('ollama').baseUrl,
     );
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
     expect(saved.presetId, 'ollama');
@@ -352,7 +352,7 @@ void main() {
       expect(find.text('已获取 1 个模型'), findsOneWidget);
       await fillProviderField(tester, keyed('provider-name'), '最新草稿');
       expect(find.textContaining('已获取'), findsNothing);
-      await tapProviderControl(tester, keyed('save-provider'));
+      await settleProviderAutoSave(tester);
       final saved = (await tester.runAsync(harness.repository.listProfiles))!
           .single;
       expect(saved.name, '最新草稿');
@@ -414,7 +414,7 @@ void main() {
       isFalse,
     );
 
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
     final model = saved.models.single;
@@ -442,10 +442,7 @@ void main() {
     });
     await tester.pump();
     expect(find.text('保存中…'), findsOneWidget);
-    expect(
-      tester.widget<FilledButton>(keyed('save-provider')).onPressed,
-      isNull,
-    );
+    expect(tester.widget<IconButton>(keyed('save-provider')).onPressed, isNull);
     expect(
       tester.widget<TextFormField>(keyed('provider-name')).enabled,
       isFalse,

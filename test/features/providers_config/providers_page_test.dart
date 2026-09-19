@@ -66,7 +66,7 @@ void main() {
       'beta-id',
     );
     await fillProviderField(tester, keyed('provider-name'), 'Beta 已编辑');
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final beta = await tester.runAsync(
       () => harness.repository.getProfile('beta-id'),
     );
@@ -128,7 +128,7 @@ void main() {
     await tapProviderControl(tester, find.text('重新加载'));
     await tapProviderControl(tester, keyed('provider-p1'));
     await fillProviderField(tester, keyed('provider-name'), '恢复并保存');
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     expect(
       (await tester.runAsync(harness.repository.listProfiles))!.single.name,
       '恢复并保存',

@@ -161,6 +161,7 @@ class MemoryKeyStorage implements KeyStore {
   final keys = <String, String>{};
   Object? readError;
   Object? writeError;
+  Object? deleteError;
   Completer<void>? writeGate;
   int writeCount = 0;
   int deleteCount = 0;
@@ -182,6 +183,7 @@ class MemoryKeyStorage implements KeyStore {
   @override
   Future<void> delete(String key) async {
     deleteCount++;
+    if (deleteError case final error?) throw error;
     keys.remove(key);
   }
 }
@@ -214,6 +216,15 @@ Future<void> settleProviderUi(WidgetTester tester) async {
     await Future<void>.delayed(const Duration(milliseconds: 10));
   });
   await tester.pumpAndSettle();
+}
+
+Future<void> settleProviderAutoSave(WidgetTester tester) async {
+  await tester.pump(const Duration(milliseconds: 450));
+  for (var i = 0; i < 100; i++) {
+    await settleProviderUi(tester);
+    if (find.text('保存中…').evaluate().isEmpty) return;
+  }
+  fail('服务商自动保存未完成');
 }
 
 Future<void> revealProviderControl(WidgetTester tester, Finder finder) async {

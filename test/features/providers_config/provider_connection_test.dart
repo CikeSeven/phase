@@ -33,7 +33,7 @@ void main() {
       ProviderUi.protocolLabel(ApiProtocol.googleGenerativeAi),
     );
     await chooseProtocol(tester, ApiProtocol.openaiCompletions);
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
     expect(saved.presetId, 'deepseek');
@@ -63,7 +63,7 @@ void main() {
     expect(find.text('已获取 0 个模型'), findsOneWidget);
     await searchModels(tester, 'manual');
     expect(tester.widget<Checkbox>(keyed('enabled-manual')).value, isTrue);
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
     expect(saved.defaultModel, 'manual');
@@ -95,7 +95,7 @@ void main() {
     );
     // 推理默认开启，直接确认。
     await tapProviderControl(tester, keyed('confirm-add-model'));
-    await tapProviderControl(tester, keyed('save-provider'));
+    await settleProviderAutoSave(tester);
     final saved = (await tester.runAsync(harness.repository.listProfiles))!
         .single;
     expect(
@@ -111,14 +111,15 @@ void main() {
     );
   });
 
-  testWidgets('请求期间保存只写入当时草稿，返回页面后到达的结果不再更新', (tester) async {
+  testWidgets('请求期间返回页面，迟到结果不再更新或自动保存', (tester) async {
     await harness.seed(tester, models: const [ProfileModel(id: 'manual')]);
     final request = Completer<List<ProfileModel>>();
     harness.provider.listModelsHandler = () => request.future;
     await harness.pump(tester);
     await tapProviderControl(tester, keyed('provider-p1'));
     await tapProviderControl(tester, keyed('test-provider'), settle: false);
-    await tapProviderControl(tester, keyed('save-provider'));
+    await tester.binding.handlePopRoute();
+    await settleProviderUi(tester);
     request.complete(const [ProfileModel(id: 'late-model')]);
     await settleProviderUi(tester);
     expect(tester.takeException(), isNull);

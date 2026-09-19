@@ -11,6 +11,21 @@ import '../../../data/models/api_protocol.dart';
 import '../../../providers/presets/provider_preset.dart';
 import 'provider_ui.dart';
 
+String? validateProviderName(String? value) =>
+    value == null || value.trim().isEmpty ? '请输入服务商名称' : null;
+
+String? validateProviderBaseUrl(String? value) {
+  final url = value?.trim() ?? '';
+  if (url.isEmpty) return '请输入 Base URL';
+  final uri = Uri.tryParse(url);
+  if (uri == null ||
+      !['http', 'https'].contains(uri.scheme) ||
+      uri.host.isEmpty) {
+    return '请输入完整的 http 或 https 地址';
+  }
+  return null;
+}
+
 /// 服务商身份、连接与凭证分区；草稿和异步操作由编辑页持有。
 class ProviderFormSections extends StatelessWidget {
   const ProviderFormSections({
@@ -105,8 +120,7 @@ class ProviderFormSections extends StatelessWidget {
                 decoration: const InputDecoration(labelText: '名称'),
                 textInputAction: TextInputAction.next,
                 onChanged: (_) => onConnectionChanged(),
-                validator: (value) =>
-                    value == null || value.trim().isEmpty ? '请输入服务商名称' : null,
+                validator: validateProviderName,
               ),
               const SizedBox(height: AppSpacing.l),
               AppDropdown<ApiProtocol>(
@@ -142,17 +156,7 @@ class ProviderFormSections extends StatelessWidget {
                 keyboardType: TextInputType.url,
                 textInputAction: TextInputAction.next,
                 onChanged: (_) => onConnectionChanged(),
-                validator: (value) {
-                  final url = value?.trim() ?? '';
-                  if (url.isEmpty) return '请输入 Base URL';
-                  final uri = Uri.tryParse(url);
-                  if (uri == null ||
-                      !['http', 'https'].contains(uri.scheme) ||
-                      uri.host.isEmpty) {
-                    return '请输入完整的 http 或 https 地址';
-                  }
-                  return null;
-                },
+                validator: validateProviderBaseUrl,
               ),
               const SizedBox(height: AppSpacing.s),
               Text('API 基础地址，不含生成端点', style: secondaryStyle),
