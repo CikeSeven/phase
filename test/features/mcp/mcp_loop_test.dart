@@ -89,7 +89,7 @@ void main() {
         });
         final model = _ModelTransport(protocol);
         final connections = McpConnections(
-          createClient: (profile, bearer, headers) => McpClient(
+          createClient: (profile, bearer, headers) => McpHttpClient(
             profile,
             bearer: bearer,
             headers: headers,
@@ -114,7 +114,11 @@ void main() {
           mcpServerRepositoryProvider.future,
         );
         final saved = await repository.save(transport.profile());
-        final discover = connections.create(saved, null, {});
+        final discover = await connections.create(
+          saved,
+          bearer: null,
+          headers: {},
+        );
         final tools = await discover.connect(RunCancellation());
         await repository.saveCatalog(saved, tools, discover.protocolVersion!);
         await connections.release(discover);
@@ -167,7 +171,7 @@ void main() {
     test('等待确认时 $change 不能扩大旧运行或执行已失效定义', () async {
       final transport = McpMemoryTransport();
       final connections = McpConnections(
-        createClient: (profile, bearer, headers) => McpClient(
+        createClient: (profile, bearer, headers) => McpHttpClient(
           profile,
           bearer: bearer,
           headers: headers,
@@ -180,7 +184,7 @@ void main() {
         mcpServerRepositoryProvider.future,
       );
       final saved = await repository.save(transport.profile());
-      final client = connections.create(saved, null, {});
+      final client = await connections.create(saved, bearer: null, headers: {});
       final tools = await client.connect(RunCancellation());
       await repository.saveCatalog(saved, tools, client.protocolVersion!);
       await connections.release(client);
@@ -241,7 +245,7 @@ void main() {
   test('停止空闲 MCP 响应，保存工具取消与运行终态（内存 HTTP）', () async {
     final transport = McpMemoryTransport();
     final connections = McpConnections(
-      createClient: (profile, bearer, headers) => McpClient(
+      createClient: (profile, bearer, headers) => McpHttpClient(
         profile,
         bearer: bearer,
         headers: headers,
@@ -254,7 +258,11 @@ void main() {
       mcpServerRepositoryProvider.future,
     );
     final profile = await repository.save(transport.profile());
-    final discovery = connections.create(profile, null, {});
+    final discovery = await connections.create(
+      profile,
+      bearer: null,
+      headers: {},
+    );
     final tools = await discovery.connect(RunCancellation());
     await repository.saveCatalog(profile, tools, discovery.protocolVersion!);
     await connections.release(discovery);

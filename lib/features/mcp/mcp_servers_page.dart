@@ -39,7 +39,7 @@ class McpServersPage extends ConsumerWidget {
             ? AppEmptyState(
                 icon: Symbols.extension,
                 title: '还没有 MCP 服务',
-                message: '添加 Streamable HTTP 服务，发现工具后在助手中启用。',
+                message: '添加 Streamable HTTP 或本地 stdio 服务，发现工具后在助手中启用。',
                 action: FilledButton.icon(
                   icon: const Icon(Symbols.add),
                   label: const Text('添加服务'),

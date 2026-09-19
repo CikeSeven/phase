@@ -17,59 +17,54 @@ class McpLimits {
 
 enum McpConnectionState { disconnected, connecting, ready, failed, closing }
 
-/// 远程 Streamable HTTP。每个运行独立持有会话，不重放请求、不跟随重定向。
-class McpClient {
-  McpClient(
-    this.profile, {
-    required String? bearer,
-    Map<String, String> headers = const {},
-    Dio? dio,
-  }) : _customHeaders = Map.unmodifiable(headers),
-       _authorization = bearer == null || bearer.isEmpty
-           ? null
-           : 'Bearer $bearer',
-       _dio =
-           dio ??
-           Dio(
-             BaseOptions(
-               connectTimeout: Duration(seconds: profile.connectTimeoutSeconds),
-             ),
-           );
-
+/// 一次 MCP 连接的共享协议语义：握手、分页目录、定义修订与关闭收口。
+/// 帧的收发与事件订阅由各传输实现。
+abstract class McpClient {
+  McpClient(this.profile);
   static const supportedVersions = ['2025-06-18', '2025-03-26'];
   final McpServerProfile profile;
-  final String? _authorization;
-  final Map<String, String> _customHeaders;
-  final Dio _dio;
-  final Set<CancelToken> _requests = {};
   McpConnectionState state = McpConnectionState.disconnected;
   String? protocolVersion;
-  String? _sessionId;
-  int _nextId = 0;
   int catalogGeneration = 0;
-  Future<void>? _eventStream;
+  int _nextId = 0;
   Future<void>? _closing;
 
-  Map<String, String> get _headers => {
-    ..._customHeaders,
-    'Accept': 'application/json, text/event-stream',
-    'Content-Type': 'application/json',
-    if (profile.requiresBearer) 'Authorization': ?_authorization,
-    'Mcp-Session-Id': ?_sessionId,
-    'MCP-Protocol-Version': ?protocolVersion,
-  };
+  /// 传输层凭据检查；HTTP 校验 Bearer 缺失。
+  Future<void> verifyCredentials() async {}
+
+  /// 发送一条无需响应的消息（通知或对服务器请求的应答）。
+  Future<void> write(
+    Map<String, dynamic> message,
+    RunCancellation cancellation,
+  );
+
+  /// 发起一次请求并返回结果帧；超时与停止的中止语义由传输实现。
+  Future<Map<String, dynamic>> exchange(
+    int id,
+    String method,
+    Map<String, dynamic> params,
+    RunCancellation cancellation, {
+    Duration? timeout,
+  });
+
+  /// listChanged 能力开启后订阅事件；stdio 天然经 stdout 收到通知。
+  Future<void> startEvents() async {}
+
+  /// 关闭前取消仍在途的请求；随后由 shutdown 收尾传输资源。
+  Future<void> cancelActiveRequests() async {}
+
+  /// 传输收尾：HTTP 删除会话并关闭 Dio，stdio 终止进程并回收管道。
+  Future<void> shutdown();
 
   Future<List<ToolSnapshot>> connect(RunCancellation cancellation) async {
     profile.validate();
     if (state != McpConnectionState.disconnected) {
       throw const McpFailure('connectionState', 'MCP 连接已结束，请重新检查连接');
     }
-    if (profile.requiresBearer && _authorization == null) {
-      throw const McpFailure('authentication', 'MCP 服务缺少 Bearer 凭据，请编辑服务配置');
-    }
+    await verifyCredentials();
     state = McpConnectionState.connecting;
     try {
-      final result = await _rpc(
+      final result = await request(
         'initialize',
         {
           'protocolVersion': supportedVersions.first,
@@ -88,14 +83,14 @@ class McpClient {
       if (capabilities is! Map || capabilities['tools'] is! Map) {
         throw const McpFailure('toolsUnsupported', 'MCP 服务没有声明工具能力');
       }
-      await _send({
+      await write({
         'jsonrpc': '2.0',
         'method': 'notifications/initialized',
       }, cancellation);
       state = McpConnectionState.ready;
       final tools = await listTools(cancellation);
       if (capabilities['tools']['listChanged'] == true) {
-        _eventStream = _listenEvents();
+        await startEvents();
       }
       return tools;
     } catch (_) {
@@ -113,7 +108,7 @@ class McpClient {
     String? cursor;
     var bytes = 0;
     for (var page = 0; page < McpLimits.catalogPages; page++) {
-      final result = await _rpc('tools/list', {
+      final result = await request('tools/list', {
         'cursor': ?cursor,
       }, cancellation);
       bytes += utf8.encode(jsonEncode(result)).length;
@@ -167,13 +162,14 @@ class McpClient {
     if (generation != catalogGeneration) {
       throw const McpFailure('definitionChanged', 'MCP 工具目录已变化，本次调用未派发');
     }
-    return _rpc('tools/call', {
+    return request('tools/call', {
       'name': snapshot.source.originalName,
       'arguments': arguments,
     }, cancellation);
   }
 
-  Future<Map<String, dynamic>> _rpc(
+  /// 单次请求-响应：分配自增 id 并校验结果帧；传输负责帧的往返。
+  Future<Map<String, dynamic>> request(
     String method,
     Map<String, dynamic> params,
     RunCancellation cancellation, {
@@ -185,26 +181,130 @@ class McpClient {
       throw const McpFailure('disconnected', 'MCP 连接已断开，本次调用没有完整响应');
     }
     final id = ++_nextId;
-    return (await _exchange(
-      'POST',
-      {'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params},
+    final frame = await exchange(
+      id,
+      method,
+      params,
       cancellation,
-      expectedId: id,
       timeout: timeout,
-    ))!;
+    );
+    return validateResult(frame, id);
   }
 
-  Future<void> _send(
+  /// 结果帧只接受与请求匹配的成功响应。
+  Map<String, dynamic> validateResult(Map<String, dynamic> frame, int id) {
+    if (frame['id'] != id) {
+      throw const McpFailure('responseId', 'MCP 响应标识与请求不一致');
+    }
+    if (frame.containsKey('error')) {
+      throw const McpFailure('rpcError', 'MCP 服务拒绝了本次请求');
+    }
+    final result = frame['result'];
+    if (result is! Map<String, dynamic>) {
+      throw const McpFailure('invalidResult', 'MCP 返回了无效的结果');
+    }
+    return result;
+  }
+
+  /// 严格按 jsonrpc 2.0 解码一条消息文本。
+  Map<String, dynamic> parseFrame(String data) {
+    final value = jsonDecode(data);
+    if (value is! Map<String, dynamic> || value['jsonrpc'] != '2.0') {
+      throw const McpFailure('invalidResponse', 'MCP 返回了无效的 JSON-RPC 消息');
+    }
+    return value;
+  }
+
+  /// 超时或停止时按协议发送取消通知；失败不改变请求自身的失败语义。
+  Future<void> notifyCancelled(int id, String reason) async {
+    try {
+      await write({
+        'jsonrpc': '2.0',
+        'method': 'notifications/cancelled',
+        'params': {'requestId': id, 'reason': reason},
+      }, RunCancellation());
+    } on Object {
+      /* 通知失败不改变请求自身的失败语义 */
+    }
+  }
+
+  Future<void> close() => _closing ??= _close();
+
+  Future<void> _close() async {
+    state = McpConnectionState.closing;
+    await cancelActiveRequests();
+    await shutdown();
+    state = McpConnectionState.disconnected;
+  }
+}
+
+/// 远程 Streamable HTTP。每个运行独立持有会话，不重放请求、不跟随重定向。
+class McpHttpClient extends McpClient {
+  McpHttpClient(
+    super.profile, {
+    required String? bearer,
+    Map<String, String> headers = const {},
+    Dio? dio,
+  }) : _customHeaders = Map.unmodifiable(headers),
+       _authorization = bearer == null || bearer.isEmpty
+           ? null
+           : 'Bearer $bearer',
+       _dio =
+           dio ??
+           Dio(
+             BaseOptions(
+               connectTimeout: Duration(seconds: profile.connectTimeoutSeconds),
+             ),
+           );
+
+  final String? _authorization;
+  final Map<String, String> _customHeaders;
+  final Dio _dio;
+  final Set<CancelToken> _requests = {};
+  String? _sessionId;
+  Future<void>? _eventStream;
+
+  Map<String, String> get _headers => {
+    ..._customHeaders,
+    'Accept': 'application/json, text/event-stream',
+    'Content-Type': 'application/json',
+    if (profile.requiresBearer) 'Authorization': ?_authorization,
+    'Mcp-Session-Id': ?_sessionId,
+    'MCP-Protocol-Version': ?protocolVersion,
+  };
+
+  @override
+  Future<void> verifyCredentials() async {
+    if (profile.requiresBearer && _authorization == null) {
+      throw const McpFailure('authentication', 'MCP 服务缺少 Bearer 凭据，请编辑服务配置');
+    }
+  }
+
+  @override
+  Future<void> write(
     Map<String, dynamic> message,
     RunCancellation cancellation,
-  ) async {
-    await _exchange(
-      'POST',
-      message,
-      cancellation,
-      timeout: const Duration(seconds: 2),
-    );
-  }
+  ) => _exchange(
+    'POST',
+    message,
+    cancellation,
+    timeout: const Duration(seconds: 2),
+  );
+
+  @override
+  Future<Map<String, dynamic>> exchange(
+    int id,
+    String method,
+    Map<String, dynamic> params,
+    RunCancellation cancellation, {
+    Duration? timeout,
+  }) async => (await _exchange(
+    'POST',
+    {'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params},
+    cancellation,
+    expectedId: id,
+    timeout: timeout,
+  ))!;
 
   Future<Map<String, dynamic>?> _exchange(
     String method,
@@ -228,11 +328,7 @@ class McpClient {
     cancellation.whenCancelled.then((_) {
       if (!active) return;
       if (expectedId != null && payload?['method'] != 'initialize') {
-        _send({
-          'jsonrpc': '2.0',
-          'method': 'notifications/cancelled',
-          'params': {'requestId': expectedId, 'reason': 'Cancelled'},
-        }, RunCancellation()).ignore();
+        notifyCancelled(expectedId, 'Cancelled').ignore();
       }
       abort(const ToolCancelled());
     }).ignore();
@@ -240,11 +336,7 @@ class McpClient {
         ? null
         : Timer(timeout ?? Duration(seconds: profile.callTimeoutSeconds), () {
             if (expectedId != null && payload?['method'] != 'initialize') {
-              _send({
-                'jsonrpc': '2.0',
-                'method': 'notifications/cancelled',
-                'params': {'requestId': expectedId, 'reason': 'Timeout'},
-              }, RunCancellation()).ignore();
+              notifyCancelled(expectedId, 'Timeout').ignore();
             }
             abort(const McpFailure('timeout', 'MCP 请求超时；已派发的操作不会自动重发'));
           });
@@ -332,7 +424,7 @@ class McpClient {
         .trim();
     if (contentType == 'text/event-stream') {
       await for (final data in _sse(body.stream, totalBound: !events)) {
-        final frame = _frame(data);
+        final frame = parseFrame(data);
         final result = await _handleFrame(frame, expectedId);
         if (result != null) return result;
       }
@@ -344,20 +436,15 @@ class McpClient {
         }
         bytes.addAll(chunk);
       }
-      final result = await _handleFrame(_frame(utf8.decode(bytes)), expectedId);
+      final result = await _handleFrame(
+        parseFrame(utf8.decode(bytes)),
+        expectedId,
+      );
       if (result != null) return result;
     } else {
       throw const McpFailure('contentType', 'MCP 返回了不支持的响应类型');
     }
     throw const McpFailure('responseLost', 'MCP 响应流在结果返回前结束；已派发的操作不会自动重发');
-  }
-
-  Map<String, dynamic> _frame(String data) {
-    final value = jsonDecode(data);
-    if (value is! Map<String, dynamic> || value['jsonrpc'] != '2.0') {
-      throw const McpFailure('invalidResponse', 'MCP 返回了无效的 JSON-RPC 消息');
-    }
-    return value;
   }
 
   Future<Map<String, dynamic>?> _handleFrame(
@@ -366,7 +453,7 @@ class McpClient {
   ) async {
     if (frame['method'] case final String method) {
       if (frame.containsKey('id')) {
-        await _send({
+        await write({
           'jsonrpc': '2.0',
           'id': frame['id'],
           if (method == 'ping')
@@ -379,17 +466,16 @@ class McpClient {
       }
       return null;
     }
+    // 响应帧原样交给基类校验；传输只负责帧的边界与归属。
     if (expectedId == null || frame['id'] != expectedId) {
       throw const McpFailure('responseId', 'MCP 响应标识与请求不一致');
     }
-    if (frame.containsKey('error')) {
-      throw const McpFailure('rpcError', 'MCP 服务拒绝了本次请求');
-    }
-    final result = frame['result'];
-    if (result is! Map<String, dynamic>) {
-      throw const McpFailure('invalidResult', 'MCP 返回了无效的结果');
-    }
-    return result;
+    return frame;
+  }
+
+  @override
+  Future<void> startEvents() async {
+    _eventStream = _listenEvents();
   }
 
   Future<void> _listenEvents() async {
@@ -405,13 +491,15 @@ class McpClient {
     }
   }
 
-  Future<void> close() => _closing ??= _close();
-
-  Future<void> _close() async {
-    state = McpConnectionState.closing;
+  @override
+  Future<void> cancelActiveRequests() async {
     for (final request in _requests.toList()) {
       request.cancel();
     }
+  }
+
+  @override
+  Future<void> shutdown() async {
     if (_sessionId != null) {
       try {
         await _exchange(
@@ -427,7 +515,6 @@ class McpClient {
     _dio.close(force: true);
     await _eventStream;
     _sessionId = null;
-    state = McpConnectionState.disconnected;
   }
 }
 

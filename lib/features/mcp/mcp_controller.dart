@@ -1,8 +1,12 @@
+import 'dart:io';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
+import '../../../core/utils/logger.dart';
 import '../../../data/models/mcp_server_profile.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
+import '../../../data/repositories/workspace_repository.dart';
 import '../tools/tool.dart';
 import 'mcp_connections.dart';
 
@@ -23,12 +27,14 @@ class McpController extends _$McpController {
     McpServerProfile profile, {
     String? bearer,
     Map<String, String>? headers,
+    Map<String, String>? environmentSecrets,
   }) => _operate(() async {
     final repository = await ref.read(mcpServerRepositoryProvider.future);
     final saved = await repository.save(
       profile,
       bearer: bearer,
       headers: headers,
+      environmentSecrets: environmentSecrets,
     );
     if (!saved.enabled) await ref.read(mcpConnectionsProvider).closeServer(id);
     final entry = await repository.get(id);
@@ -44,10 +50,23 @@ class McpController extends _$McpController {
     final connections = ref.read(mcpConnectionsProvider);
     final cancellation = RunCancellation();
     _cancellation = cancellation;
-    final bearer = await repository.readBearer(entry.profile);
-    final headers = await repository.readHeaders(entry.profile);
+    final profile = entry.profile;
+    final bearer = profile.transport == McpTransport.streamableHttp
+        ? await repository.readBearer(profile)
+        : null;
+    final headers = profile.transport == McpTransport.streamableHttp
+        ? await repository.readHeaders(profile)
+        : const <String, String>{};
+    final secrets = profile.command == null
+        ? const <String, String>{}
+        : await repository.readEnvironmentSecrets(profile);
     cancellation.throwIfCancelled();
-    final client = connections.create(entry.profile, bearer, headers);
+    final client = await connections.create(
+      profile,
+      bearer: bearer,
+      headers: headers,
+      environment: {...?profile.command?.environment, ...secrets},
+    );
     try {
       final tools = await client.connect(cancellation);
       cancellation.throwIfCancelled();
@@ -76,6 +95,7 @@ class McpController extends _$McpController {
     await ref.read(mcpConnectionsProvider).closeServer(id);
     try {
       await repository.delete(id);
+      await _cleanStdioDirectory(id);
       if (ref.mounted) state = const AsyncData(null);
     } catch (_) {
       final pending = await repository.get(id);
@@ -83,6 +103,21 @@ class McpController extends _$McpController {
       rethrow;
     }
   });
+
+  /// stdio 服务的专属目录不在数据库登记；删除成功后尽力清理，失败只记录。
+  Future<void> _cleanStdioDirectory(String id) async {
+    try {
+      final workspaces = await ref.read(workspaceRepositoryProvider.future);
+      final directory = Directory(
+        McpStdioLauncher.serverDirectory(workspaces, id),
+      );
+      if (await directory.exists()) {
+        await directory.delete(recursive: true);
+      }
+    } on Object catch (error) {
+      AppLogger.warning('MCP 服务目录清理失败，残留目录不影响使用：${error.runtimeType}');
+    }
+  }
 
   Future<void> _operate(Future<void> Function() action) async {
     if (_working) throw const OperationFailure('请等待当前操作完成');

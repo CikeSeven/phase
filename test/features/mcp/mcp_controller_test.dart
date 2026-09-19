@@ -12,7 +12,7 @@ void main() {
   test('连接检查只发现工具，退出后关闭连接，禁用后配置持久化', () async {
     final transport = McpMemoryTransport();
     final connections = McpConnections(
-      createClient: (profile, bearer, headers) => McpClient(
+      createClient: (profile, bearer, headers) => McpHttpClient(
         profile,
         bearer: bearer,
         headers: headers,

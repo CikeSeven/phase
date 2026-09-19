@@ -49,7 +49,7 @@ class LocalProcessDriver implements ProcessDriver {
     final process = await Process.start(
       '/usr/bin/setsid',
       [
-        '/bin/sh',
+        spec.executable,
         ...spec.argv.map((s) => s.replaceAll('/workspace', spec.workspace)),
       ],
       workingDirectory: spec.cwd.replaceAll('/workspace', spec.workspace),

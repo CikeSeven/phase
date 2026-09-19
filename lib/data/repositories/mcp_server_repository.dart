@@ -54,6 +54,7 @@ class McpServerRepository {
     McpServerProfile draft, {
     String? bearer,
     Map<String, String>? headers,
+    Map<String, String>? environmentSecrets,
   }) => _guard(() async {
     draft.validate();
     final previous = await get(draft.id);
@@ -67,14 +68,24 @@ class McpServerRepository {
         old.requiresBearer != draft.requiresBearer ||
         old.connectTimeoutSeconds != draft.connectTimeoutSeconds ||
         old.callTimeoutSeconds != draft.callTimeoutSeconds ||
+        old.command?.executable != draft.command?.executable ||
+        old.command?.args.join('\u0000') !=
+            draft.command?.args.join('\u0000') ||
+        old.command?.cwd != draft.command?.cwd ||
+        old.command?.environment.toString() !=
+            draft.command?.environment.toString() ||
+        old.command?.environmentSecretRefs.keys.toString() !=
+            draft.command?.environmentSecretRefs.keys.toString() ||
         (bearer?.trim().isNotEmpty ?? false) ||
-        headers != null;
+        headers != null ||
+        environmentSecrets != null;
     // 空凭据保留旧值；免凭据模式不读取或删除它。
     var reference = old?.credentialRef;
     final references = {...?old?.credentialRefs};
     final newReferences = <String>[];
     final headerRefs = {...?old?.headerRefs};
     _validateHeaders(headers);
+    _validateEnvironmentSecrets(environmentSecrets, draft.command);
     try {
       if (bearer != null && bearer.trim().isNotEmpty) {
         if (bearer.contains('\r') || bearer.contains('\n')) {
@@ -95,7 +106,21 @@ class McpServerRepository {
           headerRefs[entry.key] = reference;
         }
       }
+      var command = draft.command;
+      if (environmentSecrets != null) {
+        final secretRefs = <String, String>{};
+        for (final entry in environmentSecrets.entries) {
+          final secretRef = generateId();
+          newReferences.add(secretRef);
+          await _keys.writeMcp(secretRef, entry.value);
+          references.add(secretRef);
+          secretRefs[entry.key] = secretRef;
+        }
+        command = command?.withSecretRefs(secretRefs);
+      }
       final profile = draft.copyWith(
+        command: command,
+        dropCommand: draft.transport != McpTransport.stdio,
         credentialRef: reference,
         credentialRefs: List.unmodifiable(references),
         headerRefs: Map.unmodifiable(headerRefs),
@@ -195,6 +220,40 @@ class McpServerRepository {
       profile.requiresBearer && profile.credentialRef != null
       ? _keys.readMcp(profile.credentialRef!)
       : Future.value(null);
+
+  /// 解析 stdio 服务的敏感环境变量；缺失按鉴权类错误处理，不静默降级。
+  Future<Map<String, String>> readEnvironmentSecrets(
+    McpServerProfile profile,
+  ) async {
+    final result = <String, String>{};
+    for (final entry
+        in profile.command?.environmentSecretRefs.entries ??
+            const <MapEntry<String, String>>[]) {
+      final value = await _keys.readMcp(entry.value);
+      if (value == null) {
+        throw const McpFailure('authentication', 'MCP 环境变量凭据缺失，请编辑服务配置');
+      }
+      result[entry.key] = value;
+    }
+    return result;
+  }
+
+  void _validateEnvironmentSecrets(
+    Map<String, String>? secrets,
+    McpStdioCommand? command,
+  ) {
+    if (secrets == null) return;
+    for (final entry in secrets.entries) {
+      if (!RegExp(r'^[A-Za-z_][A-Za-z0-9_]*$').hasMatch(entry.key) ||
+          entry.value.contains('\u0000') ||
+          entry.value.length > 32768) {
+        throw const OperationFailure('敏感环境变量的名称或值无效');
+      }
+      if (command?.environment.containsKey(entry.key) ?? false) {
+        throw const OperationFailure('同名环境变量不能同时明文保存与加密保存');
+      }
+    }
+  }
 
   /// 先持久化禁用，凭据删除失败仍保留可重试条目。
   Future<void> delete(String id) => _guard(() async {

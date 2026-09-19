@@ -67,7 +67,10 @@ void main() {
       router.push('/new');
       await tester.pumpAndSettle();
       await tester.enterText(find.byKey(const ValueKey('mcp-name')), '样本服务');
-      await tester.ensureVisible(find.byKey(const ValueKey('mcp-endpoint')));
+      // 传输选择器占位后，小屏/横屏下地址字段可能尚未进入懒加载视口；
+      // 路由页面存在多个 Scrollable，直接拖动表单列表。
+      await tester.drag(find.byType(ListView), const Offset(0, -400));
+      await tester.pumpAndSettle();
       await tester.enterText(
         find.byKey(const ValueKey('mcp-endpoint')),
         'https://mcp.test/mcp',

@@ -1,6 +1,6 @@
 # 相月开发实施计划
 
-更新：2026-09-19｜阶段：未发布的初版建设
+更新：2026-09-20｜阶段：未发布的初版建设
 
 本计划从当前代码继续建设扩展能力。已实现功能的入口与必须延续的行为见 [产品设计](./product_and_technical_design.md)，新增接口、数据和生命周期见 [Agent 与扩展设计](./agent_extensions_design.md)，工程与 UI 要求分别见 [AGENTS.md](../AGENTS.md)、[DESIGN.md](../DESIGN.md)。
 
@@ -17,6 +17,7 @@
 | 远程 MCP、动态工具来源/快照、扩展管理 | 已实现；本机真实 HTTP 四协议闭环通过 | 外部服务、真机生命周期与性能仍需独立验收 |
 | Skills 本地导入、助手范围、按需读取与固定版本 | 已实现；本机四协议文件产物闭环通过 | SAF 真机导入、生命周期与性能仍需独立验收 |
 | Ubuntu 安装、工作区、进程管道与 shell | 已实现；本机四协议、真机安装和进程桥通过 | 完整 UI/生命周期和性能仍需真机验收 |
+| 本地 MCP stdio、合并依赖安装 | 已实现；本机 Python/Node 固件闭环与真机 stdio 探针通过 | 真实 npx/uvx 服务与依赖安装真机验收仍需独立进行 |
 | Shizuku、Termux、插件宿主、子代理等 | 尚未实现 | 按 E 阶段建设，不显示空入口 |
 
 历史记录最近一批为 2026-09-15：记录了 644 项 Flutter 测试通过、4 项预览跳过、25 项 JVM 测试通过，以及 Profile 构建/覆盖安装。手势探针未完成实际点击验收，用户随后反馈可用；这些记录不代表当前提交已复验，也不代表真实网关或 Profile 帧性能通过。E1 本批检查另见第 3 节。
@@ -28,7 +29,7 @@
 | E1 | 工具来源/快照 + 远程 MCP 最小闭环 | 现有工具循环 | 已实现；本机真实 HTTP 闭环通过 |
 | E2 | Skills 导入与按需读取 | E1 的来源与范围管理 | 已实现；本机四协议闭环通过 |
 | E3 | Ubuntu PRoot、工作区、原始进程管道与 shell | 原生宿主 | 已实现；自动化、真机安装/进程桥通过，完整 UI/生命周期待验收 |
-| E4 | 本地 MCP stdio、依赖安装与环境界面 | E1 + E3 | 待实现 |
+| E4 | 本地 MCP stdio、依赖安装与环境界面 | E1 + E3 | 已实现；本机 Python/Node 固件闭环与真机 stdio 探针通过 |
 | E5 | 上下文预算/摘要、Plan Mode、记忆 | E1/E2；不强依赖 Linux | 待实现 |
 | E6 | Shizuku 与 Termux 独立命令通道 | 进程结果/取消契约稳定 | 待实现 |
 | E7 | 声明式扩展包，再做有实际用例的插件钩子 | E1/E2/E4 | 待实现 |
@@ -149,13 +150,30 @@
 
 设计入口：[扩展设计 §3.4](./agent_extensions_design.md#extensions-mcp)。
 
-- [ ] 添加 Node/npm、Python/uv、Git/搜索工具的按需安装，记录版本和结果，安装失败/取消保留已知状态。
-- [ ] MCP 配置开放 stdio，选择已有环境/工作区及 executable/argv/cwd；敏感环境变量仅保存引用，npx/uvx 依赖预先安装并固定版本。
-- [ ] Dart 客户端直接连接进程原始管道，stderr 与 JSON stdout 分离，stdin 可持续写入。
-- [ ] 绑定服务会话与进程生命周期，关闭/取消/服务异常不会遗留进程或自动重跑调用。
-- [ ] 会话工具目录变化沿用 E1 的定义修订与权限规则，清理空闲后台连接。
+- [x] 添加 Node/npm、Python/uv、Git/搜索工具的按需安装，记录版本和结果，安装失败/取消保留已知状态；按用户要求三组合并为一次完整安装，设置页与模型工具共用同一白名单。
+- [x] MCP 配置开放 stdio，选择已有环境/工作区及 executable/argv/cwd；敏感环境变量仅保存引用，npx/uvx 依赖预先安装并固定版本。
+- [x] Dart 客户端直接连接进程原始管道，stderr 与 JSON stdout 分离，stdin 可持续写入。
+- [x] 绑定服务会话与进程生命周期，关闭/取消/服务异常不会遗留进程或自动重跑调用。
+- [x] 会话工具目录变化沿用 E1 的定义修订与权限规则，清理空闲后台连接。
 
 交付用例：固定版本 Node 和 Python 各一个 MCP 服务，完成发现、确认调用、分片输出、错误、停止及退出；再选择一个实际 npm/uvx 服务做明确环境下的兼容性检查。依赖安装不是普通 tools/call 的隐藏步骤，PTY 不能替代 stdio。
+
+实现入口：[stdio 客户端](../lib/features/mcp/mcp_stdio_client.dart)、[连接管理](../lib/features/mcp/mcp_connections.dart)、[配置模型](../lib/data/models/mcp_server_profile.dart)、[依赖安装](../lib/features/workspace/dependency_installer.dart)、[测试](../test/features/mcp/mcp_stdio_test.dart)。
+
+2026-09-19 E4 实现与本机验收记录：
+
+- stdio 服务以 executable + argv 直接启动，不经 shell 拼接；cwd 为 guest 路径（默认 `/workspace`），每个服务持有独立持久目录（宿主 `workspaces/mcp/<id>`，不落库，删除服务时尽力清理）。明文环境变量存 profile JSON，敏感变量只存 `SecureKeyStorage` 引用，轮换/清除语义与请求头一致；同名变量禁止明文与加密并存。命令、cwd、环境任一变化生成新定义修订并清空目录；切回 HTTP 丢弃命令。环境未就绪、目录创建失败、启动失败均映射为可见错误，不静默换环境。
+- stdio 客户端复用 E1 协议骨架：握手、分页目录、定义修订与权限检查为共享实现（`McpClient` 基类），HTTP 实现改名为 `McpHttpClient` 且 55 项既有测试不变语义通过。stdout 按行承载 JSON-RPC（UTF-8 分片、`\r\n` 兼容、单帧与缓冲有 8 MiB 上限），迟到响应在超时/停止后被忽略；stderr 仅保留 4 KiB 尾部随失败消息给出，不写 AppLogger。stdin 持续写入（>60 KiB 分块）；超时与停止发送 `notifications/cancelled`；服务器 `ping` 请求应答空结果、其余拒绝。进程不设累计时限/总输出限额；连接随运行创建，运行收口、检查结束、通知停止或协议违规均终止进程组并回收任务归属，不重跑已派发调用。
+- 连接检查、运行时与助手动授权共用 E1 的快照/权限路径；stdio 不读取 Bearer/请求头，环境变量在派发前解析合并。空闲清理由“连接仅存活于活动运行或检查期间”满足，不为闲置服务器保活。数据库 schema 不变（stdio 全部在 `profileJson` 内），未产生装机升级例外。
+- 依赖安装合并：设置页与 `install_packages` 模型工具一次装齐 python3/pip/venv、nodejs/npm、git/ripgrep（单次 apt 命令 + 按组独立验证），失败/取消保留已安装内容与旧记录，重试重发完整安装。工具不再接受 profile 参数。
+- 已执行格式检查、`flutter analyze --no-pub`、`flutter test --no-pub`（全量 1053 项通过、4 项预览跳过，其中 MCP 71 项含新增 stdio 15 项、仓储 7 项）和 `git diff --check`。stdio 测试用真实本机进程：Python（`mcp_stdio_server.py`）覆盖握手/环境透传/分块 UTF-8/RPC 错误/超时与迟到响应/停止取消通知/进程退出带 stderr 尾部/非 JSON stdout/list_changed/服务器 ping/启动器环境缺失/经 `ToolLoopHarness` 的确认调用-落库-最终回答闭环；Node（`mcp_stdio_server.mjs`）覆盖握手/调用/RPC 错误/ping。缺 python3/node 的环境对应文件自动跳过。
+- 未验收范围：真实 npx/uvx 服务兼容性检查（含固定版本预装流程的实际样本）、付费模型/外部网关、Profile 帧数据。apt 合并安装未在真机复验（当时设备仅有计量移动网络，避免消耗流量；设置页入口可直接人工执行）。
+
+2026-09-20 E4 真机验收记录（授权设备 `1b8418ca`、2211133C、Android 16/API 36）：
+
+- 安装前备份加密数据库与应用文档（忽略且限权的 `build/e4_install/before_app_flutter.tar`，6,296 个数据文件校验值存 `before_checksums.txt`）。以忽略目录内的临时探针入口（不渲染界面、不打开业务数据库）在设备 PRoot 内用真实 `/usr/bin/python3.12` 运行 stdio 服务：握手协商 `2025-06-18`、目录发现 1 个工具、`tools/call` 回填「月相记录标记-device」（明文环境变量经 PRoot `env -i` 正确透传）、`close()` 后进程与任务归属回收、服务进程 `exit 2` 映射为带退出码与 stderr 尾部的 `processExit` 错误、探针工作区清理，全部通过（日志在 `build/e4_stdio_probe/` 与设备 cache，已清理）。
+- 随后以 `adb install -r` 覆盖安装正式 E4 Profile 包（66.6 MB，SHA-256 `0d1e88a9…`），启动 `Status: ok`；覆盖后 6,296 个数据文件集合与内容除 Flutter 引擎 `files/profileInstalled` 标记外全部一致。未卸载、清数据或更换签名；schema 未变，无装机升级例外。
+- 设备当前已装有 Ubuntu 环境（用户自行使用中）且 guest 内已有 python3.12/pip，故本次 stdio 验收未产生任何下载流量；探针进程与临时文件均收口清理。
 
 ## 7. E5：Agent 上下文与计划
 

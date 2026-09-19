@@ -126,4 +126,100 @@ void main() {
     expect(keys.values, isEmpty);
     expect(await repository.list(), isEmpty);
   });
+
+  McpServerProfile stdioProfile({McpStdioCommand? command}) => McpServerProfile(
+    id: 'stdio-1',
+    name: '本地样本',
+    endpoint: '',
+    transport: McpTransport.stdio,
+    command:
+        command ??
+        const McpStdioCommand(
+          executable: '/usr/bin/node',
+          args: ['/workspace/server.js'],
+          environment: {'DEBUG': '1'},
+        ),
+    definitionRevision: 'r1',
+    createdAt: DateTime(2026),
+    updatedAt: DateTime(2026),
+  );
+
+  test('stdio 命令与敏感环境变量：JSON 只存引用，空映射清除', () async {
+    final saved = await repository.save(
+      stdioProfile(),
+      environmentSecrets: {'API_TOKEN': 'stdio-secret'},
+    );
+    final row = await db.select(db.mcpServers).getSingle();
+    expect(row.profileJson, isNot(contains('stdio-secret')));
+    expect(saved.command?.environmentSecretRefs.keys, ['API_TOKEN']);
+    expect(await repository.readEnvironmentSecrets(saved), {
+      'API_TOKEN': 'stdio-secret',
+    });
+    final roundtrip = McpServerProfile.fromJson(
+      jsonDecode(jsonEncode(saved.toJson())),
+    );
+    expect(roundtrip.transport, McpTransport.stdio);
+    expect(roundtrip.command?.executable, '/usr/bin/node');
+    expect(roundtrip.command?.cwd, '/workspace');
+    final cleared = await repository.save(saved, environmentSecrets: const {});
+    expect(cleared.command?.environmentSecretRefs, isEmpty);
+    // 旧引用与请求头轮换语义一致：保留到服务删除时统一清理。
+    await repository.delete(saved.id);
+    expect(keys.values, isEmpty);
+  });
+
+  test('stdio 命令变化生成新修订并清空目录；切回 HTTP 丢弃命令', () async {
+    final first = await repository.save(stdioProfile());
+    final tool = mcpToolSnapshot(first, McpMemoryTransport().tool());
+    await repository.saveCatalog(first, [tool], '2025-06-18');
+    final edited = await repository.save(
+      first.copyWith(
+        command: first.command?.copyWith(args: ['/workspace/other.js']),
+      ),
+    );
+    expect(edited.definitionRevision, isNot(first.definitionRevision));
+    expect((await repository.get(edited.id))!.tools, isEmpty);
+    final http = McpServerProfile(
+      id: first.id,
+      name: first.name,
+      endpoint: 'https://mcp.test/mcp',
+      definitionRevision: edited.definitionRevision,
+      createdAt: first.createdAt,
+      updatedAt: first.updatedAt,
+    );
+    final switched = await repository.save(http);
+    expect(switched.transport, McpTransport.streamableHttp);
+    expect(switched.command, isNull);
+    final stored = (await repository.get(http.id))!.profile;
+    expect(stored.command, isNull);
+  });
+
+  test('stdio 校验拒绝相对路径、非法环境名与同名双份变量', () async {
+    await expectLater(
+      repository.save(
+        stdioProfile(command: const McpStdioCommand(executable: 'node')),
+      ),
+      throwsA(isA<OperationFailure>()),
+    );
+    await expectLater(
+      repository.save(
+        stdioProfile(
+          command: const McpStdioCommand(
+            executable: '/usr/bin/node',
+            environment: {'1BAD': 'x'},
+          ),
+        ),
+      ),
+      throwsA(isA<OperationFailure>()),
+    );
+    await expectLater(
+      repository.save(
+        stdioProfile(),
+        environmentSecrets: {'DEBUG': 'duplicate'},
+      ),
+      throwsA(isA<OperationFailure>()),
+    );
+    expect(keys.values, isEmpty);
+    expect(await repository.list(), isEmpty);
+  });
 }

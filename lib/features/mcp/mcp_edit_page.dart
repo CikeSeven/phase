@@ -33,6 +33,11 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
   final _endpoint = TextEditingController();
   final _bearer = TextEditingController();
   final _headers = TextEditingController();
+  final _executable = TextEditingController();
+  final _arguments = TextEditingController();
+  final _guestCwd = TextEditingController();
+  final _environment = TextEditingController();
+  final _environmentSecrets = TextEditingController();
   final _connectTimeout = TextEditingController(text: '15');
   final _callTimeout = TextEditingController(text: '60');
   late final String _id;
@@ -40,6 +45,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
   bool _loading = true;
   bool _enabled = true;
   bool _requiresBearer = false;
+  McpTransport _transport = McpTransport.streamableHttp;
   bool _saving = false;
   bool _checking = false;
   bool _dirty = false;
@@ -61,6 +67,11 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       _endpoint,
       _bearer,
       _headers,
+      _executable,
+      _arguments,
+      _guestCwd,
+      _environment,
+      _environmentSecrets,
       _connectTimeout,
       _callTimeout,
     ]) {
@@ -88,6 +99,14 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
           _endpoint.text = entry.profile.endpoint;
           _enabled = entry.profile.enabled;
           _requiresBearer = entry.profile.requiresBearer;
+          _transport = entry.profile.transport;
+          final command = entry.profile.command;
+          _executable.text = command?.executable ?? '';
+          _arguments.text = command?.args.join('\n') ?? '';
+          _guestCwd.text = command?.cwd ?? '/workspace';
+          _environment.text = command == null || command.environment.isEmpty
+              ? ''
+              : jsonEncode(command.environment);
           _connectTimeout.text = '${entry.profile.connectTimeoutSeconds}';
           _callTimeout.text = '${entry.profile.callTimeoutSeconds}';
         }
@@ -114,6 +133,18 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
     _notice = null;
   });
 
+  Map<String, String>? _jsonField(
+    TextEditingController controller,
+    String label,
+  ) {
+    if (controller.text.trim().isEmpty) return null;
+    try {
+      return Map<String, String>.from(jsonDecode(controller.text) as Map);
+    } on Object {
+      throw OperationFailure('$label应为名称和值均为文本的 JSON 对象');
+    }
+  }
+
   Future<void> _save() async {
     if (_busy || !_form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
@@ -122,13 +153,12 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       _error = null;
     });
     try {
-      Map<String, String>? headers;
-      if (_headers.text.trim().isNotEmpty) {
-        try {
-          headers = Map<String, String>.from(jsonDecode(_headers.text) as Map);
-        } on Object {
-          throw const OperationFailure('请求头应为名称和值均为文本的 JSON 对象');
-        }
+      final http = _transport == McpTransport.streamableHttp;
+      final headers = http ? _jsonField(_headers, '请求头') : null;
+      final environment = http ? null : _jsonField(_environment, '环境变量');
+      Map<String, String>? environmentSecrets;
+      if (!http && _environmentSecrets.text.trim().isNotEmpty) {
+        environmentSecrets = _jsonField(_environmentSecrets, '敏感环境变量');
       }
       final now = DateTime.now();
       await ref
@@ -137,23 +167,39 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
             McpServerProfile(
               id: _id,
               name: _name.text.trim(),
-              endpoint: _endpoint.text.trim(),
+              endpoint: http ? _endpoint.text.trim() : '',
+              transport: _transport,
+              command: http
+                  ? null
+                  : McpStdioCommand(
+                      executable: _executable.text.trim(),
+                      args: [
+                        for (final line in _arguments.text.split('\n'))
+                          if (line.trim().isNotEmpty) line.trim(),
+                      ],
+                      cwd: _guestCwd.text.trim().isEmpty
+                          ? '/workspace'
+                          : _guestCwd.text.trim(),
+                      environment: environment ?? const {},
+                    ),
               definitionRevision:
                   _entry?.profile.definitionRevision ?? generateId(),
               createdAt: _entry?.profile.createdAt ?? now,
               updatedAt: now,
               enabled: _enabled,
-              requiresBearer: _requiresBearer,
+              requiresBearer: http && _requiresBearer,
               credentialRef: _entry?.profile.credentialRef,
               connectTimeoutSeconds: int.parse(_connectTimeout.text),
               callTimeoutSeconds: int.parse(_callTimeout.text),
             ),
-            bearer: _bearer.text,
+            bearer: http ? _bearer.text : null,
             headers: headers,
+            environmentSecrets: environmentSecrets,
           );
       if (!mounted) return;
       _bearer.clear();
       _headers.clear();
+      _environmentSecrets.clear();
       context.pop();
     } catch (error) {
       if (mounted) setState(() => _error = _message(error));
@@ -288,7 +334,32 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                 child: ListView(
                   padding: const EdgeInsets.all(AppSpacing.l),
                   children: [
-                    const Text('Streamable HTTP'),
+                    SegmentedButton<McpTransport>(
+                      segments: const [
+                        ButtonSegment(
+                          value: McpTransport.streamableHttp,
+                          label: Text('HTTP'),
+                        ),
+                        ButtonSegment(
+                          value: McpTransport.stdio,
+                          label: Text('本地 stdio'),
+                        ),
+                      ],
+                      selected: {_transport},
+                      onSelectionChanged: _busy || deleting
+                          ? null
+                          : (values) => setState(() {
+                              _transport = values.first;
+                              _dirty = true;
+                            }),
+                    ),
+                    const SizedBox(height: AppSpacing.m),
+                    if (_transport == McpTransport.stdio)
+                      Text(
+                        '在 Ubuntu 环境启动本地进程，stdin/stdout 承载 MCP 协议；'
+                        '需先在环境设置安装运行时（如 nodejs、python3）。',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                     const SizedBox(height: AppSpacing.l),
                     TextFormField(
                       key: const ValueKey('mcp-name'),
@@ -304,21 +375,102 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                           : null,
                     ),
                     const SizedBox(height: AppSpacing.l),
-                    TextFormField(
-                      key: const ValueKey('mcp-endpoint'),
-                      controller: _endpoint,
-                      enabled: !_busy && !deleting,
-                      onChanged: _changed,
-                      keyboardType: TextInputType.url,
-                      decoration: const InputDecoration(
-                        labelText: '服务地址',
-                        hintText: 'https://example.com/mcp',
+                    if (_transport == McpTransport.streamableHttp) ...[
+                      TextFormField(
+                        key: const ValueKey('mcp-endpoint'),
+                        controller: _endpoint,
+                        enabled: !_busy && !deleting,
+                        onChanged: _changed,
+                        keyboardType: TextInputType.url,
+                        decoration: const InputDecoration(
+                          labelText: '服务地址',
+                          hintText: 'https://example.com/mcp',
+                        ),
+                        validator: (value) =>
+                            value == null || value.trim().isEmpty
+                            ? '请填写服务地址'
+                            : null,
                       ),
-                      validator: (value) =>
-                          value == null || value.trim().isEmpty
-                          ? '请填写服务地址'
-                          : null,
-                    ),
+                    ] else ...[
+                      TextFormField(
+                        key: const ValueKey('mcp-executable'),
+                        controller: _executable,
+                        enabled: !_busy && !deleting,
+                        onChanged: _changed,
+                        decoration: const InputDecoration(
+                          labelText: '启动程序',
+                          hintText: '/usr/bin/node',
+                          helperText: 'Ubuntu 环境内的绝对路径',
+                        ),
+                        validator: (value) =>
+                            value == null || !value.trim().startsWith('/')
+                            ? '请填写以 / 开头的程序路径'
+                            : null,
+                      ),
+                      const SizedBox(height: AppSpacing.l),
+                      TextFormField(
+                        key: const ValueKey('mcp-arguments'),
+                        controller: _arguments,
+                        enabled: !_busy && !deleting,
+                        onChanged: _changed,
+                        minLines: 1,
+                        maxLines: 4,
+                        decoration: const InputDecoration(
+                          labelText: '启动参数（可选，每行一个）',
+                          hintText: '/usr/lib/server.js',
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.l),
+                      TextFormField(
+                        key: const ValueKey('mcp-cwd'),
+                        controller: _guestCwd,
+                        enabled: !_busy && !deleting,
+                        onChanged: _changed,
+                        decoration: const InputDecoration(
+                          labelText: 'guest 工作目录（可选）',
+                          hintText: '/workspace',
+                        ),
+                        validator: (value) =>
+                            value != null &&
+                                value.trim().isNotEmpty &&
+                                !value.trim().startsWith('/')
+                            ? 'guest 工作目录应以 / 开头'
+                            : null,
+                      ),
+                      const SizedBox(height: AppSpacing.l),
+                      TextFormField(
+                        key: const ValueKey('mcp-environment'),
+                        controller: _environment,
+                        enabled: !_busy && !deleting,
+                        onChanged: _changed,
+                        minLines: 1,
+                        maxLines: 4,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        decoration: const InputDecoration(
+                          labelText: '环境变量（JSON，可选）',
+                          hintText: '{"DEBUG": "1"}',
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.l),
+                      TextFormField(
+                        key: const ValueKey('mcp-environment-secrets'),
+                        controller: _environmentSecrets,
+                        enabled: !_busy && !deleting,
+                        onChanged: _changed,
+                        minLines: 1,
+                        maxLines: 4,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        obscureText: true,
+                        decoration: InputDecoration(
+                          labelText: '敏感环境变量（JSON，可选）',
+                          helperText:
+                              '加密保存；留空保留，输入 {} 清除。'
+                              '${_entry?.profile.command?.environmentSecretRefs.isNotEmpty == true ? "已保存：${_entry!.profile.command!.environmentSecretRefs.keys.join('、')}" : ""}',
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.m),
                     SwitchListTile.adaptive(
                       title: const Text('启用服务'),
@@ -331,48 +483,50 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                               _dirty = true;
                             }),
                     ),
-                    SwitchListTile.adaptive(
-                      title: const Text('Bearer 鉴权'),
-                      contentPadding: EdgeInsets.zero,
-                      value: _requiresBearer,
-                      onChanged: _busy || deleting
-                          ? null
-                          : (value) => setState(() {
-                              _requiresBearer = value;
-                              _dirty = true;
-                            }),
-                    ),
-                    if (_requiresBearer) ...[
+                    if (_transport == McpTransport.streamableHttp) ...[
+                      SwitchListTile.adaptive(
+                        title: const Text('Bearer 鉴权'),
+                        contentPadding: EdgeInsets.zero,
+                        value: _requiresBearer,
+                        onChanged: _busy || deleting
+                            ? null
+                            : (value) => setState(() {
+                                _requiresBearer = value;
+                                _dirty = true;
+                              }),
+                      ),
+                      if (_requiresBearer) ...[
+                        TextFormField(
+                          key: const ValueKey('mcp-bearer'),
+                          controller: _bearer,
+                          enabled: !_busy && !deleting,
+                          onChanged: _changed,
+                          obscureText: true,
+                          enableSuggestions: false,
+                          autocorrect: false,
+                          decoration: const InputDecoration(
+                            labelText: 'Bearer 凭据',
+                            helperText: '留空保留已保存的凭据',
+                          ),
+                        ),
+                        const SizedBox(height: AppSpacing.l),
+                      ],
                       TextFormField(
-                        key: const ValueKey('mcp-bearer'),
-                        controller: _bearer,
+                        key: const ValueKey('mcp-headers'),
+                        controller: _headers,
                         enabled: !_busy && !deleting,
                         onChanged: _changed,
-                        obscureText: true,
+                        minLines: 1,
+                        maxLines: 4,
                         enableSuggestions: false,
                         autocorrect: false,
-                        decoration: const InputDecoration(
-                          labelText: 'Bearer 凭据',
-                          helperText: '留空保留已保存的凭据',
+                        decoration: InputDecoration(
+                          labelText: '自定义请求头（JSON，可选）',
+                          helperText:
+                              '加密保存；留空保留，输入 {} 清除。${_entry?.profile.headerRefs.isNotEmpty == true ? "已保存：${_entry!.profile.headerRefs.keys.join('、')}" : ""}',
                         ),
                       ),
-                      const SizedBox(height: AppSpacing.l),
                     ],
-                    TextFormField(
-                      key: const ValueKey('mcp-headers'),
-                      controller: _headers,
-                      enabled: !_busy && !deleting,
-                      onChanged: _changed,
-                      minLines: 1,
-                      maxLines: 4,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      decoration: InputDecoration(
-                        labelText: '自定义请求头（JSON，可选）',
-                        helperText:
-                            '加密保存；留空保留，输入 {} 清除。${_entry?.profile.headerRefs.isNotEmpty == true ? "已保存：${_entry!.profile.headerRefs.keys.join('、')}" : ""}',
-                      ),
-                    ),
                     for (final field in [
                       (_connectTimeout, '连接超时（秒）', 120),
                       (_callTimeout, '调用超时（秒）', 300),

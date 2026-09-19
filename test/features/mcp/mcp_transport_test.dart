@@ -17,7 +17,7 @@ void main() {
   late McpClient client;
   setUp(() {
     adapter = McpMemoryTransport();
-    client = McpClient(
+    client = McpHttpClient(
       adapter.profile(),
       bearer: null,
       dio: Dio()..httpClientAdapter = adapter,
@@ -142,7 +142,7 @@ void main() {
     await client.close();
     adapter.status = null;
     adapter.version = 'unsupported';
-    client = McpClient(
+    client = McpHttpClient(
       adapter.profile(),
       bearer: null,
       dio: Dio()..httpClientAdapter = adapter,
@@ -156,7 +156,7 @@ void main() {
     await client.close();
     adapter.version = '2025-06-18';
     adapter.responseId = 'wrong-id';
-    client = McpClient(
+    client = McpHttpClient(
       adapter.profile(),
       bearer: null,
       dio: Dio()..httpClientAdapter = adapter,
@@ -177,7 +177,7 @@ void main() {
     adapter.duplicate = false;
     adapter.paginate = true;
     adapter.repeatCursor = true;
-    client = McpClient(
+    client = McpHttpClient(
       adapter.profile(),
       bearer: null,
       dio: Dio()..httpClientAdapter = adapter,

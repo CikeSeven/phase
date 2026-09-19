@@ -11,7 +11,7 @@ void main() {
   late McpClient client;
   setUp(() async {
     server = await McpTestServer.start();
-    client = McpClient(server.profile(), bearer: null);
+    client = McpHttpClient(server.profile(), bearer: null);
   });
   tearDown(() async {
     await client.close();
@@ -92,7 +92,7 @@ void main() {
 
   test('调用超时有界并取消空闲流', () async {
     await client.close();
-    client = McpClient(server.profile(timeout: 1), bearer: null);
+    client = McpHttpClient(server.profile(timeout: 1), bearer: null);
     final tools = await client.connect(RunCancellation());
     server.mode = 'idle';
     await expectLater(
@@ -175,7 +175,7 @@ void main() {
       throwsA(isA<McpFailure>().having((e) => e.code, 'code', 'nameCollision')),
     );
     await client.close();
-    client = McpClient(server.profile(), bearer: null);
+    client = McpHttpClient(server.profile(), bearer: null);
     server.duplicate = false;
     server.paginate = true;
     server.repeatCursor = true;

@@ -1,5 +1,6 @@
 import '../../../core/error/failure.dart';
 import '../../../data/models/agent_run.dart';
+import '../../../data/models/mcp_server_profile.dart';
 import '../../../data/models/tool_policy.dart';
 import '../../../data/models/tool_source.dart';
 import '../../../data/repositories/assistant_repository.dart';
@@ -41,11 +42,28 @@ class McpRunRuntime {
               final profile = run.configuration.mcpServers
                   .where((p) => p.id == snapshot.source.id)
                   .first;
-              final bearer = await repository.readBearer(profile);
-              final headers = await repository.readHeaders(profile);
+              // stdio 不使用 HTTP 头与 Bearer；敏感环境变量在此解析为进程环境。
+              final bearer = profile.transport == McpTransport.streamableHttp
+                  ? await repository.readBearer(profile)
+                  : null;
+              final headers = profile.transport == McpTransport.streamableHttp
+                  ? await repository.readHeaders(profile)
+                  : const <String, String>{};
+              final secrets = profile.command == null
+                  ? const <String, String>{}
+                  : await repository.readEnvironmentSecrets(profile);
+              final environment = {
+                ...?profile.command?.environment,
+                ...secrets,
+              };
               cancellation.throwIfCancelled();
               if (_closed) throw const ToolCancelled();
-              client = connections.create(profile, bearer, headers);
+              client = await connections.create(
+                profile,
+                bearer: bearer,
+                headers: headers,
+                environment: environment,
+              );
               _clients[profile.id] = client;
               await client.connect(cancellation);
             }

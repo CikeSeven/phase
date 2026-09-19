@@ -47,8 +47,8 @@
 
 | 类别 | 缺口 | 详细设计 |
 |---|---|---|
-| 工具生态 | 远程 MCP 外部服务验收、本地 MCP stdio、Skill 脚本真机验收/网络导入、插件包及受限扩展钩子 | [MCP](./agent_extensions_design.md#extensions-mcp)、[Skills](./agent_extensions_design.md#extensions-skills)、[插件包](./agent_extensions_design.md#extensions-plugins) |
-| 命令环境 | PRoot 安装/文件 UI、通知停止和生命周期真机验收、本地 MCP stdio、依赖安装、PTY、Termux、Shizuku | [扩展设计 §5–§7](./agent_extensions_design.md#extensions-runtime) |
+| 工具生态 | 远程 MCP 外部服务验收、本地 MCP stdio 真机与真实 npx/uvx 服务验收、Skill 脚本真机验收/网络导入、插件包及受限扩展钩子 | [MCP](./agent_extensions_design.md#extensions-mcp)、[Skills](./agent_extensions_design.md#extensions-skills)、[插件包](./agent_extensions_design.md#extensions-plugins) |
+| 命令环境 | PRoot 安装/文件 UI、通知停止和生命周期真机验收、依赖安装真机验收、PTY、Termux、Shizuku | [扩展设计 §5–§7](./agent_extensions_design.md#extensions-runtime) |
 | Agent 能力 | Plan Mode、上下文预算与摘要、长期记忆、单子代理 | [扩展设计 §8、§10](./agent_extensions_design.md#extensions-planning) |
 | 聊天与数据 | 完整分支导航、加密备份恢复、原生文档上传 | [扩展设计 §11](./agent_extensions_design.md#extensions-product) |
 | 配置与感知 | 多 Key、按任务选模型、成本统计、通知监听与回复 | [扩展设计 §11](./agent_extensions_design.md#extensions-product) |
@@ -210,7 +210,7 @@ SAF 的 `path` 使用用户授予范围内的 URI；创建外部文件时 `direc
 
 ## 5. 新执行通道
 
-Linux 工作区与原始进程桥已有实现，真机安装/原始进程桥通过，完整 UI/生命周期待验收；本地 MCP stdio、Shizuku、Termux 和通知感知仍待建设，详见扩展设计。运行快照明确选择通道，环境不可用时返回原因，不在执行器内自动切换身份或重做命令。
+Linux 工作区与原始进程桥已有实现，真机安装/原始进程桥通过，完整 UI/生命周期待验收；本地 MCP stdio 已接通原始管道（本机 Python/Node 固件闭环通过，真机与真实 npx/uvx 服务待验收），Shizuku、Termux 和通知感知仍待建设，详见扩展设计。运行快照明确选择通道，环境不可用时返回原因，不在执行器内自动切换身份或重做命令。
 
 # 第四部分 多代理与调度
 

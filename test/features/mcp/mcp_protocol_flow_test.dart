@@ -76,7 +76,7 @@ void main() {
           mcpServerRepositoryProvider.future,
         );
         final saved = await repository.save(mcp.profile());
-        final discovery = McpClient(saved, bearer: null);
+        final discovery = McpHttpClient(saved, bearer: null);
         final tools = await discovery.connect(RunCancellation());
         await repository.saveCatalog(saved, tools, discovery.protocolVersion!);
         await discovery.close();
@@ -157,7 +157,7 @@ void main() {
         mcpServerRepositoryProvider.future,
       );
       final profile = await repository.save(server.profile());
-      final client = McpClient(profile, bearer: null);
+      final client = McpHttpClient(profile, bearer: null);
       final tools = await client.connect(RunCancellation());
       await repository.saveCatalog(profile, tools, client.protocolVersion!);
       await client.close();
