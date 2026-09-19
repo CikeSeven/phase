@@ -267,8 +267,14 @@ Future<void> _chooseTheme(WidgetTester tester, ThemeMode mode) async {
 Future<void> _tapVisible(WidgetTester tester, Finder finder) async {
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
-  expect(finder.hitTestable(), findsOneWidget);
-  await tester.tap(finder);
+  if (finder.hitTestable().evaluate().isNotEmpty) {
+    await tester.tap(finder);
+  } else {
+    // 极矮视口（键盘 + 大字号 + 横屏）下元素可能高于视口，中心点永远
+    // 不可见；ensureVisible 顶对齐后点击其可见顶部。
+    final rect = tester.getRect(finder);
+    await tester.tapAt(Offset(rect.center.dx, rect.top + 8));
+  }
   await tester.pumpAndSettle();
 }
 

@@ -96,9 +96,7 @@ void main() {
         find.textContaining('python3、python3-pip、python3-venv'),
         findsOneWidget,
       );
-      // At large text scales the dialog content exceeds the viewport and
-      // the action row needs scrolling before it can be tapped.
-      await _revealInOwningScrollable(tester, find.text('安装'));
+      // Actions stay fixed at the dialog bottom even at large text scales.
       await tester.tap(find.text('安装'));
       await tester.pumpAndSettle();
       expect(operation.installed, ['python']);
@@ -180,19 +178,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('环境依赖', skipOffstage: false), findsNothing);
   });
-}
-
-/// Scrolls the innermost enclosing scrollable fully so the target, which
-/// belongs to a scrollable region inside a dialog, becomes tappable.
-Future<void> _revealInOwningScrollable(
-  WidgetTester tester,
-  Finder target,
-) async {
-  if (target.hitTestable().evaluate().isNotEmpty) return;
-  final element = target.evaluate().single;
-  final scrollable = Scrollable.maybeOf(element);
-  scrollable?.position.jumpTo(scrollable.position.maxScrollExtent);
-  await tester.pump();
 }
 
 /// Cached offscreen list items still build, so scrollUntilVisible can stop

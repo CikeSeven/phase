@@ -111,6 +111,8 @@ class AppDialog extends StatelessWidget {
       backgroundColor: colors.surface.withValues(alpha: 0),
       surfaceTintColor: colors.surfaceTint.withValues(alpha: 0),
       elevation: 0,
+      // Flutter 的 Dialog 默认不避开键盘；底部固定的 actions 会被键盘
+      // 盖住，这里把 viewInsets 转成外边距让整个弹窗为键盘让位。
       child: FrostedSurface(
         borderRadius: AppRadius.extraLargeAll,
         color: colors.surfaceContainerLow.withValues(
@@ -119,26 +121,29 @@ class AppDialog extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxHeight < 360 * scale) {
-              return SingleChildScrollView(
-                primary: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    header,
-                    if (scrollableContent)
-                      SizedBox(
-                        height: math.max(
-                          160 * scale,
-                          constraints.maxHeight * 0.55,
-                        ),
-                        child: insetContent,
-                      )
-                    else
-                      insetContent,
-                    footer,
-                  ],
-                ),
+              // 内容超高时 actions 固定在底部，大字号下也无需滚动即可
+              // 确认或取消。自滚动的列表内容拿独立视口，不进外层滚动，
+              // 避免嵌套滚动让选项难以滚动到位。
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Flexible(
+                    child: SingleChildScrollView(
+                      primary: false,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          header,
+                          if (!scrollableContent) insetContent,
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (scrollableContent) Flexible(child: insetContent),
+                  footer,
+                ],
               );
             }
             return Column(
