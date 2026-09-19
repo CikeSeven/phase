@@ -17,7 +17,7 @@ class ScriptedDependencyInstaller extends DependencyInstaller {
   ScriptedDependencyInstaller(super.repository, super.driver, this.scripts);
   final Map<DependencyStep, String> scripts;
   @override
-  String commandFor(DependencyStep step, DependencyProfile profile) =>
+  String commandFor(DependencyStep step, List<DependencyProfile> profiles) =>
       scripts[step] ?? 'true';
 }
 
@@ -48,22 +48,27 @@ void main() {
     Map<DependencyStep, String> scripts = const {},
   }) => ScriptedDependencyInstaller(repository, driver, scripts);
 
-  test('successful run records version and cleans staging', () async {
+  test('successful run records all groups and cleans staging', () async {
     final steps = <DependencyStep>[];
-    final record =
+    final records =
         await installer(
           scripts: {
             DependencyStep.repairing: 'printf repairing',
             DependencyStep.updating: 'printf updating',
             DependencyStep.installing: 'printf installing',
-            DependencyStep.verifying: 'printf "Python 3.12.3\\nextra"',
+            DependencyStep.verifying: 'printf "tool 1.2.3\\nextra"',
           },
-        ).install(DependencyProfile.python, RunCancellation(), (step, line) {
+        ).install(RunCancellation(), (step, line) {
           steps.add(step);
         });
-    expect(record.version, 'Python 3.12.3');
     final env = await repository.environment();
-    expect(env.installedDependencies['python']?.version, 'Python 3.12.3');
+    expect(env.installedDependencies.keys, [
+      for (final profile in DependencyProfile.all) profile.id,
+    ]);
+    for (final profile in DependencyProfile.all) {
+      expect(records[profile.id]?.version, 'tool 1.2.3');
+      expect(env.installedDependencies[profile.id]?.version, 'tool 1.2.3');
+    }
     expect(
       steps,
       containsAllInOrder([
@@ -75,7 +80,6 @@ void main() {
     );
     expect(driver.calls.first.rootfs, 'fixture-root');
     expect(driver.calls.first.cwd, '/workspace');
-    expect(driver.calls.first.timeoutMs, isNull);
     final staging = Directory('${fixture.directory.path}/staging');
     expect(
       await staging.exists() ? await staging.list().isEmpty : true,
@@ -83,23 +87,43 @@ void main() {
     );
   });
 
-  test('repeated install keeps latest record for the profile', () async {
-    final first = await installer().install(
-      DependencyProfile.gitTools,
-      RunCancellation(),
-      (_, _) {},
-    );
-    expect(first.version, isNull);
+  test(
+    'merged install issues one apt command and one verify process per group',
+    () async {
+      final real = DependencyInstaller(repository, driver);
+      final command = real.commandFor(
+        DependencyStep.installing,
+        DependencyProfile.all,
+      );
+      expect(command, contains('install -y'));
+      for (final package in DependencyProfile.all.expand(
+        (profile) => profile.packages,
+      )) {
+        expect(command, contains(package));
+      }
+      expect(
+        real.commandFor(DependencyStep.verifying, [DependencyProfile.python]),
+        DependencyProfile.python.verifyCommand,
+      );
+      // 脚本把每步替换为一个进程：修复、更新、安装各一次，验证按组三次。
+      await installer().install(RunCancellation(), (_, _) {});
+      expect(driver.calls, hasLength(6));
+    },
+  );
+
+  test('repeated install keeps latest records for every group', () async {
+    final first = await installer().install(RunCancellation(), (_, _) {});
+    expect(first.values.every((record) => record.version == null), isTrue);
     final second = await installer(
-      scripts: {DependencyStep.verifying: 'printf "git version 2.43.0"'},
-    ).install(DependencyProfile.gitTools, RunCancellation(), (_, _) {});
-    expect(second.version, 'git version 2.43.0');
+      scripts: {DependencyStep.verifying: 'printf "tool 2.0.0"'},
+    ).install(RunCancellation(), (_, _) {});
     final env = await repository.environment();
-    expect(env.installedDependencies.keys, ['git-tools']);
-    expect(
-      env.installedDependencies['git-tools']?.version,
-      'git version 2.43.0',
-    );
+    expect(env.installedDependencies.keys, [
+      for (final profile in DependencyProfile.all) profile.id,
+    ]);
+    for (final record in second.values) {
+      expect(record.version, 'tool 2.0.0');
+    }
   });
 
   test('cancel keeps previous records and throws', () async {
@@ -114,7 +138,7 @@ void main() {
     );
     final cancellation = RunCancellation();
     final pending = installer(scripts: {DependencyStep.verifying: 'sleep 30'})
-        .install(DependencyProfile.python, cancellation, (_, _) {});
+        .install(cancellation, (_, _) {});
     while (driver.active.isEmpty) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
@@ -122,6 +146,7 @@ void main() {
     await expectLater(pending, throwsA(isA<ToolCancelled>()));
     final env = await repository.environment();
     expect(env.installedDependencies['python'], isNull);
+    expect(env.installedDependencies['node'], isNull);
     expect(
       env.installedDependencies['git-tools']?.version,
       'git version 2.43.0',
@@ -131,7 +156,7 @@ void main() {
 
   test('apt update failure keeps previous records', () async {
     final result = installer(scripts: {DependencyStep.updating: 'exit 100'})
-        .install(DependencyProfile.node, RunCancellation(), (_, _) {});
+        .install(RunCancellation(), (_, _) {});
     await expectLater(
       result,
       throwsA(
@@ -147,7 +172,7 @@ void main() {
 
   test('install step failure keeps previous records', () async {
     final result = installer(scripts: {DependencyStep.installing: 'exit 100'})
-        .install(DependencyProfile.node, RunCancellation(), (_, _) {});
+        .install(RunCancellation(), (_, _) {});
     await expectLater(
       result,
       throwsA(
@@ -162,7 +187,7 @@ void main() {
 
   test('verify failure reports without recording version', () async {
     final result = installer(scripts: {DependencyStep.verifying: 'exit 3'})
-        .install(DependencyProfile.python, RunCancellation(), (_, _) {});
+        .install(RunCancellation(), (_, _) {});
     await expectLater(
       result,
       throwsA(
@@ -178,23 +203,23 @@ void main() {
 
   test('dpkg repair failure degrades to a warning and continues', () async {
     final lines = <String>[];
-    final record =
+    final records =
         await installer(
           scripts: {
             DependencyStep.repairing: 'exit 1',
             DependencyStep.verifying: 'printf "Python 3.12.3"',
           },
-        ).install(DependencyProfile.python, RunCancellation(), (_, line) {
+        ).install(RunCancellation(), (_, line) {
           lines.add(line);
         });
-    expect(record.version, 'Python 3.12.3');
+    expect(records[DependencyProfile.python.id]?.version, 'Python 3.12.3');
     expect(lines, contains('警告：dpkg 修复未完全成功，继续尝试安装'));
   });
 
   test('carriage returns split into lines like newlines', () async {
     final lines = <String>[];
     await installer(scripts: {DependencyStep.installing: 'printf "a\\rb\\nc"'})
-        .install(DependencyProfile.node, RunCancellation(), (_, line) {
+        .install(RunCancellation(), (_, line) {
           lines.add(line);
         });
     expect(lines, containsAll(['a', 'b', 'c']));
@@ -222,11 +247,7 @@ void main() {
     await repository.saveEnvironment(
       const RuntimeEnvironment(phase: EnvironmentPhase.failed),
     );
-    final result = installer().install(
-      DependencyProfile.python,
-      RunCancellation(),
-      (_, _) {},
-    );
+    final result = installer().install(RunCancellation(), (_, _) {});
     await expectLater(
       result,
       throwsA(

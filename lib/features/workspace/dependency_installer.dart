@@ -12,7 +12,7 @@ import 'dependency_profiles.dart';
 import 'process_api.g.dart';
 import 'process_driver.dart';
 
-/// 托管 apt 安装：修复、更新、安装、验证四步，结果写入环境记录。
+/// 托管 apt 安装：修复、更新、一次装齐全部依赖组，再逐组验证并记录版本。
 /// 失败或取消保留已知状态；不替换 rootfs，因此可与模型运行并发。
 class DependencyInstaller {
   DependencyInstaller(this.repository, this.driver);
@@ -21,9 +21,10 @@ class DependencyInstaller {
   static const outputLimitBytes = 8 * 1024 * 1024;
 
   /// 每个步骤在 guest 内执行的完整 shell 命令；测试覆写此方法注入假命令。
+  /// 验证步按组单独执行，此时传入单元素列表。
   String commandFor(
     DependencyStep step,
-    DependencyProfile profile,
+    List<DependencyProfile> profiles,
   ) => switch (step) {
     // 自愈步：失败只降级为警告，后续 apt 仍是权威判定。
     DependencyStep.repairing => 'dpkg --configure -a',
@@ -32,21 +33,23 @@ class DependencyInstaller {
           '-o APT::Update::Error-Mode=any update',
     DependencyStep.installing =>
       'apt-get -o DPkg::Lock::Timeout=60 install -y --no-install-recommends '
-          'ca-certificates ${profile.packages.join(' ')}',
-    DependencyStep.verifying => profile.verifyCommand,
+          'ca-certificates ${profiles.expand((p) => p.packages).join(' ')}',
+    DependencyStep.verifying =>
+      profiles.map((profile) => profile.verifyCommand).join(' && '),
   };
 
-  Future<InstalledDependency> install(
-    DependencyProfile profile,
+  /// 一次安装全部依赖组；返回按组记录的安装结果。
+  Future<Map<String, InstalledDependency>> install(
     RunCancellation cancellation,
     void Function(DependencyStep step, String line) onOutput,
   ) async {
+    final profiles = DependencyProfile.all;
     final env = await repository.environment();
     if (!env.ready || env.rootPath == null) {
       throw const WorkspaceFailure('environmentMissing', '请先安装 Ubuntu 环境');
     }
     repository.beginDependencyChange();
-    final owner = 'deps-${profile.id}-${generateId()}';
+    final owner = 'deps-${generateId()}';
     // The host only accepts guest workspaces under managed paths; staging
     // holds a scratch directory for the duration of the run.
     final scratch = Directory(
@@ -57,36 +60,48 @@ class DependencyInstaller {
     });
     try {
       await scratch.create(recursive: true);
-      await driver.beginTask(owner, '安装${profile.label}');
-      var version = '';
-      for (final step in DependencyStep.values) {
+      await driver.beginTask(owner, '安装开发依赖');
+      for (final step in DependencyStep.values.take(3)) {
         cancellation.throwIfCancelled();
-        final result = await _run(
+        await _run(
           owner,
           env.rootPath!,
           scratch.path,
           step,
-          profile,
+          profiles,
           cancellation,
           onOutput,
         );
-        if (step == DependencyStep.verifying) version = result;
       }
-      final latest = await repository.environment();
+      // 版本按组提取，每组一个独立验证进程；时间统一为本轮完成时刻。
+      final installedAt = DateTime.now();
+      var latest = await repository.environment();
       if (!latest.ready || latest.rootPath != env.rootPath) {
         throw const WorkspaceFailure(
           'environmentChanged',
           '环境已变化，本次安装结果未记录，可重试',
         );
       }
-      final record = InstalledDependency(
-        installedAt: DateTime.now(),
-        version: _firstLine(version),
-      );
-      await repository.saveEnvironment(
-        latest.withDependencies(profile.id, record),
-      );
-      return record;
+      for (final profile in profiles) {
+        final version = await _run(
+          owner,
+          env.rootPath!,
+          scratch.path,
+          DependencyStep.verifying,
+          [profile],
+          cancellation,
+          onOutput,
+        );
+        latest = latest.withDependencies(
+          profile.id,
+          InstalledDependency(
+            installedAt: installedAt,
+            version: _firstLine(version),
+          ),
+        );
+      }
+      await repository.saveEnvironment(latest);
+      return latest.installedDependencies;
     } finally {
       try {
         await driver.endTask(owner);
@@ -104,7 +119,7 @@ class DependencyInstaller {
     String rootfs,
     String workspace,
     DependencyStep step,
-    DependencyProfile profile,
+    List<DependencyProfile> profiles,
     RunCancellation cancellation,
     void Function(DependencyStep, String) onOutput,
   ) async {
@@ -151,7 +166,7 @@ class DependencyInstaller {
         rootfs: rootfs,
         workspace: workspace,
         executable: '/bin/sh',
-        argv: ['-c', commandFor(step, profile)],
+        argv: ['-c', commandFor(step, profiles)],
         cwd: '/workspace',
         environment: {},
         outputLimitBytes: DependencyInstaller.outputLimitBytes,
@@ -199,9 +214,9 @@ class DependencyInstaller {
           'aptUpdate',
           '软件源更新失败，请检查网络后重试',
         ),
-        DependencyStep.installing => WorkspaceFailure(
+        DependencyStep.installing => const WorkspaceFailure(
           'aptInstall',
-          '${profile.label} 安装失败，可重试；已安装内容保留',
+          '依赖安装失败，可重试；已安装内容保留',
         ),
         _ => const WorkspaceFailure('verifyFailed', '已安装但验证未通过，未记录版本，可重试'),
       };

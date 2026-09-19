@@ -20,7 +20,7 @@ void main() {
     (const Size(320, 700), 2.0, false),
     (const Size(800, 360), 2.0, true),
   ]) {
-    testWidgets('依赖安装列表、确认、进度与取消 $size/$scale/$dark', (tester) async {
+    testWidgets('依赖安装条目、确认、进度与取消 $size/$scale/$dark', (tester) async {
       final operation = _ControlledDependency();
       final environment = _ControlledEnvironment();
       tester.view.physicalSize = size;
@@ -68,8 +68,8 @@ void main() {
       );
       await pump();
 
-      // Ready environment shows the dependency section with profiles.
-      // The section starts outside the build cache, so scroll to it first.
+      // Ready environment shows the merged dependency tile; a partially
+      // installed environment names what is already present.
       await tester.scrollUntilVisible(
         find.text('环境依赖'),
         200,
@@ -77,39 +77,30 @@ void main() {
       );
       await tester.pump();
       expect(find.text('环境依赖'), findsOneWidget);
-      expect(find.text('Python'), findsOneWidget);
-      expect(find.text('Node.js'), findsOneWidget);
-      expect(find.text('Git 与搜索工具', skipOffstage: false), findsOneWidget);
-      await tester.scrollUntilVisible(
-        find.text('git version 2.43.0 · 2024-05-01'),
-        150,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-      expect(find.text('git version 2.43.0 · 2024-05-01'), findsOneWidget);
-      expect(find.text(DependencyProfile.python.description), findsOneWidget);
+      expect(find.text('开发依赖'), findsOneWidget);
+      expect(find.text('已安装 Git 与搜索工具，重新安装可补齐其余依赖'), findsOneWidget);
       expect(find.byType(AppLinearProgressIndicator), findsNothing);
 
-      // Tapping a profile asks for confirmation with its packages.
-      await _dragUntilTappable(tester, find.text('Python'));
-      await tester.tap(find.text('Python'));
+      // Tapping the tile asks for confirmation with every package.
+      await _dragUntilTappable(tester, find.text('开发依赖'));
+      await tester.tap(find.text('开发依赖'));
       await tester.pumpAndSettle();
-      expect(find.text('安装Python？'), findsOneWidget);
+      expect(find.text('安装环境依赖？'), findsOneWidget);
       expect(
         find.textContaining('python3、python3-pip、python3-venv'),
         findsOneWidget,
       );
+      expect(find.textContaining('nodejs、npm'), findsOneWidget);
       // Actions stay fixed at the dialog bottom even at large text scales.
       await tester.tap(find.text('安装'));
       await tester.pumpAndSettle();
-      expect(operation.installed, ['python']);
+      expect(operation.installed, 1);
       expect(operation.cancelled, isFalse);
 
       // Busy install shows an indeterminate bar and step log lines.
       operation.update(
         const DependencyOperation(
           busy: true,
-          profileId: 'python',
           step: DependencyStep.installing,
           logTail: ['读取包列表', '解压 python3'],
         ),
@@ -121,7 +112,7 @@ void main() {
         tester.widget<AppLinearProgressIndicator>(indicator).value,
         isNull,
       );
-      expect(find.text('正在安装 Python'), findsOneWidget);
+      expect(find.text('正在安装依赖'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('解压 python3'),
         150,
@@ -135,20 +126,17 @@ void main() {
       expect(operation.cancelled, isTrue);
 
       operation.update(
-        const DependencyOperation(
-          error: '软件源更新失败，请检查网络后重试',
-          failedProfileId: 'python',
-        ),
+        const DependencyOperation(error: '软件源更新失败，请检查网络后重试', failed: true),
       );
       await tester.pumpAndSettle();
 
-      // Failures keep the profile so the retry button resubmits it; scroll
-      // first because the shrunken list may leave the row outside the cache.
+      // Failures keep the retry button resubmitting the same full install;
+      // scroll first because the row may sit outside the build cache.
       await _dragUntilTappable(tester, find.text('重试'));
       expect(find.text('软件源更新失败，请检查网络后重试'), findsOneWidget);
       await tester.tap(find.text('重试'));
       await tester.pump();
-      expect(operation.installed, ['python', 'python']);
+      expect(operation.installed, 2);
 
       // Environment-level operations hide the dependency section.
       operation.update(const DependencyOperation());
@@ -164,7 +152,7 @@ void main() {
     });
   }
 
-  testWidgets('已装条目展示成功标记与概览，重装走独立确认', (tester) async {
+  testWidgets('全部安装后展示成功标记与概览，重装走独立确认', (tester) async {
     final operation = _ControlledDependency();
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
@@ -180,10 +168,11 @@ void main() {
                 rootPath: '/fixture/root',
                 revision: 'fixture',
                 installedDependencies: {
-                  'git-tools': InstalledDependency(
-                    installedAt: DateTime.utc(2024, 5, 1),
-                    version: 'git version 2.43.0',
-                  ),
+                  for (final profile in DependencyProfile.all)
+                    profile.id: InstalledDependency(
+                      installedAt: DateTime.utc(2024, 5, 1),
+                      version: '${profile.label} 1.0',
+                    ),
                 },
               ),
             ),
@@ -211,26 +200,25 @@ void main() {
     );
     await tester.pump();
 
-    // Installed rows carry a success badge, a reinstall button and no
-    // chevron; not-yet-installed rows show the download icon instead.
+    // A fully installed tile carries the success badge, a reinstall button
+    // and no download icon.
     final installedBadge = find.descendant(
       of: find.byType(AppIconBadge),
       matching: find.byIcon(Symbols.check_circle),
     );
     expect(installedBadge, findsOneWidget);
     expect(find.byIcon(Symbols.refresh), findsOneWidget);
-    expect(find.byIcon(Symbols.chevron_right), findsNothing);
-    expect(find.byIcon(Symbols.download), findsNWidgets(2));
+    expect(find.byIcon(Symbols.download), findsNothing);
+    expect(find.text('全部已安装 · 2024-05-01'), findsOneWidget);
 
-    // Tapping an installed row opens the info overview, not install consent.
-    await _dragUntilTappable(tester, find.text('Git 与搜索工具'));
-    await tester.tap(find.text('Git 与搜索工具'));
+    // Tapping the installed tile opens the info overview, not install consent.
+    await _dragUntilTappable(tester, find.text('开发依赖'));
+    await tester.tap(find.text('开发依赖'));
     await tester.pumpAndSettle();
-    expect(find.text('已安装 · 2024-05-01'), findsOneWidget);
-    expect(find.text('版本：git version 2.43.0'), findsOneWidget);
-    expect(find.text('· git'), findsOneWidget);
-    expect(find.text('· ripgrep'), findsOneWidget);
-    expect(find.text('安装Git 与搜索工具？'), findsNothing);
+    expect(find.text('Python：Python 1.0'), findsOneWidget);
+    expect(find.text('Node.js：Node.js 1.0'), findsOneWidget);
+    expect(find.text('Git 与搜索工具：Git 与搜索工具 1.0'), findsOneWidget);
+    expect(find.text('安装环境依赖？'), findsNothing);
 
     // The tile's reinstall IconButton also exposes a tooltip with the same
     // text, so target the action button inside the open dialog only.
@@ -240,11 +228,11 @@ void main() {
     );
     await tester.tap(confirmReinstall);
     await tester.pumpAndSettle();
-    expect(find.text('重新安装Git 与搜索工具？'), findsOneWidget);
-    // Confirming the reinstall dialog dispatches install for the profile.
+    expect(find.text('重新安装环境依赖？'), findsOneWidget);
+    // Confirming the reinstall dialog dispatches the full install again.
     await tester.tap(confirmReinstall);
     await tester.pumpAndSettle();
-    expect(operation.installed, ['git-tools']);
+    expect(operation.installed, 1);
     expect(tester.takeException(), isNull);
   });
 
@@ -312,10 +300,10 @@ class _ControlledDependency extends DependencyController {
   @override
   void cancel() => cancelled = true;
   bool cancelled = false;
-  final installed = <String>[];
+  int installed = 0;
   @override
-  Future<void> install(String profileId) async {
-    installed.add(profileId);
+  Future<void> install() async {
+    installed++;
   }
 }
 

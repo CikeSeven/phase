@@ -37,6 +37,10 @@ class DependencyProfile {
     verifyCommand: 'git --version && rg --version',
   );
   static const all = [python, node, gitTools];
+
+  /// 完整安装时一次装入的全部软件包，用于确认文案与模型侧描述。
+  static String get completePackages =>
+      all.expand((profile) => profile.packages).join('、');
   static DependencyProfile? byId(String id) {
     for (final profile in all) {
       if (profile.id == id) return profile;

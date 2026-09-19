@@ -18,7 +18,7 @@ class _ScriptedInstaller extends DependencyInstaller {
   _ScriptedInstaller(super.repository, super.driver, this.scripts);
   final Map<DependencyStep, String> scripts;
   @override
-  String commandFor(DependencyStep step, DependencyProfile profile) =>
+  String commandFor(DependencyStep step, List<DependencyProfile> profiles) =>
       scripts[step] ?? 'true';
 }
 
@@ -63,7 +63,7 @@ void main() {
   test('missing environment reports environmentMissing', () async {
     const bare = InstallTool();
     final outcome = await bare.execute(
-      {'profile': 'python'},
+      {},
       _context('c', 'r', 't'),
       RunCancellation(),
     );
@@ -71,35 +71,37 @@ void main() {
     expect(outcome.errorCode, 'environmentMissing');
   });
 
-  test('unknown profile is rejected by validation', () {
-    expect(tool().validateArguments({'profile': 'postgres'}), '未知的依赖组');
-    expect(tool().validateArguments({'profile': 'node'}), isNull);
+  test('arguments must stay empty', () {
+    expect(tool().validateArguments({}), isNull);
+    expect(tool().validateArguments({'profile': 'python'}), '该工具不需要参数');
   });
 
-  test('successful install returns recorded version and output tail', () async {
-    final outcome =
-        await tool(
-          scripts: {
-            DependencyStep.verifying: 'printf "Python 3.12.3"',
-            DependencyStep.installing: 'printf installing',
-          },
-        ).execute(
-          {'profile': 'python'},
-          _context('c', 'r', 't'),
-          RunCancellation(),
-        );
-    expect(outcome.ok, isTrue);
-    final body = jsonDecode(outcome.content) as Map<String, dynamic>;
-    expect(body['profile'], 'python');
-    expect(body['label'], 'Python');
-    expect(body['version'], 'Python 3.12.3');
-    expect((body['outputTail'] as List).last, '验证: Python 3.12.3');
-  });
+  test(
+    'successful install returns per-group records and output tail',
+    () async {
+      final outcome = await tool(
+        scripts: {
+          DependencyStep.verifying: 'printf "Python 3.12.3"',
+          DependencyStep.installing: 'printf installing',
+        },
+      ).execute({}, _context('c', 'r', 't'), RunCancellation());
+      expect(outcome.ok, isTrue);
+      final body = jsonDecode(outcome.content) as Map<String, dynamic>;
+      final profiles = (body['profiles'] as List).cast<Map<String, dynamic>>();
+      expect(profiles.map((profile) => profile['id']).toList(), [
+        for (final profile in DependencyProfile.all) profile.id,
+      ]);
+      expect(
+        profiles.every((profile) => profile['version'] == 'Python 3.12.3'),
+        isTrue,
+      );
+      expect((body['outputTail'] as List).last, '验证: Python 3.12.3');
+    },
+  );
 
   test('apt failure maps to a failed outcome with its code', () async {
-    final outcome = await tool(
-      scripts: {DependencyStep.updating: 'exit 100'},
-    ).execute({'profile': 'node'}, _context('c', 'r', 't'), RunCancellation());
+    final outcome = await tool(scripts: {DependencyStep.updating: 'exit 100'})
+        .execute({}, _context('c', 'r', 't'), RunCancellation());
     expect(outcome.ok, isFalse);
     expect(outcome.errorCode, 'aptUpdate');
     expect(outcome.content, contains('软件源更新失败'));
@@ -108,7 +110,7 @@ void main() {
   test('cancellation returns a cancelled outcome', () async {
     final cancellation = RunCancellation();
     final pending = tool(scripts: {DependencyStep.verifying: 'sleep 30'})
-        .execute({'profile': 'node'}, _context('c', 'r', 't'), cancellation);
+        .execute({}, _context('c', 'r', 't'), cancellation);
     while (driver.active.isEmpty) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
@@ -119,10 +121,11 @@ void main() {
     expect(driver.active, isEmpty);
   });
 
-  test('describeAction lists the profile packages', () {
-    final action = tool().describeAction({'profile': 'git-tools'});
+  test('describeAction lists every package', () {
+    final action = tool().describeAction({});
     expect(action, contains('Ubuntu fixture'));
     expect(action, contains('git、ripgrep'));
+    expect(action, contains('python3、python3-pip、python3-venv'));
   });
 }
 

@@ -3,7 +3,6 @@ import 'dart:convert';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_source.dart';
-import '../workspace/dependency_profiles.dart';
 import 'application_tool_display.dart';
 import 'tool_diff.dart';
 import 'tool_presentation.dart';
@@ -50,11 +49,7 @@ class ToolCallDisplay {
     final args = record.arguments;
     return switch (record.toolName) {
       'shell' => args['command'] is String ? '\$ ${args['command']}' : null,
-      'install_packages' =>
-        args['profile'] is String
-            ? DependencyProfile.byId(args['profile'] as String)?.label ??
-                  args['profile'] as String
-            : null,
+      'install_packages' => null,
       'write_file' ||
       'edit_file' ||
       'read_file' => args['path'] is String ? args['path'] as String : null,
@@ -98,24 +93,7 @@ class ToolCallDisplay {
             );
           }
         case 'install_packages':
-          if (args['profile'] case final String id) {
-            final label = DependencyProfile.byId(id)?.label ?? id;
-            Map<String, dynamic>? result;
-            if (record.result != null) {
-              try {
-                result = jsonDecode(record.result!) as Map<String, dynamic>;
-              } on FormatException {
-                // Failure results carry a plain message, not the JSON payload.
-              }
-            }
-            return ToolCallDisplay(
-              call: '安装$label',
-              metadata: result?['version'] is String
-                  ? result!['version'] as String
-                  : null,
-              output: output,
-            );
-          }
+          return ToolCallDisplay(call: '安装开发依赖', output: output);
         case 'write_file':
           if (args['content'] case final String content) {
             return ToolCallDisplay(
