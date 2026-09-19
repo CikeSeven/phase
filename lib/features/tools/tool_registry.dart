@@ -18,7 +18,12 @@ ToolRegistry buildBuiltInRegistry({
   return ToolRegistry([
     const SystemInfoTool(),
     const ShellTool(),
-    for (final tool in const [ReadFileTool(), WriteFileTool(), ListFilesTool()])
+    for (final tool in const [
+      ReadFileTool(),
+      WriteFileTool(),
+      EditFileTool(),
+      ListFilesTool(),
+    ])
       if (platform == null) tool else ScopedFileTool(tool, platform),
     if (platform != null)
       for (final action in const [

@@ -54,7 +54,7 @@ class ToolContext {
 
   final ToolStorage storage;
 
-  /// 当前会话的附件（read_file / list_files 只读这些）。
+  /// 当前会话的附件；文件工具还可访问会话产物和已选择的工作区。
   final List<Attachment> attachments;
 
   /// 允许读写的应用私有工作目录。

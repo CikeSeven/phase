@@ -160,7 +160,7 @@ void main() {
         assistantMessageId: assistant.id,
         providerCallId: 'call_old',
         toolName: 'read_file',
-        arguments: const {'reference': 'notes.txt'},
+        arguments: const {'path': 'notes.txt'},
         channel: ExecutionChannel.app,
         defaultPolicy: ToolPolicy.allow,
         status: ToolCallStatus.prepared,

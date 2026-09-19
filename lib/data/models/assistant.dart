@@ -106,6 +106,7 @@ const defaultToolPolicyConfig = ToolPolicyConfig(
     'read_file': ToolPolicy.allow,
     'list_files': ToolPolicy.allow,
     'write_file': ToolPolicy.ask,
+    'edit_file': ToolPolicy.ask,
     'http_request': ToolPolicy.ask,
     applicationOperationsPolicyKey: ToolPolicy.ask,
   },

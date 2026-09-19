@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/models/attachment.dart';
 import 'package:phase/data/models/agent_run.dart';
+import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 
 import 'tool_loop_harness.dart';
@@ -33,7 +34,7 @@ void main() {
       toolTurn(
         callId: 'call_2',
         toolName: 'read_file',
-        arguments: '{"reference":"summary.md"}',
+        arguments: '{"path":"summary.md"}',
       ),
       toolTurn(callId: 'call_3', toolName: 'list_files', arguments: '{}'),
       textTurn('已保存'),
@@ -140,4 +141,103 @@ void main() {
     );
     expect((await harness.latestRun()).status, RunStatus.completed);
   });
+  test('AI creates an empty extensionless file, writes, edits and reads it through persisted results', () async {
+    final h = await ToolLoopHarness.create();
+    h.onConfirmation = (_) async => ToolDecision.approved;
+    h.provider.turns.addAll([
+      toolTurn(
+        callId: 'empty',
+        toolName: 'write_file',
+        arguments: jsonEncode({'path': 'src/README', 'content': ''}),
+      ),
+      toolTurn(
+        callId: 'write',
+        toolName: 'write_file',
+        arguments: jsonEncode({
+          'path': 'src/README',
+          'content': 'alpha\nbeta\ngamma',
+        }),
+      ),
+      toolTurn(
+        callId: 'edit',
+        toolName: 'edit_file',
+        arguments: jsonEncode({
+          'path': 'src/README',
+          'edits': [
+            {'oldText': 'alpha', 'newText': 'ALPHA'},
+            {'oldText': 'gamma', 'newText': ''},
+          ],
+        }),
+      ),
+      toolTurn(
+        callId: 'read',
+        toolName: 'read_file',
+        arguments: jsonEncode({'path': 'src/README', 'offset': 2, 'limit': 1}),
+      ),
+      toolTurn(
+        callId: 'list',
+        toolName: 'list_files',
+        arguments: jsonEncode({'path': 'src'}),
+      ),
+      textTurn('完成'),
+    ]);
+    await h.controller().send('修改文件');
+    final records = await h.recordsByCall();
+    expect(
+      records.values.every(
+        (record) => record.status == ToolCallStatus.succeeded,
+      ),
+      isTrue,
+    );
+    expect(records['empty']!.artifacts, records['edit']!.artifacts);
+    final attachments = await (await h.conversations()).attachmentsFor(
+      h.conversationId()!,
+    );
+    expect(attachments, hasLength(1));
+    expect(attachments.single.name, 'src/README');
+    expect(attachments.single.size, utf8.encode('ALPHA\nbeta\n').length);
+    expect(
+      await File(attachments.single.localPath).readAsString(),
+      'ALPHA\nbeta\n',
+    );
+    expect(records['read']!.result, startsWith('beta\n'));
+    expect(records['read']!.result, contains('offset=3'));
+    expect(jsonDecode(records['list']!.result!)['files'], [
+      {'path': 'src/README', 'type': 'file'},
+    ]);
+  });
+
+  test(
+    'read continuation survives the model context limit and subsequent turns',
+    () async {
+      final h = await ToolLoopHarness.create();
+      h.onConfirmation = (_) async => ToolDecision.approved;
+      h.provider.turns.addAll([
+        toolTurn(
+          callId: 'write',
+          toolName: 'write_file',
+          arguments: jsonEncode({
+            'path': 'large',
+            'content': List.filled(20, '月' * 1000).join('\n'),
+          }),
+        ),
+        toolTurn(
+          callId: 'read',
+          toolName: 'read_file',
+          arguments: jsonEncode({'path': 'large'}),
+        ),
+        toolTurn(callId: 'system', toolName: 'system_info', arguments: '{}'),
+        textTurn('已读取第一页'),
+      ]);
+      await h.controller().send('查看大文件');
+      for (final request in h.provider.requests.skip(2)) {
+        final result = request.messages
+            .expand((m) => m.parts)
+            .whereType<ResolvedToolResult>()
+            .singleWhere((r) => r.callId == 'read');
+        expect(result.content, contains('offset=6'));
+        expect(result.content, isNot(contains('结果已截断')));
+      }
+    },
+  );
 }

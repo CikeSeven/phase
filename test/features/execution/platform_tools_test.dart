@@ -45,7 +45,7 @@ void main() {
       toolTurn(
         callId: 'read',
         toolName: 'read_file',
-        arguments: jsonEncode({'reference': document}),
+        arguments: jsonEncode({'path': document}),
       ),
       textTurn('已读取授权文件'),
     ]);
@@ -82,7 +82,7 @@ void main() {
       toolTurn(
         callId: 'read',
         toolName: 'read_file',
-        arguments: jsonEncode({'reference': document}),
+        arguments: jsonEncode({'path': document}),
       ),
       textTurn('这次没有读到 notes.txt 的内容'),
     ]);
@@ -131,7 +131,7 @@ void main() {
       toolTurn(
         callId: 'read',
         toolName: 'read_file',
-        arguments: jsonEncode({'reference': document}),
+        arguments: jsonEncode({'path': document}),
       ),
       textTurn('已读取'),
     ]);
@@ -231,7 +231,7 @@ void main() {
       toolTurn(
         callId: 'read',
         toolName: 'read_file',
-        arguments: jsonEncode({'reference': document}),
+        arguments: jsonEncode({'path': document}),
       ),
     );
     await expectLater(
@@ -253,7 +253,6 @@ void main() {
         .writeExecutionScope(const ExecutionScope(fileUris: [root]));
     h.onConfirmation = (request) async {
       expect(request.record.arguments['directory'], root);
-      expect(request.record.arguments['overwrite'], false);
       await h.container
           .read(settingsStorageProvider)
           .writeExecutionScope(
@@ -276,7 +275,6 @@ void main() {
           'directory': root,
           'path': 'summary.txt',
           'content': '摘要',
-          'overwrite': false,
         }),
       ),
     );
@@ -288,4 +286,116 @@ void main() {
     expect(driver.scopes.single.fileUris, [root]);
     expect(h.provider.requests, hasLength(2));
   });
+  for (final matches in [true, false]) {
+    test(
+      'external edit ${matches ? 'writes matched text with internal hash' : 'does not dispatch a write when text is missing'}',
+      () async {
+        final h = await ToolLoopHarness.create();
+        h.onConfirmation = (_) async => ToolDecision.approved;
+        final driver =
+            h.container.read(channelDriverProvider) as FakeChannelDriver;
+        final external = File('${h.tempDir.path}/external')
+          ..writeAsStringSync('before\nkeep');
+        final reads = <ExecutionRequest>[];
+        final writes = <ExecutionRequest>[];
+        final copies = <File>[];
+        driver.executeHandler = (request, _) async {
+          expect(request.target.uri, document);
+          if (request.action == ExecutionAction.readFile) {
+            reads.add(request);
+          } else {
+            expect(request.action, ExecutionAction.writeFile);
+            writes.add(request);
+            expect(request.arguments['expectedSha256'], 'original-hash');
+            expect(request.arguments, isNot(contains('overwrite')));
+            await external.writeAsString(
+              request.arguments['content'] as String,
+            );
+          }
+          final copy = await external.copy(
+            '${h.tempDir.path}/copy-${copies.length}',
+          );
+          copies.add(copy);
+          return ExecutionResult(
+            toolCallId: request.toolCallId,
+            status: ExecutionStatus.succeeded,
+            result: {'uri': document, 'name': 'README'},
+            artifacts: [
+              ExecutionArtifact(
+                uri: document,
+                name: 'README',
+                size: await copy.length(),
+                localPath: copy.path,
+                sha256: 'original-hash',
+              ),
+            ],
+          );
+        };
+        h.provider.turns.addAll([
+          toolTurn(
+            callId: 'edit',
+            toolName: 'edit_file',
+            arguments: jsonEncode({
+              'path': document,
+              'edits': [
+                {'oldText': matches ? 'before' : 'absent', 'newText': 'after'},
+              ],
+            }),
+          ),
+          textTurn('已处理'),
+        ]);
+        await h.controller().send('修改授权文件');
+        final record = (await h.recordsByCall())['edit']!;
+        expect(reads.single.toolCallId, '${record.id}:read');
+        if (matches) {
+          expect(writes.single.toolCallId, record.id);
+          expect(record.status, ToolCallStatus.succeeded);
+          expect(await external.readAsString(), 'after\nkeep');
+          expect(record.artifacts, hasLength(1));
+        } else {
+          expect(writes, isEmpty);
+          expect(record.errorCode, 'textNotFound');
+          expect(await external.readAsString(), 'before\nkeep');
+        }
+        expect(copies.every((f) => !f.existsSync()), isTrue);
+      },
+    );
+  }
+
+  test(
+    'external read uses the same 1-based pagination as private files',
+    () async {
+      final h = await ToolLoopHarness.create();
+      final driver =
+          h.container.read(channelDriverProvider) as FakeChannelDriver;
+      final file = File('${h.tempDir.path}/native-copy')
+        ..writeAsStringSync('one\ntwo\nthree');
+      driver.executeHandler = (request, _) async => ExecutionResult(
+        toolCallId: request.toolCallId,
+        status: ExecutionStatus.succeeded,
+        result: {'uri': document},
+        artifacts: [
+          ExecutionArtifact(
+            uri: document,
+            name: 'README',
+            size: file.lengthSync(),
+            localPath: file.path,
+          ),
+        ],
+      );
+      h.provider.turns.addAll([
+        toolTurn(
+          callId: 'read',
+          toolName: 'read_file',
+          arguments: jsonEncode({'path': document, 'offset': 2, 'limit': 1}),
+        ),
+        textTurn('two'),
+      ]);
+      await h.controller().send('读取第二行');
+      final result = jsonDecode((await h.recordsByCall())['read']!.result!);
+      expect(result['text'], 'two');
+      expect(result['startLine'], 2);
+      expect(result['nextOffset'], 3);
+    },
+  );
 }

@@ -11,6 +11,8 @@ import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
 import '../chat/document_extractor.dart';
 import '../tools/tool.dart';
+import '../tools/file_text.dart';
+import '../tools/file_tools.dart';
 import 'channel_driver.dart';
 import 'execution_api.g.dart';
 
@@ -65,26 +67,18 @@ class ScopedFileTool extends Tool {
   String get name => local.name;
   @override
   String get description =>
-      '${local.description} 外部文件使用用户授权的 content:// URI。'
-      'list_files 的 directory 为授权目录；write_file 的 directory 为目录 URI，path 为单个文件名。'
-      '默认只新建；覆盖须 overwrite=true 且 expectedSha256 与之前读取的文件校验值一致。';
+      '${local.description} 外部文件的 path 使用授权范围内的 content:// URI。'
+      '${name == 'write_file' ? '新建外部文件时 directory 传目录 URI，path 传相对路径；自动创建父目录，同名文件完整覆盖。外部单次写入上限 128 KiB。' : ''}';
   @override
   Map<String, dynamic> get inputSchema => {
     ...local.inputSchema,
     'properties': {
       ...Map<String, dynamic>.from(local.inputSchema['properties'] as Map),
-      if (name != 'read_file')
+      if (name == 'write_file')
         'directory': {
           'type': 'string',
-          'description': '本次授权目录的 content:// URI',
+          'description': '新建或按名称写入外部文件时使用的授权目录 URI',
         },
-      if (name == 'write_file') ...{
-        'overwrite': {'type': 'boolean', 'description': '是否覆盖已有文件，默认 false'},
-        'expectedSha256': {
-          'type': 'string',
-          'description': '覆盖目标之前读取到的 SHA-256',
-        },
-      },
     },
   };
   @override
@@ -92,17 +86,27 @@ class ScopedFileTool extends Tool {
   @override
   ToolPolicy get defaultPolicy => local.defaultPolicy;
   @override
-  bool usesPlatform(Map<String, dynamic> arguments) => name == 'read_file'
-      ? arguments['reference'] is String &&
-            (arguments['reference'] as String).startsWith('content://')
-      : arguments.containsKey('directory');
+  String? validateArguments(Map<String, dynamic> arguments) {
+    final directory = arguments['directory'];
+    if (directory != null &&
+        (directory is! String || !directory.startsWith('content://'))) {
+      return 'directory 必须是授权目录的 content:// URI';
+    }
+    if (directory != null &&
+        (arguments['path'] as String).startsWith('content://')) {
+      return '指定 directory 时 path 应为相对路径';
+    }
+    return local.validateArguments(arguments);
+  }
+
+  @override
+  bool usesPlatform(Map<String, dynamic> arguments) =>
+      (arguments['path'] is String &&
+          (arguments['path'] as String).startsWith('content://')) ||
+      arguments.containsKey('directory');
   @override
   String describeAction(Map<String, dynamic> arguments) =>
-      !usesPlatform(arguments)
-      ? local.describeAction(arguments)
-      : name == 'write_file'
-      ? '${arguments['overwrite'] == true ? '覆盖' : '新建'}外部文件 ${arguments['path']}，目录 ${arguments['directory']}'
-      : '读取授权${name == 'list_files' ? '目录' : '文件'}：${arguments['directory'] ?? arguments['reference']}';
+      '${local.describeAction(arguments)}${arguments['directory'] == null ? '' : '，目录 ${arguments['directory']}'}';
 
   @override
   Future<ToolOutcome> execute(
@@ -113,15 +117,14 @@ class ScopedFileTool extends Tool {
   }) async {
     if (!usesPlatform(arguments)) {
       return local.execute(
-        {
-          for (final entry in arguments.entries)
-            if (!['overwrite', 'expectedSha256'].contains(entry.key))
-              entry.key: entry.value,
-        },
+        arguments,
         context,
         cancellation,
         onProgress: onProgress,
       );
+    }
+    if (name == 'edit_file') {
+      return _editExternal(arguments, context, cancellation, onProgress);
     }
     if (name == 'write_file' &&
         utf8.encode(arguments['content'] as String).length > 128 * 1024) {
@@ -141,7 +144,7 @@ class ScopedFileTool extends Tool {
         },
         arguments: arguments,
         target: ExecutionTarget(
-          uri: (arguments['directory'] ?? arguments['reference']) as String?,
+          uri: (arguments['directory'] ?? arguments['path']) as String?,
         ),
         timeoutMs: 30000,
       ),
@@ -181,35 +184,22 @@ class ScopedFileTool extends Tool {
                 .extension(artifact.name)
                 .replaceFirst('.', '')
                 .toLowerCase();
-            final text = await Isolate.run(() async {
-              if (DocumentExtractor.supports(extension)) {
-                return (await const DocumentExtractor().extract(
+            if (DocumentExtractor.supports(extension)) {
+              final text = await Isolate.run(
+                () async => (await const DocumentExtractor().extract(
                   path: target.path,
                   extension: extension,
-                )).text;
-              }
-              return await target.readAsString();
-            });
-            if (DocumentExtractor.supports(extension)) {
+                )).text,
+              );
               extractedPath = '${target.path}.extracted.txt';
               await File(extractedPath).writeAsString(text);
             }
-            final lines = text.split('\n');
-            final offset = ((arguments['offset'] as num?)?.toInt() ?? 0).clamp(
-              0,
-              lines.length,
+            final page = await readFilePage(
+              File(extractedPath ?? target.path),
+              arguments,
+              cancellation,
             );
-            final limit = ((arguments['limit'] as num?)?.toInt() ?? 300).clamp(
-              1,
-              1000,
-            );
-            final end = (offset + limit).clamp(0, lines.length);
-            final slice = lines.sublist(offset, end).join('\n');
-            details['text'] = slice.length > 16000
-                ? slice.substring(0, 16000)
-                : slice;
-            details['truncated'] = end < lines.length || slice.length > 16000;
-            details['totalLines'] = lines.length;
+            details.addAll(page.toJson());
           } on DocumentExtractionException {
             extractionError = '无法抽取文字，可能是扫描件或损坏文档';
           } on FormatException {
@@ -228,6 +218,20 @@ class ScopedFileTool extends Tool {
           extractionError: extractionError,
         );
         ids.add(attachment.id);
+        if (extractionError != null) {
+          return ToolOutcome(
+            ok: false,
+            content: jsonEncode(details),
+            artifacts: ids,
+            errorCode: 'notText',
+          );
+        }
+      } on ToolCancelled {
+        await _discardCopy(target);
+        rethrow;
+      } on FileToolException catch (error) {
+        await _discardCopy(target);
+        return ToolOutcome.failure(error.message, errorCode: error.code);
       } on FileSystemException catch (error) {
         AppLogger.warning('授权文件处理失败 (io=${error.osError?.errorCode})');
         await _discardCopy(target);
@@ -245,6 +249,82 @@ class ScopedFileTool extends Tool {
       }
     }
     return ToolOutcome.success(jsonEncode(details), artifacts: ids);
+  }
+
+  Future<ToolOutcome> _editExternal(
+    Map<String, dynamic> arguments,
+    ToolContext context,
+    RunCancellation cancellation,
+    ToolProgress? onProgress,
+  ) async {
+    // 两个原生阶段使用不同派发 ID；写入阶段仍归属当前工具调用，禁止底层重放。
+    final uri = arguments['path'] as String;
+    final read = await driver().execute(
+      ExecutionRequest(
+        runId: context.runId,
+        toolCallId: '${context.toolCallId}:read',
+        action: ExecutionAction.readFile,
+        arguments: {'path': uri},
+        target: ExecutionTarget(uri: uri),
+        timeoutMs: 30000,
+      ),
+      cancellation,
+    );
+    if (read.status != ExecutionStatus.succeeded) return platformOutcome(read);
+    try {
+      final source = read.artifacts.singleOrNull;
+      if (source?.localPath == null || source?.sha256 == null) {
+        return const ToolOutcome.failure(
+          '未获得完整文件与校验值，未执行编辑',
+          errorCode: 'fileReadFailed',
+        );
+      }
+      cancellation.throwIfCancelled();
+      final file = File(source!.localPath!);
+      if (await file.length() > 128 * 1024) {
+        return const ToolOutcome.failure(
+          '外部文件编辑上限为 128 KiB',
+          errorCode: 'contentTooLarge',
+        );
+      }
+      final original = await readEditableText(file);
+      if (original.contains('\u0000')) {
+        return const ToolOutcome.failure('不能编辑二进制文件', errorCode: 'notText');
+      }
+      final edited = applyFileEdits(original, arguments);
+      if (original == edited) {
+        return const ToolOutcome.success('替换内容与原文相同，文件未改变');
+      }
+      cancellation.throwIfCancelled();
+      return await ScopedFileTool(const WriteFileTool(), driver).execute(
+        {'path': uri, 'content': edited, 'expectedSha256': source.sha256},
+        context,
+        cancellation,
+        onProgress: onProgress,
+      );
+    } on FileToolException catch (error) {
+      return ToolOutcome.failure(error.message, errorCode: error.code);
+    } on FormatException {
+      return const ToolOutcome.failure(
+        '文件不是有效的 UTF-8 文本，未执行编辑',
+        errorCode: 'notText',
+      );
+    } on FileSystemException {
+      return const ToolOutcome.failure(
+        '无法读取文件副本，未执行编辑',
+        errorCode: 'fileReadFailed',
+      );
+    } finally {
+      for (final artifact in read.artifacts) {
+        if (artifact.localPath case final path?) {
+          try {
+            await File(path).delete();
+          } on FileSystemException {
+            /* 临时缓存由系统清理。 */
+          }
+        }
+      }
+    }
   }
 
   ToolOutcome _unavailableArtifact(

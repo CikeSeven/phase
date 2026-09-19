@@ -1,352 +1,433 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
 
-import '../../../data/models/attachment.dart';
+import '../../../core/error/failure.dart';
 import '../../../data/models/tool_policy.dart';
+import '../workspace/workspace_files.dart';
+import 'file_text.dart';
 import 'tool.dart';
 
-/// 单次读取的默认行数与上限：大文档由模型按行分段读，不一次塞满上下文。
-const _defaultReadLines = 300;
-const _maxReadLines = 1000;
+const _pathDescription = '相对于本会话产物目录的路径；/workspace/ 开头访问当前工作区。文件名原样使用，不补后缀。';
 
-/// 读取已导入的附件或本会话产物中的文本。
 class ReadFileTool extends Tool {
   const ReadFileTool();
-
   @override
   String get name => 'read_file';
-
   @override
   String get description =>
-      '读取文件文本。reference 可以是附件的文件名或 id，也可以是本会话产物的文件名。'
-      '大文件用 offset（起始行，从 0 开始）与 limit（行数）分段读取。';
-
+      '读取 UTF-8 文本或附件已抽取的文本。$_pathDescription '
+      '附件也可用 attachment:<ID> 或唯一文件名。offset 从 1 开始；'
+      '最多返回 2000 行或 16 KiB 完整行，按返回的 nextOffset/offset 继续读取。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
-      'reference': {'type': 'string', 'description': '文件名或附件 id'},
-      'offset': {'type': 'integer', 'description': '起始行，从 0 开始'},
-      'limit': {'type': 'integer', 'description': '读取行数，默认 300，最多 1000'},
+      'path': {'type': 'string', 'description': '文件路径或 attachment:<ID>'},
+      'offset': {'type': 'integer', 'minimum': 1, 'description': '起始行，默认 1'},
+      'limit': {
+        'type': 'integer',
+        'minimum': 1,
+        'description': '最多读取行数，默认 2000',
+      },
     },
-    'required': ['reference'],
+    'required': ['path'],
     'additionalProperties': false,
   };
-
   @override
   Set<String> get requiredCapabilities => const {'file_read'};
-
   @override
   ToolPolicy get defaultPolicy => ToolPolicy.allow;
-
   @override
-  String describeAction(Map<String, dynamic> arguments) {
-    final reference = arguments['reference'];
-    return '读取文件：${reference is String ? reference : '（缺少引用）'}';
-  }
-
+  String? validateArguments(Map<String, dynamic> arguments) =>
+      validateFileRead(arguments);
+  @override
+  String describeAction(Map<String, dynamic> arguments) =>
+      '读取文件：${arguments['path']}';
   @override
   Future<ToolOutcome> execute(
     Map<String, dynamic> arguments,
     ToolContext context,
     RunCancellation cancellation, {
     ToolProgress? onProgress,
-  }) async {
-    final args = ToolArguments(arguments, name);
-    final reference = args.string('reference');
-    final offset = (args.optionalInt('offset') ?? 0).clamp(0, 1 << 31);
-    final limit = (args.optionalInt('limit') ?? _defaultReadLines).clamp(
-      1,
-      _maxReadLines,
-    );
-
-    final resolved = _resolve(reference, context);
-    if (resolved == null) {
-      return ToolOutcome.failure(
-        '找不到文件「$reference」。可读的是当前会话的附件与本会话产物：'
-        '${_availableNames(context).join('、')}',
-        errorCode: 'fileNotFound',
-      );
-    }
+  }) => _fileOperation(() async {
+    final path = ToolArguments(arguments, name).string('path');
     cancellation.throwIfCancelled();
-
-    final file = File(resolved.path);
-    if (!file.existsSync()) {
-      return ToolOutcome.failure(
-        '文件「$reference」已不存在（可能已被删除）',
-        errorCode: 'fileMissing',
-      );
-    }
-    if (file.lengthSync() > _maxBytes) {
-      return ToolOutcome.failure(
-        '文件超过 ${_maxBytes ~/ 1024}KB，太小无法一次读取；请改用 offset 分段读取',
-        errorCode: 'fileTooLarge',
-      );
-    }
-    final String text;
-    try {
-      text = await file.readAsString();
-    } on FileSystemException catch (error) {
-      return ToolOutcome.failure(
-        '读取失败：${error.message}',
-        errorCode: 'fileReadFailed',
-      );
-    } on FormatException {
-      // 二进制内容不进上下文，也不假装读到了文本。
-      return ToolOutcome.failure(
-        '「$reference」不是文本内容，无法作为文本读取',
-        errorCode: 'notText',
-      );
-    }
-
-    final lines = text.split('\n');
-    final slice = (offset >= lines.length
-        ? const <String>[]
-        : lines.sublist(offset, (offset + limit).clamp(0, lines.length)));
-    if (slice.isEmpty) {
-      return ToolOutcome.success(
-        '「${resolved.name}」从第 $offset 行起没有内容（全文共 ${lines.length} 行）',
-      );
-    }
-    final end = offset + slice.length;
-    final truncated = end < lines.length;
-    return ToolOutcome.success(
-      '文件「${resolved.name}」第 $offset–${end - 1} 行'
-      '${truncated ? '（还有 ${lines.length - end} 行未读）' : '（已到结尾）'}：\n'
-      '${slice.join('\n')}',
-    );
-  }
-
-  _ResolvedFile? _resolve(String reference, ToolContext context) {
-    // 先看本会话产物，再看附件：产物是模型最近写出的东西。
-    final artifact = _artifactFile(reference, context);
-    if (artifact != null) return artifact;
-    final attachment = context.attachmentBy(reference);
-    if (attachment == null) return null;
-    return _ResolvedFile(
-      name: attachment.name,
-      path: attachment.extractedTextPath ?? attachment.localPath,
-    );
-  }
-
-  static const _maxBytes = 4 * 1024 * 1024;
-
-  List<String> _availableNames(ToolContext context) {
-    final names = <String>[
-      for (final attachment in context.attachments) attachment.name,
-      if (Directory(context.artifactsDirectory).existsSync())
-        for (final entity in Directory(context.artifactsDirectory).listSync())
-          if (entity is File) p.basename(entity.path),
-    ];
-    return names.isEmpty ? const ['（当前没有可读文件）'] : names;
-  }
+    final file = await _readableFile(path, context);
+    final page = await readFilePage(file, arguments, cancellation);
+    return ToolOutcome.success(page.render());
+  });
 }
 
-/// 把文本写成新产物：写入应用私有目录，产物作为附件登记。
 class WriteFileTool extends Tool {
   const WriteFileTool();
-
-  /// 单次写入的内容上限，避免一次落一个超大文件。
-  static const maxBytes = 2 * 1024 * 1024;
-
+  static const maxBytes = maxFileWriteBytes;
   @override
   String get name => 'write_file';
-
   @override
   String get description =>
-      '把文本写成本会话的产物文件。path 是文件名或相对路径（相对于本会话产物目录），'
-      '内容完全由 content 决定；同名文件会被覆盖，覆盖前会向用户确认。';
-
+      '将 content 原样写成 UTF-8 文件，不存在则创建，存在则完整覆盖；自动创建父目录。'
+      '允许空内容和无扩展名文件。$_pathDescription 局部修改用 edit_file。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
-      'path': {'type': 'string', 'description': '文件名或相对路径，如 summary.md'},
-      'content': {'type': 'string', 'description': '要写入的完整文本'},
+      'path': {'type': 'string', 'description': _pathDescription},
+      'content': {
+        'type': 'string',
+        'minLength': 0,
+        'description': '完整内容；空字符串创建空文件或清空文件',
+      },
     },
     'required': ['path', 'content'],
     'additionalProperties': false,
   };
-
   @override
   Set<String> get requiredCapabilities => const {'file_write'};
-
   @override
   ToolPolicy get defaultPolicy => ToolPolicy.ask;
-
   @override
-  String describeAction(Map<String, dynamic> arguments) {
-    final path = arguments['path'];
-    final content = arguments['content'];
-    final size = content is String ? content.length : 0;
-    final exists = arguments['__exists'] == true;
-    return '写入文件「${path is String ? path : '（缺少路径）'}」'
-        '（$size 字${exists ? '，覆盖已有文件' : '，新文件'}）';
-  }
-
+  String describeAction(Map<String, dynamic> arguments) =>
+      '写入文件「${arguments['path']}」（存在则完整覆盖）';
   @override
   Future<ToolOutcome> execute(
     Map<String, dynamic> arguments,
     ToolContext context,
     RunCancellation cancellation, {
     ToolProgress? onProgress,
-  }) async {
-    final args = ToolArguments(arguments, name);
-    final rawPath = args.string('path').trim();
-    final content = args.string('content', required: true);
-    final bytes = content.length;
-    if (bytes > maxBytes) {
-      return ToolOutcome.failure(
-        '内容过大（$bytes 字，上限 ${maxBytes ~/ 1024}KB）；请分段写入或改用其他方式',
-        errorCode: 'contentTooLarge',
-      );
-    }
-
-    final safeName = _safeRelativePath(rawPath);
-    if (safeName == null) {
-      return ToolOutcome.failure(
-        '路径不合法：只能写入本会话产物目录内的相对路径（收到「$rawPath」）',
-        errorCode: 'invalidPath',
-      );
-    }
-    final target = File(p.join(context.artifactsDirectory, safeName));
-    cancellation.throwIfCancelled();
-
-    try {
-      await target.parent.create(recursive: true);
-      cancellation.throwIfCancelled();
-      final directory = Directory(context.artifactsDirectory).absolute.path;
-      if (!p.isWithin(directory, target.absolute.path)) {
-        return ToolOutcome.failure('路径越出会话产物目录', errorCode: 'invalidPath');
-      }
-      final existed = target.existsSync();
-      await target.writeAsString(content, flush: true);
-      // 产物按 artifact 类型附件登记，结果引用它（design 第六部分 §6.3）：
-      // 卡片、导出与 list_files 都靠这条引用查到写出的文件。
-      final artifact = await _registerArtifact(context, target, safeName);
-      return ToolOutcome.success(
-        '已${existed ? '覆盖' : '创建'}「$safeName」（$bytes 字）',
-        artifacts: [artifact.id],
-      );
-    } on FileSystemException catch (error) {
-      return ToolOutcome.failure(
-        '写入失败：${error.message}',
-        errorCode: 'fileWriteFailed',
-      );
-    }
-  }
-
-  /// 登记写入的文件；同一路径已有附件时复用，避免同名产物出现多条记录。
-  Future<Attachment> _registerArtifact(
-    ToolContext context,
-    File target,
-    String name,
-  ) async {
-    final normalized = p.normalize(target.path);
-    for (final attachment in context.attachments) {
-      if (p.normalize(attachment.localPath) == normalized) return attachment;
-    }
-    return context.storage.registerArtifact(
-      conversationId: context.conversationId,
-      path: target.path,
-      name: name,
-    );
-  }
-
-  /// 归一化相对路径；绝对路径与上跳路径一律拒绝，不做"就近落盘"的猜测。
-  String? _safeRelativePath(String raw) {
-    if (raw.isEmpty) return null;
-    if (p.isAbsolute(raw)) return null;
-    final normalized = p.normalize(raw);
-    if (normalized.startsWith('..') || normalized.contains('../')) return null;
-    if (normalized == '.' || normalized.endsWith('/')) return null;
-    return normalized;
-  }
+  }) => _fileOperation(() async {
+    final path = ToolArguments(arguments, name).string('path');
+    final content = arguments['content'];
+    if (content is! String) throw ToolArgumentException(name, 'content 必须是字符串');
+    return _write(path, content, context, cancellation);
+  });
 }
 
-/// 列出当前会话可读的文件：已导入的附件与本会话产物。
-class ListFilesTool extends Tool {
-  const ListFilesTool();
-
+class EditFileTool extends Tool {
+  const EditFileTool();
   @override
-  String get name => 'list_files';
-
+  String get name => 'edit_file';
   @override
-  String get description => '列出当前会话可读的文件（附件与本会话产物）。';
-
+  String get description =>
+      '用精确文本替换编辑文件。$_pathDescription '
+      'edits 中每个 oldText 必须在原文件中唯一匹配，所有区域互不重叠；'
+      '全部匹配成功才写入。newText 为空可删除内容。先读取文件，保留原文空格；支持多处修改一次提交。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
-    'properties': {},
+    'properties': {
+      'path': {'type': 'string', 'description': _pathDescription},
+      'edits': {
+        'type': 'array',
+        'minItems': 1,
+        'items': {
+          'type': 'object',
+          'properties': {
+            'oldText': {
+              'type': 'string',
+              'minLength': 1,
+              'description': '原文件中唯一的原文',
+            },
+            'newText': {'type': 'string', 'description': '替换文本，允许为空'},
+          },
+          'required': ['oldText', 'newText'],
+          'additionalProperties': false,
+        },
+      },
+    },
+    'required': ['path', 'edits'],
     'additionalProperties': false,
   };
-
   @override
-  Set<String> get requiredCapabilities => const {'file_read'};
-
+  Set<String> get requiredCapabilities => const {'file_read', 'file_write'};
   @override
-  ToolPolicy get defaultPolicy => ToolPolicy.allow;
-
+  ToolPolicy get defaultPolicy => ToolPolicy.ask;
   @override
-  String describeAction(Map<String, dynamic> arguments) => '列出当前会话的文件';
-
+  String? validateArguments(Map<String, dynamic> arguments) =>
+      validateFileEdits(arguments);
+  @override
+  String describeAction(Map<String, dynamic> arguments) =>
+      '编辑文件：${arguments['path']}';
   @override
   Future<ToolOutcome> execute(
     Map<String, dynamic> arguments,
     ToolContext context,
     RunCancellation cancellation, {
     ToolProgress? onProgress,
-  }) async {
+  }) => _fileOperation(() async {
+    final path = ToolArguments(arguments, name).string('path');
     cancellation.throwIfCancelled();
-    final lines = <String>[];
-    for (final attachment in context.attachments) {
-      lines.add(
-        '- ${attachment.name}（${_kindLabel(attachment)}，'
-        '${(attachment.size / 1024).toStringAsFixed(1)}KB，'
-        '引用：${attachment.name}）',
+    final file = await _localFile(path, context);
+    if (await file.length() > maxFileWriteBytes) {
+      throw const FileToolException(
+        'fileTooLarge',
+        '编辑文件上限为 2 MiB，请通过工作区 shell 处理',
       );
     }
-    final artifacts = Directory(context.artifactsDirectory);
-    if (artifacts.existsSync()) {
-      for (final entity in artifacts.listSync()) {
-        if (entity is! File) continue;
-        final size = (entity.lengthSync() / 1024).toStringAsFixed(1);
-        lines.add(
-          '- ${p.basename(entity.path)}（产物，${size}KB，引用：'
-          '${p.basename(entity.path)}）',
-        );
-      }
+    final original = await readEditableText(file);
+    if (original.contains('\u0000')) {
+      throw const FileToolException('notText', '不能编辑二进制文件');
     }
-    if (lines.isEmpty) {
-      return ToolOutcome.success('当前会话还没有可读文件。');
+    final content = applyFileEdits(original, arguments);
+    cancellation.throwIfCancelled();
+    if (await readEditableText(file) != original) {
+      throw const FileToolException('fileChanged', '文件在编辑期间已改变，请重新读取后编辑');
     }
-    return ToolOutcome.success('当前会话的文件：\n${lines.join('\n')}');
+    if (content == original) {
+      return const ToolOutcome.success('替换内容与原文相同，文件未改变');
+    }
+    final outcome = await _write(path, content, context, cancellation);
+    return ToolOutcome.success(
+      '已替换 ${(arguments['edits'] as List).length} 处文本。${outcome.content}',
+      artifacts: outcome.artifacts,
+    );
+  });
+}
+
+class ListFilesTool extends Tool {
+  const ListFilesTool();
+  @override
+  String get name => 'list_files';
+  @override
+  String get description =>
+      '列出目录的直接子项，返回可直接用于 read_file/write_file/edit_file 的路径。'
+      'path 默认 .（会话产物目录，同时列出附件）；工作区用 /workspace，子目录可继续列出。';
+  @override
+  Map<String, dynamic> get inputSchema => const {
+    'type': 'object',
+    'properties': {
+      'path': {'type': 'string', 'description': '目录路径，默认 .'},
+      'offset': {'type': 'integer', 'minimum': 0, 'description': '跳过的条目数，默认 0'},
+      'limit': {
+        'type': 'integer',
+        'minimum': 1,
+        'maximum': 200,
+        'description': '返回条目数，默认 100，最多 200',
+      },
+    },
+    'additionalProperties': false,
+  };
+  @override
+  Set<String> get requiredCapabilities => const {'file_read'};
+  @override
+  ToolPolicy get defaultPolicy => ToolPolicy.allow;
+  @override
+  String? validateArguments(Map<String, dynamic> arguments) {
+    final offset = arguments['offset'];
+    final limit = arguments['limit'];
+    if (offset != null && (offset is! int || offset < 0)) {
+      return 'offset 必须是非负整数';
+    }
+    if (limit != null && (limit is! int || limit < 1 || limit > 200)) {
+      return 'limit 必须是 1–200 的整数';
+    }
+    return null;
   }
 
-  String _kindLabel(Attachment attachment) => switch (attachment.kind) {
-    AttachmentKind.image => '图片',
-    AttachmentKind.pdf => 'PDF',
-    AttachmentKind.docx => 'DOCX',
-    AttachmentKind.artifact => '产物',
-    AttachmentKind.text => '文本',
-  };
+  @override
+  String describeAction(Map<String, dynamic> arguments) =>
+      '列出目录：${arguments['path'] ?? '.'}';
+  @override
+  Future<ToolOutcome> execute(
+    Map<String, dynamic> arguments,
+    ToolContext context,
+    RunCancellation cancellation, {
+    ToolProgress? onProgress,
+  }) => _fileOperation(() async {
+    final path = arguments['path'] as String? ?? '.';
+    cancellation.throwIfCancelled();
+    final location = await _location(path, context, directory: true);
+    final entries = <Map<String, Object?>>[];
+    final directory = Directory(location);
+    if (await directory.exists()) {
+      await for (final entity in directory.list(followLinks: false)) {
+        cancellation.throwIfCancelled();
+        final attachment = context.attachments
+            .where((a) => p.normalize(a.localPath) == p.normalize(entity.path))
+            .firstOrNull;
+        if (context.attachments.any(
+          (a) =>
+              a.extractedTextPath != null &&
+              p.normalize(a.extractedTextPath!) == p.normalize(entity.path),
+        )) {
+          continue;
+        }
+        final relative = p.relative(
+          entity.path,
+          from: context.artifactsDirectory,
+        );
+        final importedCopy = attachment != null && attachment.name != relative;
+        entries.add({
+          if (importedCopy) ...{
+            'path': 'attachment:${attachment.id}',
+            'name': attachment.name,
+            'type': 'attachment',
+          } else ...{
+            'path': p.posix.normalize(
+              p.posix.join(path, p.basename(entity.path)),
+            ),
+            'type': entity is Directory
+                ? 'directory'
+                : entity is Link
+                ? 'link'
+                : 'file',
+          },
+        });
+      }
+    } else if (path != '.') {
+      throw const FileToolException('fileNotFound', '目录不存在');
+    }
+    if (p.posix.normalize(path) == '.') {
+      for (final attachment in context.attachments) {
+        if (p.isWithin(
+          p.absolute(context.artifactsDirectory),
+          p.absolute(attachment.localPath),
+        )) {
+          continue;
+        }
+        entries.add({
+          'path': 'attachment:${attachment.id}',
+          'name': attachment.name,
+          'type': 'attachment',
+        });
+      }
+      if (context.workspaceDirectory.isNotEmpty) {
+        entries.add({'path': '/workspace', 'type': 'directory'});
+      }
+    }
+    entries.sort(
+      (a, b) => (a['path'] as String).compareTo(b['path'] as String),
+    );
+    final offset = arguments['offset'] as int? ?? 0;
+    final limit = arguments['limit'] as int? ?? 100;
+    final selected = <Map<String, Object?>>[];
+    var bytes = 0;
+    for (final entry in entries.skip(offset).take(limit)) {
+      final size = utf8.encode(jsonEncode(entry)).length;
+      if (bytes + size > maxFileReadBytes && selected.isNotEmpty) break;
+      selected.add(entry);
+      bytes += size;
+    }
+    final end = offset + selected.length;
+    return ToolOutcome.success(
+      jsonEncode({
+        'path': path,
+        'files': selected,
+        'total': entries.length,
+        if (end < entries.length) 'nextOffset': end,
+      }),
+    );
+  });
 }
 
-/// 解析出的可读文件。
-class _ResolvedFile {
-  const _ResolvedFile({required this.name, required this.path});
-
-  final String name;
-  final String path;
+Future<String> _location(
+  String path,
+  ToolContext context, {
+  bool directory = false,
+}) async {
+  final workspace = path == '/workspace' || path.startsWith('/workspace/');
+  if (workspace && context.workspaceDirectory.isEmpty) {
+    throw const FileToolException('workspaceUnavailable', '本次会话未选择工作区');
+  }
+  final root = workspace
+      ? context.workspaceDirectory
+      : context.artifactsDirectory;
+  final relative = workspace
+      ? (path == '/workspace' ? '.' : path.substring(11))
+      : path;
+  if (relative.startsWith('attachment:')) {
+    throw const FileToolException('readOnlyAttachment', '导入附件只读；请写到新的文件路径');
+  }
+  if (relative.isEmpty ||
+      relative.contains('\u0000') ||
+      relative.contains('\\') ||
+      p.posix.isAbsolute(relative) ||
+      p.posix.split(relative).contains('..') ||
+      (!directory &&
+          (p.posix.normalize(relative) == '.' || relative.endsWith('/')))) {
+    throw const FileToolException(
+      'invalidPath',
+      '路径不合法：请使用会话产物目录内的相对路径或 /workspace/ 路径',
+    );
+  }
+  if (!await Directory(root).exists() && !workspace) {
+    return p.join(root, p.posix.normalize(relative));
+  }
+  return workspacePath(root, relative, mustExist: false);
 }
 
-_ResolvedFile? _artifactFile(String reference, ToolContext context) {
-  final directory = Directory(context.artifactsDirectory);
-  if (!directory.existsSync()) return null;
-  final normalized = p.normalize(reference);
-  if (normalized.startsWith('..') || p.isAbsolute(normalized)) return null;
-  final file = File(p.join(directory.path, normalized));
-  if (!file.existsSync()) return null;
-  return _ResolvedFile(name: normalized, path: file.path);
+Future<File> _localFile(String path, ToolContext context) async =>
+    File(await _location(path, context));
+
+Future<File> _readableFile(String path, ToolContext context) async {
+  if (!path.startsWith('attachment:')) {
+    final file = await _localFile(path, context);
+    if (await file.exists()) return file;
+  }
+  final matches = path.startsWith('attachment:')
+      ? context.attachments.where((a) => a.id == path.substring(11))
+      : context.attachments.where((a) => a.name == path || a.id == path);
+  if (matches.length > 1) {
+    throw const FileToolException(
+      'ambiguousPath',
+      '附件名不唯一，请用 list_files 返回的 attachment:<ID>',
+    );
+  }
+  final attachment = matches.firstOrNull;
+  if (attachment == null) {
+    throw FileToolException('fileNotFound', '找不到文件「$path」，请用 list_files 查看路径');
+  }
+  return File(attachment.extractedTextPath ?? attachment.localPath);
+}
+
+Future<ToolOutcome> _write(
+  String path,
+  String content,
+  ToolContext context,
+  RunCancellation cancellation,
+) async {
+  final bytes = utf8.encode(content);
+  if (bytes.length > maxFileWriteBytes) {
+    throw const FileToolException('contentTooLarge', '单次写入上限为 2 MiB UTF-8 内容');
+  }
+  cancellation.throwIfCancelled();
+  final file = await _localFile(path, context);
+  await file.parent.create(recursive: true);
+  // 创建父目录后再检查链接，避免把写入导向目录之外。
+  await _localFile(path, context);
+  cancellation.throwIfCancelled();
+  await file.writeAsBytes(bytes, flush: true);
+  final ids = <String>[];
+  if (!path.startsWith('/workspace/')) {
+    final attachment = await context.storage.registerArtifact(
+      conversationId: context.conversationId,
+      path: file.path,
+      name: p.relative(file.path, from: context.artifactsDirectory),
+    );
+    ids.add(attachment.id);
+  }
+  return ToolOutcome.success(
+    '已写入「$path」（${bytes.length} bytes）',
+    artifacts: ids,
+  );
+}
+
+Future<ToolOutcome> _fileOperation(
+  Future<ToolOutcome> Function() action,
+) async {
+  try {
+    return await action();
+  } on FileToolException catch (error) {
+    return ToolOutcome.failure(error.message, errorCode: error.code);
+  } on WorkspaceFailure catch (error) {
+    return ToolOutcome.failure(error.message, errorCode: error.code);
+  } on FileSystemException catch (error) {
+    return ToolOutcome.failure(
+      '文件操作失败：${error.message}',
+      errorCode: 'fileOperationFailed',
+    );
+  } on FormatException {
+    return const ToolOutcome.failure('文件不是有效的 UTF-8 文本', errorCode: 'notText');
+  }
 }

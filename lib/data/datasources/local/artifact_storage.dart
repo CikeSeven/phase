@@ -94,7 +94,10 @@ class ArtifactStorage implements ToolStorage {
           ],
         };
         final registered = <Attachment>[];
-        for (final entity in directory.listSync(recursive: true)) {
+        for (final entity in directory.listSync(
+          recursive: true,
+          followLinks: false,
+        )) {
           if (entity is! File) continue;
           if (known.contains(p.normalize(entity.path))) continue;
           registered.add(
@@ -119,8 +122,14 @@ class ArtifactStorage implements ToolStorage {
     String? extractionError,
   }) => _fileOperation(() async {
     final file = File(path);
+    final existing = (await attachments(conversationId))
+        .where(
+          (attachment) =>
+              p.normalize(attachment.localPath) == p.normalize(path),
+        )
+        .firstOrNull;
     final attachment = Attachment(
-      id: generateId(),
+      id: existing?.id ?? generateId(),
       conversationId: conversationId,
       kind: AttachmentKind.artifact,
       name: name,
@@ -130,7 +139,7 @@ class ArtifactStorage implements ToolStorage {
       sha256: sha256,
       extractedTextPath: extractedTextPath,
       extractionError: extractionError,
-      createdAt: DateTime.now(),
+      createdAt: existing?.createdAt ?? DateTime.now(),
     );
     await _recordOperation(() => saveAttachment(attachment));
     return attachment;

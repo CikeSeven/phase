@@ -43,7 +43,7 @@ void main() {
           2 => mcpCallSse(
             protocol,
             'read_file',
-            arguments: {'reference': 'sample.txt'},
+            arguments: {'path': 'sample.txt'},
             callId: 'document',
           ),
           3 => mcpCallSse(

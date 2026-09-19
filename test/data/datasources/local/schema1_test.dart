@@ -118,7 +118,7 @@ void main() {
             runId: 'run',
             assistantMessageId: 'input',
             toolName: 'read_file',
-            argumentsJson: '{"reference":"notes.txt"}',
+            argumentsJson: '{"path":"notes.txt"}',
             channel: ExecutionChannel.app,
             defaultPolicy: ToolPolicy.allow,
             status: ToolCallStatus.executing,

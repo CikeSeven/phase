@@ -51,44 +51,95 @@ class AppFileDriver(private val context: Context) {
             val output = when (request.action) {
                 ExecutionAction.LIST_FILES -> {
                     require(Docs.isTreeUri(root))
-                    val children = children(root, signal)
-                    ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED,
-                        mapOf("directory" to raw, "files" to children.take(200), "truncated" to (children.size > 200)), emptyList())
+                    val offset = (request.arguments["offset"] as? Number)?.toInt() ?: 0
+                    val limit = (request.arguments["limit"] as? Number)?.toInt() ?: 100
+                    require(offset >= 0 && limit in 1..200)
+                    val children = children(root, signal).sortedBy { it["name"] as String }
+                    val page = mutableListOf<Map<String, Any?>>()
+                    var pageBytes = 0
+                    for (child in children.drop(offset).take(limit)) {
+                        val size = (child["path"].toString() + child["name"].toString()).toByteArray(Charsets.UTF_8).size
+                        if (page.isNotEmpty() && pageBytes + size > 16 * 1024) break
+                        page.add(child)
+                        pageBytes += size
+                    }
+                    val result = mutableMapOf<String, Any?>("path" to raw, "files" to page, "total" to children.size)
+                    if (offset + page.size < children.size) result["nextOffset"] = offset + page.size
+                    ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED, result, emptyList())
                 }
                 ExecutionAction.READ_FILE -> {
                     val file = copy(document(root), signal, active)
                     ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED, details(file), listOf(file))
                 }
                 ExecutionAction.WRITE_FILE -> {
-                    require(Docs.isTreeUri(root))
-                    val name = safeName(request.arguments["path"] as? String ?: "")
                     val bytes = (request.arguments["content"] as? String ?: throw IllegalArgumentException("content")).toByteArray(Charsets.UTF_8)
                     require(bytes.size <= 128 * 1024)
-                    val existing = find(root, name, signal)
-                    if (existing != null) {
-                        if (request.arguments["overwrite"] != true) return@io failure(request, ChannelError.TARGET_CHANGED, "目标已存在；请读取并明确确认覆盖")
-                        val expected = request.arguments["expectedSha256"] as? String
-                        if (expected == null || expected != digest(existing, signal, active)) return@io failure(request, ChannelError.TARGET_CHANGED, "覆盖目标已变化，请重新读取并确认")
-                    } else if (request.arguments["overwrite"] == true) {
-                        return@io failure(request, ChannelError.TARGET_CHANGED, "覆盖目标已不存在")
+                    val directory = request.arguments["directory"] as? String
+                    var parent = document(root)
+                    val name: String
+                    val existing: Uri?
+                    if (directory != null) {
+                        require(Docs.isTreeUri(root))
+                        val segments = relativeSegments(request.arguments["path"] as? String ?: "")
+                        for (segment in segments.dropLast(1)) {
+                            signal.throwIfCanceled()
+                            val found = find(parent, segment, signal)
+                            parent = if (found != null) {
+                                require(metadata(found).mime == Docs.Document.MIME_TYPE_DIR)
+                                found
+                            } else {
+                                affected = true
+                                val created = Docs.createDocument(resolver, parent, Docs.Document.MIME_TYPE_DIR, segment)
+                                    ?: throw IllegalStateException("mkdir")
+                                actual = created
+                                val actualName = metadata(created).name
+                                if (actualName != segment) throw DocumentNameException(actualName)
+                                created
+                            }
+                        }
+                        name = segments.last()
+                        existing = find(parent, name, signal)
+                    } else {
+                        existing = document(root)
+                        val meta = metadata(existing)
+                        require(meta.mime != Docs.Document.MIME_TYPE_DIR)
+                        name = meta.name
+                    }
+                    if (existing != null) require(metadata(existing).mime != Docs.Document.MIME_TYPE_DIR)
+                    // edit_file reads and matches in Dart; this guards the read/write interval.
+                    val expected = request.arguments["expectedSha256"] as? String
+                    if (expected != null && (existing == null || expected != digest(existing, signal, active))) {
+                        return@io failure(request, ChannelError.TARGET_CHANGED, "文件在编辑期间已变化，请重新读取后编辑")
                     }
                     signal.throwIfCanceled()
                     affected = true
-                    actual = existing ?: Docs.createDocument(resolver, document(root), "text/plain", name)
-                        ?: throw IllegalStateException("create")
-                    resolver.openOutputStream(actual, "wt")?.use { stream ->
+                    val destination = existing ?: createExactDocument(name,
+                        create = { mime, displayName -> Docs.createDocument(resolver, parent, mime, displayName)
+                            ?: throw IllegalStateException("create") },
+                        nameOf = { metadata(it).name },
+                        onCreated = { actual = it })
+                    actual = destination
+                    signal.throwIfCanceled()
+                    resolver.openOutputStream(destination, "wt")?.use { stream ->
                         active.set(stream); signal.throwIfCanceled()
                         stream.write(bytes); stream.flush()
                     } ?: throw IllegalStateException("open")
                     active.set(null)
-                    val file = copy(actual, signal, active)
-                    if (file.name != name || file.sha256 != hash(bytes)) return@io ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
-                        mapOf("uri" to actual.toString(), "reason" to "写入后的校验不一致"), emptyList(), ChannelError.EXECUTION_FAILED)
+                    val file = copy(destination, signal, active)
+                    if (file.name != name || file.sha256 != hash(bytes)) {
+                        File(file.localPath!!).delete()
+                        return@io ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
+                            mapOf("uri" to actual.toString(), "reason" to "写入后的校验不一致"), emptyList(), ChannelError.EXECUTION_FAILED)
+                    }
                     ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED, details(file), listOf(file))
                 }
                 else -> failure(request, ChannelError.INVALID_ARGUMENTS, "不是文件动作")
             }
             output
+        } catch (error: DocumentNameException) {
+            ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
+                mapOf("uri" to actual?.toString(), "name" to error.actualName,
+                    "reason" to "文件提供器更改了名称，已创建空文件或目录但未写入内容"), emptyList(), ChannelError.EXECUTION_FAILED)
         } catch (_: SecurityException) {
             if (affected) writeFailure(request, actual) else failure(request, ChannelError.PERMISSION_REQUIRED, "文件授权已失效，请重新选择文件或目录")
         } catch (_: IllegalArgumentException) {
@@ -119,9 +170,9 @@ class AppFileDriver(private val context: Context) {
         val result = mutableListOf<Map<String, Any?>>()
         val childUri = Docs.buildChildDocumentsUriUsingTree(uri, Docs.getDocumentId(document(uri)))
         resolver.query(childUri, arrayOf(Docs.Document.COLUMN_DOCUMENT_ID, Docs.Document.COLUMN_DISPLAY_NAME, Docs.Document.COLUMN_MIME_TYPE, Docs.Document.COLUMN_SIZE), null, null, null, signal)?.use { cursor ->
-            while (cursor.moveToNext() && result.size < 201) {
+            while (cursor.moveToNext()) {
                 signal.throwIfCanceled()
-                result.add(mapOf("uri" to Docs.buildDocumentUriUsingTree(uri, cursor.getString(0)).toString(),
+                result.add(mapOf("path" to Docs.buildDocumentUriUsingTree(uri, cursor.getString(0)).toString(),
                     "name" to cursor.getString(1), "directory" to (cursor.getString(2) == Docs.Document.MIME_TYPE_DIR), "size" to cursor.getLong(3)))
             }
         } ?: throw IllegalStateException("query")
@@ -193,8 +244,15 @@ class AppFileDriver(private val context: Context) {
     companion object {
         const val MAX_BYTES = 20L * 1024 * 1024
         fun safeName(name: String): String {
-            require(name.isNotBlank() && name != "." && name != ".." && name.length <= 200 && name.none { it == '/' || it == '\\' || it == '\u0000' })
+            require(name.isNotBlank() && name != "." && name != ".." && name.toByteArray(Charsets.UTF_8).size <= 255 && name.none { it == '/' || it == '\\' || it == '\u0000' })
             return name
+        }
+        fun relativeSegments(path: String): List<String> {
+            require(!path.startsWith('/') && !path.endsWith('/'))
+            return path.split('/').filter { it != "." }.also { segments ->
+                require(segments.isNotEmpty())
+                segments.forEach { safeName(it) }
+            }
         }
         fun hash(bytes: ByteArray) = hex(MessageDigest.getInstance("SHA-256").digest(bytes))
         private fun hex(bytes: ByteArray) = bytes.joinToString("") { "%02x".format(it) }

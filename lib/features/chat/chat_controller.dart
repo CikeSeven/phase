@@ -1514,12 +1514,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 回填给模型与结果消息的文本；记录里没有结果时按状态给出说明。
   String _resultText(ToolCallRecord record) => _truncateResult(
     record.result ?? _statusText(record.status),
-    limit:
-        record.channel == ExecutionChannel.accessibility ||
-            record.toolName == 'list_apps'
-        ? 64 * 1024
-        : _maxToolResultBytes,
+    limit: _toolResultLimit(record),
   );
+
+  int _toolResultLimit(ToolCallRecord record) =>
+      const {'read_file', 'list_files'}.contains(record.toolName)
+      ? 128 * 1024
+      : record.channel == ExecutionChannel.accessibility ||
+            record.toolName == 'list_apps'
+      ? 64 * 1024
+      : _maxToolResultBytes;
 
   String _statusText(ToolCallStatus status) => switch (status) {
     ToolCallStatus.rejected => '用户拒绝了本次动作，没有执行。',
@@ -1739,6 +1743,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             message.text.isNotEmpty
                 ? message.text
                 : (record.result ?? _statusText(record.status)),
+            limit: _toolResultLimit(record),
           ),
           isError: record.status != ToolCallStatus.succeeded,
         );
@@ -1837,7 +1842,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               for (final entry in missingResults.entries)
                 ResolvedToolResult(
                   callId: entry.key.callId,
-                  content: _truncateResult(entry.value.result ?? _noResultText),
+                  content: _truncateResult(
+                    entry.value.result ?? _noResultText,
+                    limit: _toolResultLimit(entry.value),
+                  ),
                   isError: entry.value.status != ToolCallStatus.succeeded,
                 ),
             ],

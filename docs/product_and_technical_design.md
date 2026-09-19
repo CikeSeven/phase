@@ -171,7 +171,18 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 ### 4.1 文件
 
-SAF 使用用户授予的 URI；普通绝对路径不代表授权。私有附件/产物按会话归属，写完文件后再记录结果。输入、副本和输出分开，预览失败不把已完成的外部写入改为未执行。
+文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径基于会话产物目录，`/workspace/...` 映射当前运行选定的工作区，附件可用 `attachment:<ID>` 或唯一文件名读取；导入原件只读。目录列表返回可直接使用的路径，支持子目录与分页，检查路径和符号链接目标不越界。
+
+- `read_file(path, offset?, limit?)`：UTF-8 文本或文档已抽取文本，行号从 1 开始；按流读取，最多 2000 行或 16 KiB 完整行，返回明确续读位置。超长单行、越过结尾、非文本均返回具体错误，不让 AI 重复请求同一无效页。
+- `write_file(path, content, directory?)`：内容原样写入，创建或完整覆盖，自动创建父目录；允许空文件、空白内容、隐藏文件和无扩展名文件。字节上限按 UTF-8 计；本地产物/工作区为 2 MiB，SAF 为 128 KiB。
+- `edit_file(path, edits)`：每项包含 `oldText` 与 `newText`，匹配同一份原文件的唯一且互不重叠区域，全部验证后再写入；新文本可为空。保留 BOM 和统一的 CRLF 换行，未匹配、歧义、重叠或读取后文件变化均不写入。
+- `list_files(path?, offset?, limit?)`：默认列出会话产物根目录、附件和已选择工作区入口；条目偏移从 0 开始，返回 `nextOffset` 后续读目录。
+
+SAF 的 `path` 使用用户授予范围内的 URI；创建外部文件时 `directory` 指定授权目录、`path` 指定相对路径。新建使用无默认扩展名的 MIME，检查提供器返回的真实名称后才写内容；提供器擅自改名时返回实际 URI 和错误，不自动再次新建。完整覆盖与本地写入一致，由工具策略控制确认；外部精确编辑内部校验读取时的哈希，无需模型提供 `overwrite` 或 `expectedSha256`。普通绝对路径不代表授权。
+
+私有产物按会话归属，同一路径覆盖时更新同一附件的元数据。工作区文件留在工作区，可经现有 shell 的 `output` 产物收集流程返回会话。输入、副本和输出分开，预览失败不把已完成的外部写入改为未执行。文件工具的续读提示保留到后续模型请求，不再被通用 8 KiB 结果限制二次截掉。
+
+自动化入口：[文本与路径边界](../test/features/tools/file_tools_test.dart)、[AI 调用/落库链路](../test/features/tools/file_tools_flow_test.dart)、[SAF 适配](../test/features/execution/platform_tools_test.dart)、[原生创建契约](../android/app/src/test/kotlin/app/xiangyue/phase/files/ExactDocumentCreationTest.kt)。本次未装机；真实 Android 文档提供器行为仍需真机验收。
 
 ### 4.2 控件目标
 

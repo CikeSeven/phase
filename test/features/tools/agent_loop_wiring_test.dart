@@ -33,7 +33,7 @@ void main() {
       toolTurn(
         callId: 'call_1',
         toolName: 'read_file',
-        arguments: '{"reference":"notes.txt"}',
+        arguments: '{"path":"notes.txt"}',
       ),
       textTurn('文件里有两行'),
     ]);
@@ -86,7 +86,7 @@ void main() {
     ];
     expect(calls.single.callId, 'call_1');
     expect(calls.single.toolName, 'read_file');
-    expect(calls.single.arguments['reference'], 'notes.txt');
+    expect(calls.single.arguments['path'], 'notes.txt');
     expect(results.single.callId, 'call_1');
     expect(results.single.content, contains('第一行'));
     expect(results.single.isError, isFalse);

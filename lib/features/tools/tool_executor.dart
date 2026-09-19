@@ -441,7 +441,10 @@ class ToolExecutor {
       for (final key in required) {
         if (key is! String) continue;
         final value = arguments[key];
-        if (value == null || (value is String && value.trim().isEmpty)) {
+        final property = (schema['properties'] as Map?)?[key];
+        final allowsEmpty = property is Map && property['minLength'] == 0;
+        if (value == null ||
+            (value is String && value.trim().isEmpty && !allowsEmpty)) {
           return '缺少必填参数「$key」';
         }
       }

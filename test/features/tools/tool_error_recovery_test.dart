@@ -67,7 +67,7 @@ void main() {
       toolTurn(
         callId: 'read',
         toolName: 'read_file',
-        arguments: '{"reference":"content://fixture/doc"}',
+        arguments: '{"path":"content://fixture/doc"}',
       ),
       textTurn('读取没有返回内容'),
     ]);

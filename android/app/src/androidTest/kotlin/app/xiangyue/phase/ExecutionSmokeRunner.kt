@@ -128,22 +128,25 @@ class ExecutionSmokeRunner : Instrumentation() {
         try {
             check(withContext(Dispatchers.Main) { coordinator.startRun(session(id, false, listOf(root))).error } == null)
             suspend fun execute(action: ExecutionAction, args: Map<String, Any?>) = withContext(Dispatchers.Main) {
-                coordinator.execute(ExecutionRequest(id, UUID.randomUUID().toString(), action, args, ExecutionTarget(uri = root), 10000))
+                coordinator.execute(ExecutionRequest(id, UUID.randomUUID().toString(), action, args + (if (action == ExecutionAction.WRITE_FILE) mapOf("directory" to root) else emptyMap()), ExecutionTarget(uri = root), 10000))
             }
             stage = "saf-list"
             check(execute(ExecutionAction.LIST_FILES, emptyMap()).status == ExecutionStatus.SUCCEEDED)
-            val name = "smoke-${UUID.randomUUID()}.txt"
+            val name = "smoke-${UUID.randomUUID()}"
             stage = "saf-write-readback"
             val written = execute(ExecutionAction.WRITE_FILE, mapOf("path" to name, "content" to "AI Agent 测试摘要"))
             check(written.status == ExecutionStatus.SUCCEEDED)
+            check(written.artifacts.single().name == name)
             check(java.io.File(written.artifacts.single().localPath!!).readText() == "AI Agent 测试摘要")
             stage = "saf-overwrite-guard"
-            check(execute(ExecutionAction.WRITE_FILE, mapOf("path" to name, "content" to "wrong")).error == ChannelError.TARGET_CHANGED)
-            check(execute(ExecutionAction.WRITE_FILE, mapOf("path" to name, "content" to "wrong", "overwrite" to true, "expectedSha256" to "wrong")).error == ChannelError.TARGET_CHANGED)
+            check(execute(ExecutionAction.WRITE_FILE, mapOf("path" to name, "content" to "wrong", "expectedSha256" to "wrong")).error == ChannelError.TARGET_CHANGED)
             check(execute(ExecutionAction.WRITE_FILE, mapOf("path" to "../escape.txt", "content" to "wrong")).error == ChannelError.INVALID_ARGUMENTS)
-            val overwritten = execute(ExecutionAction.WRITE_FILE, mapOf("path" to name, "content" to "更新后的测试摘要", "overwrite" to true, "expectedSha256" to written.artifacts.single().sha256))
+            val overwritten = execute(ExecutionAction.WRITE_FILE, mapOf("path" to name, "content" to "更新后的测试摘要", "expectedSha256" to written.artifacts.single().sha256))
             check(overwritten.status == ExecutionStatus.SUCCEEDED)
             check(java.io.File(overwritten.artifacts.single().localPath!!).readText() == "更新后的测试摘要")
+            val emptied = execute(ExecutionAction.WRITE_FILE, mapOf("path" to name, "content" to ""))
+            check(emptied.status == ExecutionStatus.SUCCEEDED)
+            check(emptied.artifacts.single().size == 0L)
             stage = "saf-scope"
             val denied = coordinator.files.execute(ExecutionRequest(id, "denied", ExecutionAction.LIST_FILES, emptyMap(), ExecutionTarget(uri = root), 10000), emptyList())
             check(denied.error == ChannelError.PERMISSION_REQUIRED)

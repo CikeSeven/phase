@@ -261,10 +261,10 @@ void main() {
           .data,
       '已完成',
     );
-    expect(find.textContaining('已创建「summary.md」'), findsNothing);
+    expect(find.textContaining('已写入「summary.md」'), findsNothing);
     await tester.tap(find.byKey(ValueKey('tool-toggle-${record.id}')));
     await _settle(tester);
-    expect(find.textContaining('已创建「summary.md」'), findsOneWidget);
+    expect(find.textContaining('已写入「summary.md」'), findsOneWidget);
     expect(find.textContaining('{"path"'), findsNothing);
 
     // 产物 chip 打开内容：文本类直接显示。
