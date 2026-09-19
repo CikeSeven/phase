@@ -75,7 +75,7 @@ void main() {
     );
     expect(driver.calls.first.rootfs, 'fixture-root');
     expect(driver.calls.first.cwd, '/workspace');
-    expect(driver.calls.first.timeoutMs, DependencyInstaller.timeoutMs);
+    expect(driver.calls.first.timeoutMs, isNull);
     final staging = Directory('${fixture.directory.path}/staging');
     expect(
       await staging.exists() ? await staging.list().isEmpty : true,

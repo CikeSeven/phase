@@ -244,6 +244,13 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                       onInstall: dependencies.busy
                           ? null
                           : () => _confirmInstall(profile),
+                      onShowInfo: () => _showDependencyInfo(
+                        profile,
+                        environment.value!.installedDependencies[profile.id]!,
+                      ),
+                      onReinstall: dependencies.busy
+                          ? null
+                          : () => _confirmInstall(profile, reinstall: true),
                     ),
                 ],
               ),
@@ -261,9 +268,24 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
             if (dependencies.error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  dependencies.error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        dependencies.error!,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                    ),
+                    if (dependencies.failedProfileId != null)
+                      TextButton(
+                        onPressed: () => ref
+                            .read(dependencyControllerProvider.notifier)
+                            .install(dependencies.failedProfileId!),
+                        child: const Text('重试'),
+                      ),
+                  ],
                 ),
               ),
           ],
@@ -272,14 +294,19 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     );
   }
 
-  Future<void> _confirmInstall(DependencyProfile profile) async {
+  Future<void> _confirmInstall(
+    DependencyProfile profile, {
+    bool reinstall = false,
+  }) async {
     final allowed = await showDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
-        title: '安装${profile.label}？',
-        icon: Symbols.terminal,
+        title: reinstall ? '重新安装${profile.label}？' : '安装${profile.label}？',
+        icon: reinstall ? Symbols.refresh : Symbols.terminal,
         content: Text(
-          '通过 Ubuntu 软件源安装 ${profile.packages.join('、')}，可能需要数分钟；已安装内容跨会话保留。',
+          reinstall
+              ? '通过 Ubuntu 软件源覆盖安装相同软件包，已有配置保留，可能需要数分钟。'
+              : '通过 Ubuntu 软件源安装 ${profile.packages.join('、')}，可能需要数分钟；已安装内容跨会话保留。',
         ),
         actions: [
           TextButton(
@@ -288,13 +315,54 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('安装'),
+            child: Text(reinstall ? '重新安装' : '安装'),
           ),
         ],
       ),
     );
     if (allowed == true && mounted) {
       await ref.read(dependencyControllerProvider.notifier).install(profile.id);
+    }
+  }
+
+  /// 已安装条目点击后的信息概览；重装从这里或右侧按钮进入同一确认。
+  Future<void> _showDependencyInfo(
+    DependencyProfile profile,
+    InstalledDependency installed,
+  ) async {
+    final action = await showDialog<String>(
+      context: context,
+      builder: (context) => AppDialog(
+        title: profile.label,
+        icon: Symbols.check_circle,
+        tone: AppTone.teal,
+        description: '已安装 · ${_formatDate(installed.installedAt)}',
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('版本：${installed.version ?? '未记录'}'),
+            const SizedBox(height: 8),
+            Text('包含软件包：'),
+            for (final package in profile.packages) Text('· $package'),
+            const SizedBox(height: 8),
+            Text('说明：${profile.description}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'close'),
+            child: const Text('关闭'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, 'reinstall'),
+            child: const Text('重新安装'),
+          ),
+        ],
+      ),
+    );
+    if (action == 'reinstall' && mounted) {
+      await _confirmInstall(profile, reinstall: true);
     }
   }
 }
@@ -305,17 +373,24 @@ class _DependencyTile extends StatelessWidget {
     required this.installed,
     required this.operation,
     required this.onInstall,
+    required this.onShowInfo,
+    required this.onReinstall,
   });
   final DependencyProfile profile;
   final InstalledDependency? installed;
   final DependencyOperation operation;
   final VoidCallback? onInstall;
+  final VoidCallback? onShowInfo;
+
+  /// 已安装条目右侧的重装按钮；与 onInstall 分开便于概览弹窗复用。
+  final VoidCallback? onReinstall;
 
   @override
   Widget build(BuildContext context) {
     final installing = operation.busy && operation.profileId == profile.id;
     final blocked = operation.busy && !installing;
     final theme = Theme.of(context);
+    final isInstalled = installed != null;
     final subtitle = installing
         ? Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -333,25 +408,41 @@ class _DependencyTile extends StatelessWidget {
             ],
           )
         : Text(
-            installed == null
+            !isInstalled
                 ? profile.description
                 : '${installed!.version ?? '已安装'} · ${_date(installed!.installedAt)}',
           );
     return AppListTile(
       title: Text(profile.label),
       subtitle: subtitle,
-      leading: AppIconBadge(icon: Symbols.terminal, size: 40, iconSize: 20),
+      // 已安装用成功色勾选徽标；未安装保持终端图标。
+      leading: AppIconBadge(
+        icon: isInstalled ? Symbols.check_circle : Symbols.terminal,
+        tone: isInstalled ? AppTone.teal : AppTone.primary,
+        size: 40,
+        iconSize: 20,
+      ),
       trailing: installing
           ? const AppLoadingIndicator.small(size: 20)
-          : blocked || onInstall == null
+          : blocked
           ? null
-          : const Icon(Symbols.chevron_right),
-      onTap: blocked ? null : onInstall,
+          : isInstalled
+          ? IconButton(
+              tooltip: '重新安装',
+              onPressed: onReinstall,
+              icon: const Icon(Symbols.refresh),
+            )
+          : const Icon(Symbols.download),
+      // 已安装的点击展示概览而不是重复的安装确认。
+      onTap: blocked
+          ? null
+          : isInstalled
+          ? onShowInfo
+          : onInstall,
     );
   }
 
-  static String _date(DateTime time) =>
-      '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')}';
+  static String _date(DateTime time) => _formatDate(time);
   String _stepLabel(DependencyStep step) => switch (step) {
     DependencyStep.repairing => '修复包状态',
     DependencyStep.updating => '更新软件源',
@@ -370,3 +461,6 @@ String _phase(EnvironmentPhase phase) => switch (phase) {
   EnvironmentPhase.failed => '安装失败',
   EnvironmentPhase.cancelled => '已取消',
 };
+
+String _formatDate(DateTime time) =>
+    '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')}';

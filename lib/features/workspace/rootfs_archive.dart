@@ -124,6 +124,13 @@ class RootfsArchive {
         final file = File(p.join(destination.path, name));
         if (entry.typeFlag == TarFile.directory) {
           await Directory(file.path).create(recursive: true);
+          // Directory.create obeys the process umask (0700 on Android);
+          // dpkg and friends need the archive's own modes, e.g. 0755.
+          modes[file.path] = entry.mode & 0x1ff;
+          if (modes.length == 256) {
+            await setModes(modes.keys.toList(), modes.values.toList());
+            modes.clear();
+          }
         } else if (entry.typeFlag == TarFile.symbolicLink ||
             entry.typeFlag == TarFile.hardLink) {
           final target = linkedName ?? '';

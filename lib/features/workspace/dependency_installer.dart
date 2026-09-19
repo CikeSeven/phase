@@ -4,6 +4,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/error/failure.dart';
 import '../../../core/utils/id.dart';
+import '../../../core/utils/logger.dart';
 import '../../../data/models/workspace.dart';
 import '../../../data/repositories/workspace_repository.dart';
 import '../tools/tool.dart';
@@ -17,7 +18,6 @@ class DependencyInstaller {
   DependencyInstaller(this.repository, this.driver);
   final WorkspaceRepository repository;
   final ProcessDriver driver;
-  static const timeoutMs = 30 * 60 * 1000;
   static const outputLimitBytes = 8 * 1024 * 1024;
 
   /// 每个步骤在 guest 内执行的完整 shell 命令；测试覆写此方法注入假命令。
@@ -110,9 +110,13 @@ class DependencyInstaller {
   ) async {
     final stdout = StringBuffer();
     final pending = StringBuffer();
+    // Failed steps log their output tail so the real apt error is observable.
+    final tail = <String>[];
     Future<void> line(bool stderr, String text) async {
       if (text.isEmpty) return;
       onOutput(step, text);
+      tail.add(text);
+      if (tail.length > 8) tail.removeAt(0);
       if (!stderr && step == DependencyStep.verifying) stdout.write('$text\n');
     }
 
@@ -150,7 +154,6 @@ class DependencyInstaller {
         argv: ['-c', commandFor(step, profile)],
         cwd: '/workspace',
         environment: {},
-        timeoutMs: DependencyInstaller.timeoutMs,
         outputLimitBytes: DependencyInstaller.outputLimitBytes,
       ),
       (stderr, bytes) => feed(stderr, bytes),
@@ -175,6 +178,10 @@ class DependencyInstaller {
         event.outputLimitExceeded;
     if (step == DependencyStep.repairing) {
       if (failed) {
+        AppLogger.error(
+          'dpkg 修复未成功 exit=${event.exitCode} signal=${event.signal} '
+          'error=${event.error}\n${tail.join('\n')}',
+        );
         await line(false, '警告：dpkg 修复未完全成功，继续尝试安装');
       }
       return '';
@@ -183,6 +190,10 @@ class DependencyInstaller {
       if (event.timedOut) {
         throw const WorkspaceFailure('aptTimeout', '安装超时，可重试；已安装内容保留');
       }
+      AppLogger.error(
+        '依赖安装步骤失败 step=${step.name} exit=${event.exitCode} '
+        'signal=${event.signal} error=${event.error}\n${tail.join('\n')}',
+      );
       throw switch (step) {
         DependencyStep.updating => const WorkspaceFailure(
           'aptUpdate',

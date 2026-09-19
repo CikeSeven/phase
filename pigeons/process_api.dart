@@ -24,6 +24,9 @@ class LinuxProcessSpec {
   List<String> argv;
   String cwd;
   Map<String, String> environment;
+
+  /// 超时毫秒数；null 表示不设超时（产品决策：命令不设超时，靠用户
+  /// 停止与任务收尾终止进程）。宿主只校验为正数，不设上限。
   int? timeoutMs;
   int? outputLimitBytes;
 }

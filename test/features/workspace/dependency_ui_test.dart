@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_symbols_icons/symbols.dart';
 import 'package:phase/core/theme/app_theme.dart';
+import 'package:phase/core/widgets/app_dialog.dart';
+import 'package:phase/core/widgets/app_icon_badge.dart';
 import 'package:phase/core/widgets/app_linear_progress_indicator.dart';
 import 'package:phase/data/models/workspace.dart';
 import 'package:phase/features/workspace/dependency_controller.dart';
@@ -131,12 +134,21 @@ void main() {
       await tester.pump();
       expect(operation.cancelled, isTrue);
 
-      operation.update(const DependencyOperation(error: '软件源更新失败，请检查网络后重试'));
-      await tester.pump();
-      expect(
-        find.text('软件源更新失败，请检查网络后重试', skipOffstage: false),
-        findsOneWidget,
+      operation.update(
+        const DependencyOperation(
+          error: '软件源更新失败，请检查网络后重试',
+          failedProfileId: 'python',
+        ),
       );
+      await tester.pumpAndSettle();
+
+      // Failures keep the profile so the retry button resubmits it; scroll
+      // first because the shrunken list may leave the row outside the cache.
+      await _dragUntilTappable(tester, find.text('重试'));
+      expect(find.text('软件源更新失败，请检查网络后重试'), findsOneWidget);
+      await tester.tap(find.text('重试'));
+      await tester.pump();
+      expect(operation.installed, ['python', 'python']);
 
       // Environment-level operations hide the dependency section.
       operation.update(const DependencyOperation());
@@ -151,6 +163,90 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('已装条目展示成功标记与概览，重装走独立确认', (tester) async {
+    final operation = _ControlledDependency();
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          dependencyControllerProvider.overrideWith(() => operation),
+          runtimeEnvironmentProvider.overrideWith(
+            (_) => Stream.value(
+              RuntimeEnvironment(
+                phase: EnvironmentPhase.ready,
+                rootPath: '/fixture/root',
+                revision: 'fixture',
+                installedDependencies: {
+                  'git-tools': InstalledDependency(
+                    installedAt: DateTime.utc(2024, 5, 1),
+                    version: 'git version 2.43.0',
+                  ),
+                },
+              ),
+            ),
+          ),
+          linuxPlatformInfoProvider.overrideWith(
+            (_) async => LinuxPlatformInfo(
+              rootDirectory: '/test',
+              abi: 'arm64-v8a',
+              available: true,
+              freeBytes: 1024 * 1024 * 1024,
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: const WorkspacesPage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('环境依赖'),
+      200,
+      scrollable: find.byType(Scrollable),
+    );
+    await tester.pump();
+
+    // Installed rows carry a success badge, a reinstall button and no
+    // chevron; not-yet-installed rows show the download icon instead.
+    final installedBadge = find.descendant(
+      of: find.byType(AppIconBadge),
+      matching: find.byIcon(Symbols.check_circle),
+    );
+    expect(installedBadge, findsOneWidget);
+    expect(find.byIcon(Symbols.refresh), findsOneWidget);
+    expect(find.byIcon(Symbols.chevron_right), findsNothing);
+    expect(find.byIcon(Symbols.download), findsNWidgets(2));
+
+    // Tapping an installed row opens the info overview, not install consent.
+    await _dragUntilTappable(tester, find.text('Git 与搜索工具'));
+    await tester.tap(find.text('Git 与搜索工具'));
+    await tester.pumpAndSettle();
+    expect(find.text('已安装 · 2024-05-01'), findsOneWidget);
+    expect(find.text('版本：git version 2.43.0'), findsOneWidget);
+    expect(find.text('· git'), findsOneWidget);
+    expect(find.text('· ripgrep'), findsOneWidget);
+    expect(find.text('安装Git 与搜索工具？'), findsNothing);
+
+    // The tile's reinstall IconButton also exposes a tooltip with the same
+    // text, so target the action button inside the open dialog only.
+    final confirmReinstall = find.descendant(
+      of: find.byType(AppDialog),
+      matching: find.widgetWithText(FilledButton, '重新安装'),
+    );
+    await tester.tap(confirmReinstall);
+    await tester.pumpAndSettle();
+    expect(find.text('重新安装Git 与搜索工具？'), findsOneWidget);
+    // Confirming the reinstall dialog dispatches install for the profile.
+    await tester.tap(confirmReinstall);
+    await tester.pumpAndSettle();
+    expect(operation.installed, ['git-tools']);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('未安装环境时不显示依赖区', (tester) async {
     await tester.pumpWidget(
@@ -194,12 +290,15 @@ Future<void> _dragUntilTappable(WidgetTester tester, Finder target) async {
       position.jumpTo(
         (position.pixels + step).clamp(0.0, position.maxScrollExtent),
       );
+      // Two frames: tall lists may need a second pass to finish relayout.
+      await tester.pump();
       await tester.pump();
     }
     for (var i = 0; i < 60; i++) {
       if (target.hitTestable().evaluate().isNotEmpty) return;
       if (position.pixels <= 0) break;
       position.jumpTo((position.pixels - step).clamp(0.0, double.infinity));
+      await tester.pump();
       await tester.pump();
     }
   }

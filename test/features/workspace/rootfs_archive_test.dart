@@ -48,6 +48,29 @@ void main() {
       'example',
     );
   });
+  test('directory entries keep the archive modes', () async {
+    final received = <String, int>{};
+    final archive = Archive();
+    archive.add(ArchiveFile.string('var/lib/dpkg/status', 'x')..mode = 0x1a4);
+    final dpkgDir = ArchiveFile.directory('var/lib/dpkg/')..mode = 0x1ed;
+    // Directory.create obeys the process umask; the extractor must restore
+    // the archive's 0755 so dpkg can update its database inside the guest.
+    archive.add(dpkgDir);
+    final file = File('${root.path}/dirs.tar.gz');
+    await file.writeAsBytes(gzip.encode(TarEncoder().encode(archive)));
+    await RootfsArchive().extract(
+      file,
+      Directory('${root.path}/staging'),
+      RunCancellation(),
+      setModes: (paths, modes) async {
+        for (var i = 0; i < paths.length; i++) {
+          received[paths[i]] = modes[i];
+        }
+      },
+      progress: (_) {},
+    );
+    expect(received['${root.path}/staging/var/lib/dpkg'], 0x1ed);
+  });
   test('rejects traversal', () async {
     await expectLater(
       extract(await package([ArchiveFile.string('../escape', 'bad')])),

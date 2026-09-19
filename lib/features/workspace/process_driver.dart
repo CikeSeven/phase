@@ -47,7 +47,8 @@ class PigeonProcessDriver implements ProcessDriver, LinuxProcessFlutterApi {
     if (_disposed) throw const WorkspaceFailure('unavailable', '进程宿主已关闭');
     try {
       return await action().timeout(const Duration(seconds: 15));
-    } on PlatformException {
+    } on PlatformException catch (error) {
+      AppLogger.error('Linux 进程通道调用失败: ${error.code}', error);
       throw const WorkspaceFailure(
         'processUnavailable',
         'Linux 进程操作失败，请检查环境和任务通知权限',

@@ -97,7 +97,7 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
         val rootfs = try { managedPath(spec.rootfs, "environments") } catch (_: IllegalArgumentException) { managedPath(spec.rootfs, "staging") }
         val workspace = try { managedPath(spec.workspace, "workspaces") } catch (_: IllegalArgumentException) { managedPath(spec.workspace, "staging") }
         require(spec.executable.startsWith("/") && spec.cwd.startsWith("/") && !spec.executable.contains('\u0000'))
-        require(spec.timeoutMs == null || spec.timeoutMs!! in 1..300000)
+        require(spec.timeoutMs == null || spec.timeoutMs!! >= 1)
         require(spec.outputLimitBytes == null || spec.outputLimitBytes!! in 1..(64L * 1024 * 1024))
         require(spec.argv.size <= 128 && spec.argv.sumOf { it.length } <= 131072 && spec.argv.none { it.contains('\u0000') })
         require(spec.environment.size <= 64 && spec.environment.all { (key, value) -> key.matches(Regex("[A-Za-z_][A-Za-z0-9_]*")) && !value.contains('\u0000') && value.length <= 32768 })
@@ -195,7 +195,9 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
             try {
                 if (terminating) return
                 val args = listOf(File(nativeDir, "libphase_exec.so").path, resultFile.path,
-                    File(nativeDir, "libphase_proot.so").path, "--kill-on-exit", "-0", "-r", rootfs.path,
+                    // --link2symlink: the Termux PRoot fork turns hard links into
+                    // symlinks; dpkg's link(status, status-old) fails without it.
+                    File(nativeDir, "libphase_proot.so").path, "--kill-on-exit", "--link2symlink", "-0", "-r", rootfs.path,
                     "-b", "/dev", "-b", "/proc", "-b", "${workspace.path}:/workspace", "-w", spec.cwd,
                     "/usr/bin/env", "-i", "HOME=/root", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "TMPDIR=/tmp") +
                     spec.environment.map { (key, value) -> "$key=$value" } + listOf(spec.executable) + spec.argv

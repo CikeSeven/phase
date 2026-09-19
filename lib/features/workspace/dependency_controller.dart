@@ -16,12 +16,16 @@ class DependencyOperation {
     this.step,
     this.logTail = const [],
     this.error,
+    this.failedProfileId,
   });
   final bool busy;
   final String? profileId;
   final DependencyStep? step;
   final List<String> logTail;
   final String? error;
+
+  /// 最近一次失败对应的依赖组；重试按钮据此原样重发。
+  final String? failedProfileId;
 }
 
 @Riverpod(keepAlive: true)
@@ -58,12 +62,16 @@ class DependencyController extends _$DependencyController {
       if (ref.mounted) state = const DependencyOperation();
     } on ToolCancelled {
       if (ref.mounted) {
-        state = const DependencyOperation(error: '已取消安装，已安装内容保留');
+        state = DependencyOperation(
+          error: '已取消安装，已安装内容保留',
+          failedProfileId: profileId,
+        );
       }
     } catch (error) {
       if (ref.mounted) {
         state = DependencyOperation(
           error: error is Failure ? error.userMessage : '依赖安装失败，请重试',
+          failedProfileId: profileId,
         );
       }
     } finally {
