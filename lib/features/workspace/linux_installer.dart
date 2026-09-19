@@ -90,7 +90,11 @@ class LinuxInstaller {
           installedBytes: old?.installedBytes ?? 0,
         ),
       );
-      progress(phase, 0, null);
+      progress(
+        phase,
+        0,
+        phase == EnvironmentPhase.downloading ? image.downloadBytes : null,
+      );
     }
 
     try {

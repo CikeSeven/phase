@@ -44,10 +44,15 @@ void main() {
     await File('${workspace.rootPath}/keep.txt').writeAsString('keep');
     final installer = LinuxInstaller(repository, driver, dio, image: image);
     final phases = <EnvironmentPhase>[];
-    await installer.install(
-      RunCancellation(),
-      (phase, _, _) => phases.add(phase),
-    );
+    final downloads = <(int, int?)>[];
+    await installer.install(RunCancellation(), (phase, received, total) {
+      phases.add(phase);
+      if (phase == EnvironmentPhase.downloading) {
+        downloads.add((received, total));
+      }
+    });
+    expect(downloads.first, (0, bytes.length));
+    expect(downloads.last, (bytes.length, bytes.length));
     expect((await repository.environment()).ready, isTrue);
     expect(
       phases,

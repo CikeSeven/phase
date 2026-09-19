@@ -15,6 +15,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.toolbarHeight = 64,
     this.showDivider = true,
     this.titleSpacing = AppSpacing.l,
+    this.bottom,
   });
 
   final Widget title;
@@ -26,9 +27,11 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// 标题两侧留白；聊天页传更小的值，给模型名留出更多截断空间。
   final double titleSpacing;
+  final PreferredSizeWidget? bottom;
 
   @override
-  Size get preferredSize => Size.fromHeight(toolbarHeight);
+  Size get preferredSize =>
+      Size.fromHeight(toolbarHeight + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {
@@ -43,6 +46,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       actions: actions,
       actionsPadding: const EdgeInsets.only(right: AppSpacing.s),
       toolbarHeight: toolbarHeight,
+      bottom: bottom,
       titleSpacing: titleSpacing,
       centerTitle: false,
       backgroundColor: clear,
@@ -50,24 +54,30 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       scrolledUnderElevation: 0,
       shape: const RoundedRectangleBorder(),
-      flexibleSpace: FrostedSurface(
-        borderRadius: BorderRadius.zero,
-        borderColor: clear,
-        color:
-            (dark ? colors.surfaceContainerLow : colors.surfaceContainerLowest)
-                .withValues(alpha: dark ? 0.64 : 0.50),
-        blur: 20,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: showDivider
-                ? Border(
-                    bottom: BorderSide(
-                      color: colors.outlineVariant.withValues(alpha: 0.24),
-                    ),
-                  )
-                : null,
+      flexibleSpace: Padding(
+        // 玻璃底色只覆盖工具栏，底部进度区域沿用下方页面画布。
+        padding: EdgeInsets.only(bottom: bottom?.preferredSize.height ?? 0),
+        child: FrostedSurface(
+          borderRadius: BorderRadius.zero,
+          borderColor: clear,
+          color:
+              (dark
+                      ? colors.surfaceContainerLow
+                      : colors.surfaceContainerLowest)
+                  .withValues(alpha: dark ? 0.64 : 0.50),
+          blur: 20,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: showDivider
+                  ? Border(
+                      bottom: BorderSide(
+                        color: colors.outlineVariant.withValues(alpha: 0.24),
+                      ),
+                    )
+                  : null,
+            ),
+            child: const SizedBox.expand(),
           ),
-          child: const SizedBox.expand(),
         ),
       ),
     );
