@@ -6,8 +6,13 @@ import '../../../core/error/failure.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_linear_progress_indicator.dart';
+import '../../../core/widgets/app_list_tile.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_section.dart';
 import '../../../data/models/workspace.dart';
+import 'dependency_controller.dart';
+import 'dependency_profiles.dart';
 import 'linux_installer.dart';
 import 'workspace_controller.dart';
 
@@ -24,11 +29,17 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     final environment = ref.watch(runtimeEnvironmentProvider);
     final replacesEnvironment = environment.value?.rootPath != null;
     final operation = ref.watch(environmentControllerProvider);
-    final showProgress = operation.busy || environment.isLoading;
-    final progress = operation.busy && (operation.total ?? 0) > 0
+    final dependencies = ref.watch(dependencyControllerProvider);
+    final showProgress =
+        operation.busy || environment.isLoading || dependencies.busy;
+    // 依赖安装没有可计量的总量，按设计规范使用不定进度。
+    final progress =
+        !dependencies.busy && operation.busy && (operation.total ?? 0) > 0
         ? (operation.bytes / operation.total!).clamp(0.0, 1.0)
         : null;
-    final progressLabel = operation.busy
+    final progressLabel = dependencies.busy
+        ? '正在安装${DependencyProfile.byId(dependencies.profileId ?? '')?.label ?? '依赖'}'
+        : operation.busy
         ? _phase(operation.phase ?? EnvironmentPhase.checking)
         : '正在读取环境';
     return AppScaffold(
@@ -217,10 +228,136 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                 style: TextStyle(color: Theme.of(context).colorScheme.error),
               ),
             ),
+          if (!operation.busy && environment.value?.ready == true) ...[
+            const SizedBox(height: 24),
+            AppSection(
+              title: '环境依赖',
+              subtitle: '按需安装开发依赖并记录版本；失败或取消保留已知状态',
+              child: Column(
+                children: [
+                  for (final profile in DependencyProfile.all)
+                    _DependencyTile(
+                      profile: profile,
+                      installed:
+                          environment.value?.installedDependencies[profile.id],
+                      operation: dependencies,
+                      onInstall: dependencies.busy
+                          ? null
+                          : () => _confirmInstall(profile),
+                    ),
+                ],
+              ),
+            ),
+            if (dependencies.busy)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: TextButton(
+                  onPressed: ref
+                      .read(dependencyControllerProvider.notifier)
+                      .cancel,
+                  child: const Text('取消安装'),
+                ),
+              ),
+            if (dependencies.error != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(
+                  dependencies.error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ),
+          ],
         ],
       ),
     );
   }
+
+  Future<void> _confirmInstall(DependencyProfile profile) async {
+    final allowed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AppDialog(
+        title: '安装${profile.label}？',
+        icon: Symbols.terminal,
+        content: Text(
+          '通过 Ubuntu 软件源安装 ${profile.packages.join('、')}，可能需要数分钟；已安装内容跨会话保留。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('安装'),
+          ),
+        ],
+      ),
+    );
+    if (allowed == true && mounted) {
+      await ref.read(dependencyControllerProvider.notifier).install(profile.id);
+    }
+  }
+}
+
+class _DependencyTile extends StatelessWidget {
+  const _DependencyTile({
+    required this.profile,
+    required this.installed,
+    required this.operation,
+    required this.onInstall,
+  });
+  final DependencyProfile profile;
+  final InstalledDependency? installed;
+  final DependencyOperation operation;
+  final VoidCallback? onInstall;
+
+  @override
+  Widget build(BuildContext context) {
+    final installing = operation.busy && operation.profileId == profile.id;
+    final blocked = operation.busy && !installing;
+    final theme = Theme.of(context);
+    final subtitle = installing
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(_stepLabel(operation.step ?? DependencyStep.repairing)),
+              for (final line in operation.logTail.take(3))
+                Text(
+                  line,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+            ],
+          )
+        : Text(
+            installed == null
+                ? profile.description
+                : '${installed!.version ?? '已安装'} · ${_date(installed!.installedAt)}',
+          );
+    return AppListTile(
+      title: Text(profile.label),
+      subtitle: subtitle,
+      leading: AppIconBadge(icon: Symbols.terminal, size: 40, iconSize: 20),
+      trailing: installing
+          ? const AppLoadingIndicator.small(size: 20)
+          : blocked || onInstall == null
+          ? null
+          : const Icon(Symbols.chevron_right),
+      onTap: blocked ? null : onInstall,
+    );
+  }
+
+  static String _date(DateTime time) =>
+      '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')}';
+  String _stepLabel(DependencyStep step) => switch (step) {
+    DependencyStep.repairing => '修复包状态',
+    DependencyStep.updating => '更新软件源',
+    DependencyStep.installing => '正在安装 ${profile.label}',
+    DependencyStep.verifying => '验证版本',
+  };
 }
 
 String _phase(EnvironmentPhase phase) => switch (phase) {

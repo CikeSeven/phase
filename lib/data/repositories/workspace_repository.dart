@@ -32,6 +32,7 @@ class WorkspaceRepository {
   final Directory root;
   final Set<String> _leases = {};
   bool _mutatingEnvironment = false;
+  bool _installingDependencies = false;
   bool get busy => _mutatingEnvironment || _leases.isNotEmpty;
   bool inUse(String id) => _leases.contains(id);
   static const environmentId = 'ubuntu-arm64';
@@ -253,12 +254,30 @@ class WorkspaceRepository {
 
   /// 安装/卸载与运行互斥，保留租约直到模型运行结束，防止固定快照失效。
   void beginEnvironmentChange() {
-    if (busy) throw const OperationFailure('环境或工作区正在使用，请先结束相关任务');
+    if (busy || _installingDependencies) {
+      throw const OperationFailure('环境或工作区正在使用，请先结束相关任务');
+    }
     _mutatingEnvironment = true;
   }
 
   void endEnvironmentChange() {
     _mutatingEnvironment = false;
+  }
+
+  /// 依赖安装与环境级变更互斥；不替换 rootfs，因此不阻断运行租约，
+  /// guest 内并发 apt 冲突由锁超时兜底。
+  void beginDependencyChange() {
+    if (_mutatingEnvironment) {
+      throw const OperationFailure('环境正在安装或卸载，请稍候');
+    }
+    if (_installingDependencies) {
+      throw const OperationFailure('已有依赖安装正在进行，请稍候');
+    }
+    _installingDependencies = true;
+  }
+
+  void endDependencyChange() {
+    _installingDependencies = false;
   }
 
   Future<WorkspaceLease> acquire(
@@ -330,6 +349,7 @@ class WorkspaceRepository {
           downloadBytes: env.downloadBytes,
           revision: env.revision,
           installedBytes: env.installedBytes,
+          installedDependencies: env.installedDependencies,
           error: '上次安装已中断，可重试；已有工作区保留',
         ),
       );

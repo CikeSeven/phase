@@ -9,6 +9,24 @@ enum EnvironmentPhase {
   cancelled,
 }
 
+/// 一个已安装依赖 profile 的记录；版本来自验证命令输出，缺失不视为失败。
+class InstalledDependency {
+  const InstalledDependency({required this.installedAt, this.version});
+  final DateTime installedAt;
+  final String? version;
+  Map<String, dynamic> toJson() => {
+    'installedAt': installedAt.toIso8601String(),
+    'version': version,
+  };
+  factory InstalledDependency.fromJson(Map<String, dynamic> json) =>
+      InstalledDependency(
+        installedAt:
+            DateTime.tryParse(json['installedAt'] as String? ?? '') ??
+            DateTime.fromMillisecondsSinceEpoch(0),
+        version: json['version'] as String?,
+      );
+}
+
 class RuntimeEnvironment {
   const RuntimeEnvironment({
     this.phase = EnvironmentPhase.notInstalled,
@@ -20,6 +38,7 @@ class RuntimeEnvironment {
     this.imageDigest,
     this.abi = 'arm64-v8a',
     this.downloadBytes = 0,
+    this.installedDependencies = const {},
   });
   final EnvironmentPhase phase;
   final String? rootPath;
@@ -30,7 +49,23 @@ class RuntimeEnvironment {
   final String? imageDigest;
   final String abi;
   final int downloadBytes;
+  final Map<String, InstalledDependency> installedDependencies;
   bool get ready => phase == EnvironmentPhase.ready && rootPath != null;
+  RuntimeEnvironment withDependencies(
+    String profileId,
+    InstalledDependency dependency,
+  ) => RuntimeEnvironment(
+    phase: phase,
+    rootPath: rootPath,
+    revision: revision,
+    installedBytes: installedBytes,
+    error: error,
+    imageUrl: imageUrl,
+    imageDigest: imageDigest,
+    abi: abi,
+    downloadBytes: downloadBytes,
+    installedDependencies: {...installedDependencies, profileId: dependency},
+  );
   Map<String, dynamic> toJson() => {
     'imageUrl': imageUrl,
     'imageDigest': imageDigest,
@@ -41,6 +76,10 @@ class RuntimeEnvironment {
     'revision': revision,
     'installedBytes': installedBytes,
     'error': error,
+    'installedDependencies': {
+      for (final entry in installedDependencies.entries)
+        entry.key: entry.value.toJson(),
+    },
   };
   factory RuntimeEnvironment.fromJson(Map<String, dynamic> json) =>
       RuntimeEnvironment(
@@ -53,6 +92,15 @@ class RuntimeEnvironment {
         revision: json['revision'] as String?,
         installedBytes: json['installedBytes'] as int,
         error: json['error'] as String?,
+        installedDependencies: {
+          for (final entry
+              in (json['installedDependencies'] as Map<String, dynamic>? ??
+                      const <String, dynamic>{})
+                  .entries)
+            entry.key: InstalledDependency.fromJson(
+              (entry.value as Map<dynamic, dynamic>).cast<String, dynamic>(),
+            ),
+        },
       );
 }
 

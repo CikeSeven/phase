@@ -44,6 +44,22 @@ void main() {
       downloadBytes: bytes.length,
     );
     final repository = WorkspaceRepository(fixture.database, fixture.directory);
+    // A previous ready environment with recorded dependencies is replaced.
+    final oldRoot = await Directory('${fixture.directory.path}/old-root')
+        .create(recursive: true);
+    await repository.saveEnvironment(
+      RuntimeEnvironment(
+        phase: EnvironmentPhase.ready,
+        rootPath: oldRoot.path,
+        revision: 'old',
+        installedDependencies: {
+          'python': InstalledDependency(
+            installedAt: DateTime.fromMillisecondsSinceEpoch(0),
+            version: 'Python 3.12.3',
+          ),
+        },
+      ),
+    );
     final workspace = await repository.create('keep');
     await File('${workspace.rootPath}/keep.txt').writeAsString('keep');
     final installer = LinuxInstaller(
@@ -64,11 +80,12 @@ void main() {
     expect(downloads.first, (0, bytes.length));
     expect(downloads.last, (bytes.length, bytes.length));
     expect((await repository.environment()).ready, isTrue);
+    // A successful replacement clears recorded dependencies with the rootfs.
+    expect((await repository.environment()).installedDependencies, isEmpty);
     final installed = await repository.environment();
     expect(
-      await File(
-        '${installed.rootPath}/etc/apt/sources.list.d/ubuntu.sources',
-      ).readAsString(),
+      await File('${installed.rootPath}/etc/apt/sources.list.d/ubuntu.sources')
+          .readAsString(),
       contains(UbuntuImage.chinaAptMirror),
     );
     expect(
@@ -128,9 +145,8 @@ void main() {
     await installer.install(RunCancellation(), (_, _, _) {});
     final installed = await repository.environment();
     expect(
-      await File(
-        '${installed.rootPath}/etc/apt/sources.list.d/ubuntu.sources',
-      ).readAsString(),
+      await File('${installed.rootPath}/etc/apt/sources.list.d/ubuntu.sources')
+          .readAsString(),
       contains(UbuntuImage.upstreamAptMirror),
     );
   });
@@ -166,6 +182,12 @@ void main() {
             phase: EnvironmentPhase.ready,
             rootPath: old.path,
             revision: 'old',
+            installedDependencies: {
+              'node': InstalledDependency(
+                installedAt: DateTime.fromMillisecondsSinceEpoch(0),
+                version: 'v18.20.4',
+              ),
+            },
           ),
         );
         final cancellation = RunCancellation();
@@ -191,6 +213,8 @@ void main() {
         final env = await repository.environment();
         expect(env.ready, isTrue);
         expect(env.revision, 'old');
+        // A failed replacement keeps the recorded dependencies.
+        expect(env.installedDependencies['node']?.version, 'v18.20.4');
         expect(await File('${old.path}/keep').readAsString(), 'old');
         expect(repository.busy, isFalse);
         expect(driver.owners, isEmpty);

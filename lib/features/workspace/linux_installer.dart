@@ -95,6 +95,7 @@ class LinuxInstaller {
           downloadBytes: old?.downloadBytes ?? 0,
           revision: old?.revision,
           installedBytes: old?.installedBytes ?? 0,
+          installedDependencies: old?.installedDependencies ?? const {},
         ),
       );
       progress(
@@ -274,6 +275,7 @@ class LinuxInstaller {
             downloadBytes: old.downloadBytes,
             revision: old.revision,
             installedBytes: old.installedBytes,
+            installedDependencies: old.installedDependencies,
             error: message,
           ),
         );
@@ -333,6 +335,7 @@ class LinuxInstaller {
           downloadBytes: old.downloadBytes,
           revision: old.revision,
           installedBytes: old.installedBytes,
+          installedDependencies: old.installedDependencies,
           error: '环境卸载未完成，可重试',
         ),
       );
