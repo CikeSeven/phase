@@ -248,9 +248,9 @@ class WorkspaceFiles {
 String workspacePrompt(WorkspaceSnapshot? workspace) {
   if (workspace == null) return '';
   final files =
-      '\n\n本会话独立工作区：${jsonEncode(workspace.name)}，路径 /workspace。文件随会话持久保存，删除会话时一并删除，不与其他会话共享。文件工具可直接访问 /workspace 下的路径。';
+      '\n\n本会话独立工作区：${jsonEncode(workspace.name)}，路径 /workspace，文件随会话持久保存。';
   if (!workspace.linuxAvailable) {
     return '$files Ubuntu 环境未就绪，当前无法执行 shell 命令。';
   }
-  return '$files Ubuntu ${workspace.environmentRevision}。命令默认在 /workspace 执行；每次 shell 的变量与 cd 不保留。将要返回的文件写入 /workspace/output，调用后会保存为会话产物。其他文件留在工作区；本会话附件在执行前复制到 /workspace/imports/<附件ID>/<文件名>。Skill 脚本先用 prepare_skill 复制固定版本，再通过 shell 显式调用解释器；没有的依赖如实返回缺失，不自动安装。';
+  return '$files Ubuntu ${workspace.environmentRevision}。需交付的文件写入 /workspace/output，shell 调用后保存为会话产物；附件在执行前复制到 /workspace/imports/<附件ID>/<文件名>。';
 }

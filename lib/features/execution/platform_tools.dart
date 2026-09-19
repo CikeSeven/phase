@@ -22,9 +22,9 @@ String executionScopePrompt(
   bool toolExecution = false,
 }) {
   // 不把黑名单包名放进模型提示词，应用信息只通过过滤后的 list_apps 提供。
-  return '${!toolExecution ? '' : '\n工具响应和错误由你处理，不要求用户核验普通操作的结果或填写状态。需要判断执行效果时，用正常的只读工具获取当前界面或文件。失败或取消不等于外部效果已撤销，不要无条件重发有副作用动作；无法继续时明确说明错误。用户授权与密码等必要输入仍由用户提供。'}'
+  return '${!toolExecution ? '' : '\n工具响应和错误由你处理；需要判断效果时读取当前界面或文件，不要求用户核验普通操作或填写状态。失败或取消不代表外部效果已撤销，不要无条件重发有副作用动作；无法继续时说明错误。必要的授权和敏感输入由用户提供。'}'
       '${scope.fileUris.isEmpty ? '' : '\n本次授权文件句柄：${jsonEncode(scope.fileUris)}。'}'
-      '${!applicationOperations ? '' : '\n应用操作统一受应用名单限制。需要打开应用时先用 list_apps 查询，再用 open_app(packageName) 打开。capture_screen 无参数，直接读取手机当前前台页面，不必先查应用列表或提供包名；其他目标操作必须传入真实 packageName。不要猜包名绕过名单。控件操作使用该应用最新快照的 snapshotId 和 nodeId；perform_gestures 可直接使用屏幕像素坐标，不要求截图 ID 或先截图；使用图片坐标时声明 coordinateSpace=image_pixels 和参照图片的 imageWidth/imageHeight，以便换算。capture_screen 只提供观察，不是执行许可。只组合无需中途重新识别的手势，目标不确定时先重新截图，不根据旧图猜测跳转后的坐标。每次动作后使用新观察。系统接受动作不等于任务成功，最终回答依据观察。支付、密码、验证码需用户手动处理。'}';
+      '${!applicationOperations ? '' : '\n应用操作受应用名单限制；打开应用前用 list_apps 查询真实包名，再调用 open_app。依据最新界面选择操作，动作后根据返回的观察或重新读取界面判断效果。系统接受动作不等于任务完成。支付、密码、验证码由用户手动处理。'}';
 }
 
 ToolOutcome platformOutcome(ExecutionResult result) {
@@ -67,8 +67,8 @@ class ScopedFileTool extends Tool {
   String get name => local.name;
   @override
   String get description =>
-      '${local.description} 外部文件的 path 使用授权范围内的 content:// URI。'
-      '${name == 'write_file' ? '新建外部文件时 directory 传目录 URI，path 传相对路径；自动创建父目录，同名文件完整覆盖。外部单次写入上限 128 KiB。' : ''}';
+      '${local.description} 外部文件的 path 使用授权的 content:// URI。'
+      '${name == 'write_file' ? '外部单次写入上限 128 KiB。' : ''}';
   @override
   Map<String, dynamic> get inputSchema => {
     ...local.inputSchema,
@@ -77,7 +77,7 @@ class ScopedFileTool extends Tool {
       if (name == 'write_file')
         'directory': {
           'type': 'string',
-          'description': '新建或按名称写入外部文件时使用的授权目录 URI',
+          'description': '新建或按名称写入外部文件时使用的授权目录 URI；指定时 path 为相对路径',
         },
     },
   };
@@ -416,13 +416,10 @@ class ApplicationTool extends Tool {
   @override
   String get description => switch (action) {
     ExecutionAction.listApps =>
-      '获取名单允许的已安装应用：名称、包名、系统属性、版本、安装时间、安装包大小及可否打开。可搜索、排序和分页；不会返回被禁止的应用。',
-    ExecutionAction.openApp =>
-      '打开名单允许的 packageName 对应应用，返回其界面快照。不会自动改名单或打开其它包名。',
-    ExecutionAction.inspectUi =>
-      '读取指定 packageName 的当前可见界面并返回有界快照；目标须已在前台且通过名单校验。',
-    _ =>
-      '对 packageName 执行 $name；必须通过名单校验，并使用该应用最新的 snapshotId 和 nodeId。不猜坐标、不自动重试；返回动作回调和操作后观察。',
+      '查询名单允许的已安装应用，返回名称、包名、系统属性、版本、安装时间、安装包大小及可否打开；支持搜索、排序和分页。',
+    ExecutionAction.openApp => '打开 packageName 对应应用，返回界面快照。',
+    ExecutionAction.inspectUi => '读取指定 packageName 的可见界面，返回控件快照；目标须已在前台。',
+    _ => '对 packageName 执行 $name，使用该应用最新快照的 snapshotId 和 nodeId；返回动作回调和操作后观察。',
   };
   @override
   Set<String> get requiredCapabilities => action == ExecutionAction.listApps

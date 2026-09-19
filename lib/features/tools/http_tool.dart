@@ -27,7 +27,7 @@ class HttpRequestTool extends Tool {
 
   @override
   String get description =>
-      '发起 HTTP 请求获取数据。支持 GET/POST/PUT/DELETE；'
+      '发起 HTTP 请求并返回响应文本。'
       '不要在 url、headers 或 body 里放密钥或用户隐私（会被记录）。'
       '响应正文超过 ${_maxBytesLabel}KB 会被截断。';
 

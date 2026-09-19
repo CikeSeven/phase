@@ -239,7 +239,7 @@ class ToolArgumentException implements Exception {
   String toString() => '参数错误（$toolName）：$message';
 }
 
-/// 当前系统时间与设备信息。
+/// 当前本地时间与时区。
 class SystemInfoTool extends Tool {
   const SystemInfoTool();
 
@@ -247,7 +247,7 @@ class SystemInfoTool extends Tool {
   String get name => 'system_info';
 
   @override
-  String get description => '查询当前时间与设备信息（时区、型号、系统版本、应用版本）。';
+  String get description => '查询当前本地时间、时区和 UTC 偏移。';
 
   @override
   Map<String, dynamic> get inputSchema => const {
@@ -263,7 +263,7 @@ class SystemInfoTool extends Tool {
   ToolPolicy get defaultPolicy => ToolPolicy.allow;
 
   @override
-  String describeAction(Map<String, dynamic> arguments) => '读取当前时间与设备信息';
+  String describeAction(Map<String, dynamic> arguments) => '读取当前时间与时区';
 
   @override
   Future<ToolOutcome> execute(

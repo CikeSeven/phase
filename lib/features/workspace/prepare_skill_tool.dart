@@ -15,8 +15,7 @@ class PrepareSkillTool extends Tool {
   @override
   String get name => 'prepare_skill';
   @override
-  String get description =>
-      '将本次启用 Skill 的固定版本资源复制到工作区并返回 guest 路径。安装原件保留；只复制文件，不执行脚本。';
+  String get description => '将已启用 Skill 的固定版本资源复制到工作区，返回 guestPath 供 shell 使用。';
   @override
   Map<String, dynamic> get inputSchema => {
     'type': 'object',

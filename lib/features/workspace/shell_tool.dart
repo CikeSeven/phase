@@ -28,7 +28,7 @@ class ShellTool extends Tool {
   String get name => 'shell';
   @override
   String get description =>
-      '在本会话独立的 Ubuntu 工作区执行一次非交互 shell 命令。每次进程独立，文件保留；结果返回 stdout/stderr、退出码与产物。需返回的文件写入 /workspace/output。';
+      '在 Ubuntu 工作区执行非交互 shell 命令，返回 stdout/stderr、退出码与产物。每次调用的环境变量与 cd 不保留。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
@@ -39,6 +39,7 @@ class ShellTool extends Tool {
         'type': 'integer',
         'minimum': 1,
         'maximum': ShellLimits.maxTimeoutMs,
+        'description': '超时时间（毫秒），默认 60000',
       },
     },
     'required': ['command'],

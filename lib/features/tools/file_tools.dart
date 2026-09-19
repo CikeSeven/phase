@@ -9,7 +9,7 @@ import '../workspace/workspace_files.dart';
 import 'file_text.dart';
 import 'tool.dart';
 
-const _pathDescription = '相对于本会话产物目录的路径；/workspace/ 开头访问当前工作区。文件名原样使用，不补后缀。';
+const _pathDescription = '相对于本会话产物目录的路径；/workspace/ 开头访问当前工作区。';
 
 class ReadFileTool extends Tool {
   const ReadFileTool();
@@ -17,14 +17,16 @@ class ReadFileTool extends Tool {
   String get name => 'read_file';
   @override
   String get description =>
-      '读取 UTF-8 文本或附件已抽取的文本。$_pathDescription '
-      '附件也可用 attachment:<ID> 或唯一文件名。offset 从 1 开始；'
+      '读取 UTF-8 文本或附件已抽取的文本。'
       '最多返回 2000 行或 16 KiB 完整行，按返回的 nextOffset/offset 继续读取。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
-      'path': {'type': 'string', 'description': '文件路径或 attachment:<ID>'},
+      'path': {
+        'type': 'string',
+        'description': '$_pathDescription 附件可用 attachment:<ID> 或唯一文件名。',
+      },
       'offset': {'type': 'integer', 'minimum': 1, 'description': '起始行，默认 1'},
       'limit': {
         'type': 'integer',
@@ -67,8 +69,7 @@ class WriteFileTool extends Tool {
   String get name => 'write_file';
   @override
   String get description =>
-      '将 content 原样写成 UTF-8 文件，不存在则创建，存在则完整覆盖；自动创建父目录。'
-      '允许空内容和无扩展名文件。$_pathDescription 局部修改用 edit_file。';
+      '写入 UTF-8 文件，不存在则创建，存在则完整覆盖；自动创建父目录。局部修改用 edit_file。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
@@ -110,9 +111,8 @@ class EditFileTool extends Tool {
   String get name => 'edit_file';
   @override
   String get description =>
-      '用精确文本替换编辑文件。$_pathDescription '
-      'edits 中每个 oldText 必须在原文件中唯一匹配，所有区域互不重叠；'
-      '全部匹配成功才写入。newText 为空可删除内容。先读取文件，保留原文空格；支持多处修改一次提交。';
+      '用精确文本替换编辑文件，支持多处修改一次提交；全部匹配成功才写入。'
+      '先读取文件，保留原文空格；oldText 在保证唯一匹配的前提下尽量短。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
@@ -121,6 +121,7 @@ class EditFileTool extends Tool {
       'edits': {
         'type': 'array',
         'minItems': 1,
+        'description': '每处替换均匹配原文件，各区域不得重叠',
         'items': {
           'type': 'object',
           'properties': {
@@ -129,7 +130,7 @@ class EditFileTool extends Tool {
               'minLength': 1,
               'description': '原文件中唯一的原文',
             },
-            'newText': {'type': 'string', 'description': '替换文本，允许为空'},
+            'newText': {'type': 'string', 'description': '替换文本，空字符串表示删除'},
           },
           'required': ['oldText', 'newText'],
           'additionalProperties': false,
@@ -190,20 +191,21 @@ class ListFilesTool extends Tool {
   @override
   String get name => 'list_files';
   @override
-  String get description =>
-      '列出目录的直接子项，返回可直接用于 read_file/write_file/edit_file 的路径。'
-      'path 默认 .（会话产物目录，同时列出附件）；工作区用 /workspace，子目录可继续列出。';
+  String get description => '列出目录的直接子项，返回可直接用于文件工具的路径；支持分页。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
-      'path': {'type': 'string', 'description': '目录路径，默认 .'},
+      'path': {
+        'type': 'string',
+        'description': '目录路径，默认 .（会话产物及附件）；工作区用 /workspace',
+      },
       'offset': {'type': 'integer', 'minimum': 0, 'description': '跳过的条目数，默认 0'},
       'limit': {
         'type': 'integer',
         'minimum': 1,
         'maximum': 200,
-        'description': '返回条目数，默认 100，最多 200',
+        'description': '返回条目数，默认 100',
       },
     },
     'additionalProperties': false,

@@ -40,7 +40,7 @@ class ToolPresentation {
       : channelLabel(record.channel);
 
   static String toolLabel(String toolName) => switch (toolName) {
-    'system_info' => '时间与设备信息',
+    'system_info' => '时间与时区',
     'read_file' => '读取文件',
     'read_skill' => '读取 Skill',
     'shell' => '执行命令',
