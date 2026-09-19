@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/rendering.dart';
@@ -157,6 +158,8 @@ class _UnusedToolCalls implements ToolCallRepository {
 /// 内存版会话仓储：布局测试只需要可控的会话与消息视图，
 /// 不走真实数据库（其行为由 repositories_test 覆盖）。
 class _MemoryConversations implements ConversationRepository {
+  @override
+  WorkspaceRepository get workspaces => throw UnimplementedError('布局测试不涉及工作区');
   @override
   Future<void> completeToolTurn({
     required String messageId,

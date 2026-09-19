@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -71,17 +72,6 @@ void main() {
                 freeBytes: 1024 * 1024 * 1024,
               ),
             ),
-            workspacesProvider.overrideWith(
-              (_) => Stream.value([
-                for (var i = 0; i < 20; i++)
-                  Workspace(
-                    id: '$i',
-                    name: '工作区 $i',
-                    rootPath: '/test/$i',
-                    createdAt: DateTime(2026),
-                  ),
-              ]),
-            ),
           ],
           child: MaterialApp(
             theme: dark ? AppTheme.dark() : AppTheme.light(),
@@ -130,10 +120,7 @@ void main() {
       final rect = tester.getRect(indicator);
       expect(rect.width, size.width);
       expect(rect.height, 10);
-      expect(
-        rect.top,
-        greaterThan(tester.getBottomLeft(find.text('环境与工作区')).dy),
-      );
+      expect(rect.top, greaterThan(tester.getBottomLeft(find.text('环境设置')).dy));
       expect(
         rect.bottom,
         lessThanOrEqualTo(tester.getBottomLeft(find.byType(AppBar)).dy),
@@ -189,15 +176,15 @@ void main() {
     });
 
     testWidgets(
-      'workspace creation dialog, cancellation and layout $size/$scale/$dark',
+      'environment settings omit conversation workspaces $size/$scale/$dark',
       (tester) async {
         late ToolLoopHarness h;
         await tester.runAsync(() async {
           final processes = LocalProcessDriver();
           addTearDown(processes.dispose);
           h = await ToolLoopHarness.create(processes: processes);
-          await (await h.container.read(workspaceRepositoryProvider.future))
-              .create('论文与月相观测的长期工作区');
+          await (await h.container.read(conversationRepositoryProvider.future))
+              .createConversation(title: '论文与月相观测的长期会话');
         });
         tester.view.physicalSize = size;
         tester.view.devicePixelRatio = 1;
@@ -262,21 +249,14 @@ void main() {
             image.dispose();
           });
         }
-        await tester.scrollUntilVisible(
-          find.text('新建'),
-          200,
-          scrollable: find.byType(Scrollable).first,
-        );
         await tester.pumpAndSettle();
-        await tester.tap(find.text('新建'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 500));
-        await tester.enterText(find.byType(TextField), '取消的草稿');
-        await tester.ensureVisible(find.text('取消'));
-        await tester.tap(find.text('取消'));
-        await tester.pump();
-        await tester.pump(const Duration(milliseconds: 500));
-        expect(find.text('取消的草稿'), findsNothing);
+        expect(find.text('环境设置'), findsOneWidget);
+        expect(find.text('会话工作区'), findsNothing);
+        expect(find.text('论文与月相观测的长期会话'), findsNothing);
+        expect(find.text('新建'), findsNothing);
+        expect(find.text('不绑定工作区'), findsNothing);
+        expect(find.text('保存'), findsNothing);
+        expect(find.byTooltip('删除工作区'), findsNothing);
         expect(tester.takeException(), isNull);
       },
     );

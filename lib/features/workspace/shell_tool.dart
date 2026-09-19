@@ -28,7 +28,7 @@ class ShellTool extends Tool {
   String get name => 'shell';
   @override
   String get description =>
-      '在绑定的 Ubuntu 工作区执行一次非交互 shell 命令。每次进程独立，文件保留；结果返回 stdout/stderr、退出码与产物。需返回的文件写入 /workspace/output。';
+      '在本会话独立的 Ubuntu 工作区执行一次非交互 shell 命令。每次进程独立，文件保留；结果返回 stdout/stderr、退出码与产物。需返回的文件写入 /workspace/output。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
@@ -50,7 +50,7 @@ class ShellTool extends Tool {
   ToolPolicy get defaultPolicy => ToolPolicy.ask;
   @override
   String describeAction(Map<String, dynamic> arguments) =>
-      'Ubuntu ${workspace?.environmentRevision ?? "24.04 ARM64"} · ${workspace?.name ?? "未绑定工作区"}\n目录：${arguments['cwd'] ?? '/workspace'}\n超时：${arguments['timeoutMs'] ?? ShellLimits.timeoutMs} ms\n${arguments['command']}';
+      'Ubuntu ${workspace?.environmentRevision ?? "24.04 ARM64"} · ${workspace?.name ?? "会话工作区"}\n目录：${arguments['cwd'] ?? '/workspace'}\n超时：${arguments['timeoutMs'] ?? ShellLimits.timeoutMs} ms\n${arguments['command']}';
   @override
   String? validateArguments(Map<String, dynamic> arguments) {
     final command = arguments['command'] as String? ?? '';
@@ -71,9 +71,12 @@ class ShellTool extends Tool {
     ToolProgress? onProgress,
   }) async {
     final binding = workspace;
-    if (binding == null || driver == null || files == null) {
+    if (binding == null ||
+        !binding.linuxAvailable ||
+        driver == null ||
+        files == null) {
       return const ToolOutcome.failure(
-        '请先准备 Ubuntu 环境并绑定工作区',
+        '请先在设置中安装 Ubuntu 环境',
         errorCode: 'environmentMissing',
       );
     }
@@ -122,7 +125,7 @@ class ShellTool extends Tool {
         LinuxProcessSpec(
           ownerId: context.runId,
           processId: context.toolCallId,
-          rootfs: binding.environmentRoot,
+          rootfs: binding.environmentRoot!,
           workspace: binding.rootPath,
           executable: '/bin/sh',
           argv: ['-c', arguments['command'] as String],

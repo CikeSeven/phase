@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -75,6 +76,9 @@ void main() {
           sharedPreferencesProvider.overrideWith((ref) => preferences),
           appDatabaseProvider.overrideWith((ref) => db),
           secureKeyStorageProvider.overrideWith((ref) => keys),
+          workspaceRepositoryProvider.overrideWith(
+            (ref) => WorkspaceRepository(db, tempDir),
+          ),
           attachmentStorageProvider.overrideWith(
             (ref) => AttachmentStorage(
               Directory(p.join(tempDir.path, 'attachments')),

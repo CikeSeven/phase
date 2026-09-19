@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/assistant.dart';
@@ -9,7 +10,6 @@ import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/workspace.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
-import 'package:phase/features/workspace/workspace_controller.dart';
 
 import '../tools/tool_loop_harness.dart';
 import 'local_process_driver.dart';
@@ -22,7 +22,6 @@ void main() {
     final repository = await h.container.read(
       workspaceRepositoryProvider.future,
     );
-    final workspace = await repository.create('停止测试');
     await repository.saveEnvironment(
       const RuntimeEnvironment(
         phase: EnvironmentPhase.ready,
@@ -41,7 +40,7 @@ void main() {
     );
     final chats = await h.container.read(conversationRepositoryProvider.future);
     final chat = await chats.createConversation(assistantId: assistant.id);
-    await repository.bind(chat.id, workspace.id);
+    final workspace = (await repository.get(chat.workspaceId!))!;
     await h.controller().openConversation(chat.id);
     h.onConfirmation = (_) async => ToolDecision.approved;
     h.provider.turns.add(

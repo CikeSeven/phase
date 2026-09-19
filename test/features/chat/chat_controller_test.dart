@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -91,6 +92,9 @@ void main() {
         appDatabaseProvider.overrideWith((ref) => db),
         secureKeyStorageProvider.overrideWith((ref) => SecureKeyStorage(keys)),
         // 附件写到临时目录，不依赖平台文档目录。
+        workspaceRepositoryProvider.overrideWith(
+          (ref) => WorkspaceRepository(db, tempDir),
+        ),
         attachmentStorageProvider.overrideWith(
           (ref) => AttachmentStorage(Directory(p.join(tempDir.path, 'files'))),
         ),

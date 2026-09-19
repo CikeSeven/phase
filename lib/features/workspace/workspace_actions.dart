@@ -13,8 +13,8 @@ import '../../../core/error/failure.dart';
 import '../../../core/utils/id.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/workspace.dart';
+import '../../../data/repositories/workspace_repository.dart';
 import '../tools/tool.dart';
-import 'workspace_controller.dart';
 import 'workspace_files.dart';
 
 part 'workspace_actions.g.dart';
@@ -30,7 +30,7 @@ Future<List<(String, int)>> workspaceEntries(
 ) async {
   final repository = await ref.watch(workspaceRepositoryProvider.future);
   final value = await repository.get(id);
-  if (value == null) throw const OperationFailure('工作区已删除');
+  if (value == null || value.deleting) throw const OperationFailure('工作区已删除');
   return WorkspaceFiles(repository).list(value, path);
 }
 
@@ -59,7 +59,7 @@ class WorkspaceActions extends _$WorkspaceActions {
   Future<Attachment> preview(String id, String relative) async {
     final repository = await ref.read(workspaceRepositoryProvider.future);
     final value = await repository.get(id);
-    if (value == null) throw const OperationFailure('工作区已删除');
+    if (value == null || value.deleting) throw const OperationFailure('工作区已删除');
     final path = await workspacePath(value.rootPath, relative);
     return Attachment(
       id: generateId(),
@@ -86,19 +86,25 @@ class WorkspaceActions extends _$WorkspaceActions {
       final file = picked.firstOrNull;
       if (file == null) return null;
       if (file.path == null) throw const OperationFailure('无法读取所选文件');
-      await WorkspaceFiles(repository).importAttachment(
-        value,
-        Attachment(
-          id: generateId(),
-          kind: AttachmentKind.artifact,
-          name: file.name,
-          mimeType: lookupMimeType(file.name) ?? 'application/octet-stream',
-          size: file.lengthSync() ?? await file.length(),
-          localPath: file.path!,
-          createdAt: DateTime.now(),
-        ),
-        RunCancellation(),
-      );
+      // 文件选择器打开期间会话可能已删除或开始运行，导入前重新取得租约。
+      final lease = await repository.acquire(id);
+      try {
+        await WorkspaceFiles(repository).importAttachment(
+          value,
+          Attachment(
+            id: generateId(),
+            kind: AttachmentKind.artifact,
+            name: file.name,
+            mimeType: lookupMimeType(file.name) ?? 'application/octet-stream',
+            size: file.lengthSync() ?? await file.length(),
+            localPath: file.path!,
+            createdAt: DateTime.now(),
+          ),
+          RunCancellation(),
+        );
+      } finally {
+        lease.close();
+      }
       if (ref.mounted) ref.invalidate(workspaceEntriesProvider);
       return true;
     });

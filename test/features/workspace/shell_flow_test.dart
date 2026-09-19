@@ -1,15 +1,12 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/api_protocol.dart';
-import 'package:phase/data/models/assistant.dart';
-import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/workspace.dart';
-import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
-import 'package:phase/features/workspace/workspace_controller.dart';
 import 'package:phase/providers/provider_factory.dart';
 
 import '../mcp/mcp_model_fixtures.dart';
@@ -61,7 +58,6 @@ void main() {
           ),
         );
         final repo = await h.container.read(workspaceRepositoryProvider.future);
-        final workspace = await repo.create('论文');
         await repo.saveEnvironment(
           const RuntimeEnvironment(
             phase: EnvironmentPhase.ready,
@@ -72,26 +68,19 @@ void main() {
         final chats = await h.container.read(
           conversationRepositoryProvider.future,
         );
-        final assistants = await h.container.read(
-          assistantRepositoryProvider.future,
-        );
-        final assistant = await assistants.ensureDefault();
-        await assistants.save(
-          assistant.copyWith(
-            toolPolicy: const ToolPolicyConfig(
-              policies: {'shell': ToolPolicy.ask},
-            ),
-          ),
-        );
-        final chat = await chats.createConversation(assistantId: assistant.id);
-        await repo.bind(chat.id, workspace.id);
-        await h.controller().openConversation(chat.id);
+        expect(h.conversationId(), isNull);
+        expect(await repo.list(), isEmpty);
         final confirmations = <String>[];
         h.onConfirmation = (request) async {
           confirmations.add(request.summary);
           return ToolDecision.approved;
         };
         await h.controller().send('生成报告');
+        final chat = (await chats.getThread(h.conversationId()!))!.conversation;
+        final workspace = (await repo.get(chat.workspaceId!))!;
+        expect(jsonEncode(requests.first), contains('shell'));
+        expect(jsonEncode(requests.first), contains('/workspace'));
+        expect((await h.latestRun()).configuration.workspace!.id, workspace.id);
         final records = await (await h.toolCalls()).getByRun(
           (await h.latestRun()).id,
         );
@@ -102,7 +91,7 @@ void main() {
         expect(records.single.result, contains('"exitCode":7'));
         expect(records.single.artifacts, hasLength(3));
         expect(jsonEncode(requests.last), contains('公开输出'));
-        expect(confirmations.single, contains('论文'));
+        expect(confirmations.single, contains('会话工作区'));
         expect(confirmations.single, contains('exit 7'));
         expect(processes.active, isEmpty);
         expect(

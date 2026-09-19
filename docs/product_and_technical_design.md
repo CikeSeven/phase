@@ -38,7 +38,7 @@
 | 文件、HTTP、工具记录、Markdown/JSON 导出 | [tool_registry.dart](../lib/features/tools/tool_registry.dart)、[conversation_export.dart](../lib/features/chat/conversation_export.dart) | [文件链路](../test/features/tools/file_tools_flow_test.dart)、[导出](../test/features/chat/conversation_export_test.dart) |
 | 远程 MCP、来源/修订快照、扩展管理与助手范围 | [mcp](../lib/features/mcp/)、[MCP 仓储](../lib/data/repositories/mcp_server_repository.dart) | [MCP 测试](../test/features/mcp/)；本机真实 HTTP/SSE 与四协议闭环通过；设备范围见实施计划 |
 | Skills 本地目录/ZIP、版本固定、助手范围与按需读取 | [skills](../lib/features/skills/)、[安装仓储](../lib/data/repositories/skill_repository.dart) | [Skills 测试](../test/features/skills/)；本机四协议文件产物闭环通过，真机范围见实施计划 |
-| Ubuntu 安装、工作区绑定、shell 与 Skill 工作副本 | [workspace](../lib/features/workspace/)、[原生宿主](../android/app/src/main/kotlin/app/xiangyue/phase/workspace/) | 本机四协议闭环、Profile 构建和真机安装/原始进程桥通过；完整 UI/生命周期待验收 |
+| Ubuntu 安装、会话独立工作区、shell 与 Skill 工作副本 | [workspace](../lib/features/workspace/)、[原生宿主](../android/app/src/main/kotlin/app/xiangyue/phase/workspace/) | 本机四协议首轮工作区闭环通过；此前环境/原始进程桥已装机验证，本次会话归属调整已覆盖安装、数据保留与启动验证，完整 UI/生命周期待验收 |
 | SAF、应用名单、无障碍、原生任务控制、设备队列 | [execution](../lib/features/execution/)、[Android 执行](../android/app/src/main/kotlin/app/xiangyue/phase/) | [Dart 执行测试](../test/features/execution/)、[JVM 测试](../android/app/src/test/kotlin/app/xiangyue/phase/) |
 | Android 14+ 窗口截图、图片回填、坐标手势组合 | [visual_tools.dart](../lib/features/execution/visual_tools.dart)、[vision](../android/app/src/main/kotlin/app/xiangyue/phase/vision/) | [四协议视觉链路](../test/features/execution/visual_protocol_flow_test.dart) |
 | 结构化消息、加密 Drift、附件与产物归属 | [models](../lib/data/models/)、[local](../lib/data/datasources/local/)、[repositories](../lib/data/repositories/) | [数据测试](../test/data/) |
@@ -60,7 +60,7 @@
 
 - 聊天：选择助手/模型 → 输入文本或附件 → 流式回答 → 阅读、复制或导出。
 - 设备执行：提出需求 → 观察目标 → 固定参数确认 → 执行动作 → 返回实际观察。
-- 扩展任务：配置 MCP 或安装 Skill → 开放给助手 → 必要时准备工作区/依赖 → 同一工具循环完成任务。
+- 扩展任务：配置 MCP 或安装 Skill → 开放给助手 → 必要时安装环境/依赖 → 同一工具循环完成任务。
 
 基础验收仍保留“文档摘要保存”和“固定测试 App 搜索并打开详情”两条闭环，再验证实际目标 App；不承诺适用于任意 App。
 
@@ -72,7 +72,7 @@
 
 ### 5.2 工具策略
 
-`allow / ask / deny` 分别表示在范围内执行、等待确认、不向模型开放且拒绝调用。新助手写入内置工具默认策略；未列出的工具和空范围均为 deny。第三方工具被用户加入助手范围后默认 ask；服务器声明只读不能自动提高权限。
+`allow / ask / deny` 分别表示在范围内执行、等待确认、不向模型开放且拒绝调用。新助手写入内置工具默认策略；shell 默认 ask，环境就绪且模型支持工具时自动注入，显式 deny 仍阻止开放。其他未列出的工具均为 deny。第三方工具被用户加入助手范围后默认 ask；服务器声明只读不能自动提高权限。
 
 应用工具统一使用 `app_operations`：`list_apps`、`open_app`、`inspect_ui`、`click_node`、`scroll`、`input_text`、`capture_screen`、`perform_gestures`。不能以单工具配置绕过该组。
 
@@ -91,7 +91,7 @@
 
 ## 6. 页面组织
 
-现有聊天、助手、服务商、任务恢复、工具记录与执行权限页面延续 DESIGN。“设置 → 扩展”已接入 MCP 服务和 Skills；“环境与工作区”已独立接入设置；插件入口随对应实现加入，不堆入现有无障碍权限页。页面内容见扩展设计，布局、返回与草稿规则统一遵循 DESIGN。
+现有聊天、助手、服务商、任务恢复、工具记录与执行权限页面延续 DESIGN。“设置 → 扩展”已接入 MCP 服务和 Skills；“环境设置”独立管理 Ubuntu，工作区文件从所属会话进入，不在设置中列出；插件入口随对应实现加入，不堆入现有无障碍权限页。页面内容见扩展设计，布局、返回与草稿规则统一遵循 DESIGN。
 
 ## 7. 数据与质量边界
 
@@ -171,16 +171,16 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 ### 4.1 文件
 
-文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径基于会话产物目录，`/workspace/...` 映射当前运行选定的工作区，附件可用 `attachment:<ID>` 或唯一文件名读取；导入原件只读。目录列表返回可直接使用的路径，支持子目录与分页，检查路径和符号链接目标不越界。
+文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径基于会话产物目录，`/workspace/...` 映射当前会话独占的工作区，附件可用 `attachment:<ID>` 或唯一文件名读取；导入原件只读。目录列表返回可直接使用的路径，支持子目录与分页，检查路径和符号链接目标不越界。
 
 - `read_file(path, offset?, limit?)`：UTF-8 文本或文档已抽取文本，行号从 1 开始；按流读取，最多 2000 行或 16 KiB 完整行，返回明确续读位置。超长单行、越过结尾、非文本均返回具体错误，不让 AI 重复请求同一无效页。
 - `write_file(path, content, directory?)`：内容原样写入，创建或完整覆盖，自动创建父目录；允许空文件、空白内容、隐藏文件和无扩展名文件。字节上限按 UTF-8 计；本地产物/工作区为 2 MiB，SAF 为 128 KiB。
 - `edit_file(path, edits)`：每项包含 `oldText` 与 `newText`，匹配同一份原文件的唯一且互不重叠区域，全部验证后再写入；新文本可为空。保留 BOM 和统一的 CRLF 换行，未匹配、歧义、重叠或读取后文件变化均不写入。
-- `list_files(path?, offset?, limit?)`：默认列出会话产物根目录、附件和已选择工作区入口；条目偏移从 0 开始，返回 `nextOffset` 后续读目录。
+- `list_files(path?, offset?, limit?)`：默认列出会话产物根目录、附件和本会话工作区入口；条目偏移从 0 开始，返回 `nextOffset` 后续读目录。
 
 SAF 的 `path` 使用用户授予范围内的 URI；创建外部文件时 `directory` 指定授权目录、`path` 指定相对路径。新建使用无默认扩展名的 MIME，检查提供器返回的真实名称后才写内容；提供器擅自改名时返回实际 URI 和错误，不自动再次新建。完整覆盖与本地写入一致，由工具策略控制确认；外部精确编辑内部校验读取时的哈希，无需模型提供 `overwrite` 或 `expectedSha256`。普通绝对路径不代表授权。
 
-私有产物按会话归属，同一路径覆盖时更新同一附件的元数据。工作区文件留在工作区，可经现有 shell 的 `output` 产物收集流程返回会话。输入、副本和输出分开，预览失败不把已完成的外部写入改为未执行。文件工具的续读提示保留到后续模型请求，不再被通用 8 KiB 结果限制二次截掉。
+发送第一条消息时创建会话及独立工作区，空白聊天页不提前落库。工作区及其副本来源随会话删除，附件与产物一并清理；复制会话复制独立工作区文件，环境不复制。文件清理失败保留记录供重试，活动任务必须先结束。私有产物按会话归属，同一路径覆盖时更新同一附件的元数据。工作区文件留在工作区，可经现有 shell 的 `output` 产物收集流程返回会话。输入、副本和输出分开，预览失败不把已完成的外部写入改为未执行。文件工具的续读提示保留到后续模型请求，不再被通用 8 KiB 结果限制二次截掉。
 
 自动化入口：[文本与路径边界](../test/features/tools/file_tools_test.dart)、[AI 调用/落库链路](../test/features/tools/file_tools_flow_test.dart)、[SAF 适配](../test/features/execution/platform_tools_test.dart)、[原生创建契约](../android/app/src/test/kotlin/app/xiangyue/phase/files/ExactDocumentCreationTest.kt)。本次未装机；真实 Android 文档提供器行为仍需真机验收。
 

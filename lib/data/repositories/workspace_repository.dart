@@ -3,11 +3,15 @@ import 'dart:io';
 
 import 'package:drift/drift.dart';
 import 'package:path/path.dart' as p;
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../core/error/failure.dart';
 import '../../core/utils/id.dart';
+import '../../features/workspace/process_driver.dart';
 import '../datasources/local/app_database.dart';
 import '../models/workspace.dart';
+
+part 'workspace_repository.g.dart';
 
 class WorkspaceLease {
   WorkspaceLease(this.snapshot, this._release);
@@ -79,22 +83,34 @@ class WorkspaceRepository {
     }
   }
 
-  Workspace _workspace(WorkspaceRow row) => Workspace(
+  Workspace _workspace(WorkspaceRow row, {String? name}) => Workspace(
     id: row.id,
-    name: row.name,
+    name: name ?? row.name,
     rootPath: p.join(root.path, 'workspaces', row.id),
     createdAt: row.createdAt,
     deleting: row.deleting,
   );
+  JoinedSelectStatement<HasResultSet, dynamic> _ownedWorkspaces() =>
+      db.select(db.workspaces).join([
+        innerJoin(
+          db.conversations,
+          db.conversations.workspaceId.equalsExp(db.workspaces.id),
+        ),
+      ])..orderBy([OrderingTerm.desc(db.conversations.updatedAt)]);
+
+  Workspace _ownedWorkspace(TypedResult row) => _workspace(
+    row.readTable(db.workspaces),
+    name: row.readTable(db.conversations).title,
+  );
+
   Future<List<Workspace>> list() => _records(
-    () async => (await db.select(db.workspaces).get()).map(_workspace).toList(),
+    () async => (await _ownedWorkspaces().get()).map(_ownedWorkspace).toList(),
   );
   Stream<List<Workspace>> watch() async* {
     try {
-      yield* db
-          .select(db.workspaces)
-          .watch()
-          .map((rows) => rows.map(_workspace).toList());
+      yield* _ownedWorkspaces().watch().map(
+        (rows) => rows.map(_ownedWorkspace).toList(),
+      );
     } catch (error) {
       throw StorageFailure('读取工作区失败', cause: error);
     }
@@ -106,13 +122,13 @@ class WorkspaceRepository {
     )..where((t) => t.id.equals(id))).getSingleOrNull();
     return row == null ? null : _workspace(row);
   });
-  Future<Workspace> create(String name) async {
+  Future<Workspace> create(String name, {String? id}) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty || trimmed.length > 100) {
       throw const OperationFailure('工作区名称需为 1–100 个字符');
     }
-    final id = generateId();
-    final directory = Directory(p.join(root.path, 'workspaces', id));
+    final workspaceId = id ?? generateId();
+    final directory = Directory(p.join(root.path, 'workspaces', workspaceId));
     try {
       await directory.create(recursive: true);
     } on FileSystemException {
@@ -125,7 +141,7 @@ class WorkspaceRepository {
             .into(db.workspaces)
             .insert(
               WorkspacesCompanion.insert(
-                id: id,
+                id: workspaceId,
                 name: trimmed,
                 environmentId: environmentId,
                 createdAt: now,
@@ -133,7 +149,7 @@ class WorkspaceRepository {
             ),
       );
       return Workspace(
-        id: id,
+        id: workspaceId,
         name: trimmed,
         rootPath: directory.path,
         createdAt: now,
@@ -144,36 +160,75 @@ class WorkspaceRepository {
     }
   }
 
-  Future<void> bind(String conversationId, String? workspaceId) => _records(
-    () => db.transaction(() async {
-      if (workspaceId != null) {
-        final workspace = await get(workspaceId);
-        if (workspace == null || workspace.deleting) {
-          throw const OperationFailure('工作区已删除');
+  /// 复制会话文件，副本目录与来源记录均独立；不复制共享 Ubuntu 环境。
+  Future<void> copyFiles(String sourceId, Workspace target) async {
+    if (!_leases.add(sourceId)) {
+      throw const OperationFailure('工作区正在使用，请先结束任务再复制会话');
+    }
+    try {
+      final source = await get(sourceId);
+      if (source == null || source.deleting) {
+        throw const OperationFailure('原会话工作区不可用，无法复制');
+      }
+      final directory = Directory(source.rootPath);
+      if (await directory.exists()) {
+        await for (final entry in directory.list(
+          recursive: true,
+          followLinks: false,
+        )) {
+          final destination = p.join(
+            target.rootPath,
+            p.relative(entry.path, from: source.rootPath),
+          );
+          if (entry is Directory) {
+            await Directory(destination).create(recursive: true);
+          } else if (entry is File) {
+            await File(destination).parent.create(recursive: true);
+            await entry.copy(destination);
+          } else if (entry is Link) {
+            final link = await entry.target();
+            final resolved = p.normalize(p.join(p.dirname(entry.path), link));
+            if (!p.isWithin(source.rootPath, resolved) &&
+                resolved != source.rootPath) {
+              throw const OperationFailure('工作区包含指向外部的链接，无法安全复制');
+            }
+            final mapped = p.join(
+              target.rootPath,
+              p.relative(resolved, from: source.rootPath),
+            );
+            await Link(destination)
+                .create(p.relative(mapped, from: p.dirname(destination)));
+          }
         }
       }
-      final changed =
-          await (db.update(db.conversations)
-                ..where((t) => t.id.equals(conversationId)))
-              .write(ConversationsCompanion(workspaceId: Value(workspaceId)));
-      if (changed == 0) throw const OperationFailure('会话已不存在');
-    }),
-  );
-  Future<List<String>> conversationsUsing(String id) => _records(
-    () async =>
-        (await (db.select(
-              db.conversations,
-            )..where((t) => t.workspaceId.equals(id))).get())
-            .map((c) => c.title)
-            .toList(),
-  );
+      final copies = await _records(
+        () => (db.select(
+          db.workspaceCopies,
+        )..where((t) => t.workspaceId.equals(sourceId))).get(),
+      );
+      for (final copy in copies) {
+        await recordCopy(
+          target.id,
+          copy.relativePath,
+          jsonDecode(copy.sourceJson) as Map<String, dynamic>,
+        );
+      }
+    } on FileSystemException {
+      throw const OperationFailure('会话工作区文件复制失败，请检查可用空间');
+    } finally {
+      _leases.remove(sourceId);
+    }
+  }
 
   /// 删除先撤销新使用，再处理文件。失败保留 deleting 行供显式重试。
-  Future<void> delete(String id) async {
+  Future<void> delete(String id, {Future<void> Function()? deleteOwner}) async {
     if (!_leases.add(id)) throw const OperationFailure('工作区正在使用，请先停止所属任务');
     try {
       final workspace = await get(id);
-      if (workspace == null) return;
+      if (workspace == null) {
+        await deleteOwner?.call();
+        return;
+      }
       await _records(
         () => (db.update(db.workspaces)..where((t) => t.id.equals(id))).write(
           const WorkspacesCompanion(deleting: Value(true)),
@@ -183,10 +238,13 @@ class WorkspaceRepository {
         final directory = Directory(workspace.rootPath);
         if (await directory.exists()) await directory.delete(recursive: true);
       } on FileSystemException {
-        throw const OperationFailure('工作区文件删除失败，可重试删除；历史消息仍保留');
+        throw const OperationFailure('会话工作区文件清理失败，请重试删除会话');
       }
       await _records(
-        () => (db.delete(db.workspaces)..where((t) => t.id.equals(id))).go(),
+        () => db.transaction(() async {
+          await deleteOwner?.call();
+          await (db.delete(db.workspaces)..where((t) => t.id.equals(id))).go();
+        }),
       );
     } finally {
       _leases.remove(id);
@@ -203,23 +261,28 @@ class WorkspaceRepository {
     _mutatingEnvironment = false;
   }
 
-  Future<WorkspaceLease?> acquire(
+  Future<WorkspaceLease> acquire(
     String id, {
     WorkspaceSnapshot? expected,
   }) async {
-    if (_mutatingEnvironment) return null;
     if (!_leases.add(id)) throw const OperationFailure('此工作区正在使用');
     var retained = false;
     try {
       final workspace = await get(id);
       final env = await environment();
-      if (workspace == null || workspace.deleting || !env.ready) return null;
+      if (workspace == null || workspace.deleting) {
+        throw const OperationFailure('会话工作区不可用，请完成会话删除后重新开始');
+      }
       final snapshot = WorkspaceSnapshot(
         id: id,
         name: workspace.name,
         rootPath: workspace.rootPath,
-        environmentRoot: env.rootPath!,
-        environmentRevision: env.revision!,
+        environmentRoot: !_mutatingEnvironment && env.ready
+            ? env.rootPath
+            : null,
+        environmentRevision: !_mutatingEnvironment && env.ready
+            ? env.revision
+            : null,
       );
       if (expected != null &&
           jsonEncode(expected.toJson()) != jsonEncode(snapshot.toJson())) {
@@ -278,4 +341,13 @@ class WorkspaceRepository {
       throw const OperationFailure('中断安装的临时文件清理失败，请重试');
     }
   }
+}
+
+@Riverpod(keepAlive: true)
+Future<WorkspaceRepository> workspaceRepository(Ref ref) async {
+  final db = await ref.watch(appDatabaseProvider.future);
+  final info = await ref.watch(processDriverProvider).info();
+  final repository = WorkspaceRepository(db, Directory(info.rootDirectory));
+  await repository.recoverInstallation();
+  return repository;
 }

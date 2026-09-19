@@ -140,7 +140,7 @@ final class WorkspaceEntriesProvider
   }
 }
 
-String _$workspaceEntriesHash() => r'588e6d49060147373348fa2a3053a42494c88b86';
+String _$workspaceEntriesHash() => r'ad2a1f1ab9917794123d4478c77bd12fbabbf6bd';
 
 final class WorkspaceEntriesFamily extends $Family
     with
@@ -196,7 +196,7 @@ final class WorkspaceActionsProvider
   }
 }
 
-String _$workspaceActionsHash() => r'efc6f6571c1f52251bd5c8ab2b9b5b8d35e85b0a';
+String _$workspaceActionsHash() => r'a8cfb67b9d2ea61c6c83f0eb68c07979969d63f3';
 
 abstract class _$WorkspaceActions extends $Notifier<AsyncValue<void>> {
   AsyncValue<void> build();

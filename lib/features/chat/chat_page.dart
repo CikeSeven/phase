@@ -61,6 +61,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final conversationId = ref.watch(
       activeConversationProvider.select((active) => active.conversationId),
     );
+    final workspaceId = conversationId == null
+        ? null
+        : ref
+              .watch(conversationThreadProvider(conversationId))
+              .value
+              ?.conversation
+              .workspaceId;
     final selection = ref.watch(modelSelectionProvider);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -212,13 +219,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ],
             ),
             actions: [
-              if (conversationId != null)
+              if (workspaceId != null)
                 IconButton(
                   tooltip: '会话工作区',
                   icon: const Icon(Symbols.folder_open),
-                  onPressed: () => context.push(
-                    '/settings/workspaces?conversation=$conversationId',
-                  ),
+                  onPressed: () =>
+                      context.push('/settings/workspaces/$workspaceId'),
                 ),
               IconButton(
                 tooltip: '新会话',

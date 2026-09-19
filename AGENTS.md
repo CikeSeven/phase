@@ -96,6 +96,7 @@ adb -s "$DEVICE" shell am start -W -n app.xiangyue.phase/.MainActivity
 
 - 保留 Dart `AgentLoop` 为统一循环；MCP、Skills、命令与插件工具复用 `ToolRegistry` / `ToolExecutor`、运行快照、确认、取消和结果记录。原生或 Node 进程不另建 Agent 循环与会话事实库。
 - 动态工具按稳定来源 ID 和定义修订注册；未加入助手范围的工具默认 deny，用户启用的第三方工具默认 ask。服务器说明、Skill 指导和插件清单不授予权限；运行中收紧权限立即生效，新增许可不扩大旧快照。
+- 发送第一条消息时创建会话专属工作区；空白聊天页不落库、不显示文件入口。不提供手动新建、选择或共享工作区；复制会话复制独立文件，删除会话清理工作区、附件、产物与来源记录，失败保留可重试状态。环境就绪且模型支持工具时自动注入 shell，默认 ask，尊重显式 deny。
 - 本地命令按需使用 Ubuntu PRoot 工作区，MCP stdio 使用独立 stdin/stdout/stderr 管道，PTY 只用于交互终端。进程按运行/调用归属，取消和超时回收受管理子进程与 FD，重启不重放命令。Termux/Shizuku 是显式选择的独立通道。
 - PRoot 执行文件通过 ABI 对应的 JNI 库目录交付，验证当前 targetSdk，不降低 SDK 绕过运行问题。PRoot 与同 UID 插件进程不是强隔离沙箱，不宣称工作区路径检查可以限制任意脚本访问。
 - MCP 凭据、敏感头和环境机密按用途与 ID 存入 `SecureKeyStorage`，业务模型只保存引用；不传给模型、诊断或备份。插件不得直接读取通用密钥存储。

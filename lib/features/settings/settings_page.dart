@@ -52,7 +52,7 @@ class SettingsPage extends ConsumerWidget {
           SettingsEntry(
             icon: Symbols.folder_open,
             tone: AppTone.teal,
-            title: '环境与工作区',
+            title: '环境设置',
             onTap: () => context.push('/settings/workspaces'),
           ),
           const SizedBox(height: AppSpacing.s),

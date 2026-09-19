@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:dio/dio.dart';
 import 'package:drift/drift.dart' show OrderingTerm;
 import 'package:flutter/material.dart';
@@ -135,6 +136,9 @@ void main() {
             sharedPreferencesProvider.overrideWith((ref) => preferences),
             appDatabaseProvider.overrideWith((ref) => db),
             secureKeyStorageProvider.overrideWith((ref) => keys),
+            workspaceRepositoryProvider.overrideWith(
+              (ref) => WorkspaceRepository(db, tempDir),
+            ),
             attachmentStorageProvider.overrideWith(
               (ref) => AttachmentStorage(
                 Directory(p.join(tempDir.path, 'attachments')),

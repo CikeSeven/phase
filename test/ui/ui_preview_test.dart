@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -85,7 +86,10 @@ void main() {
       );
       final keys = _PreviewKeyStorage();
       final profiles = ProviderProfileRepository(db, keys);
-      final conversations = ConversationRepository(db);
+      final conversations = ConversationRepository(
+        db,
+        workspaces: WorkspaceRepository(db, tempDir),
+      );
       late String gatewayId;
       await tester.runAsync(() async {
         final gateway = await profiles.createProfile(
@@ -197,6 +201,9 @@ void main() {
           sharedPreferencesProvider.overrideWith((ref) => preferences),
           appDatabaseProvider.overrideWith((ref) => db),
           secureKeyStorageProvider.overrideWith((ref) => keys),
+          workspaceRepositoryProvider.overrideWith(
+            (ref) => WorkspaceRepository(db, tempDir),
+          ),
           attachmentStorageProvider.overrideWith(
             (ref) => AttachmentStorage(
               Directory(p.join(tempDir.path, 'attachments')),

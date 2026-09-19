@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/data/models/agent_run.dart';
@@ -56,8 +57,10 @@ void main() {
 
   test('持久化运行也保留旧版本，重建仓储不会丢失引用', () async {
     final first = await fixture.install();
-    final conversation = await ConversationRepository(fixture.database)
-        .createConversation(title: '版本固定');
+    final conversation = await ConversationRepository(
+      fixture.database,
+      workspaces: WorkspaceRepository(fixture.database, fixture.directory),
+    ).createConversation(title: '版本固定');
     final runs = AgentRunRepository(fixture.database);
     await runs.create(
       AgentRun(

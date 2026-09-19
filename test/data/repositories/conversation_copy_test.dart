@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/core/error/failure.dart';
@@ -26,7 +27,11 @@ void main() {
     storage = AttachmentStorage(
       Directory(p.join(directory.path, 'attachments')),
     );
-    repository = ConversationRepository(db, attachments: storage);
+    repository = ConversationRepository(
+      db,
+      workspaces: WorkspaceRepository(db, directory),
+      attachments: storage,
+    );
   });
 
   tearDown(() async {

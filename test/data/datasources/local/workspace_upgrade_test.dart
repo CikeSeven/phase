@@ -105,7 +105,10 @@ void main() {
       ),
     );
     await assistants.save(assistant);
-    final conversations = ConversationRepository(db);
+    final conversations = ConversationRepository(
+      db,
+      workspaces: WorkspaceRepository(db, directory),
+    );
     final conversation = await conversations.createConversation(
       title: '升级前样本',
       assistantId: assistant.id,
@@ -272,9 +275,10 @@ void main() {
         skill.toJson(),
       );
       expect(
-        (await ConversationRepository(db).getThread(conversation.id))!
-            .conversation
-            .workspaceId,
+        (await ConversationRepository(
+          db,
+          workspaces: WorkspaceRepository(db, directory),
+        ).getThread(conversation.id))!.conversation.workspaceId,
         isNull,
       );
       expect(
@@ -309,11 +313,15 @@ void main() {
           Directory('${directory.path}/linux'),
         );
         final workspace = await workspaces.create('升级后工作区');
-        await workspaces.bind(conversation.id, workspace.id);
+        await db.customStatement(
+          'UPDATE conversations SET workspace_id = ? WHERE id = ?',
+          [workspace.id, conversation.id],
+        );
         expect(
-          (await ConversationRepository(db).getThread(conversation.id))!
-              .conversation
-              .workspaceId,
+          (await ConversationRepository(
+            db,
+            workspaces: WorkspaceRepository(db, directory),
+          ).getThread(conversation.id))!.conversation.workspaceId,
           workspace.id,
         );
         await workspaces.saveEnvironment(
@@ -329,9 +337,10 @@ void main() {
         expect(await db.select(db.workspaceCopies).get(), hasLength(1));
         await workspaces.delete(workspace.id);
         expect(
-          (await ConversationRepository(db).getThread(conversation.id))!
-              .conversation
-              .workspaceId,
+          (await ConversationRepository(
+            db,
+            workspaces: WorkspaceRepository(db, directory),
+          ).getThread(conversation.id))!.conversation.workspaceId,
           isNull,
         );
         expect(await db.select(db.workspaceCopies).get(), isEmpty);

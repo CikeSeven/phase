@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/core/error/failure.dart';
@@ -45,7 +46,10 @@ void main() {
       path: p.join(tempDir.path, 'phase.sqlite'),
       hexKey: hexKey,
     );
-    conversations = ConversationRepository(db);
+    conversations = ConversationRepository(
+      db,
+      workspaces: WorkspaceRepository(db, tempDir),
+    );
     runs = AgentRunRepository(db);
     toolCalls = ToolCallRepository(db);
     assistants = AssistantRepository(db);

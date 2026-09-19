@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/core/error/failure.dart';
@@ -32,7 +33,10 @@ void main() {
     final created = createTestDatabase(name: 'export');
     database = created.database;
     directory = created.directory;
-    conversations = ConversationRepository(database);
+    conversations = ConversationRepository(
+      database,
+      workspaces: WorkspaceRepository(database, directory),
+    );
     toolCalls = ToolCallRepository(database);
     runs = AgentRunRepository(database);
     exporter = ConversationExporter(

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -143,6 +144,9 @@ void main() {
         appDatabaseProvider.overrideWith((ref) => db),
         secureKeyStorageProvider.overrideWith(
           (ref) => SecureKeyStorage(FakeSecureStorage()),
+        ),
+        workspaceRepositoryProvider.overrideWith(
+          (ref) => WorkspaceRepository(db, storage.root),
         ),
         attachmentStorageProvider.overrideWith((ref) => storage),
         providerProfilesProvider.overrideWith(

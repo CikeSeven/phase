@@ -1,5 +1,4 @@
 import 'package:phase/features/workspace/process_driver.dart';
-import 'package:phase/features/workspace/workspace_controller.dart';
 import 'package:phase/data/repositories/workspace_repository.dart';
 
 import 'dart:async';

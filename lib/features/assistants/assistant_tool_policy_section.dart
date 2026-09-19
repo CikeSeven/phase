@@ -42,7 +42,7 @@ class AssistantToolPolicySection extends StatelessWidget {
             const SizedBox(height: AppSpacing.m),
             AppDropdown<ToolPolicy>(
               key: ValueKey('tool-policy-${tool.policyKey}'),
-              value: policy.policies[tool.policyKey] ?? ToolPolicy.deny,
+              value: policy.overrides[tool.policyKey] ?? ToolPolicy.deny,
               label: tool.policyKey == applicationOperationsPolicyKey
                   ? '应用操作'
                   : ToolPresentation.toolLabel(tool.name),

@@ -563,7 +563,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
         final colors = Theme.of(context).colorScheme;
         return AppDialog(
           title: '删除会话',
-          description: '该会话的所有消息将一并删除，此操作无法撤销。',
+          description: '该会话的所有消息、附件、工作区文件与产物将一并删除，此操作无法撤销。',
           icon: Symbols.delete,
           tone: AppTone.error,
           content: Text('确定删除「${conversation.title}」吗？'),

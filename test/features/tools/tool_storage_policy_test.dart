@@ -39,6 +39,13 @@ void main() {
       final copied = (await repository.toolCallsByIds([copiedId]))[copiedId]!;
       expect(copied.id, isNot(original.id));
       expect(copied.runId, isNot(original.runId));
+      final copiedRun = (await (await h.runs()).getById(copied.runId))!;
+      final originalRun = (await (await h.runs()).getById(original.runId))!;
+      expect(copiedRun.configuration.workspace!.id, copy.workspaceId);
+      expect(
+        copiedRun.configuration.workspace!.rootPath,
+        isNot(originalRun.configuration.workspace!.rootPath),
+      );
       expect(copied.assistantMessageId, isNot(original.assistantMessageId));
       expect(copied.resultMessageId, isNot(original.resultMessageId));
       expect(copied.artifacts.single, isNot(original.artifacts.single));

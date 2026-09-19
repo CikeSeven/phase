@@ -328,7 +328,7 @@ Future<String> _location(
 }) async {
   final workspace = path == '/workspace' || path.startsWith('/workspace/');
   if (workspace && context.workspaceDirectory.isEmpty) {
-    throw const FileToolException('workspaceUnavailable', '本次会话未选择工作区');
+    throw const FileToolException('workspaceUnavailable', '本次运行的会话工作区不可用');
   }
   final root = workspace
       ? context.workspaceDirectory

@@ -83,8 +83,10 @@ class WorkspaceSnapshot {
   final String id;
   final String name;
   final String rootPath;
-  final String environmentRoot;
-  final String environmentRevision;
+  final String? environmentRoot;
+  final String? environmentRevision;
+  bool get linuxAvailable =>
+      environmentRoot != null && environmentRevision != null;
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
@@ -97,7 +99,7 @@ class WorkspaceSnapshot {
         id: json['id'] as String,
         name: json['name'] as String,
         rootPath: json['rootPath'] as String,
-        environmentRoot: json['environmentRoot'] as String,
-        environmentRevision: json['environmentRevision'] as String,
+        environmentRoot: json['environmentRoot'] as String?,
+        environmentRevision: json['environmentRevision'] as String?,
       );
 }

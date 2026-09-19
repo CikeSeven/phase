@@ -1,3 +1,4 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../data/datasources/local/settings_storage.dart';
@@ -73,22 +74,37 @@ class ModelSelection extends _$ModelSelection {
     final conversationId = active.conversationId;
     // 只订阅用到的两个字段：线程流在生成期间每落一次库就更新一次，
     // 整条订阅会把模型选择反复重建（标题栏在模型名与加载态之间跳）。
-    final bound = conversationId == null
+    final boundState = conversationId == null
         ? null
-        : await ref.watch(
-            conversationThreadProvider(conversationId).selectAsync(
-              (thread) => (
-                thread?.conversation.assistantId,
-                thread?.conversation.modelSelectionOverride,
+        : ref.watch(
+            conversationThreadProvider(conversationId).select(
+              (value) => value.whenData(
+                (thread) => (
+                  thread?.conversation.assistantId,
+                  thread?.conversation.modelSelectionOverride,
+                ),
               ),
             ),
           );
+    // 删除会话可在首次线程读取完成前取消订阅；只在加载时等待原始 Future。
+    final loadingThread =
+        boundState != null && (boundState.isLoading || !boundState.hasValue);
+    final initialThread = loadingThread
+        ? await ref.watch(conversationThreadProvider(conversationId!).future)
+        : null;
+    if (!ref.mounted) return null;
+    final bound = loadingThread
+        ? (
+            initialThread?.conversation.assistantId,
+            initialThread?.conversation.modelSelectionOverride,
+          )
+        : boundState?.value ?? (null, null);
     final assistant = resolveAssistant(
       assistants,
       draftAssistantId: active.draftAssistantId,
-      boundAssistantId: bound?.$1,
+      boundAssistantId: bound.$1,
     );
-    final override = active.draftModelSelection ?? bound?.$2;
+    final override = active.draftModelSelection ?? bound.$2;
     var profile = profiles.first;
     for (final selection in [override, assistant?.defaultModelSelection]) {
       if (selection == null) continue;

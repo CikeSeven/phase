@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/data/datasources/local/app_database.dart';
@@ -21,7 +22,11 @@ void main() {
       hexKey: '0123456789abcdef' * 4,
     );
     storage = AttachmentStorage(Directory(p.join(tempDir.path, 'attachments')));
-    repository = ConversationRepository(db, attachments: storage);
+    repository = ConversationRepository(
+      db,
+      workspaces: WorkspaceRepository(db, tempDir),
+      attachments: storage,
+    );
   });
 
   tearDown(() async {

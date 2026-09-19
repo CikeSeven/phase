@@ -17,6 +17,7 @@ import '../models/model_selection.dart';
 import '../models/tool_call_record.dart';
 import '../models/agent_run.dart';
 import 'row_mappers.dart';
+import 'workspace_repository.dart';
 
 part 'conversation_repository.g.dart';
 
@@ -45,7 +46,13 @@ class ConversationThread {
 
 /// 会话、消息与附件的读写；事务边界按 design 第五部分 §3.3。
 class ConversationRepository {
-  ConversationRepository(this._db, {this.attachments});
+  ConversationRepository(
+    this._db, {
+    required this.workspaces,
+    this.attachments,
+  });
+
+  final WorkspaceRepository workspaces;
 
   final AppDatabase _db;
 
@@ -82,17 +89,24 @@ class ConversationRepository {
   }) async {
     return _guard('创建会话失败', () async {
       final now = DateTime.now();
+      final workspace = await workspaces.create('会话工作区');
       final conversation = Conversation(
         id: generateId(),
         title: title,
+        workspaceId: workspace.id,
         assistantId: assistantId,
         modelSelectionOverride: modelSelectionOverride,
         createdAt: now,
         updatedAt: now,
       );
-      await _db
-          .into(_db.conversations)
-          .insert(conversationCompanion(conversation));
+      try {
+        await _db
+            .into(_db.conversations)
+            .insert(conversationCompanion(conversation));
+      } catch (_) {
+        await workspaces.delete(workspace.id);
+        rethrow;
+      }
       return conversation;
     });
   }
@@ -141,20 +155,39 @@ class ConversationRepository {
     });
   }
 
-  /// 删除会话：消息、附件记录、运行与工具记录由外键级联删除，
-  /// 附件文件在库删除成功后尽力清理。
+  /// 文件清理完成后删除记录；失败保留会话与工作区标记，允许重试。
   Future<void> deleteConversation(String id) {
     return _guard('删除会话失败', () async {
+      final thread = await getThread(id);
+      if (thread == null) return;
+      final runs = await (_db.select(
+        _db.agentRuns,
+      )..where((t) => t.conversationId.equals(id))).get();
+      if (runs.any(
+        (run) =>
+            run.status == RunStatus.running ||
+            run.status == RunStatus.awaitingConfirmation,
+      )) {
+        throw const OperationFailure('请先停止或处理此会话的任务，再删除会话');
+      }
       final rows = await (_db.select(
         _db.attachments,
       )..where((t) => t.conversationId.equals(id))).get();
-      await (_db.delete(_db.conversations)..where((t) => t.id.equals(id))).go();
-      await attachments?.deletePaths([
-        for (final row in rows) ...[
-          row.localPath,
-          if (row.extractedTextPath != null) row.extractedTextPath!,
-        ],
-      ]);
+      Future<void> removeOwner() async {
+        await attachments?.deleteConversationFiles(id, [
+          for (final row in rows) ...[row.localPath, ?row.extractedTextPath],
+        ]);
+        await (_db.delete(
+          _db.conversations,
+        )..where((t) => t.id.equals(id))).go();
+      }
+
+      final workspaceId = thread.conversation.workspaceId;
+      if (workspaceId == null) {
+        await removeOwner();
+      } else {
+        await workspaces.delete(workspaceId, deleteOwner: removeOwner);
+      }
     });
   }
 
@@ -188,7 +221,7 @@ class ConversationRepository {
         id: generateId(),
         title: '${source.conversation.title}（副本）',
         assistantId: source.conversation.assistantId,
-        workspaceId: source.conversation.workspaceId,
+        workspaceId: generateId(),
         modelSelectionOverride: source.conversation.modelSelectionOverride,
         createdAt: now,
         updatedAt: now,
@@ -201,7 +234,11 @@ class ConversationRepository {
       }
       final attachmentIds = <String, String>{};
       final copiedAttachments = <Attachment>[];
+      final workspace = await workspaces.create('会话工作区', id: copy.workspaceId!);
       try {
+        if (source.conversation.workspaceId case final sourceWorkspace?) {
+          await workspaces.copyFiles(sourceWorkspace, workspace);
+        }
         for (final row in attachmentRows) {
           final newId = generateId();
           final copied = await attachments!.copy(
@@ -247,6 +284,16 @@ class ConversationRepository {
           String mappedMessage(String old) =>
               idMap[old] ?? (throw const OperationFailure('会话的运行消息引用不完整，无法复制'));
           for (final row in runRows) {
+            final configuration = agentRunFromRow(row).configuration;
+            final copiedConfiguration = configuration.toJson();
+            if (configuration.workspace case final originalWorkspace?) {
+              copiedConfiguration['workspace'] = {
+                ...originalWorkspace.toJson(),
+                'id': workspace.id,
+                'name': workspace.name,
+                'rootPath': workspace.rootPath,
+              };
+            }
             await _db
                 .into(_db.agentRuns)
                 .insert(
@@ -255,6 +302,9 @@ class ConversationRepository {
                       .copyWith(
                         id: Value(runIds[row.id]!),
                         conversationId: Value(copy.id),
+                        configurationJson: Value(
+                          jsonEncode(copiedConfiguration),
+                        ),
                         inputMessageId: Value(
                           mappedMessage(row.inputMessageId),
                         ),
@@ -320,6 +370,7 @@ class ConversationRepository {
           }
         });
       } catch (_) {
+        await workspaces.delete(workspace.id);
         await attachments?.deletePaths([
           for (final attachment in copiedAttachments) ...[
             attachment.localPath,
@@ -636,5 +687,9 @@ class ConversationRepository {
 Future<ConversationRepository> conversationRepository(Ref ref) async {
   final database = await ref.watch(appDatabaseProvider.future);
   final storage = await ref.watch(attachmentStorageProvider.future);
-  return ConversationRepository(database, attachments: storage);
+  return ConversationRepository(
+    database,
+    attachments: storage,
+    workspaces: await ref.watch(workspaceRepositoryProvider.future),
+  );
 }

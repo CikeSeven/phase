@@ -128,12 +128,8 @@ GoRouter appRouter(Ref ref) {
           ),
           GoRoute(
             path: 'workspaces',
-            pageBuilder: (context, state) => materialPage(
-              state,
-              WorkspacesPage(
-                conversationId: state.uri.queryParameters['conversation'],
-              ),
-            ),
+            pageBuilder: (context, state) =>
+                materialPage(state, const WorkspacesPage()),
             routes: [
               GoRoute(
                 path: ':id',

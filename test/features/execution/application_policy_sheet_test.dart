@@ -388,6 +388,7 @@ void main() {
     await tester.tap(find.text('直接执行').last);
     await tester.pumpAndSettle();
     expect(policy.overrides, {
+      'shell': ToolPolicy.ask,
       applicationOperationsPolicyKey: ToolPolicy.allow,
     });
     expect(
@@ -395,7 +396,7 @@ void main() {
           .definitionsFor(policy.enabledTools, policy.overrides)
           .map((tool) => tool.name)
           .toSet(),
-      applicationOperationTools,
+      {'shell', ...applicationOperationTools},
     );
   });
 

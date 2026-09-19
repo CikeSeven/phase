@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -89,6 +90,9 @@ void main() {
         sharedPreferencesProvider.overrideWith((ref) => preferences),
         appDatabaseProvider.overrideWith((ref) => db),
         secureKeyStorageProvider.overrideWith((ref) => keys),
+        workspaceRepositoryProvider.overrideWith(
+          (ref) => WorkspaceRepository(db, tempDir),
+        ),
         attachmentStorageProvider.overrideWith(
           (ref) =>
               AttachmentStorage(Directory(p.join(tempDir.path, 'attachments'))),
@@ -108,6 +112,14 @@ void main() {
     );
     await _settleUi(tester);
 
+    expect(container.read(activeConversationProvider).conversationId, isNull);
+    expect(find.byTooltip('会话工作区'), findsNothing);
+    await tester.runAsync(() async {
+      expect(
+        await (await container.read(workspaceRepositoryProvider.future)).list(),
+        isEmpty,
+      );
+    });
     await tester.enterText(find.byType(TextField).first, '帮我安排今天的任务');
     await tester.pump();
     final sendRect = tester.getRect(find.byType(ChatSendButton));
@@ -115,6 +127,7 @@ void main() {
     await tester.tap(find.byTooltip('发送'));
     await _until(tester, () => provider.requests.length == 1);
     expect(provider.requests.single.modelId, 'reasoning-test');
+    expect(find.byTooltip('会话工作区'), findsOneWidget);
     expect(
       provider.requests.single.messages.last.parts
           .whereType<ResolvedText>()

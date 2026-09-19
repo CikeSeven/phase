@@ -5,6 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/utils/id.dart';
+import '../../../core/error/failure.dart';
 import '../../models/attachment.dart';
 
 part 'attachment_storage.g.dart';
@@ -87,6 +88,25 @@ class AttachmentStorage {
     } catch (_) {
       await deletePaths([copiedPath, ?copiedTextPath]);
       rethrow;
+    }
+  }
+
+  /// 会话删除包含未登记的中间产物；清理失败交给用户重试，不能伪装成功。
+  Future<void> deleteConversationFiles(
+    String conversationId,
+    Iterable<String> paths,
+  ) async {
+    try {
+      for (final path in paths.toSet()) {
+        final file = File(path);
+        if (await file.exists()) await file.delete();
+      }
+      final artifacts = Directory(
+        p.join(root.path, 'artifacts', conversationId),
+      );
+      if (await artifacts.exists()) await artifacts.delete(recursive: true);
+    } on FileSystemException {
+      throw const OperationFailure('会话附件或产物清理失败，请重试删除会话');
     }
   }
 

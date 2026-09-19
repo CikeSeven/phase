@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../data/datasources/local/app_database.dart';
 import '../../../data/models/workspace.dart';
 import '../../../data/repositories/workspace_repository.dart';
 import '../tools/tool.dart';
@@ -18,20 +16,6 @@ part 'workspace_controller.g.dart';
 @riverpod
 Future<LinuxPlatformInfo> linuxPlatformInfo(Ref ref) =>
     ref.watch(processDriverProvider).info();
-
-@Riverpod(keepAlive: true)
-Future<WorkspaceRepository> workspaceRepository(Ref ref) async {
-  final db = await ref.watch(appDatabaseProvider.future);
-  final info = await ref.watch(linuxPlatformInfoProvider.future);
-  final repository = WorkspaceRepository(db, Directory(info.rootDirectory));
-  await repository.recoverInstallation();
-  return repository;
-}
-
-@riverpod
-Stream<List<Workspace>> workspaces(Ref ref) async* {
-  yield* (await ref.watch(workspaceRepositoryProvider.future)).watch();
-}
 
 @riverpod
 Stream<RuntimeEnvironment> runtimeEnvironment(Ref ref) async* {
