@@ -116,13 +116,17 @@ void main() {
     const config = ToolPolicyConfig(
       policies: {applicationOperationsPolicyKey: ToolPolicy.allow},
     );
-    expect(config.enabledTools, {'shell', ...applicationOperationTools});
+    expect(config.enabledTools, {
+      'shell',
+      'install_packages',
+      ...applicationOperationTools,
+    });
     expect(
       registry
           .definitionsFor(config.enabledTools, config.overrides)
           .map((tool) => tool.name)
           .toSet(),
-      {'shell', ...applicationOperationTools},
+      {'shell', 'install_packages', ...applicationOperationTools},
     );
     for (final tool in appTools) {
       expect(
@@ -139,15 +143,18 @@ void main() {
         expect(tool.inputSchema['required'], contains('packageName'));
       }
     }
-    expect(const ToolPolicyConfig(policies: {}).enabledTools, {'shell'});
+    expect(const ToolPolicyConfig(policies: {}).enabledTools, {
+      'shell',
+      'install_packages',
+    });
     expect(
       const ToolPolicyConfig(policies: {'shell': ToolPolicy.deny}).enabledTools,
-      isEmpty,
+      {'install_packages'},
     );
     expect(
       const ToolPolicyConfig(policies: {'click_node': ToolPolicy.allow})
           .enabledTools,
-      {'shell'},
+      {'shell', 'install_packages'},
     );
   });
 

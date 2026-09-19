@@ -1,6 +1,7 @@
 import '../../../data/repositories/workspace_repository.dart';
 import '../workspace/workspace_files.dart';
 import '../workspace/shell_tool.dart';
+import '../workspace/install_tool.dart';
 import '../workspace/prepare_skill_tool.dart';
 import '../workspace/process_driver.dart';
 
@@ -125,6 +126,9 @@ class ChatState {
   ],
 )
 class ChatController extends _$ChatController implements AgentLoopHost {
+  /// 仅在环境就绪时注入的内置工具。
+  static const _environmentTools = {'shell', 'install_packages'};
+
   /// 流式增量写库的节流间隔：SSE chunk 远密于屏幕刷新。
   static const _flushInterval = Duration(milliseconds: 100);
 
@@ -564,7 +568,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         if (prepareSkill != null) prepareSkill.snapshot,
         for (final tool in baseRegistry.tools)
           if (enabled.contains(tool.name) &&
-              (tool.name != 'shell' || workspace?.linuxAvailable == true))
+              (!_environmentTools.contains(tool.name) ||
+                  workspace?.linuxAvailable == true))
             tool.snapshot,
         for (final entry in mcpEntries)
           if (entry.profile.enabled && !entry.profile.deleting)
@@ -617,7 +622,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                         in assistant?.toolPolicy.enabledTools ?? <String>{})
                       if ((selection.supportsImages ||
                               name != 'capture_screen') &&
-                          (name != 'shell' ||
+                          (!_environmentTools.contains(name) ||
                               workspace?.linuxAvailable == true))
                         name,
                   }
@@ -694,12 +699,18 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         : ref.read(processDriverProvider);
     final registry = ToolRegistry([
       for (final tool in base.tools)
-        if (tool.name != 'shell') tool,
+        if (!_environmentTools.contains(tool.name)) tool,
       if (binding?.linuxAvailable == true)
         ShellTool(
           workspace: binding,
           driver: processDriver,
           files: workspaceFiles,
+        ),
+      if (binding?.linuxAvailable == true)
+        InstallTool(
+          workspace: binding,
+          repository: workspaceRepository,
+          driver: processDriver,
         ),
       if (binding?.linuxAvailable == true && skillTool != null)
         PrepareSkillTool(skillTool, binding!, workspaceFiles!),

@@ -389,6 +389,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(policy.overrides, {
       'shell': ToolPolicy.ask,
+      'install_packages': ToolPolicy.ask,
       applicationOperationsPolicyKey: ToolPolicy.allow,
     });
     expect(
@@ -396,7 +397,7 @@ void main() {
           .definitionsFor(policy.enabledTools, policy.overrides)
           .map((tool) => tool.name)
           .toSet(),
-      {'shell', ...applicationOperationTools},
+      {'shell', 'install_packages', ...applicationOperationTools},
     );
   });
 

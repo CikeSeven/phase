@@ -1,3 +1,4 @@
+import '../workspace/install_tool.dart';
 import '../workspace/shell_tool.dart';
 import 'file_tools.dart';
 import 'http_tool.dart';
@@ -18,6 +19,7 @@ ToolRegistry buildBuiltInRegistry({
   return ToolRegistry([
     const SystemInfoTool(),
     const ShellTool(),
+    const InstallTool(),
     for (final tool in const [
       ReadFileTool(),
       WriteFileTool(),

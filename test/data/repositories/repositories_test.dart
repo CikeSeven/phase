@@ -527,12 +527,14 @@ void main() {
     );
     expect(assistant.toolPolicy.enabledTools, {
       'write_file',
+      'install_packages',
       ...applicationOperationTools,
     });
     expect(assistant.toolPolicy.overrides, {
       'write_file': ToolPolicy.ask,
       applicationOperationsPolicyKey: ToolPolicy.allow,
       'shell': ToolPolicy.deny,
+      'install_packages': ToolPolicy.ask,
     });
   });
 

@@ -25,6 +25,7 @@ class ToolPolicyConfig {
   /// 内置命令默认询问；显式 deny 保留，第三方工具仍须加入助手范围。
   Map<String, ToolPolicy> get overrides => {
     'shell': ToolPolicy.ask,
+    'install_packages': ToolPolicy.ask,
     for (final entry in policies.entries)
       if (!applicationOperationTools.contains(entry.key))
         entry.key: entry.value,
@@ -104,6 +105,7 @@ const defaultAssistantName = '相月';
 const defaultToolPolicyConfig = ToolPolicyConfig(
   policies: {
     'shell': ToolPolicy.ask,
+    'install_packages': ToolPolicy.ask,
     'system_info': ToolPolicy.allow,
     'read_file': ToolPolicy.allow,
     'list_files': ToolPolicy.allow,
