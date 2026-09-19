@@ -30,7 +30,11 @@ void main() {
       ..add(ArchiveFile.string('etc/os-release', 'fixture'));
     final bytes = gzip.encode(TarEncoder().encode(archive));
     server.listen((request) async {
-      request.response.add(bytes);
+      if (request.uri.path == '/trace') {
+        request.response.write('fl=fixture\nloc=CN\n');
+      } else {
+        request.response.add(bytes);
+      }
       await request.response.close();
     });
     final image = LinuxImage(
@@ -42,7 +46,13 @@ void main() {
     final repository = WorkspaceRepository(fixture.database, fixture.directory);
     final workspace = await repository.create('keep');
     await File('${workspace.rootPath}/keep.txt').writeAsString('keep');
-    final installer = LinuxInstaller(repository, driver, dio, image: image);
+    final installer = LinuxInstaller(
+      repository,
+      driver,
+      dio,
+      image: image,
+      traceUrl: 'http://127.0.0.1:${server.port}/trace',
+    );
     final phases = <EnvironmentPhase>[];
     final downloads = <(int, int?)>[];
     await installer.install(RunCancellation(), (phase, received, total) {
@@ -54,6 +64,13 @@ void main() {
     expect(downloads.first, (0, bytes.length));
     expect(downloads.last, (bytes.length, bytes.length));
     expect((await repository.environment()).ready, isTrue);
+    final installed = await repository.environment();
+    expect(
+      await File(
+        '${installed.rootPath}/etc/apt/sources.list.d/ubuntu.sources',
+      ).readAsString(),
+      contains(UbuntuImage.chinaAptMirror),
+    );
     expect(
       phases,
       containsAllInOrder([
@@ -71,6 +88,51 @@ void main() {
       EnvironmentPhase.notInstalled,
     );
     expect(await File('${workspace.rootPath}/keep.txt').readAsString(), 'keep');
+  });
+  test('apt mirror falls back to upstream when the probe fails', () async {
+    final fixture = createTestDatabase();
+    final driver = LocalProcessDriver();
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    final dio = Dio();
+    addTearDown(() async {
+      dio.close(force: true);
+      await server.close(force: true);
+      await driver.dispose();
+      await fixture.database.close();
+      await fixture.directory.delete(recursive: true);
+    });
+    final archive = Archive()
+      ..add(ArchiveFile.string('etc/os-release', 'fixture'));
+    final bytes = gzip.encode(TarEncoder().encode(archive));
+    server.listen((request) async {
+      if (request.uri.path == '/trace') {
+        request.response.statusCode = HttpStatus.notFound;
+      } else {
+        request.response.add(bytes);
+      }
+      await request.response.close();
+    });
+    final repository = WorkspaceRepository(fixture.database, fixture.directory);
+    final installer = LinuxInstaller(
+      repository,
+      driver,
+      dio,
+      image: LinuxImage(
+        revision: 'fixture',
+        url: 'http://127.0.0.1:${server.port}/rootfs',
+        digest: sha256.convert(bytes).toString(),
+        downloadBytes: bytes.length,
+      ),
+      traceUrl: 'http://127.0.0.1:${server.port}/trace',
+    );
+    await installer.install(RunCancellation(), (_, _, _) {});
+    final installed = await repository.environment();
+    expect(
+      await File(
+        '${installed.rootPath}/etc/apt/sources.list.d/ubuntu.sources',
+      ).readAsString(),
+      contains(UbuntuImage.upstreamAptMirror),
+    );
   });
   for (final stop in [false, true]) {
     test(

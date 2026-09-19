@@ -82,8 +82,6 @@ class ToolCallDisplay {
             final metadata = [
               if (args['cwd'] case final String cwd when cwd != '/workspace')
                 cwd,
-              if (args['timeoutMs'] case final num ms when ms != 60000)
-                '超时 ${ms / 1000} 秒',
             ];
             return ToolCallDisplay(
               call: '\$ $command',

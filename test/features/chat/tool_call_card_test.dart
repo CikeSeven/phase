@@ -281,7 +281,6 @@ void main() {
       arguments: const {
         'command': 'printf "first\\nsecond\\n"; missing-command',
         'cwd': '/workspace/project',
-        'timeoutMs': 3000,
       },
       result: jsonEncode({
         'environment': '24.04-arm64',

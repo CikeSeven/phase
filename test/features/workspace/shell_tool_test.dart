@@ -18,7 +18,7 @@ import 'local_process_driver.dart';
 void main() {
   for (final scenario in [
     'stop',
-    'timeout',
+    'noTimeout',
     'limit',
     'independent',
     'beforeStart',
@@ -78,9 +78,9 @@ void main() {
             'empty' => 'true',
             'previewBoundary' => 'head -c 65536 /dev/zero',
             'largeStderr' => 'head -c 65537 /dev/zero >&2',
+            'noTimeout' => 'sleep 1; printf done',
             _ => 'printf partial; sleep 60',
           },
-          'timeoutMs': scenario == 'timeout' ? 50 : 60000,
         },
         context('first'),
         cancel,
@@ -104,9 +104,10 @@ void main() {
         expect(result.cancelled, isTrue);
         expect(body['stdout'], 'partial');
       }
-      if (scenario == 'timeout') {
-        expect(body['timedOut'], isTrue);
-        expect(body['stdout'], 'partial');
+      if (scenario == 'noTimeout') {
+        // Commands no longer carry a timeout; the process runs to completion.
+        expect(body['timedOut'], isFalse);
+        expect(body['stdout'], 'done');
       }
       if (scenario == 'limit') {
         expect(body['outputLimitExceeded'], isTrue);
@@ -171,7 +172,6 @@ void main() {
           argv: ['-c', 'cat'],
           cwd: '/workspace',
           environment: {},
-          timeoutMs: 1000,
           outputLimitBytes: 10000,
         ),
         (_, data) async {

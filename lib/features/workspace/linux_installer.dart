@@ -34,6 +34,11 @@ abstract final class UbuntuImage {
       'a91d5a93010193712d346d761372b7c9db6dfcf093893161c64ca107f05914f2';
   static const downloadBytes = 29936675;
   static const fileBytes = 104728695;
+  static const codename = 'noble';
+  static const traceUrl = 'https://www.cloudflare.com/cdn-cgi/trace';
+  static const upstreamAptMirror = 'http://ports.ubuntu.com/ubuntu-ports';
+  static const chinaAptMirror =
+      'http://mirrors.tuna.tsinghua.edu.cn/ubuntu-ports';
   static const manifest = LinuxImage(
     revision: revision,
     url: url,
@@ -51,11 +56,13 @@ class LinuxInstaller {
     this.driver,
     this.dio, {
     this.image = UbuntuImage.manifest,
+    this.traceUrl = UbuntuImage.traceUrl,
   });
   final LinuxImage image;
   final WorkspaceRepository repository;
   final ProcessDriver driver;
   final Dio dio;
+  final String traceUrl;
 
   Future<void> install(
     RunCancellation cancellation,
@@ -165,6 +172,26 @@ class LinuxInstaller {
         await Link(resolv.path).delete();
       }
       await resolv.writeAsString('nameserver 1.1.1.1\nnameserver 8.8.8.8\n');
+      // One best-effort probe picks the apt mirror for this install; failures
+      // keep the upstream default. Plain HTTP avoids needing a guest CA bundle.
+      final aptMirror = await _aptMirror();
+      final legacySources = File(
+        p.join(rootfs.path, 'etc', 'apt', 'sources.list'),
+      );
+      if (await legacySources.exists()) await legacySources.delete();
+      final ubuntuSources = File(
+        p.join(rootfs.path, 'etc', 'apt', 'sources.list.d', 'ubuntu.sources'),
+      );
+      await ubuntuSources.parent.create(recursive: true);
+      final codename = UbuntuImage.codename;
+      await ubuntuSources.writeAsString(
+        'Types: deb\n'
+        'URIs: $aptMirror\n'
+        'Suites: $codename $codename-updates $codename-backports '
+        '$codename-security\n'
+        'Components: main restricted universe multiverse\n'
+        'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n',
+      );
       await stage(EnvironmentPhase.checking);
       final probe = Directory(p.join(staging.path, 'probe'));
       await probe.create();
@@ -269,6 +296,27 @@ class LinuxInstaller {
         repository.endEnvironmentChange();
       }
     }
+  }
+
+  Future<String> _aptMirror() async {
+    try {
+      final response = await dio.get<String>(
+        traceUrl,
+        options: Options(
+          responseType: ResponseType.plain,
+          connectTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+        ),
+      );
+      final location = RegExp(
+        r'^loc=(\S+)',
+        multiLine: true,
+      ).firstMatch(response.data ?? '')?.group(1);
+      if (location == 'CN') return UbuntuImage.chinaAptMirror;
+    } on DioException {
+      // Probing is best-effort; the upstream mirror always works.
+    }
+    return UbuntuImage.upstreamAptMirror;
   }
 
   Future<void> uninstall() async {

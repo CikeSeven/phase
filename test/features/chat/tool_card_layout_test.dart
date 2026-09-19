@@ -140,7 +140,6 @@ void main() {
               _ => const {
                 'command': 'python scripts/moon_phase.py --date 2026-09-19',
                 'cwd': '/workspace',
-                'timeoutMs': 60000,
               },
             },
             channel: ExecutionChannel.app,

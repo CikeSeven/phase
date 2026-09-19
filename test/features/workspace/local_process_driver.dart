@@ -100,17 +100,19 @@ class LocalProcess implements LinuxProcess {
   }
 
   Future<void> run() async {
-    final timeout = Timer(Duration(milliseconds: spec.timeoutMs ?? 60000), () {
-      timedOut = true;
-      kill();
-    });
+    final timeout = spec.timeoutMs == null
+        ? null
+        : Timer(Duration(milliseconds: spec.timeoutMs!), () {
+            timedOut = true;
+            kill();
+          });
     final pumps = Future.wait([
       pump(process.stdout, false),
       pump(process.stderr, true),
     ]);
     final code = await process.exitCode;
     await pumps;
-    timeout.cancel();
+    timeout?.cancel();
     done.complete(
       LinuxProcessEvent(
         ownerId: spec.ownerId,

@@ -13,8 +13,6 @@ import 'process_driver.dart';
 import 'workspace_files.dart';
 
 abstract final class ShellLimits {
-  static const timeoutMs = 60000;
-  static const maxTimeoutMs = 300000;
   static const previewBytes = 64 * 1024;
   static const outputBytes = 8 * 1024 * 1024;
 }
@@ -28,19 +26,16 @@ class ShellTool extends Tool {
   String get name => 'shell';
   @override
   String get description =>
-      '在 Ubuntu 工作区执行非交互 shell 命令，返回 stdout/stderr、退出码与产物。每次调用的环境变量与 cd 不保留。';
+      '在 Ubuntu 工作区执行非交互 shell 命令，返回 stdout/stderr、退出码与产物。'
+      '每次调用的环境变量与 cd 不保留。环境为最小安装：安装软件用 '
+      'apt update && apt install -y，已安装内容跨会话持久保留；apt 被中断后'
+      '先运行 dpkg --configure -a 恢复再重试。命令不设超时。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
       'command': {'type': 'string', 'description': '完整 shell 命令'},
       'cwd': {'type': 'string', 'description': 'guest 工作目录，默认 /workspace'},
-      'timeoutMs': {
-        'type': 'integer',
-        'minimum': 1,
-        'maximum': ShellLimits.maxTimeoutMs,
-        'description': '超时时间（毫秒），默认 60000',
-      },
     },
     'required': ['command'],
     'additionalProperties': false,
@@ -51,7 +46,7 @@ class ShellTool extends Tool {
   ToolPolicy get defaultPolicy => ToolPolicy.ask;
   @override
   String describeAction(Map<String, dynamic> arguments) =>
-      'Ubuntu ${workspace?.environmentRevision ?? "24.04 ARM64"} · ${workspace?.name ?? "会话工作区"}\n目录：${arguments['cwd'] ?? '/workspace'}\n超时：${arguments['timeoutMs'] ?? ShellLimits.timeoutMs} ms\n${arguments['command']}';
+      'Ubuntu ${workspace?.environmentRevision ?? "24.04 ARM64"} · ${workspace?.name ?? "会话工作区"}\n目录：${arguments['cwd'] ?? '/workspace'}\n${arguments['command']}';
   @override
   String? validateArguments(Map<String, dynamic> arguments) {
     final command = arguments['command'] as String? ?? '';
@@ -128,7 +123,6 @@ class ShellTool extends Tool {
           argv: ['-c', arguments['command'] as String],
           cwd: arguments['cwd'] as String? ?? '/workspace',
           environment: {},
-          timeoutMs: arguments['timeoutMs'] as int? ?? ShellLimits.timeoutMs,
           outputLimitBytes: ShellLimits.outputBytes,
         ),
         (stderr, bytes) async {
