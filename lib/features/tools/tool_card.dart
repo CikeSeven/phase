@@ -10,7 +10,11 @@ import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/content_expansion_notification.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
+import 'tool_call_display.dart';
+import 'tool_diff.dart';
+import 'tool_diff_view.dart';
 import 'tool_presentation.dart';
+import 'tool_screenshot_preview.dart';
 
 /// 默认收起为工具名与状态；展开后查看完整输入、输出和产物。
 ///
@@ -18,12 +22,14 @@ import 'tool_presentation.dart';
 class ToolCard extends StatefulWidget {
   const ToolCard({
     required this.record,
+    this.appName,
     this.artifacts = const [],
     this.onOpenArtifact,
     super.key,
   });
 
   final ToolCallRecord record;
+  final String? appName;
 
   /// 产物附件（写文件、下载等），由调用方按记录的 artifacts 查好传入。
   final List<Attachment> artifacts;
@@ -41,6 +47,8 @@ class _ToolCardState extends State<ToolCard>
   final _outputController = ScrollController();
   bool _expanded = false;
   bool _userToggled = false;
+  ToolCallRecord? _displayRecord;
+  ToolCallDisplay? _display;
 
   @override
   bool get wantKeepAlive => _userToggled;
@@ -93,7 +101,18 @@ class _ToolCardState extends State<ToolCard>
     final colors = theme.colorScheme;
     final statusColor = ToolPresentation.statusColor(context, record.status);
     final inFlight = ToolPresentation.isInFlight(record.status);
-    final output = _expanded ? ToolPresentation.outputText(record) : '';
+    if (_expanded && !identical(record, _displayRecord)) {
+      _display = ToolCallDisplay.fromRecord(record);
+      _displayRecord = record;
+    }
+    final display = _expanded ? _display : null;
+    final detail = ToolCallDisplay.detail(record, appName: widget.appName);
+    final artifacts = [
+      for (final artifact in widget.artifacts)
+        if (ToolCallDisplay.artifactLabel(record, artifact)
+            case final String label)
+          (artifact: artifact, label: label),
+    ];
     final status = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -118,13 +137,10 @@ class _ToolCardState extends State<ToolCard>
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.l,
-        vertical: AppSpacing.xs,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Material(
         key: ValueKey('tool-card-${record.id}'),
-        color: colors.surfaceContainerHigh.withValues(alpha: 0.72),
+        color: colors.surfaceContainerLow.withValues(alpha: 0.55),
         borderRadius: AppRadius.mediumAll,
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -148,9 +164,29 @@ class _ToolCardState extends State<ToolCard>
                       final stacked =
                           constraints.maxWidth <
                           MediaQuery.textScalerOf(context).scale(14) * 18;
-                      final title = Text(
-                        ToolPresentation.recordLabel(record),
-                        style: theme.textTheme.labelLarge,
+                      final title = Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            ToolCallDisplay.title(record),
+                            style: theme.textTheme.labelLarge,
+                          ),
+                          if (detail != null &&
+                              !(record.toolName == 'shell' && _expanded)) ...[
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              detail,
+                              key: ValueKey('tool-detail-${record.id}'),
+                              maxLines: _expanded ? null : 2,
+                              overflow: _expanded
+                                  ? null
+                                  : TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ],
                       );
                       return Row(
                         children: [
@@ -192,7 +228,7 @@ class _ToolCardState extends State<ToolCard>
                 ),
               ),
             ),
-            if (_expanded)
+            if (display != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.m,
@@ -204,7 +240,8 @@ class _ToolCardState extends State<ToolCard>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (record.errorCode == 'storageError' &&
-                        output != ToolPresentation.storageFailureMessage) ...[
+                        display.output !=
+                            ToolPresentation.storageFailureMessage) ...[
                       Text(
                         ToolPresentation.storageFailureMessage,
                         style: theme.textTheme.bodySmall?.copyWith(
@@ -213,61 +250,172 @@ class _ToolCardState extends State<ToolCard>
                       ),
                       const SizedBox(height: AppSpacing.s),
                     ],
-                    _ToolContentSection(
-                      title: '输入参数',
-                      text: ToolPresentation.inputText(record),
-                      textKey: ValueKey('tool-arguments-${record.id}'),
-                      scrollKey: PageStorageKey('tool-input-${record.id}'),
-                      controller: _inputController,
-                      maxHeight: 160,
-                      onOverscroll: _onContentOverscroll,
-                    ),
-                    const SizedBox(height: AppSpacing.s),
-                    _ToolContentSection(
-                      title: '输出内容',
-                      text: output,
-                      textKey: ValueKey('tool-result-${record.id}'),
-                      scrollKey: PageStorageKey('tool-output-${record.id}'),
-                      controller: _outputController,
-                      maxHeight: 240,
-                      onOverscroll: _onContentOverscroll,
-                      isError: record.status == ToolCallStatus.failed,
-                    ),
-                    if (widget.artifacts.isNotEmpty) ...[
+                    if (display.metadata case final String metadata
+                        when metadata.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                        child: Text(
+                          metadata,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    if (display.diff != null)
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '+${display.diff!.where((l) => l.kind == ToolDiffKind.added).length} '
+                              '−${display.diff!.where((l) => l.kind == ToolDiffKind.removed).length}',
+                              style: theme.textTheme.labelMedium,
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: display.copyLabel,
+                            onPressed: () => _copy(
+                              context,
+                              display.copyText!,
+                              display.copyLabel,
+                            ),
+                            icon: const Icon(Symbols.content_copy, size: 18),
+                          ),
+                        ],
+                      ),
+                    if (display.diff case final diff?)
+                      _ToolContentSection(
+                        scrollKey: PageStorageKey('tool-input-${record.id}'),
+                        controller: _inputController,
+                        maxHeight: 240,
+                        onOverscroll: _onContentOverscroll,
+                        child: diff.isEmpty
+                            ? const Text('（空文件）')
+                            : ToolDiffView(lines: diff),
+                      )
+                    else if (display.call case final String call
+                        when call.isNotEmpty)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                vertical: AppSpacing.s,
+                              ),
+                              child: _ToolContentSection(
+                                scrollKey: PageStorageKey(
+                                  'tool-input-${record.id}',
+                                ),
+                                controller: _inputController,
+                                maxHeight: 160,
+                                onOverscroll: _onContentOverscroll,
+                                child: Text(
+                                  call,
+                                  key: ValueKey('tool-arguments-${record.id}'),
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    fontFamily: 'monospace',
+                                    fontWeight: FontWeight.w600,
+                                    height: 1.6,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: display.copyLabel,
+                            onPressed: () => _copy(
+                              context,
+                              display.copyText ?? call,
+                              display.copyLabel,
+                            ),
+                            icon: const Icon(Symbols.content_copy, size: 18),
+                          ),
+                        ],
+                      ),
+                    if (display.output case final String output) ...[
+                      if (display.diff == null &&
+                          !(display.call?.isNotEmpty ?? false))
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: IconButton(
+                            tooltip: '复制输出',
+                            onPressed: () => _copy(context, output, '复制输出'),
+                            icon: const Icon(Symbols.content_copy, size: 18),
+                          ),
+                        ),
+                      if (display.diff != null ||
+                          (display.call?.isNotEmpty ?? false))
+                        const SizedBox(height: AppSpacing.m),
+                      _ToolContentSection(
+                        scrollKey: PageStorageKey('tool-output-${record.id}'),
+                        controller: _outputController,
+                        maxHeight: 240,
+                        onOverscroll: _onContentOverscroll,
+                        child: Text(
+                          output,
+                          key: ValueKey('tool-result-${record.id}'),
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            height: 1.5,
+                            color: record.status == ToolCallStatus.failed
+                                ? colors.error
+                                : colors.onSurface,
+                          ),
+                        ),
+                      ),
+                    ],
+                    if (display.showScreenshots) ...[
+                      for (final (:artifact, label: _) in artifacts)
+                        if (artifact.isImage)
+                          ToolScreenshotPreview(
+                            key: ValueKey('tool-artifact-${artifact.id}'),
+                            attachment: artifact,
+                            onOpen: widget.onOpenArtifact == null
+                                ? null
+                                : () => widget.onOpenArtifact!(artifact),
+                          ),
+                      if (record.artifacts.isNotEmpty &&
+                          !artifacts.any((entry) => entry.artifact.isImage))
+                        const Text('截图附件暂不可用'),
+                    ],
+                    if (artifacts.any(
+                      (entry) =>
+                          !display.showScreenshots || !entry.artifact.isImage,
+                    )) ...[
                       const SizedBox(height: AppSpacing.xs),
                       Wrap(
                         spacing: AppSpacing.s,
                         runSpacing: AppSpacing.xs,
                         children: [
-                          for (final artifact in widget.artifacts)
-                            FilledButton.tonalIcon(
-                              key: ValueKey('tool-artifact-${artifact.id}'),
-                              style: AppControlStyle.compact.copyWith(
-                                textStyle: WidgetStatePropertyAll(
-                                  theme.textTheme.bodySmall,
-                                ),
-                                padding: const WidgetStatePropertyAll(
-                                  EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.m,
-                                    vertical: AppSpacing.s,
+                          for (final (:artifact, :label) in artifacts)
+                            if (!display.showScreenshots || !artifact.isImage)
+                              FilledButton.tonalIcon(
+                                key: ValueKey('tool-artifact-${artifact.id}'),
+                                style: AppControlStyle.compact.copyWith(
+                                  textStyle: WidgetStatePropertyAll(
+                                    theme.textTheme.bodySmall,
+                                  ),
+                                  padding: const WidgetStatePropertyAll(
+                                    EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.m,
+                                      vertical: AppSpacing.s,
+                                    ),
                                   ),
                                 ),
+                                icon: Icon(
+                                  artifact.isImage
+                                      ? Symbols.image
+                                      : Symbols.attach_file,
+                                  size: 18,
+                                ),
+                                label: Text(
+                                  label,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                onPressed: widget.onOpenArtifact == null
+                                    ? null
+                                    : () => widget.onOpenArtifact!(artifact),
                               ),
-                              icon: Icon(
-                                artifact.isImage
-                                    ? Symbols.image
-                                    : Symbols.attach_file,
-                                size: 18,
-                              ),
-                              label: Text(
-                                artifact.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              onPressed: widget.onOpenArtifact == null
-                                  ? null
-                                  : () => widget.onOpenArtifact!(artifact),
-                            ),
                         ],
                       ),
                     ],
@@ -283,90 +431,48 @@ class _ToolCardState extends State<ToolCard>
 
 class _ToolContentSection extends StatelessWidget {
   const _ToolContentSection({
-    required this.title,
-    required this.text,
-    required this.textKey,
+    required this.child,
     required this.scrollKey,
     required this.controller,
     required this.maxHeight,
     required this.onOverscroll,
-    this.isError = false,
   });
 
-  final String title;
-  final String text;
-  final Key textKey;
+  final Widget child;
   final PageStorageKey<String> scrollKey;
   final ScrollController controller;
   final double maxHeight;
   final bool Function(OverscrollNotification) onOverscroll;
-  final bool isError;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                title,
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: colors.onSurfaceVariant,
-                ),
-              ),
-            ),
-            IconButton(
-              tooltip: '复制$title',
-              onPressed: () => _copy(context),
-              icon: const Icon(Symbols.content_copy, size: 18),
-            ),
-          ],
+  Widget build(BuildContext context) => ConstrainedBox(
+    constraints: BoxConstraints(maxHeight: maxHeight),
+    child: Scrollbar(
+      controller: controller,
+      thumbVisibility: true,
+      child: NotificationListener<OverscrollNotification>(
+        onNotification: onOverscroll,
+        child: SingleChildScrollView(
+          key: scrollKey,
+          controller: controller,
+          primary: false,
+          child: SelectionArea(child: child),
         ),
-        ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: Scrollbar(
-            controller: controller,
-            thumbVisibility: true,
-            child: NotificationListener<OverscrollNotification>(
-              onNotification: onOverscroll,
-              child: SingleChildScrollView(
-                key: scrollKey,
-                controller: controller,
-                primary: false,
-                padding: const EdgeInsets.only(right: AppSpacing.s),
-                child: SelectionArea(
-                  child: Text(
-                    text,
-                    key: textKey,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                      color: isError ? colors.error : colors.onSurface,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+      ),
+    ),
+  );
+}
 
-  Future<void> _copy(BuildContext context) async {
-    String feedback;
-    try {
-      await Clipboard.setData(ClipboardData(text: text));
-      feedback = '已复制$title';
-    } on PlatformException {
-      feedback = '复制失败，请重试';
-    }
-    if (!context.mounted) return;
-    ScaffoldMessenger.maybeOf(context)
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(feedback)));
+Future<void> _copy(BuildContext context, String text, String label) async {
+  String feedback;
+  try {
+    await Clipboard.setData(ClipboardData(text: text));
+    feedback = '已$label';
+  } on PlatformException {
+    feedback = '复制失败，请重试';
   }
+  if (!context.mounted) return;
+  ScaffoldMessenger.maybeOf(context)
+    ?..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(feedback)));
 }

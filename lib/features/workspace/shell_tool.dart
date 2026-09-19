@@ -92,7 +92,7 @@ class ShellTool extends Tool {
           ),
         ),
     ];
-    final handles = <RandomAccessFile>[];
+    final handles = List<RandomAccessFile?>.filled(2, null);
     final artifacts = <String>[];
     LinuxProcessEvent? exit;
     LinuxProcess? process;
@@ -117,10 +117,6 @@ class ShellTool extends Tool {
         );
       }
       final before = await files!.outputs(binding);
-      await outputFiles.first.parent.create(recursive: true);
-      for (final file in outputFiles) {
-        handles.add(await file.open(mode: FileMode.write));
-      }
       cancellation.throwIfCancelled();
       process = await driver!.start(
         LinuxProcessSpec(
@@ -137,15 +133,32 @@ class ShellTool extends Tool {
         ),
         (stderr, bytes) async {
           final index = stderr ? 1 : 0;
+          final previousPreviewLength = previews[index].length;
+          final previewRemaining =
+              ShellLimits.previewBytes - previousPreviewLength;
           sizes[index] += bytes.length;
-          final remaining = ShellLimits.previewBytes - previews[index].length;
-          if (remaining > 0) {
+          if (previewRemaining > 0) {
             previews[index].add(
-              bytes.sublist(0, bytes.length.clamp(0, remaining)),
+              bytes.sublist(0, bytes.length.clamp(0, previewRemaining)),
             );
           }
           try {
-            await handles[index].writeFrom(bytes);
+            // 普通输出只保留在结果里；超过预览上限才保存完整日志。
+            if (sizes[index] > ShellLimits.previewBytes) {
+              var handle = handles[index];
+              if (handle == null) {
+                await outputFiles[index].parent.create(recursive: true);
+                handle = await outputFiles[index].open(mode: FileMode.write);
+                handles[index] = handle;
+                await handle.writeFrom(previews[index].toBytes());
+                final overflowStart = previewRemaining.clamp(0, bytes.length);
+                if (overflowStart < bytes.length) {
+                  await handle.writeFrom(bytes.sublist(overflowStart));
+                }
+              } else {
+                await handle.writeFrom(bytes);
+              }
+            }
           } on FileSystemException {
             fileError = '命令输出文件保存失败';
             rethrow;
@@ -162,13 +175,13 @@ class ShellTool extends Tool {
         }
       }
       exit = await waitForProcess(process, cancellation);
-      for (final handle in handles) {
-        await handle.close();
+      for (var i = 0; i < handles.length; i++) {
+        await handles[i]?.close();
+        handles[i] = null;
       }
-      handles.clear();
       // Output/known file effects survive a stop. This does not rerun the command.
       for (var i = 0; i < 2; i++) {
-        if (sizes[i] == 0) continue;
+        if (sizes[i] <= ShellLimits.previewBytes) continue;
         final attachment = await context.storage.registerArtifact(
           conversationId: context.conversationId,
           path: outputFiles[i].path,
@@ -204,7 +217,7 @@ class ShellTool extends Tool {
         }
       }
       for (final handle in handles) {
-        await handle.close();
+        await handle?.close();
       }
     }
     final stopped = exit?.cancelled == true || cancellation.isCancelled;

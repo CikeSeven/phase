@@ -90,6 +90,7 @@ void main() {
                 children: [
                   ToolCard(
                     record: record,
+                    appName: '测试应用',
                     artifacts: [attachment],
                     onOpenArtifact: (value) => showToolArtifact(context, value),
                   ),
@@ -119,10 +120,12 @@ void main() {
       expect(find.byKey(const ValueKey('tool-artifact-image')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('tool-toggle-capture')));
       await tester.pumpAndSettle();
-      final output = tester
-          .widget<Text>(find.byKey(const ValueKey('tool-result-capture')))
-          .data!;
-      expect(jsonDecode(output), jsonDecode(record.result!));
+      expect(find.text('测试应用'), findsOneWidget);
+      expect(find.byKey(const ValueKey('tool-result-capture')), findsNothing);
+      expect(
+        find.byKey(const ValueKey('tool-screenshot-image')),
+        findsOneWidget,
+      );
       expect(find.textContaining('screenshotId'), findsNothing);
       await tester.tap(find.byKey(const ValueKey('tool-artifact-image')));
       await tester.pumpAndSettle();

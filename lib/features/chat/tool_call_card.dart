@@ -5,7 +5,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/repositories/tool_call_repository.dart';
-import '../tools/tool_card.dart';
+import '../tools/resolved_tool_card.dart';
 import 'tool_artifact_viewer.dart';
 
 part 'tool_call_card.g.dart';
@@ -22,7 +22,7 @@ Stream<ToolCallRecord> toolCallRecord(Ref ref, String toolCallId) async* {
 /// 聊天流里的工具卡片：工具记录按 [toolCallId] 从仓储读。
 ///
 /// 消息只保存记录 id（design 第五部分 §2.3），参数与结果留在 tool_calls；
-/// 卡片展开后展示输入参数、输出内容和附件。
+/// 卡片按工具语义展示命令、文件内容或 diff，以及实际返回内容和产物。
 class ToolCallCard extends ConsumerWidget {
   const ToolCallCard({
     required this.toolCallId,
@@ -39,7 +39,7 @@ class ToolCallCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final record = ref.watch(toolCallRecordProvider(toolCallId)).value;
     if (record == null) return const SizedBox.shrink();
-    return ToolCard(
+    return ResolvedToolCard(
       record: record,
       artifacts: [
         for (final id in record.artifacts)

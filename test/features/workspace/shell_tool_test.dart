@@ -22,6 +22,9 @@ void main() {
     'limit',
     'independent',
     'beforeStart',
+    'empty',
+    'previewBoundary',
+    'largeStderr',
   ]) {
     test('real shell $scenario preserves output and closes process', () async {
       final fixture = createTestDatabase();
@@ -72,6 +75,9 @@ void main() {
           'command': switch (scenario) {
             'limit' => 'head -c 10000000 /dev/zero',
             'independent' => 'export PHASE_TRANSIENT=1; cd /tmp; printf first',
+            'empty' => 'true',
+            'previewBoundary' => 'head -c 65536 /dev/zero',
+            'largeStderr' => 'head -c 65537 /dev/zero >&2',
             _ => 'printf partial; sleep 60',
           },
           'timeoutMs': scenario == 'timeout' ? 50 : 60000,
@@ -122,6 +128,25 @@ void main() {
         );
         expect(next.content, contains('value=unset'));
         expect(next.content, contains(workspace.rootPath));
+      }
+      if (scenario == 'largeStderr') {
+        expect(body['stdout'], isEmpty);
+        expect((body['stderr'] as String).length, ShellLimits.previewBytes);
+        expect(body['previewTruncated'], isTrue);
+        expect(attachments.single.name, 'first-stderr.txt');
+        expect(
+          await File(attachments.single.localPath).readAsBytes(),
+          List<int>.filled(ShellLimits.previewBytes + 1, 0),
+        );
+      }
+      if (scenario != 'limit' && scenario != 'largeStderr') {
+        expect(result.artifacts, isEmpty);
+        expect(attachments, isEmpty);
+        final directory = Directory(context('first').artifactsDirectory);
+        expect(
+          await directory.exists() ? await directory.list().toList() : [],
+          isEmpty,
+        );
       }
     });
   }

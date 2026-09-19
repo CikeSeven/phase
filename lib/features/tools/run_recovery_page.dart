@@ -13,7 +13,7 @@ import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../chat/chat_controller.dart';
 import 'run_recovery_controller.dart';
-import 'tool_card.dart';
+import 'resolved_tool_card.dart';
 
 class RunRecoveryPage extends ConsumerStatefulWidget {
   const RunRecoveryPage({super.key});
@@ -123,7 +123,7 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
                         Text('任务已中断。继续后由 AI 处理已有结果，不会自动重发已派发的动作。'),
                         for (final call in entry.calls) ...[
                           const SizedBox(height: AppSpacing.m),
-                          ToolCard(record: call),
+                          ResolvedToolCard(record: call),
                         ],
                         const SizedBox(height: AppSpacing.m),
                         Wrap(

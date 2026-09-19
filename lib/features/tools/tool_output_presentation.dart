@@ -20,10 +20,11 @@ String presentToolOutput(ToolCallRecord record, String result) {
           'stderr': final String err,
         }) {
           return [
-            if (out.isNotEmpty) 'stdout\n$out',
-            if (err.isNotEmpty) 'stderr\n$err',
+            if (out.isNotEmpty || err.isNotEmpty)
+              '$out${out.isNotEmpty && !out.endsWith('\n') && err.isNotEmpty ? '\n' : ''}$err',
             if (out.isEmpty && err.isEmpty) '（无输出）',
-            if (decoded['exitCode'] case final num code) '退出码：$code',
+            if (decoded['exitCode'] case final num code when code != 0)
+              '退出码：$code',
             if (decoded['signal'] case final num signal) '终止信号：$signal',
             if (decoded['cancelled'] == true) '命令已停止',
             if (decoded['timedOut'] == true) '命令执行超时',

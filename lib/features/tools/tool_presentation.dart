@@ -205,13 +205,6 @@ class ToolPresentation {
 
   static const storageFailureMessage = '相月未能保存这次对话，任务已停止。';
 
-  /// 卡片展示全部实际输入，不复用确认面板的长正文预览。
-  static String inputText(ToolCallRecord record) => record.arguments.isEmpty
-      ? '（无参数）'
-      : record.arguments.entries
-            .map((entry) => '${entry.key}: ${toolValueText(entry.value)}')
-            .join('\n\n');
-
   /// 展示本次输出正文与必要结果信息；没有输出时才使用状态说明。
   static String outputText(ToolCallRecord record) {
     final result = record.result;

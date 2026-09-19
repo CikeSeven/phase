@@ -12,7 +12,7 @@ import '../../../data/models/tool_call_record.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import '../../../data/repositories/tool_call_repository.dart';
 import '../chat/tool_artifact_viewer.dart';
-import 'tool_card.dart';
+import 'resolved_tool_card.dart';
 
 /// 一个会话的执行记录：按时间列出工具调用、决定与结果。
 class ToolRecordsPage extends ConsumerStatefulWidget {
@@ -98,7 +98,10 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
           }
           return ListView.builder(
             key: const ValueKey('tool-records-list'),
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.m),
+            padding: const EdgeInsets.symmetric(
+              vertical: AppSpacing.m,
+              horizontal: AppSpacing.l,
+            ),
             itemCount: records.length,
             itemBuilder: (context, index) {
               final record = records[index];
@@ -108,9 +111,9 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
                   if (index == 0 || !_sameRun(records[index - 1], record)) ...[
                     Padding(
                       padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.l,
+                        0,
                         AppSpacing.m,
-                        AppSpacing.l,
+                        0,
                         AppSpacing.xs,
                       ),
                       child: Text(
@@ -122,7 +125,7 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
                       ),
                     ),
                   ],
-                  ToolCard(
+                  ResolvedToolCard(
                     record: record,
                     artifacts: [
                       for (final id in record.artifacts)

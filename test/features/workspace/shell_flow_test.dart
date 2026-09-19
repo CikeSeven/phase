@@ -89,7 +89,7 @@ void main() {
         expect(records.single.result, contains('公开输出'));
         expect(records.single.result, contains('诊断输出'));
         expect(records.single.result, contains('"exitCode":7'));
-        expect(records.single.artifacts, hasLength(3));
+        expect(records.single.artifacts, hasLength(1));
         expect(jsonEncode(requests.last), contains('公开输出'));
         expect(confirmations.single, contains('会话工作区'));
         expect(confirmations.single, contains('exit 7'));

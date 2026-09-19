@@ -253,7 +253,7 @@ void main() {
     expect(record.decision, ToolDecision.approved);
     expect((await _run(harness)).status, RunStatus.completed);
 
-    // 聊天流里的工具卡片：读记录显示状态与结果，不显示原始参数 JSON。
+    // 批准落盘后，卡片展示路径与绿色新增内容，不重复成功回执。
     expect(find.byType(ToolCard), findsOneWidget);
     expect(
       tester
@@ -264,7 +264,9 @@ void main() {
     expect(find.textContaining('已写入「summary.md」'), findsNothing);
     await tester.tap(find.byKey(ValueKey('tool-toggle-${record.id}')));
     await _settle(tester);
-    expect(find.textContaining('已写入「summary.md」'), findsOneWidget);
+    expect(find.textContaining('+ # 摘要\n+ 第一条'), findsOneWidget);
+    expect(find.byKey(const ValueKey('diff-added-0')), findsOneWidget);
+    expect(find.textContaining('已写入「summary.md」'), findsNothing);
     expect(find.textContaining('{"path"'), findsNothing);
 
     // 产物 chip 打开内容：文本类直接显示。
