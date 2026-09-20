@@ -21,18 +21,29 @@ Future<Map<String, dynamic>> buildGooglePayload(
   bool supportsReasoning = true,
 }) async {
   final attachments = RequestAttachmentEncoder(supportsImages: supportsImages);
+  final multimodalToolResults = _supportsMultimodalFunctionResponse(
+    request.modelId,
+  );
   // Google 的合成调用 ID 会跨响应重复，配对只能使用当时最近的调用轮。
   final toolNames = <String, String>{};
 
   final contents = <Map<String, dynamic>>[];
   var previousWasTool = false;
-  for (final message in expandToolResultImages(request.messages)) {
+  final resolved = multimodalToolResults
+      ? request.messages
+      : expandToolResultImages(request.messages);
+  for (final message in resolved) {
     // system 角色消息并入 systemInstruction，不进入 contents。
     if (message.role == ChatRole.system) continue;
     for (final call in message.parts.whereType<ResolvedToolCall>()) {
       toolNames[call.callId] = call.toolName;
     }
-    final parts = await _googleParts(message, attachments, toolNames);
+    final parts = await _googleParts(
+      message,
+      attachments,
+      toolNames,
+      multimodalToolResults: multimodalToolResults,
+    );
     if (message.role == ChatRole.tool && previousWasTool) {
       (contents.last['parts'] as List).addAll(parts);
       continue;
@@ -91,11 +102,19 @@ Future<Map<String, dynamic>> buildGooglePayload(
   };
 }
 
+// Gemini 3+ 支持 functionResponse.parts；2.x 和无法识别的别名保留
+// 原有图片观察路径，不猜测网关能力，也不在请求失败后切换格式。
+bool _supportsMultimodalFunctionResponse(String modelId) {
+  final version = RegExp(r'^gemini-(\d+)(?:[.-]|$)').firstMatch(modelId);
+  return version != null && (int.tryParse(version.group(1)!) ?? 0) >= 3;
+}
+
 Future<List<Map<String, dynamic>>> _googleParts(
   ResolvedMessage message,
   RequestAttachmentEncoder attachments,
-  Map<String, String> toolNames,
-) async {
+  Map<String, String> toolNames, {
+  required bool multimodalToolResults,
+}) async {
   final parts = <Map<String, dynamic>>[];
   for (final part in message.parts) {
     switch (part) {
@@ -114,20 +133,48 @@ Future<List<Map<String, dynamic>>> _googleParts(
           parts.add({'text': text});
         }
       case ResolvedToolCall(
+        :final callId,
         :final toolName,
         :final arguments,
         :final providerData,
       ):
         parts.add({
-          'functionCall': {'name': toolName, 'args': arguments},
+          'functionCall': {
+            if (multimodalToolResults) 'id': callId,
+            'name': toolName,
+            'args': arguments,
+          },
           if (message.sameModel && providerData?['thoughtSignature'] is String)
             'thoughtSignature': providerData!['thoughtSignature'],
         });
       case ResolvedToolResult(:final callId, :final content, :final isError):
+        final imageParts = <Map<String, dynamic>>[];
+        final text = StringBuffer(content);
+        if (multimodalToolResults) {
+          for (final image in part.images) {
+            final payload = await attachments.encode(image);
+            if (payload.isImage) {
+              imageParts.add({
+                'inlineData': {
+                  'mimeType': payload.mimeType,
+                  'data': payload.base64Data,
+                },
+              });
+            } else if (payload.text case final notice?) {
+              // FunctionResponsePart 只接受媒体，不把占位文字伪装成媒体 part。
+              if (text.isNotEmpty) text.write('\n');
+              text.write(notice);
+            }
+          }
+        }
         parts.add({
           'functionResponse': {
+            if (multimodalToolResults) 'id': callId,
             'name': toolNames[callId] ?? callId,
-            'response': isError ? {'error': content} : {'result': content},
+            'response': isError
+                ? {'error': text.toString()}
+                : {'result': text.toString()},
+            if (imageParts.isNotEmpty) 'parts': imageParts,
           },
         });
       case ResolvedReasoning():
@@ -271,6 +318,7 @@ class _GoogleStreamDecoder {
       // Gemini 的 functionCall 一次给全参数，没有增量片段。
       _parts.toolCall(
         index,
+        callId: call['id'] is String ? call['id'] as String : null,
         toolName: call['name'] is String ? call['name'] as String : null,
         argumentsFragment: switch (call['args']) {
           final Map<String, dynamic> args => jsonEncode(args),

@@ -5,7 +5,6 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
 import '../../data/models/reasoning_effort.dart';
 import '../attachment_encoder.dart';
-import '../tool_result_images.dart';
 import '../dio_failure_mapper.dart';
 import '../part_assembler.dart';
 import '../sse_transport.dart';
@@ -36,7 +35,7 @@ Future<Map<String, dynamic>> buildAnthropicPayload(
     }
   }
 
-  final resolved = expandToolResultImages(request.messages);
+  final resolved = request.messages;
   final messages = <Map<String, dynamic>>[];
   var index = 0;
   while (index < resolved.length) {
@@ -113,19 +112,10 @@ Future<List<Map<String, dynamic>>> _anthropicBlocks(
       case ResolvedText(:final text):
         if (text.isNotEmpty) blocks.add({'type': 'text', 'text': text});
       case ResolvedImage(:final attachment):
-        final payload = await attachments.encode(attachment);
-        if (payload.isImage) {
-          blocks.add({
-            'type': 'image',
-            'source': {
-              'type': 'base64',
-              'media_type': payload.mimeType,
-              'data': payload.base64Data,
-            },
-          });
-        } else if (payload.text case final text?) {
-          blocks.add({'type': 'text', 'text': text});
-        }
+        final block = _anthropicAttachmentBlock(
+          await attachments.encode(attachment),
+        );
+        if (block != null) blocks.add(block);
       case ResolvedReasoning(:final providerData):
         // 三档：同模型且带签名 → 原样回传；跨模型 → 就地降级成普通文本；
         // 没签名也没内容 → 丢弃。签名只对生成它的模型有效，跨模型送回去
@@ -159,16 +149,47 @@ Future<List<Map<String, dynamic>>> _anthropicBlocks(
           'name': toolName,
           'input': arguments,
         });
-      case ResolvedToolResult(:final callId, :final content, :final isError):
+      case ResolvedToolResult(:final callId, :final isError):
         blocks.add({
           'type': 'tool_result',
           'tool_use_id': callId,
-          'content': content,
+          'content': await _anthropicToolResultContent(part, attachments),
           if (isError) 'is_error': true,
         });
     }
   }
   return blocks;
+}
+
+Map<String, dynamic>? _anthropicAttachmentBlock(AttachmentPayload payload) {
+  if (payload.isImage) {
+    return {
+      'type': 'image',
+      'source': {
+        'type': 'base64',
+        'media_type': payload.mimeType,
+        'data': payload.base64Data,
+      },
+    };
+  }
+  if (payload.text case final text?) return {'type': 'text', 'text': text};
+  return null;
+}
+
+Future<Object> _anthropicToolResultContent(
+  ResolvedToolResult result,
+  RequestAttachmentEncoder attachments,
+) async {
+  if (result.images.isEmpty) return result.content;
+  // 图片留在对应的 tool_result 内，不追加独立 user 消息。
+  final content = <Map<String, dynamic>>[
+    if (result.content.isNotEmpty) {'type': 'text', 'text': result.content},
+  ];
+  for (final image in result.images) {
+    final block = _anthropicAttachmentBlock(await attachments.encode(image));
+    if (block != null) content.add(block);
+  }
+  return content;
 }
 
 /// 只含工具结果的消息：Anthropic 里它们要合并进一条 user 消息。

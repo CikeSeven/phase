@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/features/execution/channel_driver.dart';
 import 'package:phase/providers/provider_factory.dart';
@@ -18,7 +19,7 @@ String _sse(Object value) => 'data: ${jsonEncode(value)}\n\n';
 // 可控 SSE 仅验证协议回填与落库，不代表真实模型已经识别图像内容。
 const _answerText = '测试最终回答';
 
-String _calls(ApiProtocol protocol) {
+String _calls(ApiProtocol protocol, {bool googleCallIds = false}) {
   final calls = [
     (id: 'capture', name: 'capture_screen', args: <String, dynamic>{}),
     (id: 'info', name: 'system_info', args: <String, dynamic>{}),
@@ -95,7 +96,11 @@ String _calls(ApiProtocol protocol) {
             'parts': [
               for (final call in calls)
                 {
-                  'functionCall': {'name': call.name, 'args': call.args},
+                  'functionCall': {
+                    if (googleCallIds) 'id': call.id,
+                    'name': call.name,
+                    'args': call.args,
+                  },
                   'thoughtSignature': 'fixture-signature',
                 },
             ],
@@ -155,8 +160,20 @@ String _answer(ApiProtocol protocol) => switch (protocol) {
 };
 
 void main() {
-  for (final protocol in ApiProtocol.values) {
-    test('${protocol.name} 原始 SSE → 工具/截图落库 → 按协议回填图片 → 最终回答', () async {
+  final cases = [
+    for (final protocol in ApiProtocol.values)
+      (
+        protocol,
+        protocol == ApiProtocol.googleGenerativeAi
+            ? 'gemini-3-pro-preview'
+            : 'model-a',
+      ),
+    (ApiProtocol.googleGenerativeAi, 'gemini-2.5-flash'),
+  ];
+  for (final (protocol, modelId) in cases) {
+    final nativeGoogleImages = modelId == 'gemini-3-pro-preview';
+    final label = '${protocol.name}/$modelId';
+    test('$label 原始 SSE → 截图落库 → 图片回填 → 历史回放', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final payloads = <Map<String, dynamic>>[];
       final listener = server.listen((request) async {
@@ -168,7 +185,9 @@ void main() {
           charset: 'utf-8',
         );
         request.response.write(
-          payloads.length == 1 ? _calls(protocol) : _answer(protocol),
+          payloads.length == 1
+              ? _calls(protocol, googleCallIds: nativeGoogleImages)
+              : _answer(protocol),
         );
         await request.response.close();
       });
@@ -178,6 +197,7 @@ void main() {
       });
       final h = await ToolLoopHarness.create(
         protocol: protocol,
+        models: [ProfileModel(id: modelId)],
         factory: (profile, key) => buildAiProvider(
           profile.copyWith(
             baseUrl: 'http://127.0.0.1:${server.port}/v1',
@@ -245,7 +265,25 @@ void main() {
             ),
             hasLength(2),
           );
-          expect(wire, contains('"type":"image"'));
+          final imageResult = (results['content'] as List).singleWhere(
+            (part) => part['tool_use_id'] == record.providerCallId,
+          );
+          expect(imageResult['content'], [
+            {'type': 'text', 'text': record.result},
+            {
+              'type': 'image',
+              'source': {
+                'type': 'base64',
+                'media_type': 'image/png',
+                'data': encoded,
+              },
+            },
+          ]);
+          expect(messages.last, results);
+          expect(
+            messages.where((item) => item['role'] == 'user'),
+            hasLength(2),
+          );
         case ApiProtocol.googleGenerativeAi:
           final contents = payloads.last['contents'] as List;
           final results = contents.firstWhere(
@@ -258,7 +296,38 @@ void main() {
             ),
             hasLength(2),
           );
-          expect(wire, contains('inline_data'));
+          final imageResult =
+              (results['parts'] as List).singleWhere(
+                    (part) =>
+                        part['functionResponse']?['name'] == 'capture_screen',
+                  )['functionResponse']
+                  as Map;
+          if (nativeGoogleImages) {
+            expect(record.providerCallId, 'capture');
+            expect(imageResult, {
+              'id': record.providerCallId,
+              'name': 'capture_screen',
+              'response': {'result': record.result},
+              'parts': [
+                {
+                  'inlineData': {'mimeType': 'image/png', 'data': encoded},
+                },
+              ],
+            });
+            final calls = contents.singleWhere(
+              (item) => item['role'] == 'model',
+            );
+            expect(calls['parts'][0]['functionCall']['id'], 'capture');
+            expect(calls['parts'][0]['thoughtSignature'], 'fixture-signature');
+            expect(contents.last, results);
+          } else {
+            expect(imageResult, isNot(contains('parts')));
+            expect(imageResult, isNot(contains('id')));
+            expect(contents.indexOf(results), contents.length - 2);
+            expect(contents.last['parts'].last, {
+              'inline_data': {'mime_type': 'image/png', 'data': encoded},
+            });
+          }
       }
       expect((await h.branch()).last.role, ChatRole.assistant);
       expect((await h.branch()).last.text, _answerText);
@@ -287,6 +356,25 @@ void main() {
         );
         expect(replay.where((item) => item['role'] == 'user'), hasLength(2));
         expect('input_image'.allMatches(jsonEncode(replay)), hasLength(1));
+        expect((await h.branch()).last.text, _answerText);
+        expect((await h.latestRun()).status, RunStatus.completed);
+      }
+      if (protocol == ApiProtocol.anthropicMessages ||
+          protocol == ApiProtocol.googleGenerativeAi) {
+        final field = protocol == ApiProtocol.anthropicMessages
+            ? 'messages'
+            : 'contents';
+        final original = payloads.last[field] as List;
+        await h
+            .controller()
+            .send('继续描述刚才的截图')
+            .timeout(const Duration(seconds: 10));
+        expect(payloads, hasLength(3));
+        final replay = payloads.last[field] as List;
+        // 落库后的历史回放保持整个调用/结果/图片前缀，仅追加回答和用户追问。
+        expect(replay.take(original.length).toList(), original);
+        expect(replay.length, original.length + 2);
+        expect((await h.recordsByCall()), hasLength(2));
         expect((await h.branch()).last.text, _answerText);
         expect((await h.latestRun()).status, RunStatus.completed);
       }

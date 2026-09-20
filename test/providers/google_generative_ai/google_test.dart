@@ -235,7 +235,7 @@ void main() {
           'thoughtSignature': 'sig-1',
         },
       ]);
-      // functionResponse 用函数名回填（协议没有调用 id）。
+      // 未提供调用 ID 的 Gemini 2.x 使用函数名回填。
       expect(contents[2]['parts'], [
         {
           'functionResponse': {
@@ -319,7 +319,7 @@ void main() {
       ).toList();
       final delta = chunks.whereType<ToolCallDelta>().single;
       expect(delta.partId, 'tool_0');
-      // 协议不给调用 id，用 partId 作为块标识。
+      // 响应未提供调用 ID 时，用 partId 作为块标识。
       expect(delta.callId, isNull);
       expect(delta.toolName, 'get_weather');
       expect(delta.argumentsFragment, '{"city":"北京"}');
@@ -334,6 +334,21 @@ void main() {
       expect(toolPart.providerData, {'thoughtSignature': 'sig-1'});
       // signature 只作为协议状态，不能显示为思考。
       expect(chunks.whereType<ReasoningDelta>(), isEmpty);
+    });
+
+    test('Gemini 3 返回的调用 ID 与签名一起保留，不替换成响应内序号', () async {
+      final chunks = await decode(
+        'data: {"candidates":[{"content":{"role":"model","parts":['
+        '{"functionCall":{"id":"capture-123","name":"capture_screen","args":{}},'
+        '"thoughtSignature":"sig-1"}]},"finishReason":"STOP"}]}\n\n',
+      ).toList();
+      final delta = chunks.whereType<ToolCallDelta>().single;
+      expect(delta.partId, 'tool_0');
+      expect(delta.callId, 'capture-123');
+      expect(delta.providerData, {'thoughtSignature': 'sig-1'});
+      final part = chunks.whereType<PartEnd>().single.part as ToolCallPart;
+      expect(part.toolCallId, 'capture-123');
+      expect(part.providerData, {'thoughtSignature': 'sig-1'});
     });
 
     test('finishReason 终态 + usageMetadata', () async {

@@ -3,7 +3,7 @@ import '../data/models/chat_request.dart';
 
 /// For adapters using user image input, keep the complete tool-result group
 /// contiguous, then add its images as explicitly labelled observations, not instructions.
-/// Responses instead includes images in the native function_call_output content.
+/// Responses, Anthropic and Gemini 3+ instead use native multimodal tool results.
 List<ResolvedMessage> expandToolResultImages(List<ResolvedMessage> messages) {
   final output = <ResolvedMessage>[];
   final observations = <ResolvedPart>[];
