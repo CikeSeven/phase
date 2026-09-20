@@ -5,7 +5,6 @@ import '../../data/models/chat_message.dart';
 import '../../data/models/chat_request.dart';
 import '../../data/models/reasoning_effort.dart';
 import '../attachment_encoder.dart';
-import '../tool_result_images.dart';
 import '../dio_failure_mapper.dart';
 import '../part_assembler.dart';
 import '../sse_transport.dart';
@@ -36,7 +35,7 @@ Future<Map<String, dynamic>> buildResponsesPayload(
         ],
       },
   ];
-  for (final message in expandToolResultImages(request.messages)) {
+  for (final message in request.messages) {
     input.addAll(await _responsesItems(message, attachments));
   }
 
@@ -140,17 +139,39 @@ Future<List<Map<String, dynamic>>> _responsesItems(
           'name': toolName,
           'arguments': jsonEncode(arguments),
         });
-      case ResolvedToolResult(:final callId, :final content):
+      case ResolvedToolResult(:final callId):
         items.add({
           'type': 'function_call_output',
           'call_id': callId,
-          'output': content,
+          'output': await _responsesToolOutput(part, attachments),
         });
       default:
         break;
     }
   }
   return items;
+}
+
+Future<Object> _responsesToolOutput(
+  ResolvedToolResult result,
+  RequestAttachmentEncoder attachments,
+) async {
+  if (result.images.isEmpty) return result.content;
+
+  // Responses 原生支持多模态工具结果；图片与元数据归属同一个 call_id，
+  // 不把工具图片拆成额外的 user 消息。
+  final output = <Map<String, dynamic>>[
+    {'type': 'input_text', 'text': result.content},
+  ];
+  for (final image in result.images) {
+    final payload = await attachments.encode(image);
+    if (payload.isImage) {
+      output.add({'type': 'input_image', 'image_url': payload.dataUri});
+    } else if (payload.text case final text?) {
+      output.add({'type': 'input_text', 'text': text});
+    }
+  }
+  return output;
 }
 
 /// Responses API 的 SSE 事件解析。

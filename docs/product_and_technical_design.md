@@ -206,7 +206,7 @@ SAF 的 `path` 使用用户授予范围内的 URI；创建外部文件时 `direc
 - 截图最长边 1568px、PNG 最大 4MB；返回尺寸、窗口边界、旋转、时间等元数据，Dart 登记图片产物并清理临时文件。仅向支持图片和工具的模型开放截图。
 - `perform_gestures` 明确传入包名，支持 1–10 步 tap/double_tap/long_press/swipe/wait。默认屏幕像素；图片坐标声明 `image_pixels` 和宽高，在整组派发前换算。无需前置截图、截图 ID、有效期或一次性凭证。
 - 整组先校验、固定参数确认，再在同一设备队列串行派发；逐步检查实际目标、名单和坐标边界。具体参数上限以 [visual_tools.dart](../lib/features/execution/visual_tools.dart) 和原生手势校验为准，两端同步。
-- 手势只要求模型支持工具，不依赖图片或截图能力。动作成功后的截图失败记为 `observationError`，保留已完成动作；失败/取消不重发。最近一次视觉结果图片在完整工具结果组后回填，旧截图保留供查看。
+- 手势只要求模型支持工具，不依赖图片或截图能力。动作成功后的截图失败记为 `observationError`，保留已完成动作；失败/取消不重发。最近一次视觉结果图片按协议回填：Responses 将元数据与 `input_image` 放在同一个 `function_call_output.output` 内容数组中，其余现有适配器在完整工具结果组后追加图片观察；旧截图保留供查看。
 
 ## 5. 新执行通道
 

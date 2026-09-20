@@ -1,8 +1,9 @@
 import '../data/models/chat_message.dart';
 import '../data/models/chat_request.dart';
 
-/// All four protocols accept user image input. Keep the complete tool-result group
+/// For adapters using user image input, keep the complete tool-result group
 /// contiguous, then add its images as explicitly labelled observations, not instructions.
+/// Responses instead includes images in the native function_call_output content.
 List<ResolvedMessage> expandToolResultImages(List<ResolvedMessage> messages) {
   final output = <ResolvedMessage>[];
   final observations = <ResolvedPart>[];

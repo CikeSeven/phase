@@ -15,6 +15,9 @@ import 'visual_tools_test.dart' show screenshotResult;
 
 String _sse(Object value) => 'data: ${jsonEncode(value)}\n\n';
 
+// 可控 SSE 仅验证协议回填与落库，不代表真实模型已经识别图像内容。
+const _answerText = '测试最终回答';
+
 String _calls(ApiProtocol protocol) {
   final calls = [
     (id: 'capture', name: 'capture_screen', args: <String, dynamic>{}),
@@ -109,7 +112,7 @@ String _answer(ApiProtocol protocol) => switch (protocol) {
     '${_sse({
       'choices': [
         {
-          'delta': {'content': '已看见真实图像'},
+          'delta': {'content': _answerText},
           'finish_reason': 'stop',
         },
       ],
@@ -123,7 +126,7 @@ String _answer(ApiProtocol protocol) => switch (protocol) {
           'type': 'message',
           'id': 'answer',
           'content': [
-            {'type': 'output_text', 'text': '已看见真实图像'},
+            {'type': 'output_text', 'text': _answerText},
           ],
         },
       ],
@@ -133,7 +136,7 @@ String _answer(ApiProtocol protocol) => switch (protocol) {
     _sse({
           'type': 'content_block_delta',
           'index': 0,
-          'delta': {'type': 'text_delta', 'text': '已看见真实图像'},
+          'delta': {'type': 'text_delta', 'text': _answerText},
         }) +
         _sse({'type': 'message_stop'}),
   ApiProtocol.googleGenerativeAi => _sse({
@@ -142,7 +145,7 @@ String _answer(ApiProtocol protocol) => switch (protocol) {
         'content': {
           'role': 'model',
           'parts': [
-            {'text': '已看见真实图像'},
+            {'text': _answerText},
           ],
         },
         'finishReason': 'STOP',
@@ -153,7 +156,7 @@ String _answer(ApiProtocol protocol) => switch (protocol) {
 
 void main() {
   for (final protocol in ApiProtocol.values) {
-    test('${protocol.name} 原始 SSE → 工具/截图落库 → 成组结果后发送真实图片 → 最终回答', () async {
+    test('${protocol.name} 原始 SSE → 工具/截图落库 → 按协议回填图片 → 最终回答', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final payloads = <Map<String, dynamic>>[];
       final listener = server.listen((request) async {
@@ -217,8 +220,19 @@ void main() {
           final firstResult = input.indexWhere(
             (m) => m['type'] == 'function_call_output',
           );
+          expect(input[firstResult]['call_id'], record.providerCallId);
+          final output = input[firstResult]['output'] as List;
+          expect(output, [
+            {'type': 'input_text', 'text': record.result},
+            {
+              'type': 'input_image',
+              'image_url': 'data:image/png;base64,$encoded',
+            },
+          ]);
           expect(input[firstResult + 1]['type'], 'function_call_output');
-          expect(jsonEncode(input[firstResult + 2]), contains('input_image'));
+          expect(input[firstResult + 1]['output'], isA<String>());
+          expect(firstResult + 2, input.length);
+          expect(input.where((item) => item['role'] == 'user'), hasLength(1));
         case ApiProtocol.anthropicMessages:
           final messages = payloads.last['messages'] as List;
           final results = messages.firstWhere(
@@ -247,8 +261,35 @@ void main() {
           expect(wire, contains('inline_data'));
       }
       expect((await h.branch()).last.role, ChatRole.assistant);
-      expect((await h.branch()).last.text, '已看见真实图像');
+      expect((await h.branch()).last.text, _answerText);
       expect((await h.latestRun()).status, RunStatus.completed);
+
+      if (protocol == ApiProtocol.openaiResponses) {
+        final originalInput = payloads.last['input'] as List;
+        final originalOutput = originalInput.singleWhere(
+          (item) =>
+              item['type'] == 'function_call_output' &&
+              item['call_id'] == record.providerCallId,
+        );
+        await h
+            .controller()
+            .send('继续描述刚才的截图')
+            .timeout(const Duration(seconds: 10));
+        expect(payloads, hasLength(3));
+        final replay = payloads.last['input'] as List;
+        expect(
+          replay.singleWhere(
+            (item) =>
+                item['type'] == 'function_call_output' &&
+                item['call_id'] == record.providerCallId,
+          ),
+          originalOutput,
+        );
+        expect(replay.where((item) => item['role'] == 'user'), hasLength(2));
+        expect('input_image'.allMatches(jsonEncode(replay)), hasLength(1));
+        expect((await h.branch()).last.text, _answerText);
+        expect((await h.latestRun()).status, RunStatus.completed);
+      }
     });
   }
 }
