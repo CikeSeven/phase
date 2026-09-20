@@ -101,7 +101,8 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(tester.widget<AppLinearProgressIndicator>(indicator).value, 0.25);
-      expect(find.text('下载中 · 25%'), findsOneWidget);
+      expect(find.text('基础环境 · 第 2 / 6 步'), findsOneWidget);
+      expect(find.text('下载中'), findsOneWidget);
       expect(find.text('未安装'), findsNothing);
       if (capture) {
         await _saveProgress(
@@ -111,12 +112,12 @@ void main() {
         );
       }
       await tester.scrollUntilVisible(
-        find.text('5.0 / 20.0 MiB'),
+        find.text('25% · 5.0 / 20.0 MiB'),
         150,
         scrollable: find.byType(Scrollable),
       );
       await tester.pump();
-      expect(find.text('5.0 / 20.0 MiB'), findsOneWidget);
+      expect(find.text('25% · 5.0 / 20.0 MiB'), findsOneWidget);
       final rect = tester.getRect(indicator);
       expect(rect.width, size.width);
       expect(rect.height, 10);

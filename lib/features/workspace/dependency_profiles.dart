@@ -1,5 +1,24 @@
 /// 依赖安装的固定白名单；设置页与后续模型工具共用同一来源。
-enum DependencyStep { repairing, updating, installing, verifying }
+enum DependencyStep {
+  repairing,
+  updating,
+  installing,
+  verifying;
+
+  String get label => switch (this) {
+    repairing => '修复包状态',
+    updating => '更新软件源',
+    installing => '安装依赖',
+    verifying => '验证版本',
+  };
+
+  String get description => switch (this) {
+    repairing => '检查并配置上次未完成的软件包',
+    updating => '下载软件包索引，尚未安装 Python、Node.js 等依赖',
+    installing => '下载、解包并配置 Python、Node.js、Git 与 ripgrep',
+    verifying => '逐组检查命令可用性并记录版本',
+  };
+}
 
 class DependencyProfile {
   const DependencyProfile({
@@ -18,7 +37,7 @@ class DependencyProfile {
   static const python = DependencyProfile(
     id: 'python',
     label: 'Python',
-    description: 'python3、pip 与 venv，用于运行脚本与 uvx 服务',
+    description: 'python3、pip 与 venv，用于运行脚本；不包含 uv/uvx',
     packages: ['python3', 'python3-pip', 'python3-venv'],
     verifyCommand: 'python3 --version && pip3 --version',
   );

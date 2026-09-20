@@ -64,6 +64,10 @@ class McpRunRuntime {
                 headers: headers,
                 environment: environment,
               );
+              if (_closed || cancellation.isCancelled) {
+                await connections.release(client);
+                throw const ToolCancelled();
+              }
               _clients[profile.id] = client;
               await client.connect(cancellation);
             }

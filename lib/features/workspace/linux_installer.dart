@@ -163,6 +163,7 @@ class LinuxInstaller {
         setModes: driver.setModes,
         progress: (bytes) => progress(EnvironmentPhase.extracting, bytes, null),
       );
+      await stage(EnvironmentPhase.configuring);
       for (final path in ['tmp', 'root', 'workspace', 'proc', 'dev']) {
         await Directory(p.join(rootfs.path, path)).create(recursive: true);
       }
@@ -175,7 +176,8 @@ class LinuxInstaller {
       await resolv.writeAsString('nameserver 1.1.1.1\nnameserver 8.8.8.8\n');
       // One best-effort probe picks the apt mirror for this install; failures
       // keep the upstream default. Plain HTTP avoids needing a guest CA bundle.
-      final aptMirror = await _aptMirror();
+      final aptMirror = await _aptMirror(token);
+      cancellation.throwIfCancelled();
       final legacySources = File(
         p.join(rootfs.path, 'etc', 'apt', 'sources.list'),
       );
@@ -300,10 +302,11 @@ class LinuxInstaller {
     }
   }
 
-  Future<String> _aptMirror() async {
+  Future<String> _aptMirror(CancelToken token) async {
     try {
       final response = await dio.get<String>(
         traceUrl,
+        cancelToken: token,
         options: Options(
           responseType: ResponseType.plain,
           connectTimeout: const Duration(seconds: 5),
@@ -315,8 +318,9 @@ class LinuxInstaller {
         multiLine: true,
       ).firstMatch(response.data ?? '')?.group(1);
       if (location == 'CN') return UbuntuImage.chinaAptMirror;
-    } on DioException {
-      // Probing is best-effort; the upstream mirror always works.
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) rethrow;
+      // Probing is best-effort; keep the upstream default on failure.
     }
     return UbuntuImage.upstreamAptMirror;
   }

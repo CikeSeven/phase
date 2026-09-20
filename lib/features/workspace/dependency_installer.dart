@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:path/path.dart' as p;
@@ -19,24 +20,27 @@ class DependencyInstaller {
   final WorkspaceRepository repository;
   final ProcessDriver driver;
   static const outputLimitBytes = 8 * 1024 * 1024;
+  // apt otherwise suppresses transfer progress when stdout is a pipe. Keep
+  // native CR-delimited progress without allocating a PTY or mixing streams.
+  static const _apt =
+      'apt-get -q=0 -o APT::Color=0 -o Dpkg::Use-Pty=0 '
+      '-o DPkg::Lock::Timeout=60 -o Acquire::Retries=2 '
+      '-o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30';
 
   /// 每个步骤在 guest 内执行的完整 shell 命令；测试覆写此方法注入假命令。
   /// 验证步按组单独执行，此时传入单元素列表。
-  String commandFor(
-    DependencyStep step,
-    List<DependencyProfile> profiles,
-  ) => switch (step) {
-    // 自愈步：失败只降级为警告，后续 apt 仍是权威判定。
-    DependencyStep.repairing => 'dpkg --configure -a',
-    DependencyStep.updating =>
-      'apt-get -o DPkg::Lock::Timeout=60 -o Acquire::Retries=2 '
-          '-o APT::Update::Error-Mode=any update',
-    DependencyStep.installing =>
-      'apt-get -o DPkg::Lock::Timeout=60 install -y --no-install-recommends '
-          'ca-certificates ${profiles.expand((p) => p.packages).join(' ')}',
-    DependencyStep.verifying =>
-      profiles.map((profile) => profile.verifyCommand).join(' && '),
-  };
+  String commandFor(DependencyStep step, List<DependencyProfile> profiles) =>
+      switch (step) {
+        // 自愈步：失败只降级为警告，后续 apt 仍是权威判定。
+        DependencyStep.repairing => 'dpkg --configure -a',
+        DependencyStep.updating =>
+          '$_apt -o APT::Update::Error-Mode=any update',
+        DependencyStep.installing =>
+          '$_apt install -y --no-install-recommends '
+              'ca-certificates ${profiles.expand((p) => p.packages).join(' ')}',
+        DependencyStep.verifying =>
+          profiles.map((profile) => profile.verifyCommand).join(' && '),
+      };
 
   /// 一次安装全部依赖组；返回按组记录的安装结果。
   Future<Map<String, InstalledDependency>> install(
@@ -44,10 +48,6 @@ class DependencyInstaller {
     void Function(DependencyStep step, String line) onOutput,
   ) async {
     final profiles = DependencyProfile.all;
-    final env = await repository.environment();
-    if (!env.ready || env.rootPath == null) {
-      throw const WorkspaceFailure('environmentMissing', '请先安装 Ubuntu 环境');
-    }
     repository.beginDependencyChange();
     final owner = 'deps-${generateId()}';
     // The host only accepts guest workspaces under managed paths; staging
@@ -59,6 +59,11 @@ class DependencyInstaller {
       if (id == owner) cancellation.cancel();
     });
     try {
+      cancellation.throwIfCancelled();
+      final env = await repository.environment();
+      if (!env.ready || env.rootPath == null) {
+        throw const WorkspaceFailure('environmentMissing', '请先安装 Ubuntu 环境');
+      }
       await scratch.create(recursive: true);
       await driver.beginTask(owner, '安装开发依赖');
       for (final step in DependencyStep.values.take(3)) {
@@ -83,6 +88,7 @@ class DependencyInstaller {
         );
       }
       for (final profile in profiles) {
+        cancellation.throwIfCancelled();
         final version = await _run(
           owner,
           env.rootPath!,
@@ -100,6 +106,7 @@ class DependencyInstaller {
           ),
         );
       }
+      cancellation.throwIfCancelled();
       await repository.saveEnvironment(latest);
       return latest.installedDependencies;
     } finally {
@@ -124,20 +131,23 @@ class DependencyInstaller {
     void Function(DependencyStep, String) onOutput,
   ) async {
     final stdout = StringBuffer();
-    final pending = StringBuffer();
-    // Failed steps log their output tail so the real apt error is observable.
-    final tail = <String>[];
-    Future<void> line(bool stderr, String text) async {
-      if (text.isEmpty) return;
-      onOutput(step, text);
-      tail.add(text);
-      if (tail.length > 8) tail.removeAt(0);
+    cancellation.throwIfCancelled();
+    onOutput(
+      step,
+      step == DependencyStep.verifying
+          ? '正在验证 ${profiles.single.label}'
+          : step.description,
+    );
+    void line(bool stderr, String text) {
+      if (text.trim().isEmpty) return;
+      onOutput(step, text.trimRight());
       if (!stderr && step == DependencyStep.verifying) stdout.write('$text\n');
     }
 
-    Future<void> feed(bool stderr, List<int> bytes) async {
-      pending.write(String.fromCharCodes(bytes));
-      var body = pending.toString();
+    final pending = [StringBuffer(), StringBuffer()];
+    void feed(bool stderr, String text) {
+      final buffer = pending[stderr ? 1 : 0]..write(text);
+      var body = buffer.toString();
       // apt 进度条以 \r 刷新；两种分隔都按整行切。
       while (true) {
         final newline = body.indexOf('\n');
@@ -152,13 +162,20 @@ class DependencyInstaller {
         final text = body.substring(0, index);
         body = body.substring(index + 1);
         if (text.isEmpty) continue;
-        await line(stderr, text);
+        line(stderr, text);
       }
-      pending
+      buffer
         ..clear()
         ..write(body);
     }
 
+    final decoders = [
+      for (final stderr in [false, true])
+        const Utf8Decoder(allowMalformed: true)
+            .startChunkedConversion(_OutputSink((text) => feed(stderr, text))),
+    ];
+
+    cancellation.throwIfCancelled();
     final process = await driver.start(
       LinuxProcessSpec(
         ownerId: owner,
@@ -168,10 +185,10 @@ class DependencyInstaller {
         executable: '/bin/sh',
         argv: ['-c', commandFor(step, profiles)],
         cwd: '/workspace',
-        environment: {},
+        environment: {'DEBIAN_FRONTEND': 'noninteractive'},
         outputLimitBytes: DependencyInstaller.outputLimitBytes,
       ),
-      (stderr, bytes) => feed(stderr, bytes),
+      (stderr, bytes) async => decoders[stderr ? 1 : 0].add(bytes),
     );
     try {
       await process.closeInput();
@@ -183,7 +200,11 @@ class DependencyInstaller {
       }
     }
     final event = await waitForProcess(process, cancellation);
-    await line(false, pending.toString());
+    for (var index = 0; index < decoders.length; index++) {
+      decoders[index].close();
+      line(index == 1, pending[index].toString());
+    }
+    cancellation.throwIfCancelled();
     if (event.cancelled) throw const ToolCancelled();
     final failed =
         event.exitCode != 0 ||
@@ -195,9 +216,9 @@ class DependencyInstaller {
       if (failed) {
         AppLogger.error(
           'dpkg 修复未成功 exit=${event.exitCode} signal=${event.signal} '
-          'error=${event.error}\n${tail.join('\n')}',
+          'timedOut=${event.timedOut}',
         );
-        await line(false, '警告：dpkg 修复未完全成功，继续尝试安装');
+        line(false, '警告：dpkg 修复未完全成功，继续尝试安装');
       }
       return '';
     }
@@ -207,7 +228,7 @@ class DependencyInstaller {
       }
       AppLogger.error(
         '依赖安装步骤失败 step=${step.name} exit=${event.exitCode} '
-        'signal=${event.signal} error=${event.error}\n${tail.join('\n')}',
+        'signal=${event.signal} outputLimit=${event.outputLimitExceeded}',
       );
       throw switch (step) {
         DependencyStep.updating => const WorkspaceFailure(
@@ -231,4 +252,13 @@ class DependencyInstaller {
     }
     return null;
   }
+}
+
+class _OutputSink implements Sink<String> {
+  _OutputSink(this.onText);
+  final void Function(String) onText;
+  @override
+  void add(String data) => onText(data);
+  @override
+  void close() {}
 }

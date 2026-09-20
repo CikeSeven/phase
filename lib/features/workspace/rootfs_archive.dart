@@ -31,7 +31,9 @@ class RootfsArchive {
           throw const WorkspaceFailure('archiveLimit', '环境解压体积超过上限');
         }
         await output.writeFrom(chunk);
-        progress(inflated);
+        // This stage reports extracted file bytes, not the intermediate tar.
+        // Signal activity without making the displayed count jump backwards.
+        progress(0);
       }
     } finally {
       await output.close();
@@ -224,6 +226,7 @@ class RootfsArchive {
           p.posix.relative(entry.value.$1, from: p.posix.dirname(entry.key)),
         );
       }
+      progress(total);
       return total;
     } finally {
       await input.close();

@@ -26,25 +26,35 @@ class McpStdioLauncher {
     Map<String, String> environment,
   ) async {
     final repository = await openRepository();
-    final env = await repository.environment();
-    if (!env.ready || env.rootPath == null) {
-      throw const WorkspaceFailure('environmentMissing', '请先在设置中安装 Ubuntu 环境');
-    }
-    final directory = Directory(serverDirectory(repository, profile.id));
-    if (!await directory.exists()) {
-      try {
-        await directory.create(recursive: true);
-      } on FileSystemException {
-        throw const OperationFailure('无法创建 MCP 服务目录，请检查可用空间');
+    final release = repository.retainEnvironment();
+    try {
+      final env = await repository.environment();
+      if (!env.ready || env.rootPath == null) {
+        throw const WorkspaceFailure(
+          'environmentMissing',
+          '请先在设置中安装 Ubuntu 环境',
+        );
       }
+      final directory = Directory(serverDirectory(repository, profile.id));
+      if (!await directory.exists()) {
+        try {
+          await directory.create(recursive: true);
+        } on FileSystemException {
+          throw const OperationFailure('无法创建 MCP 服务目录，请检查可用空间');
+        }
+      }
+      return McpStdioClient(
+        profile,
+        driver: openDriver(),
+        rootfs: env.rootPath!,
+        workspace: directory.path,
+        environment: environment,
+        releaseEnvironment: release,
+      );
+    } catch (_) {
+      release();
+      rethrow;
     }
-    return McpStdioClient(
-      profile,
-      driver: openDriver(),
-      rootfs: env.rootPath!,
-      workspace: directory.path,
-      environment: environment,
-    );
   }
 
   static String serverDirectory(

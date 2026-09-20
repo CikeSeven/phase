@@ -50,7 +50,7 @@ final class McpControllerProvider
   }
 }
 
-String _$mcpControllerHash() => r'edd298811c20cec5742a0740295e95c6f30386dd';
+String _$mcpControllerHash() => r'51b1c9cc3290bcfa789c530518b323ad5765e56a';
 
 final class McpControllerFamily extends $Family
     with

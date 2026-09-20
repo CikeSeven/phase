@@ -125,7 +125,7 @@ final class EnvironmentControllerProvider
 }
 
 String _$environmentControllerHash() =>
-    r'cfc4a99728c9ce394af8719f5bcf5d986f05adf4';
+    r'c6a6fa0c72cde7e3840975d34ab5f4e7166cbfe4';
 
 abstract class _$EnvironmentController extends $Notifier<EnvironmentOperation> {
   EnvironmentOperation build();

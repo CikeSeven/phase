@@ -147,55 +147,60 @@ void main() {
     );
   });
 
-  test(
-    'interrupted installation restores the previous ready pointer',
-    () async {
-      final fixture = createTestDatabase();
-      addTearDown(() async {
-        await fixture.database.close();
-        await fixture.directory.delete(recursive: true);
-      });
-      final repository = WorkspaceRepository(
-        fixture.database,
-        fixture.directory,
-      );
-      await repository.saveEnvironment(
-        RuntimeEnvironment(
-          phase: EnvironmentPhase.extracting,
-          rootPath: '/fixture/rootfs',
-          revision: 'old',
-          installedBytes: 12,
-          installedDependencies: {
-            'python': InstalledDependency(
-              installedAt: DateTime.fromMillisecondsSinceEpoch(1000),
-              version: 'Python 3.12.3',
-            ),
-          },
-        ),
-      );
-      await Directory('${fixture.directory.path}/staging/partial')
-          .create(recursive: true);
-      await repository.recoverInstallation();
-      expect((await repository.environment()).ready, isTrue);
-      expect((await repository.environment()).revision, 'old');
-      final recovered = await repository.environment();
-      expect(
-        recovered.installedDependencies['python']?.version,
-        'Python 3.12.3',
-      );
-      expect(
-        recovered
-            .installedDependencies['python']
-            ?.installedAt
-            .millisecondsSinceEpoch,
-        1000,
-      );
-      expect(
-        Directory('${fixture.directory.path}/staging').existsSync(),
-        isFalse,
-      );
-    },
-  );
+  for (final phase in [
+    EnvironmentPhase.extracting,
+    EnvironmentPhase.configuring,
+  ]) {
+    test(
+      '${phase.name} interrupted installation restores the previous ready pointer',
+      () async {
+        final fixture = createTestDatabase();
+        addTearDown(() async {
+          await fixture.database.close();
+          await fixture.directory.delete(recursive: true);
+        });
+        final repository = WorkspaceRepository(
+          fixture.database,
+          fixture.directory,
+        );
+        await repository.saveEnvironment(
+          RuntimeEnvironment(
+            phase: phase,
+            rootPath: '/fixture/rootfs',
+            revision: 'old',
+            installedBytes: 12,
+            installedDependencies: {
+              'python': InstalledDependency(
+                installedAt: DateTime.fromMillisecondsSinceEpoch(1000),
+                version: 'Python 3.12.3',
+              ),
+            },
+          ),
+        );
+        await Directory('${fixture.directory.path}/staging/partial')
+            .create(recursive: true);
+        await repository.recoverInstallation();
+        expect((await repository.environment()).ready, isTrue);
+        expect((await repository.environment()).revision, 'old');
+        final recovered = await repository.environment();
+        expect(
+          recovered.installedDependencies['python']?.version,
+          'Python 3.12.3',
+        );
+        expect(
+          recovered
+              .installedDependencies['python']
+              ?.installedAt
+              .millisecondsSinceEpoch,
+          1000,
+        );
+        expect(
+          Directory('${fixture.directory.path}/staging').existsSync(),
+          isFalse,
+        );
+      },
+    );
+  }
 }
 
 class _FailingCleanup extends AttachmentStorage {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:archive/archive_io.dart';
@@ -71,14 +72,18 @@ void main() {
     );
     final phases = <EnvironmentPhase>[];
     final downloads = <(int, int?)>[];
+    final extracted = <int>[];
     await installer.install(RunCancellation(), (phase, received, total) {
       phases.add(phase);
       if (phase == EnvironmentPhase.downloading) {
         downloads.add((received, total));
       }
+      if (phase == EnvironmentPhase.extracting) extracted.add(received);
     });
     expect(downloads.first, (0, bytes.length));
     expect(downloads.last, (bytes.length, bytes.length));
+    expect(extracted, orderedEquals([...extracted]..sort()));
+    expect(extracted.last, 'fixture'.length);
     expect((await repository.environment()).ready, isTrue);
     // A successful replacement clears recorded dependencies with the rootfs.
     expect((await repository.environment()).installedDependencies, isEmpty);
@@ -94,6 +99,7 @@ void main() {
         EnvironmentPhase.downloading,
         EnvironmentPhase.verifying,
         EnvironmentPhase.extracting,
+        EnvironmentPhase.configuring,
         EnvironmentPhase.checking,
         EnvironmentPhase.ready,
       ]),
@@ -106,6 +112,69 @@ void main() {
     );
     expect(await File('${workspace.rootPath}/keep.txt').readAsString(), 'keep');
   });
+  for (final waitingFor in ['download', 'mirror']) {
+    test('cancels an idle $waitingFor request and removes staging', () async {
+      final fixture = createTestDatabase();
+      final repository = WorkspaceRepository(
+        fixture.database,
+        fixture.directory,
+      );
+      final driver = LocalProcessDriver();
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final dio = Dio();
+      addTearDown(() async {
+        dio.close(force: true);
+        await server.close(force: true);
+        await driver.dispose();
+        await fixture.database.close();
+        await fixture.directory.delete(recursive: true);
+      });
+      final bytes = gzip.encode(
+        TarEncoder().encode(
+          Archive()..add(ArchiveFile.string('etc/os-release', 'fixture')),
+        ),
+      );
+      final waiting = Completer<void>();
+      server.listen((request) async {
+        if (waitingFor == 'mirror' && request.uri.path == '/rootfs') {
+          request.response.add(bytes);
+          await request.response.close();
+        } else {
+          request.response.add(bytes.sublist(0, 1));
+          await request.response.flush();
+          waiting.complete();
+        }
+      });
+      final cancellation = RunCancellation();
+      final installer = LinuxInstaller(
+        repository,
+        driver,
+        dio,
+        image: LinuxImage(
+          revision: 'fixture',
+          url: 'http://127.0.0.1:${server.port}/rootfs',
+          digest: sha256.convert(bytes).toString(),
+          downloadBytes: bytes.length,
+        ),
+        traceUrl: 'http://127.0.0.1:${server.port}/trace',
+      );
+      final pending = installer.install(cancellation, (_, _, _) {});
+      await waiting.future;
+      final result = expectLater(pending, throwsA(isA<ToolCancelled>()));
+      cancellation.cancel();
+      await result.timeout(const Duration(seconds: 2));
+      expect(
+        (await repository.environment()).phase,
+        EnvironmentPhase.cancelled,
+      );
+      expect(repository.busy, isFalse);
+      expect(driver.owners, isEmpty);
+      expect(
+        await Directory('${fixture.directory.path}/staging').list().isEmpty,
+        isTrue,
+      );
+    });
+  }
   test('apt mirror falls back to upstream when the probe fails', () async {
     final fixture = createTestDatabase();
     final driver = LocalProcessDriver();

@@ -42,7 +42,7 @@ final class DependencyControllerProvider
 }
 
 String _$dependencyControllerHash() =>
-    r'2540e1a89ed905e09d0978c70f58dc1e29020169';
+    r'9b601a1429fb933954f566daf13266bdea70e5e1';
 
 abstract class _$DependencyController extends $Notifier<DependencyOperation> {
   DependencyOperation build();

@@ -25,17 +25,15 @@ void main() {
   late ({AppDatabase database, Directory directory}) fixture;
   late LocalProcessDriver driver;
   late WorkspaceRepository repository;
-  setUpAll(() {
+  setUp(() async {
+    fixture = createTestDatabase();
+    driver = LocalProcessDriver();
+    repository = WorkspaceRepository(fixture.database, fixture.directory);
     addTearDown(() async {
       await driver.dispose();
       await fixture.database.close();
       await fixture.directory.delete(recursive: true);
     });
-  });
-  setUp(() async {
-    fixture = createTestDatabase();
-    driver = LocalProcessDriver();
-    repository = WorkspaceRepository(fixture.database, fixture.directory);
     await repository.saveEnvironment(
       const RuntimeEnvironment(
         phase: EnvironmentPhase.ready,
@@ -96,6 +94,10 @@ void main() {
         DependencyProfile.all,
       );
       expect(command, contains('install -y'));
+      expect(command, contains('-q=0'));
+      expect(command, contains('Acquire::http::Timeout=30'));
+      expect(command, contains('Acquire::https::Timeout=30'));
+      expect(command, contains('Dpkg::Use-Pty=0'));
       for (final package in DependencyProfile.all.expand(
         (profile) => profile.packages,
       )) {
@@ -108,6 +110,12 @@ void main() {
       // 脚本把每步替换为一个进程：修复、更新、安装各一次，验证按组三次。
       await installer().install(RunCancellation(), (_, _) {});
       expect(driver.calls, hasLength(6));
+      expect(
+        driver.calls.every(
+          (spec) => spec.environment['DEBIAN_FRONTEND'] == 'noninteractive',
+        ),
+        isTrue,
+      );
     },
   );
 
@@ -224,6 +232,41 @@ void main() {
         });
     expect(lines, containsAll(['a', 'b', 'c']));
   });
+
+  test(
+    'silent steps are announced before launch and can be cancelled',
+    () async {
+      final cancellation = RunCancellation();
+      final steps = <DependencyStep>[];
+      await expectLater(
+        installer().install(cancellation, (step, _) {
+          steps.add(step);
+          if (step == DependencyStep.updating) cancellation.cancel();
+        }),
+        throwsA(isA<ToolCancelled>()),
+      );
+      expect(steps, [DependencyStep.repairing, DependencyStep.updating]);
+      expect(driver.calls, hasLength(1));
+      expect(driver.active, isEmpty);
+    },
+  );
+
+  test(
+    'stdout UTF-8 fragments and stderr never mix into recorded versions',
+    () async {
+      final lines = <String>[];
+      final records = await installer(
+        scripts: {
+          DependencyStep.verifying: r'''printf '\346'; sleep 0.02; printf 'warning\n' >&2; printf '\234\210相 1.2\n'; printf trailing >&2''',
+        },
+      ).install(RunCancellation(), (_, line) => lines.add(line));
+      expect(
+        records.values.every((record) => record.version == '月相 1.2'),
+        isTrue,
+      );
+      expect(lines, containsAll(['warning', 'trailing', '月相 1.2']));
+    },
+  );
 
   test(
     'dependency change and environment change are mutually exclusive',

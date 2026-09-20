@@ -33,7 +33,9 @@ class WorkspaceRepository {
   final Set<String> _leases = {};
   bool _mutatingEnvironment = false;
   bool _installingDependencies = false;
-  bool get busy => _mutatingEnvironment || _leases.isNotEmpty;
+  int _environmentUsers = 0;
+  bool get busy =>
+      _mutatingEnvironment || _leases.isNotEmpty || _environmentUsers > 0;
   bool inUse(String id) => _leases.contains(id);
   static const environmentId = 'ubuntu-arm64';
 
@@ -264,6 +266,20 @@ class WorkspaceRepository {
     _mutatingEnvironment = false;
   }
 
+  /// 本地 MCP 检查也会持有 rootfs，但没有会话工作区租约。
+  void Function() retainEnvironment() {
+    if (_mutatingEnvironment) {
+      throw const OperationFailure('环境正在安装或卸载，请稍候');
+    }
+    _environmentUsers++;
+    var released = false;
+    return () {
+      if (released) return;
+      released = true;
+      _environmentUsers--;
+    };
+  }
+
   /// 依赖安装与环境级变更互斥；不替换 rootfs，因此不阻断运行租约，
   /// guest 内并发 apt 冲突由锁超时兜底。
   void beginDependencyChange() {
@@ -336,6 +352,7 @@ class WorkspaceRepository {
       EnvironmentPhase.downloading,
       EnvironmentPhase.verifying,
       EnvironmentPhase.extracting,
+      EnvironmentPhase.configuring,
       EnvironmentPhase.checking,
     }.contains(env.phase)) {
       await saveEnvironment(

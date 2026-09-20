@@ -48,4 +48,4 @@ final class McpConnectionsProvider
   }
 }
 
-String _$mcpConnectionsHash() => r'68ffa7aaeb12376e685698c20c84ea0a75f28add';
+String _$mcpConnectionsHash() => r'eb57f943cb7a7913c7e51c7169f7607f33ae9499';

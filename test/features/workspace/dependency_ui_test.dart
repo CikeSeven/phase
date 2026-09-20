@@ -9,6 +9,7 @@ import 'package:phase/core/widgets/app_linear_progress_indicator.dart';
 import 'package:phase/data/models/workspace.dart';
 import 'package:phase/features/workspace/dependency_controller.dart';
 import 'package:phase/features/workspace/dependency_profiles.dart';
+import 'package:phase/features/workspace/installation_progress.dart';
 import 'package:phase/features/workspace/process_api.g.dart';
 import 'package:phase/features/workspace/workspace_controller.dart';
 import 'package:phase/features/workspace/workspaces_page.dart';
@@ -112,7 +113,8 @@ void main() {
         tester.widget<AppLinearProgressIndicator>(indicator).value,
         isNull,
       );
-      expect(find.text('正在安装依赖'), findsOneWidget);
+      expect(find.text('安装依赖'), findsOneWidget);
+      expect(find.text('开发依赖 · 第 3 / 4 步'), findsOneWidget);
       await tester.scrollUntilVisible(
         find.text('解压 python3'),
         150,
@@ -261,6 +263,42 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('环境依赖', skipOffstage: false), findsNothing);
+  });
+
+  testWidgets('软件源阶段展示整体位置、等待时间与新输出，不将静默判断为网络故障', (tester) async {
+    final started = DateTime.now();
+    Future<void> show(DateTime updated, List<String> lines) =>
+        tester.pumpWidget(
+          MaterialApp(
+            theme: AppTheme.light(),
+            home: Scaffold(
+              body: InstallationProgress(
+                title: '开发依赖',
+                steps: [for (final step in DependencyStep.values) step.label],
+                current: DependencyStep.updating.index,
+                description: DependencyStep.updating.description,
+                startedAt: started,
+                updatedAt: updated,
+                lines: lines,
+              ),
+            ),
+          ),
+        );
+    await show(started, ['Get: 1 http://fixture/ubuntu noble InRelease']);
+    expect(find.text('开发依赖 · 第 2 / 4 步'), findsOneWidget);
+    expect(find.textContaining('尚未安装 Python'), findsOneWidget);
+    // Test time is passed explicitly because DateTime.now is not fake_async's clock.
+    await show(started.subtract(const Duration(seconds: 25)), [
+      'Get: 1 http://fixture/ubuntu noble InRelease',
+    ]);
+    expect(find.textContaining('可能在等待网络或处理文件'), findsOneWidget);
+    await show(DateTime.now(), [
+      '42% [3 Packages 420 kB/1000 kB 42%] 100 kB/s 6s',
+    ]);
+    expect(find.textContaining('可能在等待网络或处理文件'), findsNothing);
+    expect(find.textContaining('420 kB/1000 kB'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox());
   });
 }
 

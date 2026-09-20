@@ -225,6 +225,27 @@ void main() {
     expect(driver.active, isEmpty);
   });
 
+  test('宿主停止进程使等待调用按取消收口并释放任务', () async {
+    final client = build(profile(mode: 'hang'));
+    final tools = await client.connect(RunCancellation());
+    final pending = client.callTool(
+      tools.single,
+      {'text': 'x'},
+      RunCancellation(),
+      beforeDispatch: () async {},
+    );
+    final failure = expectLater(pending, throwsA(isA<ToolCancelled>()));
+    await waitUntil(
+      () =>
+          logFile.existsSync() &&
+          logFile.readAsStringSync().contains('call-arrived'),
+    );
+    await driver.active.values.single.cancel();
+    await failure;
+    await waitUntil(() => driver.owners.isEmpty);
+    await client.close();
+  });
+
   test('stdout 出现非 JSON 内容时连接明确失败', () async {
     final client = build(profile(mode: 'garbage'));
     final tools = await client.connect(RunCancellation());
@@ -347,6 +368,40 @@ void main() {
         ),
       ),
     );
+    expect(repository.busy, isFalse);
+  });
+
+  test('本地连接持有环境直到关闭，未启动和已退出的连接也正确释放', () async {
+    final launcher = McpStdioLauncher(
+      openDriver: () => driver,
+      openRepository: () async => repository,
+    );
+    for (final start in [false, true]) {
+      final value = profile();
+      final client = await launcher.create(value, value.command!.environment);
+      if (start) await client.connect(RunCancellation());
+      expect(
+        () => repository.beginEnvironmentChange(),
+        throwsA(isA<OperationFailure>()),
+      );
+      await client.close();
+      expect(repository.busy, isFalse);
+      repository.beginEnvironmentChange();
+      await expectLater(
+        launcher.create(value, const {}),
+        throwsA(isA<OperationFailure>()),
+      );
+      repository.endEnvironmentChange();
+    }
+    final value = profile(mode: 'exit_after_init');
+    final client = await launcher.create(value, value.command!.environment);
+    await expectLater(
+      client.connect(RunCancellation()),
+      throwsA(isA<McpFailure>()),
+    );
+    await waitUntil(() => driver.owners.isEmpty);
+    expect(repository.busy, isFalse);
+    await client.close();
   });
 
   test('stdio 真实进程经运行时闭环：确认调用、落库与最终回答', () async {

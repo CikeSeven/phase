@@ -163,7 +163,7 @@ E2 当前实现：上述本地导入、助手范围、版本固定、管理界�
 
 `RuntimeEnvironment`：id、发行版/版本、ABI、镜像来源与摘要、状态、安装目录、已安装依赖版本和可测量大小。首批一个 Ubuntu 环境供多个独立工作区使用。
 
-状态：notInstalled → downloading → verifying → extracting → checking → ready；失败进入 failed，取消进入 cancelled，保留可清理的临时目录和此前可用安装。只有 shell、文件读写、进程退出码检查都通过才能 ready。
+状态：notInstalled → downloading → verifying → extracting → configuring → checking → ready；配置阶段选择软件源并写入 DNS/来源配置。失败进入 failed，取消进入 cancelled，保留此前可用安装并清理临时目录。只有 shell、文件读写、进程退出码检查都通过才能 ready。
 
 - 镜像清单固定发行版修订、ABI、可信发布摘要和来源，校验下载内容；断点续传需校验资源一致性，不能把截断包标为安装完成。
 - 解压到 staging，防路径穿越、链接逃逸与解压超额；空间检查覆盖压缩包、解压和替换时峰值占用。

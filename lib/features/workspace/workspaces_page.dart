@@ -14,6 +14,7 @@ import '../../../data/models/workspace.dart';
 import 'dependency_controller.dart';
 import 'dependency_profiles.dart';
 import 'linux_installer.dart';
+import 'installation_progress.dart';
 import 'workspace_controller.dart';
 
 class WorkspacesPage extends ConsumerStatefulWidget {
@@ -40,7 +41,9 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     final progressLabel = dependencies.busy
         ? '正在安装依赖'
         : operation.busy
-        ? _phase(operation.phase ?? EnvironmentPhase.checking)
+        ? operation.uninstalling
+              ? '正在卸载环境'
+              : _phase(operation.phase)
         : '正在读取环境';
     return AppScaffold(
       title: '环境设置',
@@ -83,23 +86,38 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
             ),
           const SizedBox(height: 16),
           if (operation.busy) ...[
-            Text(
-              progress == null
-                  ? progressLabel
-                  : '$progressLabel · ${(progress * 100).floor()}%',
-            ),
-            if (progress != null)
-              Text(
-                '${(operation.bytes / 1048576).toStringAsFixed(1)} / ${(operation.total! / 1048576).toStringAsFixed(1)} MiB',
-              )
-            else if (operation.bytes > 0)
-              Text('${(operation.bytes / 1048576).toStringAsFixed(1)} MiB'),
-            TextButton(
-              onPressed: ref
-                  .read(environmentControllerProvider.notifier)
-                  .cancel,
-              child: const Text('取消安装'),
-            ),
+            if (operation.uninstalling)
+              const Text('正在卸载环境…')
+            else ...[
+              InstallationProgress(
+                title: '基础环境',
+                steps: [for (final phase in _installPhases) _phase(phase)],
+                current: _installPhases
+                    .indexOf(operation.phase)
+                    .clamp(0, _installPhases.length - 1),
+                description: switch (operation.phase) {
+                  null => '检查设备支持与可用空间',
+                  EnvironmentPhase.downloading => '从 Ubuntu 下载固定版本镜像',
+                  EnvironmentPhase.verifying => '校验 SHA-256，确认镜像完整性',
+                  EnvironmentPhase.extracting => '展开归档、写入文件并设置权限',
+                  EnvironmentPhase.configuring => '选择软件源并配置 DNS 与 Ubuntu 软件包来源',
+                  _ => '启动 Ubuntu shell，检查文件读写与进程退出码',
+                },
+                detail: progress != null
+                    ? '${(progress * 100).floor()}% · ${(operation.bytes / 1048576).toStringAsFixed(1)} / ${(operation.total! / 1048576).toStringAsFixed(1)} MiB'
+                    : operation.bytes > 0
+                    ? '已写入 ${(operation.bytes / 1048576).toStringAsFixed(1)} MiB'
+                    : null,
+                startedAt: operation.phaseStartedAt,
+                updatedAt: operation.lastProgressAt,
+              ),
+              TextButton(
+                onPressed: ref
+                    .read(environmentControllerProvider.notifier)
+                    .cancel,
+                child: const Text('取消安装'),
+              ),
+            ],
           ] else
             Row(
               children: [
@@ -117,6 +135,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                         : null,
                     onPressed:
                         environment.hasValue &&
+                            !dependencies.busy &&
                             platform.value?.available == true
                         ? () async {
                             final allowed = await showDialog<bool>(
@@ -178,42 +197,48 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Theme.of(context).colorScheme.error,
                       ),
-                      onPressed: () async {
-                        final allowed = await showDialog<bool>(
-                          context: context,
-                          builder: (context) => AppDialog(
-                            title: '卸载 Ubuntu 环境？',
-                            icon: Symbols.delete,
-                            tone: AppTone.error,
-                            content: const Text(
-                              '删除环境和已安装依赖，保留全部工作区文件。正在使用时不能卸载。',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context, false),
-                                child: const Text('取消'),
-                              ),
-                              FilledButton(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .error,
-                                  foregroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .onError,
+                      onPressed: dependencies.busy
+                          ? null
+                          : () async {
+                              final allowed = await showDialog<bool>(
+                                context: context,
+                                builder: (context) => AppDialog(
+                                  title: '卸载 Ubuntu 环境？',
+                                  icon: Symbols.delete,
+                                  tone: AppTone.error,
+                                  content: const Text(
+                                    '删除环境和已安装依赖，保留全部工作区文件。正在使用时不能卸载。',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(context, false),
+                                      child: const Text('取消'),
+                                    ),
+                                    FilledButton(
+                                      style: FilledButton.styleFrom(
+                                        backgroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .error,
+                                        foregroundColor: Theme.of(context)
+                                            .colorScheme
+                                            .onError,
+                                      ),
+                                      onPressed: () =>
+                                          Navigator.pop(context, true),
+                                      child: const Text('卸载'),
+                                    ),
+                                  ],
                                 ),
-                                onPressed: () => Navigator.pop(context, true),
-                                child: const Text('卸载'),
-                              ),
-                            ],
-                          ),
-                        );
-                        if (allowed == true && mounted) {
-                          await ref
-                              .read(environmentControllerProvider.notifier)
-                              .uninstall();
-                        }
-                      },
+                              );
+                              if (allowed == true && mounted) {
+                                await ref
+                                    .read(
+                                      environmentControllerProvider.notifier,
+                                    )
+                                    .uninstall();
+                              }
+                            },
                       child: const Text('卸载环境', textAlign: TextAlign.center),
                     ),
                   ),
@@ -245,6 +270,23 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                     : () => _confirmInstall(reinstall: true),
               ),
             ),
+            if (dependencies.busy ||
+                dependencies.failed && dependencies.step != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: InstallationProgress(
+                  title: '开发依赖',
+                  steps: [for (final step in DependencyStep.values) step.label],
+                  current:
+                      (dependencies.step ?? DependencyStep.repairing).index,
+                  description: (dependencies.step ?? DependencyStep.repairing)
+                      .description,
+                  lines: dependencies.logTail,
+                  startedAt: dependencies.stepStartedAt,
+                  updatedAt: dependencies.lastOutputAt,
+                  running: dependencies.busy,
+                ),
+              ),
             if (dependencies.busy)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
@@ -380,23 +422,8 @@ class _DependencyTile extends StatelessWidget {
     ];
     final allInstalled = installedLabels.length == DependencyProfile.all.length;
     final installing = operation.busy;
-    final theme = Theme.of(context);
     final subtitle = installing
-        ? Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(_stepLabel(operation.step ?? DependencyStep.repairing)),
-              for (final line in operation.logTail.take(3))
-                Text(
-                  line,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
-                ),
-            ],
-          )
+        ? null
         : Text(
             allInstalled
                 ? '全部已安装 · ${_formatDate(_latestInstalledAt(records))}'
@@ -439,20 +466,24 @@ class _DependencyTile extends StatelessWidget {
     }
     return latest;
   }
-
-  String _stepLabel(DependencyStep step) => switch (step) {
-    DependencyStep.repairing => '修复包状态',
-    DependencyStep.updating => '更新软件源',
-    DependencyStep.installing => '正在安装依赖',
-    DependencyStep.verifying => '验证版本',
-  };
 }
 
-String _phase(EnvironmentPhase phase) => switch (phase) {
+const _installPhases = [
+  null,
+  EnvironmentPhase.downloading,
+  EnvironmentPhase.verifying,
+  EnvironmentPhase.extracting,
+  EnvironmentPhase.configuring,
+  EnvironmentPhase.checking,
+];
+
+String _phase(EnvironmentPhase? phase) => switch (phase) {
+  null => '准备安装',
   EnvironmentPhase.notInstalled => '未安装',
   EnvironmentPhase.downloading => '下载中',
   EnvironmentPhase.verifying => '校验镜像',
   EnvironmentPhase.extracting => '解压文件',
+  EnvironmentPhase.configuring => '配置软件源',
   EnvironmentPhase.checking => '检查 shell 和文件读写',
   EnvironmentPhase.ready => '可用',
   EnvironmentPhase.failed => '安装失败',

@@ -16,11 +16,15 @@ class DependencyOperation {
     this.logTail = const [],
     this.error,
     this.failed = false,
+    this.stepStartedAt,
+    this.lastOutputAt,
   });
   final bool busy;
   final DependencyStep? step;
   final List<String> logTail;
   final String? error;
+  final DateTime? stepStartedAt;
+  final DateTime? lastOutputAt;
 
   /// 最近一次失败可原样重试；重试重发同样的完整安装。
   final bool failed;
@@ -48,20 +52,33 @@ class DependencyController extends _$DependencyController {
       );
       await installer.install(cancellation, (step, line) {
         if (!ref.mounted) return;
+        final now = DateTime.now();
+        final lines = [if (state.step == step) ...state.logTail, line];
         state = DependencyOperation(
           busy: true,
           step: step,
-          logTail: [...state.logTail, line].take(5).toList(),
+          logTail: lines
+              .skip((lines.length - 5).clamp(0, lines.length))
+              .toList(),
+          stepStartedAt: state.step == step ? state.stepStartedAt : now,
+          lastOutputAt: now,
         );
       });
       if (ref.mounted) state = const DependencyOperation();
     } on ToolCancelled {
       if (ref.mounted) {
-        state = const DependencyOperation(error: '已取消安装，已安装内容保留', failed: true);
+        state = DependencyOperation(
+          step: state.step,
+          logTail: state.logTail,
+          error: '已取消安装，已安装内容保留',
+          failed: true,
+        );
       }
     } catch (error) {
       if (ref.mounted) {
         state = DependencyOperation(
+          step: state.step,
+          logTail: state.logTail,
           error: error is Failure ? error.userMessage : '依赖安装失败，请重试',
           failed: true,
         );

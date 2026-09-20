@@ -30,12 +30,18 @@ class EnvironmentOperation {
     this.bytes = 0,
     this.total,
     this.error,
+    this.phaseStartedAt,
+    this.lastProgressAt,
+    this.uninstalling = false,
   });
   final bool busy;
   final EnvironmentPhase? phase;
   final int bytes;
   final int? total;
   final String? error;
+  final DateTime? phaseStartedAt;
+  final DateTime? lastProgressAt;
+  final bool uninstalling;
 }
 
 @Riverpod(keepAlive: true)
@@ -54,7 +60,11 @@ class EnvironmentController extends _$EnvironmentController {
     if (state.busy) return;
     final cancellation = RunCancellation();
     _cancellation = cancellation;
-    state = const EnvironmentOperation(busy: true);
+    state = EnvironmentOperation(
+      busy: true,
+      uninstalling: uninstall,
+      phaseStartedAt: DateTime.now(),
+    );
     final dio = Dio(
       BaseOptions(
         connectTimeout: const Duration(seconds: 30),
@@ -72,6 +82,8 @@ class EnvironmentController extends _$EnvironmentController {
       } else {
         var last = DateTime.fromMillisecondsSinceEpoch(0);
         await installer.install(cancellation, (phase, bytes, total) {
+          // Keep the final check visible until commit and cleanup both finish.
+          if (phase == EnvironmentPhase.ready) return;
           final now = DateTime.now();
           if (ref.mounted &&
               (state.phase != phase ||
@@ -82,6 +94,8 @@ class EnvironmentController extends _$EnvironmentController {
               phase: phase,
               bytes: bytes,
               total: total,
+              phaseStartedAt: state.phase == phase ? state.phaseStartedAt : now,
+              lastProgressAt: now,
             );
             last = now;
           }

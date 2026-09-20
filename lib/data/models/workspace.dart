@@ -3,6 +3,7 @@ enum EnvironmentPhase {
   downloading,
   verifying,
   extracting,
+  configuring,
   checking,
   ready,
   failed,

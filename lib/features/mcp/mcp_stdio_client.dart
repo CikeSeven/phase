@@ -19,6 +19,7 @@ class McpStdioClient extends McpClient {
     required this.rootfs,
     required this.workspace,
     this.environment = const {},
+    this.releaseEnvironment,
   });
 
   static const stderrTailBytes = 4096;
@@ -34,6 +35,7 @@ class McpStdioClient extends McpClient {
 
   /// 明文与解密后敏感环境变量的合并结果；基础 PATH/HOME 由宿主提供。
   final Map<String, String> environment;
+  final void Function()? releaseEnvironment;
 
   final _pending = <int, Completer<Map<String, dynamic>>>{};
   List<int> _stdoutBuffer = [];
@@ -43,6 +45,10 @@ class McpStdioClient extends McpClient {
   String? _owner;
   Future<void>? _started;
   LinuxProcessEvent? _exit;
+  bool _shuttingDown = false;
+  Future<void> _writes = Future.value();
+  bool _leaseReleased = false;
+  Future<void>? _ownerRelease;
 
   @override
   Future<Map<String, dynamic>> exchange(
@@ -52,18 +58,22 @@ class McpStdioClient extends McpClient {
     RunCancellation cancellation, {
     Duration? timeout,
   }) async {
+    cancellation.throwIfCancelled();
     await _ensureStarted();
+    cancellation.throwIfCancelled();
+    if (_shuttingDown) throw const ToolCancelled();
     if (_exit != null) throw _exitFailure();
     final completer = Completer<Map<String, dynamic>>();
+    final response = completer.future;
     _pending[id] = completer;
     Timer? timer;
-    Future<void>? cancelled;
+    var sent = false;
     try {
       timer = Timer(
         timeout ?? Duration(seconds: profile.callTimeoutSeconds),
         () {
-          _pending.remove(id);
-          if (method != 'initialize') {
+          if (_pending.remove(id) == null) return;
+          if (sent && method != 'initialize') {
             notifyCancelled(id, 'Timeout').ignore();
           }
           if (!completer.isCompleted) {
@@ -73,25 +83,27 @@ class McpStdioClient extends McpClient {
           }
         },
       );
-      cancelled = cancellation.whenCancelled.then((_) {
-        _pending.remove(id);
-        if (method != 'initialize') {
+      cancellation.whenCancelled.then((_) {
+        if (_pending.remove(id) == null) return;
+        if (sent && method != 'initialize') {
           notifyCancelled(id, 'Cancelled').ignore();
         }
         if (!completer.isCompleted) {
           completer.completeError(const ToolCancelled());
         }
       });
-      await _writeLine({
-        'jsonrpc': '2.0',
-        'id': id,
-        'method': method,
-        'params': params,
-      });
-      return await completer.future;
+      final writing = _writeLine(
+        {'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params},
+        beforeWrite: () {
+          if (!_pending.containsKey(id)) return false;
+          sent = true;
+          return true;
+        },
+      );
+      // Timeout/cancellation must also finish while stdin has backpressure.
+      return await Future.any([response, writing.then((_) => response)]);
     } finally {
       timer?.cancel();
-      cancelled?.ignore();
       _pending.remove(id);
     }
   }
@@ -100,7 +112,13 @@ class McpStdioClient extends McpClient {
   Future<void> write(
     Map<String, dynamic> message,
     RunCancellation cancellation,
-  ) => _writeLine(message);
+  ) => _writeLine(
+    message,
+    beforeWrite: () {
+      cancellation.throwIfCancelled();
+      return true;
+    },
+  );
 
   /// 首次请求前启动服务进程；后续复用同一进程与管道。
   Future<void> _ensureStarted() => _started ??= _start();
@@ -110,6 +128,7 @@ class McpStdioClient extends McpClient {
     if (command == null) {
       throw const McpFailure('invalidCommand', 'stdio 服务缺少启动命令');
     }
+    if (_shuttingDown) throw const ToolCancelled();
     if (_exit != null) {
       throw _exitFailure();
     }
@@ -117,6 +136,7 @@ class McpStdioClient extends McpClient {
     try {
       await driver.beginTask(owner, 'MCP 服务 ${profile.name}');
       _owner = owner;
+      if (_shuttingDown) throw const ToolCancelled();
       _stops = driver.stops.listen((id) {
         if (id == owner) {
           // 通知面板的停止等同用户停止：终止进程，等待中的请求按取消收口。
@@ -145,11 +165,16 @@ class McpStdioClient extends McpClient {
       );
       _process = process;
       unawaited(process.exited.then(_onExit));
+      if (_shuttingDown) {
+        await _terminate();
+        throw const ToolCancelled();
+      }
     } on Failure catch (error) {
       await _releaseOwner();
       throw McpFailure('processStart', error.userMessage);
     } on Object {
       await _releaseOwner();
+      if (_shuttingDown) throw const ToolCancelled();
       throw const McpFailure('processStart', 'MCP 服务进程启动失败');
     }
   }
@@ -159,11 +184,13 @@ class McpStdioClient extends McpClient {
     if (state != McpConnectionState.closing) {
       state = McpConnectionState.failed;
     }
-    final failure = _exitFailure();
+    final failure = event.cancelled ? const ToolCancelled() : _exitFailure();
     for (final completer in _pending.values.toList()) {
       if (!completer.isCompleted) completer.completeError(failure);
     }
     _pending.clear();
+    unawaited(_releaseOwner());
+    _releaseLease();
   }
 
   McpFailure _exitFailure() {
@@ -260,9 +287,23 @@ class McpStdioClient extends McpClient {
     }
   }
 
-  Future<void> _writeLine(Map<String, dynamic> message) async {
+  Future<void> _writeLine(
+    Map<String, dynamic> message, {
+    bool Function()? beforeWrite,
+  }) {
+    // Serialize whole frames, not individual bridge-sized chunks: server ping
+    // replies and cancellation notifications may be sent during a large call.
+    final writing = _writes.then((_) async {
+      if (beforeWrite != null && !beforeWrite()) return;
+      await _writeFrame(message);
+    });
+    _writes = writing.then<void>((_) {}, onError: (Object _, StackTrace _) {});
+    return writing;
+  }
+
+  Future<void> _writeFrame(Map<String, dynamic> message) async {
     final process = _process;
-    if (process == null || _exit != null) {
+    if (process == null || _exit != null || _shuttingDown) {
       throw const McpFailure(
         'connectionLost',
         'MCP 服务进程不可用，消息未能发送；已派发的操作不会自动重发',
@@ -310,7 +351,9 @@ class McpStdioClient extends McpClient {
     }
   }
 
-  Future<void> _releaseOwner() async {
+  Future<void> _releaseOwner() => _ownerRelease ??= _finishOwner();
+
+  Future<void> _finishOwner() async {
     await _stops?.cancel();
     _stops = null;
     final owner = _owner;
@@ -337,7 +380,25 @@ class McpStdioClient extends McpClient {
 
   @override
   Future<void> shutdown() async {
-    await _terminate();
-    await _releaseOwner();
+    _shuttingDown = true;
+    try {
+      // A close during beginTask/start must also reap the process whose handle
+      // arrives later; otherwise it escapes both the connection and owner.
+      try {
+        await _started;
+      } on Object {
+        // Startup failure is reported by the request that initiated it.
+      }
+      await _terminate();
+      await _releaseOwner();
+    } finally {
+      _releaseLease();
+    }
+  }
+
+  void _releaseLease() {
+    if (_leaseReleased) return;
+    _leaseReleased = true;
+    releaseEnvironment?.call();
   }
 }

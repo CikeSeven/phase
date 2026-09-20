@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.text.TextUtils
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -49,8 +48,8 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
     private var continuing = false
     private var column: LinearLayout? = null
     private var header: LinearLayout? = null
-    private var title: TextSwitcher? = null
-    private var displayedTitle = ""
+    private var title: TaskPanelTextView? = null
+    private var displayedHeadline: TaskPanelHeadline? = null
     private var chevron: ImageView? = null
     private var primary: ImageButton? = null
     private var stopButton: ImageButton? = null
@@ -87,7 +86,7 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
         countdown?.let(handler::removeCallbacks); countdown = null
         motion?.cancel(); motion = null; targetFrame = null
         scroll?.let { scrollY = it.scrollY; followTail = !it.canScrollVertically(1) }
-        title?.inAnimation?.cancel(); title?.outAnimation?.cancel()
+        title?.clearAnimation()
         rows.values.forEach { it.container.animate().cancel() }
         followOnLayout?.let { listener ->
             view?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnPreDrawListener(listener)
@@ -96,7 +95,7 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
         view?.let { try { manager.removeView(it) } catch (_: IllegalArgumentException) {} }
         view = null; params = null; column = null; header = null; title = null
         chevron = null; primary = null; stopButton = null; footer = null; terminal = null
-        scroll = null; feed = null; rows.clear(); displayedTitle = ""; reading = false
+        scroll = null; feed = null; rows.clear(); displayedHeadline = null; reading = false
         decide = {}; stop = {}; resume = {}; open = {}; close = {}
     }
 
@@ -140,11 +139,7 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
             setPadding(dp(8), 0, 0, 0); background = ripple(Color.TRANSPARENT)
             setOnClickListener { expanded = !expanded; render(animate = true) }
         }
-        title = TextSwitcher(service).apply {
-            setFactory { text(14f, accent).apply {
-                setTypeface(typeface, Typeface.BOLD); maxLines = 2; ellipsize = TextUtils.TruncateAt.END
-            } }
-        }
+        title = TaskPanelTextView(service).apply { textSize = 14f; setTextColor(accent) }
         toggle.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
         chevron = ImageView(service).apply {
             setImageResource(R.drawable.ic_task_expand); imageTintList = ColorStateList.valueOf(muted)
@@ -198,21 +193,24 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
     private fun render(animate: Boolean) {
         val root = view ?: return
         val pending = confirmation
-        val status = when {
-            finished -> displayedTitle
-            pending != null -> "等待确认"
-            continuing -> "正在交还控制"
-            waiting -> "等待你操作"
-            else -> snapshot?.status ?: "正在处理"
+        val headline = if (finished) displayedHeadline ?: TaskPanelHeadline("") else
+            TaskPanelHeadline.from(snapshot, expanded, pending != null, continuing)
+        if (displayedHeadline != headline) {
+            // Stream increments replace text in place; only a new message/stage animates.
+            val sameResponse = headline.responseId != null && headline.responseId == displayedHeadline?.responseId
+            val duration = if (animate && displayedHeadline != null && !sameResponse) motionDuration(150) else 0L
+            title?.apply {
+                setTypeface(Typeface.DEFAULT, if (headline.responseId == null) Typeface.BOLD else Typeface.NORMAL)
+                setTextColor(if (headline.responseId == null) accent else ink)
+                showHeadline(headline)
+                if (!sameResponse) {
+                    clearAnimation()
+                    if (duration > 0) startAnimation(textMotion(duration))
+                }
+            }
+            displayedHeadline = headline
         }
-        if (displayedTitle != status) {
-            val duration = if (animate && displayedTitle.isNotEmpty()) motionDuration(150) else 0L
-            title?.inAnimation = textMotion(true, duration)
-            title?.outAnimation = textMotion(false, duration)
-            title?.setText(status)
-            displayedTitle = status
-        }
-        (header?.getChildAt(0))?.contentDescription = "$status。${if (expanded) "收起" else "展开"}任务面板；可拖动到屏幕两侧"
+        (header?.getChildAt(0))?.contentDescription = "${headline.text}。${if (expanded) "收起" else "展开"}任务面板；可拖动到屏幕两侧"
         primary?.apply {
             setImageResource(if (waiting) R.drawable.ic_task_play else R.drawable.ic_task_stop)
             imageTintList = ColorStateList.valueOf(if (waiting) accent else error)
@@ -397,9 +395,9 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
         return if (enabled) value else 0L
     }
 
-    private fun textMotion(enter: Boolean, duration: Long) = AnimationSet(false).apply {
-        addAnimation(AlphaAnimation(if (enter) 0f else 1f, if (enter) 1f else 0f))
-        addAnimation(TranslateAnimation(0f, 0f, if (enter) dp(4).toFloat() else 0f, if (enter) 0f else -dp(4).toFloat()))
+    private fun textMotion(duration: Long) = AnimationSet(false).apply {
+        addAnimation(AlphaAnimation(0f, 1f))
+        addAnimation(TranslateAnimation(0f, 0f, dp(4).toFloat(), 0f))
         this.duration = duration; interpolator = easing
     }
 
