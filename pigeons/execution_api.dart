@@ -210,6 +210,48 @@ class ExecutionConfirmation {
   int expiresAtMs;
 }
 
+enum TaskPanelPhase {
+  waitingModel,
+  thinking,
+  responding,
+  preparingTool,
+  executingTool,
+  waitingUser,
+}
+
+enum TaskPanelMessageKind { reasoning, text, tool }
+
+class TaskPanelMessage {
+  TaskPanelMessage({
+    required this.id,
+    required this.kind,
+    required this.label,
+    required this.text,
+  });
+  String id;
+  TaskPanelMessageKind kind;
+  String label;
+  String text;
+}
+
+/// 有界、按实际顺序排列的最近消息，不取代消息与工具记录。
+class TaskPanelSnapshot {
+  TaskPanelSnapshot({
+    required this.runId,
+    required this.phase,
+    required this.status,
+    required this.messages,
+    this.waitingToolCallId,
+    this.userPrompt,
+  });
+  String runId;
+  TaskPanelPhase phase;
+  String status;
+  List<TaskPanelMessage> messages;
+  String? waitingToolCallId;
+  String? userPrompt;
+}
+
 class HostReply {
   HostReply({this.error});
   ChannelError? error;
@@ -225,6 +267,7 @@ abstract class ExecutionHostApi {
   HostReply startRun(ExecutionSession session);
   void endRun(String runId);
   void setConfirmation(ExecutionConfirmation? confirmation);
+  void setTaskPanel(TaskPanelSnapshot snapshot);
 }
 
 class SkillDirectoryImport {
@@ -278,4 +321,5 @@ abstract class ExecutionFlutterApi {
     ConfirmationDecision decision,
   );
   void stopRequested(String runId, String? reason);
+  void continueRequested(String runId, String toolCallId);
 }

@@ -526,11 +526,13 @@ void main() {
       ),
     );
     expect(assistant.toolPolicy.enabledTools, {
+      'wait_for_user',
       'write_file',
       'install_packages',
       ...applicationOperationTools,
     });
     expect(assistant.toolPolicy.overrides, {
+      'wait_for_user': ToolPolicy.allow,
       'write_file': ToolPolicy.ask,
       applicationOperationsPolicyKey: ToolPolicy.allow,
       'shell': ToolPolicy.deny,

@@ -117,6 +117,7 @@ void main() {
       policies: {applicationOperationsPolicyKey: ToolPolicy.allow},
     );
     expect(config.enabledTools, {
+      'wait_for_user',
       'shell',
       'install_packages',
       ...applicationOperationTools,
@@ -126,7 +127,12 @@ void main() {
           .definitionsFor(config.enabledTools, config.overrides)
           .map((tool) => tool.name)
           .toSet(),
-      {'shell', 'install_packages', ...applicationOperationTools},
+      {
+        'wait_for_user',
+        'shell',
+        'install_packages',
+        ...applicationOperationTools,
+      },
     );
     for (final tool in appTools) {
       expect(
@@ -144,17 +150,18 @@ void main() {
       }
     }
     expect(const ToolPolicyConfig(policies: {}).enabledTools, {
+      'wait_for_user',
       'shell',
       'install_packages',
     });
     expect(
       const ToolPolicyConfig(policies: {'shell': ToolPolicy.deny}).enabledTools,
-      {'install_packages'},
+      {'wait_for_user', 'install_packages'},
     );
     expect(
       const ToolPolicyConfig(policies: {'click_node': ToolPolicy.allow})
           .enabledTools,
-      {'shell', 'install_packages'},
+      {'wait_for_user', 'shell', 'install_packages'},
     );
   });
 

@@ -1,9 +1,13 @@
+import '../execution/wait_for_user_tool.dart';
+import '../tools/tool_presentation.dart';
 import '../../../data/repositories/workspace_repository.dart';
 import '../workspace/workspace_files.dart';
 import '../workspace/shell_tool.dart';
 import '../workspace/install_tool.dart';
 import '../workspace/prepare_skill_tool.dart';
 import '../workspace/process_driver.dart';
+import '../execution/execution_api.g.dart';
+import '../execution/task_activity.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -699,7 +703,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         : ref.read(processDriverProvider);
     final registry = ToolRegistry([
       for (final tool in base.tools)
-        if (!_environmentTools.contains(tool.name)) tool,
+        if (!_environmentTools.contains(tool.name))
+          if (tool is WaitForUserTool) WaitForUserTool(_waitForUser) else tool,
       if (binding?.linuxAvailable == true)
         ShellTool(
           workspace: binding,
@@ -722,6 +727,27 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       registry: registry,
       toolCalls: toolCalls,
       runs: runs,
+      onExecuting: (tool, arguments, toolCallId) {
+        if (!ref.mounted) return;
+        execution.updateActivity(
+          run.id,
+          ref
+              .read(executionControllerProvider)
+              .activity
+              .copyWith(
+                phase: TaskPanelPhase.executingTool,
+                status: '正在${ToolPresentation.toolLabel(tool.name)}',
+              )
+              .upsert(
+                TaskMessage(
+                  id: 'tool/$toolCallId',
+                  kind: TaskPanelMessageKind.tool,
+                  label: '正在${ToolPresentation.toolLabel(tool.name)}',
+                  text: _toolActivity(tool, arguments),
+                ),
+              ),
+        );
+      },
       currentPolicy: (tool) async {
         if (tool is ReadSkillTool) return tool.currentPolicy();
         if (tool is PrepareSkillTool) return tool.currentPolicy();
@@ -743,7 +769,20 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         return mcp.currentPolicy(tool.snapshot);
       },
       prepareChannel: (tool, arguments) async {
-        if (tool is ShellTool) await processDriver!.beginTask(run.id, '工作区命令');
+        execution.updateActivity(
+          run.id,
+          ref
+              .read(executionControllerProvider)
+              .activity
+              .copyWith(
+                phase: TaskPanelPhase.preparingTool,
+                status: '准备${ToolPresentation.toolLabel(tool.name)}',
+              ),
+        );
+        if (tool is ShellTool) {
+          await processDriver!.beginTask(run.id, '工作区命令');
+          await execution.showAvailablePanel(run.id);
+        }
         if (tool.usesPlatform(arguments)) {
           await execution.ensureDeviceHost(
             run.id,
@@ -1029,6 +1068,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     await repository.appendMessage(assistantMessage);
 
     _liveParts.clear();
+    ref
+        .read(executionControllerProvider.notifier)
+        .updateActivity(
+          run.id,
+          ref.read(executionControllerProvider).activity.waitForResponse(),
+        );
     _streamingMessageId = assistantMessage.id;
     _streamError = null;
     _stoppedManually = isCancelled;
@@ -1212,8 +1257,61 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         recordId: call.recordId,
       ),
       cancellation,
+      onProgress: (message) {
+        if (!ref.mounted || cancellation.isCancelled) return;
+        ref
+            .read(executionControllerProvider.notifier)
+            .updateActivity(
+              run.id,
+              ref
+                  .read(executionControllerProvider)
+                  .activity
+                  .upsert(
+                    TaskMessage(
+                      id: 'tool/${call.recordId}',
+                      kind: TaskPanelMessageKind.tool,
+                      label: '正在${ToolPresentation.toolLabel(call.toolName)}',
+                      text:
+                          '${_toolActivity(_registry!.byName(call.toolName)!, call.arguments)}\n${panelExcerpt(message, limit: 160)}',
+                    ),
+                  ),
+            );
+      },
     );
     final record = executed.record;
+    final label = ToolPresentation.recordLabel(record);
+    final status = switch (record.status) {
+      ToolCallStatus.succeeded =>
+        '执行了${record.toolName == 'shell' ? '命令' : label}',
+      ToolCallStatus.rejected => '已拒绝$label',
+      ToolCallStatus.cancelled => '已取消$label',
+      _ => '$label失败',
+    };
+    final previousActivity = ref.read(executionControllerProvider).activity;
+    ref
+        .read(executionControllerProvider.notifier)
+        .updateActivity(
+          run.id,
+          previousActivity
+              .copyWith(
+                phase: TaskPanelPhase.waitingModel,
+                status: status,
+                lastToolStatus: status,
+              )
+              .upsert(
+                TaskMessage(
+                  id: 'tool/${record.id}',
+                  kind: TaskPanelMessageKind.tool,
+                  label: status,
+                  text:
+                      previousActivity.messages
+                          .where((entry) => entry.id == 'tool/${record.id}')
+                          .firstOrNull
+                          ?.text ??
+                      (record.target ?? label),
+                ),
+              ),
+        );
     if (record.status == ToolCallStatus.succeeded ||
         record.artifacts.isNotEmpty) {
       await _registerArtifacts(
@@ -1316,6 +1414,26 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         .confirm(request, cancellation);
   }
 
+  Future<void> _waitForUser(
+    ToolContext context,
+    String prompt,
+    RunCancellation cancellation,
+  ) async {
+    _run = await _runs!.awaitUser(context.runId, context.toolCallId);
+    await ref
+        .read(executionControllerProvider.notifier)
+        .waitForUser(
+          UserActionRequest(
+            runId: context.runId,
+            toolCallId: context.toolCallId,
+            prompt: prompt,
+          ),
+          cancellation,
+        );
+    cancellation.throwIfCancelled();
+    _run = await _runs!.resume(context.runId);
+  }
+
   /// 停止生成：结束本轮模型请求与正在进行的工具执行。
   ///
   /// 等待确认中停止不执行动作（记录 cancelled）；执行中停止请求工具取消，
@@ -1382,6 +1500,18 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             delay: delay,
           ),
         );
+        ref
+            .read(executionControllerProvider.notifier)
+            .updateActivity(
+              _run!.id,
+              ref
+                  .read(executionControllerProvider)
+                  .activity
+                  .copyWith(
+                    phase: TaskPanelPhase.waitingModel,
+                    status: '等待自动重试 ${attempt + 1}/${policy.maxRetries}',
+                  ),
+            );
       }
       await waitForModelRetry(delay, _cancellation!);
       if (ref.mounted) state = state.copyWith(clearRetry: true);
@@ -1679,6 +1809,48 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _publishTimer = null;
     if (_liveParts.isEmpty || !ref.mounted) return;
     state = state.copyWith(streamingParts: _partsFromLive(_liveParts));
+    final runId = _run?.id;
+    if (runId == null || isCancelled) return;
+    final visible = _liveParts.where((part) => part.buffer.isNotEmpty);
+    final last = visible.lastOrNull;
+    final phase = switch (last?.kind) {
+      PartKind.reasoning => TaskPanelPhase.thinking,
+      PartKind.text => TaskPanelPhase.responding,
+      PartKind.toolCall => TaskPanelPhase.preparingTool,
+      _ => TaskPanelPhase.waitingModel,
+    };
+    final activity = ref.read(executionControllerProvider).activity;
+    final messageId = _streamingMessageId;
+    if (messageId == null) return;
+    final parts = [
+      for (final part in _liveParts)
+        if ((part.kind == PartKind.reasoning || part.kind == PartKind.text) &&
+            part.buffer.isNotEmpty)
+          TaskMessage(
+            id: '$messageId/${part.partId}',
+            kind: part.kind == PartKind.reasoning
+                ? TaskPanelMessageKind.reasoning
+                : TaskPanelMessageKind.text,
+            label: part.kind == PartKind.reasoning ? '思考' : '相月',
+            text: part.buffer.toString(),
+          ),
+    ];
+    ref
+        .read(executionControllerProvider.notifier)
+        .updateActivity(
+          runId,
+          activity
+              .replaceResponse(messageId, parts)
+              .copyWith(
+                phase: phase,
+                status: switch (phase) {
+                  TaskPanelPhase.thinking => '正在思考',
+                  TaskPanelPhase.responding => '正在回复',
+                  TaskPanelPhase.preparingTool => '正在准备工具调用',
+                  _ => activity.waitingStatus,
+                },
+              ),
+        );
   }
 
   /// 收口前把最后一批增量立即发布，界面不会停在半句话上。
@@ -1991,6 +2163,11 @@ List<MessagePart> _partsFromLive(List<_LivePart> liveParts) {
         part.toPart(),
   ];
 }
+
+String _toolActivity(Tool tool, Map<String, dynamic> arguments) =>
+    tool.name == 'shell'
+    ? '\$ ${panelExcerpt(arguments['command'] as String? ?? '', limit: 300)}'
+    : panelExcerpt(tool.describeAction(arguments), limit: 300);
 
 /// 内置工具集：文件工具只访问应用私有目录，HTTP 工具走独立的 Dio 实例。
 ///

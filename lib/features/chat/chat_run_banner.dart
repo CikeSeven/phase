@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/error/failure.dart';
@@ -44,7 +45,9 @@ class ChatRunBanner extends ConsumerWidget {
         chat.runningConversationId != null &&
         chat.runningConversationId != viewed;
     final count = recovery.value?.length ?? 0;
-    final pending = ref.watch(executionControllerProvider).confirmation;
+    final execution = ref.watch(executionControllerProvider);
+    final pending = execution.confirmation;
+    final userAction = execution.userAction;
     final reopen = ToolConfirmationHost.reopenOf(context);
     final canConfirm = pending != null && reopen != null;
     final retry = chat.retry;
@@ -52,6 +55,7 @@ class ChatRunBanner extends ConsumerWidget {
         count == 0 &&
         !recovery.hasError &&
         !canConfirm &&
+        userAction == null &&
         retry == null) {
       return const SizedBox.shrink();
     }
@@ -64,6 +68,41 @@ class ChatRunBanner extends ConsumerWidget {
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.xs,
             children: [
+              if (userAction != null)
+                Semantics(
+                  liveRegion: true,
+                  child: Container(
+                    key: const ValueKey('waiting-for-user'),
+                    padding: const EdgeInsets.all(AppSpacing.s),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.secondaryContainer,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('等待你操作 · AI 已暂停'),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 96),
+                          child: SingleChildScrollView(
+                            child: Text(userAction.prompt),
+                          ),
+                        ),
+                        TextButton.icon(
+                          key: const ValueKey('continue-user-action'),
+                          icon: const Icon(Symbols.play_arrow),
+                          label: const Text('继续，让 AI 接管'),
+                          onPressed: () => ref
+                              .read(executionControllerProvider.notifier)
+                              .continueRun(
+                                userAction.runId,
+                                userAction.toolCallId,
+                              ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               if (retry != null)
                 Semantics(
                   liveRegion: true,

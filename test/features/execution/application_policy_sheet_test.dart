@@ -388,6 +388,7 @@ void main() {
     await tester.tap(find.text('直接执行').last);
     await tester.pumpAndSettle();
     expect(policy.overrides, {
+      'wait_for_user': ToolPolicy.allow,
       'shell': ToolPolicy.ask,
       'install_packages': ToolPolicy.ask,
       applicationOperationsPolicyKey: ToolPolicy.allow,
@@ -397,7 +398,12 @@ void main() {
           .definitionsFor(policy.enabledTools, policy.overrides)
           .map((tool) => tool.name)
           .toSet(),
-      {'shell', 'install_packages', ...applicationOperationTools},
+      {
+        'wait_for_user',
+        'shell',
+        'install_packages',
+        ...applicationOperationTools,
+      },
     );
   });
 

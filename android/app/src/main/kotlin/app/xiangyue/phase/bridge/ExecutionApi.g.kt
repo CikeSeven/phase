@@ -295,6 +295,33 @@ enum class PermissionScreen(val raw: Int) {
   }
 }
 
+enum class TaskPanelPhase(val raw: Int) {
+  WAITING_MODEL(0),
+  THINKING(1),
+  RESPONDING(2),
+  PREPARING_TOOL(3),
+  EXECUTING_TOOL(4),
+  WAITING_USER(5);
+
+  companion object {
+    fun ofRaw(raw: Int): TaskPanelPhase? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
+enum class TaskPanelMessageKind(val raw: Int) {
+  REASONING(0),
+  TEXT(1),
+  TOOL(2);
+
+  companion object {
+    fun ofRaw(raw: Int): TaskPanelMessageKind? {
+      return values().firstOrNull { it.raw == raw }
+    }
+  }
+}
+
 /**
  * 机器校验的目标，不使用动作摘要代替目标身份。节点只在对应快照内有效。
  *
@@ -887,6 +914,116 @@ data class ExecutionConfirmation (
 }
 
 /** Generated class from Pigeon that represents data sent in messages. */
+data class TaskPanelMessage (
+  val id: String,
+  val kind: TaskPanelMessageKind,
+  val label: String,
+  val text: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): TaskPanelMessage {
+      val id = pigeonVar_list[0] as String
+      val kind = pigeonVar_list[1] as TaskPanelMessageKind
+      val label = pigeonVar_list[2] as String
+      val text = pigeonVar_list[3] as String
+      return TaskPanelMessage(id, kind, label, text)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      kind,
+      label,
+      text,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as TaskPanelMessage
+    return ExecutionApiPigeonUtils.deepEquals(this.id, other.id) && ExecutionApiPigeonUtils.deepEquals(this.kind, other.kind) && ExecutionApiPigeonUtils.deepEquals(this.label, other.label) && ExecutionApiPigeonUtils.deepEquals(this.text, other.text)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.id)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.kind)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.label)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.text)
+    return result
+  }
+  override fun toString(): String {
+    return "TaskPanelMessage(id=$id, kind=$kind, label=$label, text=$text)"
+  }
+}
+
+/**
+ * 有界、按实际顺序排列的最近消息，不取代消息与工具记录。
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class TaskPanelSnapshot (
+  val runId: String,
+  val phase: TaskPanelPhase,
+  val status: String,
+  val messages: List<TaskPanelMessage>,
+  val waitingToolCallId: String? = null,
+  val userPrompt: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): TaskPanelSnapshot {
+      val runId = pigeonVar_list[0] as String
+      val phase = pigeonVar_list[1] as TaskPanelPhase
+      val status = pigeonVar_list[2] as String
+      val messages = pigeonVar_list[3] as List<TaskPanelMessage>
+      val waitingToolCallId = pigeonVar_list[4] as String?
+      val userPrompt = pigeonVar_list[5] as String?
+      return TaskPanelSnapshot(runId, phase, status, messages, waitingToolCallId, userPrompt)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      runId,
+      phase,
+      status,
+      messages,
+      waitingToolCallId,
+      userPrompt,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as TaskPanelSnapshot
+    return ExecutionApiPigeonUtils.deepEquals(this.runId, other.runId) && ExecutionApiPigeonUtils.deepEquals(this.phase, other.phase) && ExecutionApiPigeonUtils.deepEquals(this.status, other.status) && ExecutionApiPigeonUtils.deepEquals(this.messages, other.messages) && ExecutionApiPigeonUtils.deepEquals(this.waitingToolCallId, other.waitingToolCallId) && ExecutionApiPigeonUtils.deepEquals(this.userPrompt, other.userPrompt)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.runId)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.phase)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.status)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.messages)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.waitingToolCallId)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.userPrompt)
+    return result
+  }
+  override fun toString(): String {
+    return "TaskPanelSnapshot(runId=$runId, phase=$phase, status=$status, messages=$messages, waitingToolCallId=$waitingToolCallId, userPrompt=$userPrompt)"
+  }
+}
+
+/** Generated class from Pigeon that represents data sent in messages. */
 data class HostReply (
   val error: ChannelError? = null
 )
@@ -1059,71 +1196,91 @@ private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
         }
       }
       136.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionTarget.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          TaskPanelPhase.ofRaw(it.toInt())
         }
       }
       137.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionRequest.fromList(it)
+        return (readValue(buffer) as Long?)?.let {
+          TaskPanelMessageKind.ofRaw(it.toInt())
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionArtifact.fromList(it)
+          ExecutionTarget.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionResult.fromList(it)
+          ExecutionRequest.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionProgress.fromList(it)
+          ExecutionArtifact.fromList(it)
         }
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionCapabilities.fromList(it)
+          ExecutionResult.fromList(it)
         }
       }
       142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionSession.fromList(it)
+          ExecutionProgress.fromList(it)
         }
       }
       143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ApplicationPolicy.fromList(it)
+          ExecutionCapabilities.fromList(it)
         }
       }
       144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          FileGrant.fromList(it)
+          ExecutionSession.fromList(it)
         }
       }
       145.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          InstalledApplication.fromList(it)
+          ApplicationPolicy.fromList(it)
         }
       }
       146.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ExecutionConfirmation.fromList(it)
+          FileGrant.fromList(it)
         }
       }
       147.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          HostReply.fromList(it)
+          InstalledApplication.fromList(it)
         }
       }
       148.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SkillDirectoryImport.fromList(it)
+          ExecutionConfirmation.fromList(it)
         }
       }
       149.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          TaskPanelMessage.fromList(it)
+        }
+      }
+      150.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          TaskPanelSnapshot.fromList(it)
+        }
+      }
+      151.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          HostReply.fromList(it)
+        }
+      }
+      152.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SkillDirectoryImport.fromList(it)
+        }
+      }
+      153.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           SkillDirectoryCopy.fromList(it)
         }
@@ -1161,60 +1318,76 @@ private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
         stream.write(135)
         writeValue(stream, value.raw.toLong())
       }
-      is ExecutionTarget -> {
+      is TaskPanelPhase -> {
         stream.write(136)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is ExecutionRequest -> {
+      is TaskPanelMessageKind -> {
         stream.write(137)
-        writeValue(stream, value.toList())
+        writeValue(stream, value.raw.toLong())
       }
-      is ExecutionArtifact -> {
+      is ExecutionTarget -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is ExecutionResult -> {
+      is ExecutionRequest -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is ExecutionProgress -> {
+      is ExecutionArtifact -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is ExecutionCapabilities -> {
+      is ExecutionResult -> {
         stream.write(141)
         writeValue(stream, value.toList())
       }
-      is ExecutionSession -> {
+      is ExecutionProgress -> {
         stream.write(142)
         writeValue(stream, value.toList())
       }
-      is ApplicationPolicy -> {
+      is ExecutionCapabilities -> {
         stream.write(143)
         writeValue(stream, value.toList())
       }
-      is FileGrant -> {
+      is ExecutionSession -> {
         stream.write(144)
         writeValue(stream, value.toList())
       }
-      is InstalledApplication -> {
+      is ApplicationPolicy -> {
         stream.write(145)
         writeValue(stream, value.toList())
       }
-      is ExecutionConfirmation -> {
+      is FileGrant -> {
         stream.write(146)
         writeValue(stream, value.toList())
       }
-      is HostReply -> {
+      is InstalledApplication -> {
         stream.write(147)
         writeValue(stream, value.toList())
       }
-      is SkillDirectoryImport -> {
+      is ExecutionConfirmation -> {
         stream.write(148)
         writeValue(stream, value.toList())
       }
-      is SkillDirectoryCopy -> {
+      is TaskPanelMessage -> {
         stream.write(149)
+        writeValue(stream, value.toList())
+      }
+      is TaskPanelSnapshot -> {
+        stream.write(150)
+        writeValue(stream, value.toList())
+      }
+      is HostReply -> {
+        stream.write(151)
+        writeValue(stream, value.toList())
+      }
+      is SkillDirectoryImport -> {
+        stream.write(152)
+        writeValue(stream, value.toList())
+      }
+      is SkillDirectoryCopy -> {
+        stream.write(153)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1231,6 +1404,7 @@ interface ExecutionHostApi {
   suspend fun startRun(session: ExecutionSession): HostReply
   fun endRun(runId: String)
   fun setConfirmation(confirmation: ExecutionConfirmation?)
+  fun setTaskPanel(snapshot: TaskPanelSnapshot)
 
   companion object {
     /** The codec used by ExecutionHostApi. */
@@ -1338,6 +1512,24 @@ interface ExecutionHostApi {
             val confirmationArg = args[0] as ExecutionConfirmation?
             val wrapped: List<Any?> = try {
               api.setConfirmation(confirmationArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              ExecutionApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionHostApi.setTaskPanel$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val snapshotArg = args[0] as TaskPanelSnapshot
+            val wrapped: List<Any?> = try {
+              api.setTaskPanel(snapshotArg)
               listOf(null)
             } catch (exception: Throwable) {
               ExecutionApiPigeonUtils.wrapError(exception)
@@ -1612,6 +1804,25 @@ class ExecutionFlutterApi(private val binaryMessenger: BinaryMessenger, private 
       val channelName = "dev.flutter.pigeon.phase.ExecutionFlutterApi.stopRequested$separatedMessageChannelSuffix"
       val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
       channel.send(listOf(runIdArg, reasonArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(FlutterError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(ExecutionApiPigeonUtils.createConnectionError(channelName))
+        }
+      }
+    }
+  }
+  suspend fun continueRequested(runIdArg: String, toolCallIdArg: String)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.phase.ExecutionFlutterApi.continueRequested$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(runIdArg, toolCallIdArg)) {
         if (it is List<*>) {
           if (it.size > 1) {
             continuation.resumeWithException(FlutterError(it[0] as String, it[1] as String, it[2] as String?))

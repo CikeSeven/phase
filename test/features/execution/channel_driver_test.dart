@@ -192,6 +192,7 @@ void main() {
     for (final entry in {
       'stopRequested': ['run', null],
       'confirmationDecision': ['run', 'app-call', ConfirmationDecision.approve],
+      'continueRequested': ['run', 'user-call'],
     }.entries) {
       final done = Completer<void>();
       messenger.handlePlatformMessage(
@@ -206,6 +207,45 @@ void main() {
       events[1],
       isA<NativeDecision>().having((e) => e.toolCallId, 'call', 'app-call'),
     );
+    expect(
+      events[2],
+      isA<NativeContinue>().having((e) => e.toolCallId, 'call', 'user-call'),
+    );
+  });
+
+  test('面板快照通过真实桥接保留独立正文、公开思考与等待标识', () async {
+    TaskPanelSnapshot? received;
+    host('setTaskPanel', (message) async {
+      received = (message as List).single as TaskPanelSnapshot;
+      return [null];
+    });
+    await driver.setTaskPanel(
+      TaskPanelSnapshot(
+        runId: 'run',
+        phase: TaskPanelPhase.waitingUser,
+        status: '等待你操作',
+        messages: [
+          TaskPanelMessage(
+            id: 'r',
+            kind: TaskPanelMessageKind.reasoning,
+            label: '思考',
+            text: '公开摘要',
+          ),
+          TaskPanelMessage(
+            id: 't',
+            kind: TaskPanelMessageKind.text,
+            label: '相月',
+            text: '正文',
+          ),
+        ],
+        waitingToolCallId: 'user-call',
+        userPrompt: '请登录',
+      ),
+    );
+    expect(received!.phase, TaskPanelPhase.waitingUser);
+    expect(received!.messages.first.text, '公开摘要');
+    expect(received!.messages.last.text, '正文');
+    expect(received!.waitingToolCallId, 'user-call');
   });
 
   test('查询能力失败映射安全 Failure，未实现通道不伪造可用', () async {

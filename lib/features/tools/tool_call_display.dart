@@ -48,6 +48,8 @@ class ToolCallDisplay {
     }
     final args = record.arguments;
     return switch (record.toolName) {
+      'wait_for_user' =>
+        args['prompt'] is String ? args['prompt'] as String : null,
       'shell' => args['command'] is String ? '\$ ${args['command']}' : null,
       'install_packages' => null,
       'write_file' ||
@@ -78,6 +80,15 @@ class ToolCallDisplay {
     final output = ToolPresentation.outputText(record);
     if (isBuiltIn(record)) {
       switch (record.toolName) {
+        case 'wait_for_user':
+          if (args['prompt'] case final String prompt) {
+            return ToolCallDisplay(
+              call: prompt,
+              output: record.status == ToolCallStatus.executing
+                  ? '等待你操作，完成后点击继续'
+                  : output,
+            );
+          }
         case 'shell':
           if (args['command'] case final String command) {
             final metadata = [

@@ -13,6 +13,9 @@ Future<AgentRun> seedInterrupted(
   List<ToolCallStatus> states, {
   DateTime? expiresAt,
   bool saveKnownResults = true,
+  String toolName = 'echo',
+  Map<String, dynamic> arguments = const {},
+  ExecutionChannel channel = ExecutionChannel.app,
 }) async {
   final conversations = await h.conversations();
   final conversation = await conversations.createConversation(title: '中断任务测试');
@@ -38,8 +41,8 @@ Future<AgentRun> seedInterrupted(
         maxOutputTokens: 300,
       ),
       systemPrompt: 'saved prompt',
-      enabledTools: const {'echo'},
-      toolPolicies: const {'echo': ToolPolicy.ask},
+      enabledTools: {toolName},
+      toolPolicies: {toolName: ToolPolicy.ask},
     ),
   );
   await (await h.runs()).create(run);
@@ -75,9 +78,9 @@ Future<AgentRun> seedInterrupted(
       runId: run.id,
       assistantMessageId: 'answer',
       providerCallId: 'call-$i',
-      toolName: 'echo',
-      arguments: const {},
-      channel: ExecutionChannel.app,
+      toolName: toolName,
+      arguments: arguments,
+      channel: channel,
       defaultPolicy: ToolPolicy.ask,
       status: status,
       result: status == ToolCallStatus.succeeded ? 'already done' : null,

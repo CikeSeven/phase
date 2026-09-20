@@ -145,6 +145,17 @@ enum ApplicationListMode { blacklist, whitelist }
 
 enum PermissionScreen { notifications, accessibility, applications }
 
+enum TaskPanelPhase {
+  waitingModel,
+  thinking,
+  responding,
+  preparingTool,
+  executingTool,
+  waitingUser,
+}
+
+enum TaskPanelMessageKind { reasoning, text, tool }
+
 /// 机器校验的目标，不使用动作摘要代替目标身份。节点只在对应快照内有效。
 class ExecutionTarget {
   ExecutionTarget({
@@ -876,6 +887,142 @@ class ExecutionConfirmation {
   }
 }
 
+class TaskPanelMessage {
+  TaskPanelMessage({
+    required this.id,
+    required this.kind,
+    required this.label,
+    required this.text,
+  });
+
+  String id;
+
+  TaskPanelMessageKind kind;
+
+  String label;
+
+  String text;
+
+  List<Object?> _toList() {
+    return <Object?>[id, kind, label, text];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static TaskPanelMessage decode(Object result) {
+    result as List<Object?>;
+    return TaskPanelMessage(
+      id: result[0]! as String,
+      kind: result[1]! as TaskPanelMessageKind,
+      label: result[2]! as String,
+      text: result[3]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TaskPanelMessage || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(id, other.id) &&
+        _deepEquals(kind, other.kind) &&
+        _deepEquals(label, other.label) &&
+        _deepEquals(text, other.text);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TaskPanelMessage(id: $id, kind: $kind, label: $label, text: $text)';
+  }
+}
+
+/// 有界、按实际顺序排列的最近消息，不取代消息与工具记录。
+class TaskPanelSnapshot {
+  TaskPanelSnapshot({
+    required this.runId,
+    required this.phase,
+    required this.status,
+    required this.messages,
+    this.waitingToolCallId,
+    this.userPrompt,
+  });
+
+  String runId;
+
+  TaskPanelPhase phase;
+
+  String status;
+
+  List<TaskPanelMessage> messages;
+
+  String? waitingToolCallId;
+
+  String? userPrompt;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      runId,
+      phase,
+      status,
+      messages,
+      waitingToolCallId,
+      userPrompt,
+    ];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static TaskPanelSnapshot decode(Object result) {
+    result as List<Object?>;
+    return TaskPanelSnapshot(
+      runId: result[0]! as String,
+      phase: result[1]! as TaskPanelPhase,
+      status: result[2]! as String,
+      messages: (result[3]! as List<Object?>).cast<TaskPanelMessage>(),
+      waitingToolCallId: result[4] as String?,
+      userPrompt: result[5] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TaskPanelSnapshot || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(runId, other.runId) &&
+        _deepEquals(phase, other.phase) &&
+        _deepEquals(status, other.status) &&
+        _deepEquals(messages, other.messages) &&
+        _deepEquals(waitingToolCallId, other.waitingToolCallId) &&
+        _deepEquals(userPrompt, other.userPrompt);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TaskPanelSnapshot(runId: $runId, phase: $phase, status: $status, messages: $messages, waitingToolCallId: $waitingToolCallId, userPrompt: $userPrompt)';
+  }
+}
+
 class HostReply {
   HostReply({this.error});
 
@@ -1065,47 +1212,59 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is PermissionScreen) {
       buffer.putUint8(135);
       writeValue(buffer, value.index);
-    } else if (value is ExecutionTarget) {
+    } else if (value is TaskPanelPhase) {
       buffer.putUint8(136);
-      writeValue(buffer, value.encode());
-    } else if (value is ExecutionRequest) {
+      writeValue(buffer, value.index);
+    } else if (value is TaskPanelMessageKind) {
       buffer.putUint8(137);
-      writeValue(buffer, value.encode());
-    } else if (value is ExecutionArtifact) {
+      writeValue(buffer, value.index);
+    } else if (value is ExecutionTarget) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionResult) {
+    } else if (value is ExecutionRequest) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionProgress) {
+    } else if (value is ExecutionArtifact) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionCapabilities) {
+    } else if (value is ExecutionResult) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionSession) {
+    } else if (value is ExecutionProgress) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    } else if (value is ApplicationPolicy) {
+    } else if (value is ExecutionCapabilities) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    } else if (value is FileGrant) {
+    } else if (value is ExecutionSession) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    } else if (value is InstalledApplication) {
+    } else if (value is ApplicationPolicy) {
       buffer.putUint8(145);
       writeValue(buffer, value.encode());
-    } else if (value is ExecutionConfirmation) {
+    } else if (value is FileGrant) {
       buffer.putUint8(146);
       writeValue(buffer, value.encode());
-    } else if (value is HostReply) {
+    } else if (value is InstalledApplication) {
       buffer.putUint8(147);
       writeValue(buffer, value.encode());
-    } else if (value is SkillDirectoryImport) {
+    } else if (value is ExecutionConfirmation) {
       buffer.putUint8(148);
       writeValue(buffer, value.encode());
-    } else if (value is SkillDirectoryCopy) {
+    } else if (value is TaskPanelMessage) {
       buffer.putUint8(149);
+      writeValue(buffer, value.encode());
+    } else if (value is TaskPanelSnapshot) {
+      buffer.putUint8(150);
+      writeValue(buffer, value.encode());
+    } else if (value is HostReply) {
+      buffer.putUint8(151);
+      writeValue(buffer, value.encode());
+    } else if (value is SkillDirectoryImport) {
+      buffer.putUint8(152);
+      writeValue(buffer, value.encode());
+    } else if (value is SkillDirectoryCopy) {
+      buffer.putUint8(153);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1137,32 +1296,42 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : PermissionScreen.values[value];
       case 136:
-        return ExecutionTarget.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : TaskPanelPhase.values[value];
       case 137:
-        return ExecutionRequest.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : TaskPanelMessageKind.values[value];
       case 138:
-        return ExecutionArtifact.decode(readValue(buffer)!);
+        return ExecutionTarget.decode(readValue(buffer)!);
       case 139:
-        return ExecutionResult.decode(readValue(buffer)!);
+        return ExecutionRequest.decode(readValue(buffer)!);
       case 140:
-        return ExecutionProgress.decode(readValue(buffer)!);
+        return ExecutionArtifact.decode(readValue(buffer)!);
       case 141:
-        return ExecutionCapabilities.decode(readValue(buffer)!);
+        return ExecutionResult.decode(readValue(buffer)!);
       case 142:
-        return ExecutionSession.decode(readValue(buffer)!);
+        return ExecutionProgress.decode(readValue(buffer)!);
       case 143:
-        return ApplicationPolicy.decode(readValue(buffer)!);
+        return ExecutionCapabilities.decode(readValue(buffer)!);
       case 144:
-        return FileGrant.decode(readValue(buffer)!);
+        return ExecutionSession.decode(readValue(buffer)!);
       case 145:
-        return InstalledApplication.decode(readValue(buffer)!);
+        return ApplicationPolicy.decode(readValue(buffer)!);
       case 146:
-        return ExecutionConfirmation.decode(readValue(buffer)!);
+        return FileGrant.decode(readValue(buffer)!);
       case 147:
-        return HostReply.decode(readValue(buffer)!);
+        return InstalledApplication.decode(readValue(buffer)!);
       case 148:
-        return SkillDirectoryImport.decode(readValue(buffer)!);
+        return ExecutionConfirmation.decode(readValue(buffer)!);
       case 149:
+        return TaskPanelMessage.decode(readValue(buffer)!);
+      case 150:
+        return TaskPanelSnapshot.decode(readValue(buffer)!);
+      case 151:
+        return HostReply.decode(readValue(buffer)!);
+      case 152:
+        return SkillDirectoryImport.decode(readValue(buffer)!);
+      case 153:
         return SkillDirectoryCopy.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1298,6 +1467,26 @@ class ExecutionHostApi {
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
       <Object?>[confirmation],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<void> setTaskPanel(TaskPanelSnapshot snapshot) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.ExecutionHostApi.setTaskPanel$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[snapshot],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -1530,6 +1719,8 @@ abstract class ExecutionFlutterApi {
 
   void stopRequested(String runId, String? reason);
 
+  void continueRequested(String runId, String toolCallId);
+
   static void setUp(
     ExecutionFlutterApi? api, {
     BinaryMessenger? binaryMessenger,
@@ -1632,6 +1823,32 @@ abstract class ExecutionFlutterApi {
           final String? arg_reason = args[1] as String?;
           try {
             api.stopRequested(arg_runId, arg_reason);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.phase.ExecutionFlutterApi.continueRequested$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String arg_runId = args[0]! as String;
+          final String arg_toolCallId = args[1]! as String;
+          try {
+            api.continueRequested(arg_runId, arg_toolCallId);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

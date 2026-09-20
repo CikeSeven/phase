@@ -99,6 +99,7 @@ class ToolExecutor {
     this.onConfirmationRequired,
     this.prepareChannel,
     this.currentPolicy,
+    this.onExecuting,
     this.confirmationTimeout = ToolCallRepository.confirmationTimeout,
   });
 
@@ -106,6 +107,12 @@ class ToolExecutor {
   final Future<ToolPolicy> Function(Tool tool)? currentPolicy;
   final ToolRegistry registry;
   final ToolCallRepository toolCalls;
+  final void Function(
+    Tool tool,
+    Map<String, dynamic> arguments,
+    String toolCallId,
+  )?
+  onExecuting;
 
   /// 运行仓储：确认有结果后把运行从等待确认恢复为运行中，与执行进度一致。
   final AgentRunRepository? runs;
@@ -283,6 +290,7 @@ class ToolExecutor {
 
     // 先记录 executing 再派发：外部动作可能已经开始。
     await toolCalls.markExecuting(record.id);
+    onExecuting?.call(tool, arguments, record.id);
 
     final context = ToolContext(
       conversationId: request.conversationId,

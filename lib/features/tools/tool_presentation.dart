@@ -15,6 +15,7 @@ class ToolPresentation {
   const ToolPresentation._();
 
   static IconData icon(String toolName) => switch (toolName) {
+    'wait_for_user' => Symbols.pan_tool_alt,
     'system_info' => Symbols.schedule,
     'read_file' => Symbols.description,
     'shell' => Symbols.terminal,
@@ -41,6 +42,7 @@ class ToolPresentation {
       : channelLabel(record.channel);
 
   static String toolLabel(String toolName) => switch (toolName) {
+    'wait_for_user' => '等待用户操作',
     'system_info' => '时间与时区',
     'read_file' => '读取文件',
     'read_skill' => '读取 Skill',

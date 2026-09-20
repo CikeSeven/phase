@@ -34,9 +34,16 @@ final class NativeCapabilities extends NativeExecutionEvent {
   final ExecutionCapabilities value;
 }
 
+final class NativeContinue extends NativeExecutionEvent {
+  NativeContinue(this.runId, this.toolCallId);
+  final String runId;
+  final String toolCallId;
+}
+
 abstract interface class ChannelDriver {
   Stream<NativeExecutionEvent> get events;
   Map<String, Object?>? get latestSnapshot;
+  void clearSnapshot();
   Future<void> startRun(
     String runId, {
     ExecutionScope scope = const ExecutionScope(),
@@ -45,6 +52,7 @@ abstract interface class ChannelDriver {
   });
   Future<void> endRun(String runId);
   Future<void> setConfirmation(ExecutionConfirmation? confirmation);
+  Future<void> setTaskPanel(TaskPanelSnapshot snapshot);
   Future<ExecutionCapabilities> queryCapabilities();
   Future<ExecutionResult> execute(
     ExecutionRequest request,
@@ -79,6 +87,9 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   Stream<NativeExecutionEvent> get events => _events.stream;
   @override
   Map<String, Object?>? get latestSnapshot => _latestSnapshot;
+
+  @override
+  void clearSnapshot() => _latestSnapshot = null;
 
   Future<T> _boundary<T>(Future<T> Function() call) async {
     if (_disposed) {
@@ -158,6 +169,10 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   @override
   Future<void> setConfirmation(ExecutionConfirmation? confirmation) =>
       _boundary(() => _host.setConfirmation(confirmation));
+
+  @override
+  Future<void> setTaskPanel(TaskPanelSnapshot snapshot) =>
+      _boundary(() => _host.setTaskPanel(snapshot));
 
   @override
   Future<ExecutionResult> execute(
@@ -314,6 +329,11 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   @override
   void stopRequested(String runId, [String? reason]) {
     if (!_disposed) _events.add(NativeStop(runId, reason: reason));
+  }
+
+  @override
+  void continueRequested(String runId, String toolCallId) {
+    if (!_disposed) _events.add(NativeContinue(runId, toolCallId));
   }
 
   Future<void> _bestEffort(Future<void> Function() action) async {

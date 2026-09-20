@@ -59,6 +59,7 @@ class AgentRunRepository {
                   (t) => t.status.isIn([
                     RunStatus.running.name,
                     RunStatus.awaitingConfirmation.name,
+                    RunStatus.awaitingUser.name,
                   ]),
                 )
                 ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
@@ -81,6 +82,7 @@ class AgentRunRepository {
                     (t) => t.status.isIn([
                       RunStatus.running.name,
                       RunStatus.awaitingConfirmation.name,
+                      RunStatus.awaitingUser.name,
                     ]),
                   )
                   ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
@@ -100,7 +102,11 @@ class AgentRunRepository {
             if (afterRestart && call.status == ToolCallStatus.executing) {
               call = call.copyWith(
                 status: ToolCallStatus.failed,
-                result: call.result ?? '上次运行中断，工具未返回完整结果。需要时先读取当前状态。',
+                result:
+                    call.result ??
+                    (call.toolName == 'wait_for_user'
+                        ? '等待用户操作期间运行中断，未收到继续指令。请重新观察当前界面。'
+                        : '上次运行中断，工具未返回完整结果。需要时先读取当前状态。'),
                 errorCode: 'interrupted',
                 finishedAt: now,
               );
@@ -229,6 +235,17 @@ class AgentRunRepository {
         activeToolCallId: toolCallId,
       );
     });
+  }
+
+  Future<AgentRun> awaitUser(String runId, String toolCallId) {
+    return _update(
+      runId,
+      '记录等待用户操作失败',
+      (run) => run.copyWith(
+        status: RunStatus.awaitingUser,
+        activeToolCallId: toolCallId,
+      ),
+    );
   }
 
   /// 用户已对确认作出决定：运行回到运行中，不再停在等待确认。

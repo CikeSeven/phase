@@ -166,7 +166,8 @@ class ConversationRepository {
       if (runs.any(
         (run) =>
             run.status == RunStatus.running ||
-            run.status == RunStatus.awaitingConfirmation,
+            run.status == RunStatus.awaitingConfirmation ||
+            run.status == RunStatus.awaitingUser,
       )) {
         throw const OperationFailure('请先停止或处理此会话的任务，再删除会话');
       }
@@ -207,6 +208,7 @@ class ConversationRepository {
         (run) => const {
           RunStatus.running,
           RunStatus.awaitingConfirmation,
+          RunStatus.awaitingUser,
         }.contains(run.status),
       )) {
         throw const OperationFailure('请先结束或处理此会话的任务，再复制会话');

@@ -8,7 +8,14 @@ import 'execution_scope.dart';
 import 'tool_source.dart';
 import 'mcp_server_profile.dart';
 
-enum RunStatus { running, awaitingConfirmation, completed, stopped, failed }
+enum RunStatus {
+  running,
+  awaitingConfirmation,
+  awaitingUser,
+  completed,
+  stopped,
+  failed,
+}
 
 enum RunFinishReason {
   completed,

@@ -1,3 +1,4 @@
+import '../execution/wait_for_user_tool.dart';
 import '../workspace/install_tool.dart';
 import '../workspace/shell_tool.dart';
 import 'file_tools.dart';
@@ -18,6 +19,7 @@ ToolRegistry buildBuiltInRegistry({
 }) {
   return ToolRegistry([
     const SystemInfoTool(),
+    const WaitForUserTool(),
     const ShellTool(),
     const InstallTool(),
     for (final tool in const [

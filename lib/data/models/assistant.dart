@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'model_selection.dart';
 import 'tool_policy.dart';
 
-/// 助手的工具配置：按工具名声明策略，shell 默认询问，其他未列出的工具不向该助手开放。
+/// 助手的工具配置：按工具名声明策略，用户协作默认允许、shell 默认询问，其他未列出的工具不向该助手开放。
 ///
 /// 持久化结构即 工具名 → 策略 的 JSON 对象；
 /// 策略为 deny 的工具不进入模型的工具定义（收到调用也不执行）。
@@ -22,8 +22,9 @@ class ToolPolicyConfig {
           entry.key,
   };
 
-  /// 内置命令默认询问；显式 deny 保留，第三方工具仍须加入助手范围。
+  /// 用户协作默认允许、内置命令默认询问；显式 deny 保留，第三方工具仍须加入助手范围。
   Map<String, ToolPolicy> get overrides => {
+    'wait_for_user': ToolPolicy.allow,
     'shell': ToolPolicy.ask,
     'install_packages': ToolPolicy.ask,
     for (final entry in policies.entries)
@@ -104,6 +105,7 @@ const defaultAssistantName = '相月';
 /// 新助手的默认范围；命令默认询问，只有环境就绪时才注入。
 const defaultToolPolicyConfig = ToolPolicyConfig(
   policies: {
+    'wait_for_user': ToolPolicy.allow,
     'shell': ToolPolicy.ask,
     'install_packages': ToolPolicy.ask,
     'system_info': ToolPolicy.allow,

@@ -238,7 +238,8 @@ class SkillRepository {
           (_db.select(_db.agentRuns)..where(
                 (t) =>
                     t.status.equalsValue(RunStatus.running) |
-                    t.status.equalsValue(RunStatus.awaitingConfirmation),
+                    t.status.equalsValue(RunStatus.awaitingConfirmation) |
+                    t.status.equalsValue(RunStatus.awaitingUser),
               ))
               .get(),
     );

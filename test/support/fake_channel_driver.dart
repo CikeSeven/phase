@@ -16,6 +16,7 @@ class FakeChannelDriver implements ChannelDriver {
   final starts = <String>[];
   final ends = <String>[];
   final confirmations = <ExecutionConfirmation?>[];
+  final panels = <TaskPanelSnapshot>[];
   final scopes = <ExecutionScope>[];
   final deviceTasks = <bool>[];
   Future<ExecutionResult> Function(ExecutionRequest, RunCancellation)?
@@ -23,6 +24,11 @@ class FakeChannelDriver implements ChannelDriver {
   Failure? startFailure;
   Failure? endFailure;
   Failure? confirmationFailure;
+  Failure? panelFailure;
+  bool accessibilityConnected = false;
+
+  @override
+  void clearSnapshot() => latestSnapshot = null;
 
   @override
   Stream<NativeExecutionEvent> get events => eventsController.stream;
@@ -52,11 +58,18 @@ class FakeChannelDriver implements ChannelDriver {
   }
 
   @override
+  Future<void> setTaskPanel(TaskPanelSnapshot snapshot) async {
+    if (panelFailure case final failure?) throw failure;
+    panels.add(snapshot);
+  }
+
+  @override
   Future<ExecutionCapabilities> queryCapabilities() async =>
       ExecutionCapabilities(
         actions: [],
         notificationsAllowed: true,
         activityResumed: true,
+        accessibilityConnected: accessibilityConnected,
       );
   @override
   Future<ExecutionResult> execute(
