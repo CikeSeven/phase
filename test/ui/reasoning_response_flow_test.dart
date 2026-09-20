@@ -95,12 +95,14 @@ class _SseAdapter implements HttpClientAdapter {
 }
 
 void main() {
-  for (final protocol in [
-    ApiProtocol.openaiResponses,
-    ApiProtocol.openaiCompletions,
+  for (final (protocol, useCapturedSample) in [
+    (ApiProtocol.openaiResponses, false),
+    (ApiProtocol.openaiCompletions, false),
+    (ApiProtocol.openaiResponses, true),
   ]) {
+    final captured = useCapturedSample ? _capturedFirstTurn() : null;
     testWidgets(
-      '${protocol.name} 原始 SSE 经真实 Provider、Controller、DB 到可见思考，保留停止与错误',
+      '${protocol.name}${useCapturedSample ? ' 真机首轮脱敏样本' : ''} 原始 SSE 经真实 Provider、Controller、DB 到可见思考，保留停止与错误',
       (tester) async {
         tester.view.devicePixelRatio = 1;
         tester.view.physicalSize = const Size(390, 844);
@@ -118,18 +120,21 @@ void main() {
         final keys = _FixtureKeys();
         final adapter = _SseAdapter();
         final dio = Dio()..httpClientAdapter = adapter;
+        final modelId = protocol == ApiProtocol.openaiResponses
+            ? 'gpt-6-astra'
+            : 'reasoning-fixture';
         await tester.runAsync(() async {
           await ProviderProfileRepository(db, keys).createProfile(
             name: '响应联调',
             protocol: protocol,
             baseUrl: 'https://example.invalid/v1',
-            defaultModel: 'reasoning-fixture',
-            models: const [
-              ProfileModel(id: 'reasoning-fixture', supportsReasoning: true),
-            ],
+            defaultModel: modelId,
+            models: [ProfileModel(id: modelId, supportsReasoning: true)],
           );
         });
-        SharedPreferences.setMockInitialValues({});
+        SharedPreferences.setMockInitialValues({
+          'last_reasoning_effort': 'high',
+        });
         final preferences = await SharedPreferences.getInstance();
         final container = ProviderContainer(
           overrides: [
@@ -183,10 +188,26 @@ void main() {
                 ? '/v1/responses'
                 : '/v1/chat/completions',
           );
-          expect((first.options.data as Map)['model'], 'reasoning-fixture');
+          expect((first.options.data as Map)['model'], modelId);
+          if (protocol == ApiProtocol.openaiResponses) {
+            expect((first.options.data as Map)['reasoning'], {
+              'effort': 'high',
+              'summary': 'auto',
+            });
+            expect((first.options.data as Map)['store'], isFalse);
+            expect((first.options.data as Map)['include'], [
+              'reasoning.encrypted_content',
+            ]);
+            expect(
+              ((first.options.data as Map)['input'] as List).where(
+                (item) => item['role'] == 'user',
+              ),
+              hasLength(1),
+            );
+          }
 
-          const reasoning = '先核对输入，再给结论。';
-          first.add(_reasoningFixture(protocol, reasoning));
+          final reasoning = captured?.reasoning ?? '先核对输入，再给结论。';
+          first.add(captured?.prefix ?? _reasoningFixture(protocol, reasoning));
           await _until(
             tester,
             () => find.textContaining('思考中…').evaluate().isNotEmpty,
@@ -199,7 +220,17 @@ void main() {
           expect(_reasoningOf(_assistant(tester)), reasoning);
           expect(_assistant(tester).status, MessageStatus.streaming);
 
-          first.add(_completedFixture(protocol, reasoning, '正文答案'));
+          // pi 在 output_item.done 以完整 summary 收口；不能把修订后的
+          // 公开摘要仅留在 providerData，显示和落库仍沿用不完整的增量。
+          final finalReasoning =
+              captured?.reasoning ??
+              (protocol == ApiProtocol.openaiResponses
+                  ? '核对输入完成，再给结论。'
+                  : reasoning);
+          first.add(
+            captured?.tail ??
+                _completedFixture(protocol, finalReasoning, '正文答案'),
+          );
           first.finish();
           await _until(
             tester,
@@ -207,37 +238,84 @@ void main() {
           );
           await _settleUi(tester);
           expect(_assistant(tester).text, '正文答案');
-          expect(_reasoningOf(_assistant(tester)), reasoning);
+          expect(_reasoningOf(_assistant(tester)), finalReasoning);
+          expect(find.text(finalReasoning), findsOneWidget);
           expect(_assistant(tester).status, MessageStatus.completed);
           var rows = (await tester.runAsync(() => _messageRows(db)))!;
           expect(rows, hasLength(2));
-          expect(_reasoningOf(_messageOf(rows.last)), reasoning);
+          expect(_reasoningOf(_messageOf(rows.last)), finalReasoning);
           expect(rows.last.partsJson, contains('正文答案'));
           expect(rows.last.status, MessageStatus.completed);
           final recorded = _messageOf(rows.last).parts
               .whereType<ReasoningPart>()
               .where((part) => part.publicText.isNotEmpty)
-              .single;
-          expect(recorded.startedAt, isNotNull);
-          expect(recorded.durationMs, isNotNull);
-          expect(rows.last.thinkingDurationMs, recorded.durationMs);
+              .toList();
+          expect(recorded, hasLength(captured == null ? 1 : 4));
+          for (final part in recorded) {
+            expect(part.startedAt, isNotNull);
+            expect(part.durationMs, isNotNull);
+          }
+          expect(
+            rows.last.thinkingDurationMs,
+            recorded.fold<int>(0, (sum, part) => sum + part.durationMs!),
+          );
           expect(find.textContaining('已思考'), findsOneWidget);
           // 正文到达后完成当前段计时；手动展开仍保留，重建消息后来自落库数据。
-          final recordedDuration = recorded.durationMs;
+          final recordedDurations = recorded
+              .map((part) => part.durationMs)
+              .toList();
           await _settleUi(tester);
           rows = (await tester.runAsync(() => _messageRows(db)))!;
           expect(
             _messageOf(rows.last).parts
                 .whereType<ReasoningPart>()
                 .where((part) => part.publicText.isNotEmpty)
-                .single
-                .durationMs,
-            recordedDuration,
+                .map((part) => part.durationMs)
+                .toList(),
+            recordedDurations,
           );
+
+          // 离开并重新打开会话，验证不是仅由流式内存保住完整摘要。
+          final controller = container.read(chatControllerProvider.notifier);
+          final conversationId = rows.last.conversationId;
+          controller.startNewConversation();
+          await _settleUi(tester);
+          var reopened = false;
+          unawaited(
+            controller
+                .openConversation(conversationId)
+                .then((_) => reopened = true),
+          );
+          await _until(tester, () => reopened);
+          await _settleUi(tester);
+          expect(_reasoningOf(_assistant(tester)), finalReasoning);
+          expect(find.text(finalReasoning), findsNothing);
+          await tester.tap(find.textContaining('已思考'));
+          await tester.pump();
+          expect(find.text(finalReasoning), findsOneWidget);
 
           await _send(tester, '测试停止');
           await _until(tester, () => adapter.requests.length == 2);
           final second = adapter.requests.last;
+          if (protocol == ApiProtocol.openaiResponses) {
+            final payload = second.options.data as Map;
+            expect(
+              payload['reasoning'],
+              (first.options.data as Map)['reasoning'],
+            );
+            final reasoningItems = (payload['input'] as List).where(
+              (item) => (item as Map)['type'] == 'reasoning',
+            );
+            expect(
+              reasoningItems.map((item) => item['summary']).toList(),
+              captured?.summaries ??
+                  [
+                    [
+                      {'type': 'summary_text', 'text': finalReasoning},
+                    ],
+                  ],
+            );
+          }
           second.add(_reasoningFixture(protocol, '停止前公开摘要'));
           second.add(_bodyFixture(protocol, '部分正文'));
           await _until(
@@ -304,6 +382,29 @@ void main() {
       },
     );
   }
+}
+
+({String prefix, String tail, String reasoning, List<Object?> summaries})
+_capturedFirstTurn() {
+  final wire = File('test/fixtures/providers/astra_first_turn_reasoning.sse')
+      .readAsStringSync();
+  final boundary = wire.indexOf('event: response.output_text.done\n');
+  final terminal = wire.trimRight().split('\n\n').last;
+  final data =
+      jsonDecode(terminal.substring(terminal.indexOf('data:') + 5)) as Map;
+  final items = (data['response']['output'] as List).where(
+    (item) => item['type'] == 'reasoning',
+  );
+  final summaries = items.map((item) => item['summary']).toList();
+  return (
+    prefix: wire.substring(0, boundary),
+    tail: wire.substring(boundary),
+    reasoning: summaries
+        .expand((summary) => summary as List)
+        .map((part) => part['text'] as String)
+        .join('\n\n'),
+    summaries: summaries,
+  );
 }
 
 Future<List<MessageRow>> _messageRows(AppDatabase db) {

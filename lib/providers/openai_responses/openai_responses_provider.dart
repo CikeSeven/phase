@@ -39,16 +39,6 @@ class OpenAiResponsesProvider implements AiProvider {
   Map<String, String> get _headers =>
       _profile.requiresKey ? {'Authorization': 'Bearer $_apiKey'} : const {};
 
-  /// 是否索要加密推理载荷（`include: ["reasoning.encrypted_content"]`）。
-  ///
-  /// 官方端点认这个参数，推理 item 靠它跨请求还原；网关不一定认识，
-  /// 未知参数会被直接拒绝，因此只在官方端点上开启——不发这个参数时，
-  /// 我们仍然原样回放服务端返回的推理 item。
-  bool get _supportsEncryptedReasoning {
-    final host = Uri.tryParse(_profile.baseUrl)?.host ?? '';
-    return host == 'api.openai.com' || host.endsWith('.openai.azure.com');
-  }
-
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) async* {
     yield* postSseStream(
@@ -58,7 +48,6 @@ class OpenAiResponsesProvider implements AiProvider {
         request,
         supportsImages: modelSupportsImages(_profile, request.modelId),
         supportsReasoning: modelSupportsReasoning(_profile, request.modelId),
-        requestEncryptedReasoning: _supportsEncryptedReasoning,
       ),
       headers: _headers,
       decode: ResponsesSseDecoder.decode,

@@ -1,0 +1,39 @@
+{
+  "model": "gpt-6-astra",
+  "input": [
+    {
+      "role": "developer",
+      "content": "fixture system"
+    },
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "input_text",
+          "text": "fixture user"
+        }
+      ]
+    }
+  ],
+  "stream": true,
+  "store": false,
+  "max_output_tokens": 128000,
+  "tools": [
+    {
+      "type": "function",
+      "name": "fixture_tool",
+      "description": "fixture description",
+      "parameters": {
+        "type": "object",
+        "properties": {}
+      }
+    }
+  ],
+  "reasoning": {
+    "effort": "high",
+    "summary": "auto"
+  },
+  "include": [
+    "reasoning.encrypted_content"
+  ]
+}

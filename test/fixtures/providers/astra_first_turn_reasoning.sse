@@ -1,0 +1,83 @@
+event: response.created
+data: {"type":"response.created","response":{"id":"fixture_0","status":"in_progress","model":"gpt-6-astra","output":[],"usage":null},"sequence_number":0}
+
+event: response.in_progress
+data: {"type":"response.in_progress","response":{"id":"fixture_0","status":"in_progress","model":"gpt-6-astra","output":[],"usage":null},"sequence_number":1}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"id":"fixture_113","type":"reasoning","content":[],"encrypted_content":"fixture_114","summary":[]},"output_index":0,"sequence_number":2}
+
+event: response.reasoning_summary_part.added
+data: {"type":"response.reasoning_summary_part.added","item_id":"fixture_113","output_index":0,"part":{"type":"summary_text","text":""},"sequence_number":3,"summary_index":0}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","delta":"xxxxxxxxxx xxxxxx xxxxxxxx","item_id":"fixture_113","obfuscation":"fixture_115","output_index":0,"sequence_number":4,"summary_index":0}
+
+event: response.reasoning_summary_text.done
+data: {"type":"response.reasoning_summary_text.done","item_id":"fixture_113","output_index":0,"sequence_number":5,"summary_index":0,"text":"xxxxxxxxxx xxxxxx xxxxxxxx"}
+
+event: response.reasoning_summary_part.done
+data: {"type":"response.reasoning_summary_part.done","item_id":"fixture_113","output_index":0,"part":{"type":"summary_text","text":"xxxxxxxxxx xxxxxx xxxxxxxx"},"sequence_number":6,"summary_index":0}
+
+event: response.reasoning_summary_part.added
+data: {"type":"response.reasoning_summary_part.added","item_id":"fixture_113","output_index":0,"part":{"type":"summary_text","text":""},"sequence_number":7,"summary_index":1}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","delta":"xxxxxxxxxx xxxxxxx xxxxxxxxxxxxx","item_id":"fixture_113","obfuscation":"fixture_116","output_index":0,"sequence_number":8,"summary_index":1}
+
+event: response.reasoning_summary_text.done
+data: {"type":"response.reasoning_summary_text.done","item_id":"fixture_113","output_index":0,"sequence_number":9,"summary_index":1,"text":"xxxxxxxxxx xxxxxxx xxxxxxxxxxxxx"}
+
+event: response.reasoning_summary_part.done
+data: {"type":"response.reasoning_summary_part.done","item_id":"fixture_113","output_index":0,"part":{"type":"summary_text","text":"xxxxxxxxxx xxxxxxx xxxxxxxxxxxxx"},"sequence_number":10,"summary_index":1}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"id":"fixture_113","type":"reasoning","content":[],"encrypted_content":"fixture_117","summary":[{"type":"summary_text","text":"xxxxxxxxxx xxxxxx xxxxxxxx"},{"type":"summary_text","text":"xxxxxxxxxx xxxxxxx xxxxxxxxxxxxx"}]},"output_index":0,"sequence_number":11}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"id":"fixture_118","type":"reasoning","content":[],"encrypted_content":"fixture_119","summary":[]},"output_index":1,"sequence_number":12}
+
+event: response.reasoning_summary_part.added
+data: {"type":"response.reasoning_summary_part.added","item_id":"fixture_118","output_index":1,"part":{"type":"summary_text","text":""},"sequence_number":13,"summary_index":0}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","delta":"xxxxxxxxx xxx xxxxxxxxxxxxx xxxxxxxxxx","item_id":"fixture_118","obfuscation":"fixture_120","output_index":1,"sequence_number":14,"summary_index":0}
+
+event: response.reasoning_summary_text.done
+data: {"type":"response.reasoning_summary_text.done","item_id":"fixture_118","output_index":1,"sequence_number":15,"summary_index":0,"text":"xxxxxxxxx xxx xxxxxxxxxxxxx xxxxxxxxxx"}
+
+event: response.reasoning_summary_part.done
+data: {"type":"response.reasoning_summary_part.done","item_id":"fixture_118","output_index":1,"part":{"type":"summary_text","text":"xxxxxxxxx xxx xxxxxxxxxxxxx xxxxxxxxxx"},"sequence_number":16,"summary_index":0}
+
+event: response.reasoning_summary_part.added
+data: {"type":"response.reasoning_summary_part.added","item_id":"fixture_118","output_index":1,"part":{"type":"summary_text","text":""},"sequence_number":17,"summary_index":1}
+
+event: response.reasoning_summary_text.delta
+data: {"type":"response.reasoning_summary_text.delta","delta":"xxxxxxxxxxxxxx","item_id":"fixture_118","obfuscation":"fixture_121","output_index":1,"sequence_number":18,"summary_index":1}
+
+event: response.reasoning_summary_text.done
+data: {"type":"response.reasoning_summary_text.done","item_id":"fixture_118","output_index":1,"sequence_number":19,"summary_index":1,"text":"xxxxxxxxxxxxxx"}
+
+event: response.reasoning_summary_part.done
+data: {"type":"response.reasoning_summary_part.done","item_id":"fixture_118","output_index":1,"part":{"type":"summary_text","text":"xxxxxxxxxxxxxx"},"sequence_number":20,"summary_index":1}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"id":"fixture_118","type":"reasoning","content":[],"encrypted_content":"fixture_122","summary":[{"type":"summary_text","text":"xxxxxxxxx xxx xxxxxxxxxxxxx xxxxxxxxxx"},{"type":"summary_text","text":"xxxxxxxxxxxxxx"}]},"output_index":1,"sequence_number":21}
+
+event: response.output_item.added
+data: {"type":"response.output_item.added","item":{"id":"fixture_123","type":"message","status":"in_progress","content":[],"phase":"final_answer","role":"assistant"},"output_index":2,"sequence_number":22}
+
+event: response.content_part.added
+data: {"type":"response.content_part.added","content_index":0,"item_id":"fixture_123","output_index":2,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":""},"sequence_number":23}
+
+event: response.output_text.done
+data: {"type":"response.output_text.done","content_index":0,"item_id":"fixture_123","logprobs":[],"output_index":2,"sequence_number":1141,"text":"正文答案"}
+
+event: response.content_part.done
+data: {"type":"response.content_part.done","content_index":0,"item_id":"fixture_123","output_index":2,"part":{"type":"output_text","annotations":[],"logprobs":[],"text":"正文答案"},"sequence_number":1142}
+
+event: response.output_item.done
+data: {"type":"response.output_item.done","item":{"id":"fixture_123","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"正文答案"}],"phase":"final_answer","role":"assistant"},"output_index":2,"sequence_number":1143}
+
+event: response.completed
+data: {"type":"response.completed","response":{"id":"fixture_0","status":"completed","model":"gpt-6-astra","output":[{"id":"fixture_113","type":"reasoning","content":[],"encrypted_content":"fixture_117","summary":[{"type":"summary_text","text":"xxxxxxxxxx xxxxxx xxxxxxxx"},{"type":"summary_text","text":"xxxxxxxxxx xxxxxxx xxxxxxxxxxxxx"}]},{"id":"fixture_118","type":"reasoning","content":[],"encrypted_content":"fixture_122","summary":[{"type":"summary_text","text":"xxxxxxxxx xxx xxxxxxxxxxxxx xxxxxxxxxx"},{"type":"summary_text","text":"xxxxxxxxxxxxxx"}]},{"id":"fixture_123","type":"message","status":"completed","content":[{"type":"output_text","annotations":[],"logprobs":[],"text":"正文答案"}],"phase":"final_answer","role":"assistant"}],"usage":{"input_tokens":2050,"input_tokens_details":{"cache_write_tokens":55,"cached_tokens":1992},"output_tokens":2188,"output_tokens_details":{"reasoning_tokens":1034},"total_tokens":4238}},"sequence_number":1144}

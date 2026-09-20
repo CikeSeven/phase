@@ -98,6 +98,7 @@ void main() {
           },
         ]);
         expect(_reasoning(chunks), '公开摘要');
+        expect(_finalReasoning(chunks), '公开摘要');
         expect(_body(chunks), '正文\n\n第二段');
         expect(chunks.last, isA<ResponseEnd>());
         expect(_usage(chunks)?.outputTokens, 3);
@@ -435,6 +436,68 @@ void main() {
         },
       ]);
       expect(_reasoning(chunks), '第一段\n\n第二段\n\n第三段');
+      expect(_finalReasoning(chunks), '第一段的晚到修订\n\n第二段\n\n第三段');
+    });
+
+    test('item 完成摘要修订已发文本时以完整块收口，不重复追加', () async {
+      final chunks = await _decode([
+        {
+          'type': 'response.output_item.added',
+          'output_index': 0,
+          'item': {'id': 'r1', 'type': 'reasoning', 'summary': []},
+        },
+        {
+          'type': 'response.reasoning_summary_text.delta',
+          'item_id': 'r1',
+          'output_index': 0,
+          'summary_index': 0,
+          'delta': '初步摘要',
+        },
+        {
+          'type': 'response.output_item.done',
+          'output_index': 0,
+          'item': {
+            'id': 'r1',
+            'type': 'reasoning',
+            'summary': [
+              {'type': 'summary_text', 'text': '完整的公开摘要'},
+            ],
+          },
+        },
+        {'type': 'response.completed', 'response': {}},
+      ]);
+      expect(_reasoning(chunks), '初步摘要');
+      expect(_finalReasoning(chunks), '完整的公开摘要');
+      expect(chunks.whereType<ResponseEnd>().single.complete, isTrue);
+    });
+
+    test('空的 item 完成摘要不清空已收到的公开思考', () async {
+      final chunks = await _decode([
+        {
+          'type': 'response.reasoning_summary_text.delta',
+          'item_id': 'r1',
+          'output_index': 0,
+          'summary_index': 0,
+          'delta': '已收到的公开摘要',
+        },
+        {
+          'type': 'response.completed',
+          'response': {
+            'output': [
+              {
+                'id': 'r1',
+                'type': 'reasoning',
+                'summary': [
+                  {'type': 'summary_text', 'text': ''},
+                ],
+                'encrypted_content': 'fixture-only-not-public',
+              },
+            ],
+          },
+        },
+      ]);
+      expect(_reasoning(chunks), '已收到的公开摘要');
+      expect(_finalReasoning(chunks), '已收到的公开摘要');
     });
 
     test('同一 item id 在独立 decode 调用中不会残留状态', () async {
@@ -559,6 +622,13 @@ String _reasoning(List<ChatChunk> chunks) =>
 
 String _body(List<ChatChunk> chunks) =>
     chunks.whereType<TextDelta>().map((chunk) => chunk.text).join();
+
+String _finalReasoning(List<ChatChunk> chunks) => chunks
+    .whereType<PartEnd>()
+    .map((chunk) => chunk.part)
+    .whereType<ReasoningPart>()
+    .map((part) => part.publicText)
+    .join();
 
 TokenUsage? _usage(List<ChatChunk> chunks) {
   for (final chunk in chunks) {

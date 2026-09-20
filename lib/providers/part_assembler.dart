@@ -67,6 +67,19 @@ class PartAssembler {
     _emit(ReasoningDelta(partId: block.partId, text: delta));
   }
 
+  /// 收口时采用完整公开摘要；通过 PartEnd 替换原块，不冒充追加增量。
+  /// 空快照不抹掉已收到的公开文本。
+  void reasoningSnapshot(Object key, String text) {
+    if (text.isEmpty) return;
+    final block = _block(key, PartKind.reasoning);
+    _start(block);
+    block.text
+      ..clear()
+      ..write(text);
+    block.hasText = true;
+    _visible = true;
+  }
+
   /// 工具调用增量：callId/toolName 取最后一次非空值（都随增量交给上层），
   /// 参数片段只追加到缓冲。
   void toolCall(

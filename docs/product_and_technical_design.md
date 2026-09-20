@@ -268,6 +268,10 @@ SQLite3MultipleCiphers 通过 `sqlite3mc` 构建钩子启用，密钥由安全�
 
 Completions 使用 messages/tool，Responses 使用 input items/function outputs，Anthropic 使用 content blocks，Google 使用 parts/function responses；配对、签名、图片和公开思考的差异留在适配器中。服务端内置工具和服务端会话状态不是当前客户端工具循环的依赖。
 
+普通 Responses 显式使用 `store:false`；模型支持且开启推理时发送 `reasoning.summary:auto` 和 `include:["reasoning.encrypted_content"]`，不按域名省略回放载荷。完整公开摘要用于对应 Part 收口，加密内容仅作协议回放、不显示为思考。首轮请求结构的 pi 同参对照见[回归测试](../test/providers/openai_responses/responses_pi_parity_test.dart)，不等同于 Codex OAuth 协议或真实网关验收。
+
+2026-09-20 已在本次配置的 GPT-6 Astra 上真机确认：全新会话首条消息可显示四段公开摘要；另一次短回复未返回 reasoning item，不展示虚构思考。两份脱敏流已加入[样本回归](../test/providers/openai_responses/responses_live_samples_test.dart)，首轮样本另经[真实适配器、界面与落库链路](../test/ui/reasoning_response_flow_test.dart)验证；不据此扩大为所有输入、模型或服务商均保证返回摘要。
+
 ## 5. 配置与失败
 
 ### 5.1 配置行为

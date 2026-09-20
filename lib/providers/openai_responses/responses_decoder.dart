@@ -15,25 +15,18 @@ import '../sse_transport.dart';
 /// 推理等级映射为 `reasoning: {effort, summary: auto}`（off → effort none）；
 /// 模型不支持推理时不下发 reasoning 字段。
 ///
-/// [requestEncryptedReasoning] 为 true 时索要 `reasoning.encrypted_content`：
-/// 推理 item 需要由客户端原样回放，加密载荷是把它带过服务端状态的唯一办法
-/// （pi 的做法；官方端点默认 store=false 语义下必须带）。网关不一定认识这个
-/// 参数，所以只在确认支持的端点上开启。
+/// 与 pi 的普通 Responses 请求一致，显式 store=false；推理开启时索要
+/// reasoning.encrypted_content，以便客户端回放。它不是公开思考文本，
+/// 是否请求由模型能力与推理等级决定，不根据 Base URL 猜测协议能力。
 Future<Map<String, dynamic>> buildResponsesPayload(
   ChatRequest request, {
   bool supportsImages = true,
   bool supportsReasoning = true,
-  bool requestEncryptedReasoning = false,
 }) async {
   final attachments = RequestAttachmentEncoder(supportsImages: supportsImages);
   final input = <Map<String, dynamic>>[
     if (request.systemPrompt.isNotEmpty)
-      {
-        'role': 'developer',
-        'content': [
-          {'type': 'input_text', 'text': request.systemPrompt},
-        ],
-      },
+      {'role': 'developer', 'content': request.systemPrompt},
   ];
   for (final message in request.messages) {
     input.addAll(await _responsesItems(message, attachments));
@@ -43,11 +36,13 @@ Future<Map<String, dynamic>> buildResponsesPayload(
     'model': request.modelId,
     'input': input,
     'stream': true,
+    'store': false,
     if (supportsReasoning)
       'reasoning': request.reasoningEffort == ReasoningEffort.off
           ? {'effort': 'none'}
           : {'effort': request.reasoningEffort.name, 'summary': 'auto'},
-    if (requestEncryptedReasoning) 'include': ['reasoning.encrypted_content'],
+    if (supportsReasoning && request.reasoningEffort != ReasoningEffort.off)
+      'include': ['reasoning.encrypted_content'],
     if (request.temperature != null) 'temperature': request.temperature,
     if (request.maxOutputTokens != null)
       'max_output_tokens': request.maxOutputTokens,
@@ -185,7 +180,7 @@ abstract final class ResponsesSseDecoder {
     return [...chunks, ...decoder.finish(complete: true)];
   }
 
-  /// 每条响应独立追踪 item 与文本段，只补齐已发前缀的缺失后缀。
+  /// 每条响应独立追踪 item 与文本段；增量补后缀，完整摘要按块收口。
   static Stream<ChatChunk> decode(Stream<List<int>> byteStream) async* {
     final decoder = _ResponsesStreamDecoder();
     await for (final data in decodeSseDataLines(byteStream)) {
@@ -409,7 +404,13 @@ class _ResponsesStreamDecoder {
     if (value['type'] == 'reasoning') {
       _readParts(item, value['summary'], _ResponseChannel.summary);
       _readParts(item, value['content'], _ResponseChannel.reasoning);
-      item.update(_ResponseChannel.reasoning, 0, value['text'], snapshot: true);
+      item.update(
+        _ResponseChannel.reasoning,
+        0,
+        value['text'],
+        snapshot: true,
+        authoritative: true,
+      );
       // 推理 item 要原样回传：服务端按 rs_* ↔ fc_* 校验配对，缺了它下一轮
       // 带函数调用的请求会被判为「function_call 缺少配对的 reasoning item」。
       final replay = _reasoningItem(value);
@@ -486,7 +487,7 @@ class _ResponsesStreamDecoder {
   void _readParts(_ResponseItem item, Object? parts, _ResponseChannel channel) {
     if (parts is! List) return;
     for (var index = 0; index < parts.length; index++) {
-      _readPart(item, parts[index], channel, index);
+      _readPart(item, parts[index], channel, index, authoritative: true);
     }
   }
 
@@ -494,8 +495,9 @@ class _ResponsesStreamDecoder {
     _ResponseItem item,
     Object? part,
     _ResponseChannel channel,
-    int index,
-  ) {
+    int index, {
+    bool authoritative = false,
+  }) {
     if (part is! Map<String, dynamic>) return;
     final accepted = switch (channel) {
       _ResponseChannel.summary => part['type'] == 'summary_text',
@@ -503,10 +505,18 @@ class _ResponsesStreamDecoder {
         part['type'] == 'reasoning_text' || part['type'] == 'text',
       _ResponseChannel.content => part['type'] == 'output_text',
     };
-    if (accepted) item.update(channel, index, part['text'], snapshot: true);
+    if (accepted) {
+      item.update(
+        channel,
+        index,
+        part['text'],
+        snapshot: true,
+        authoritative: authoritative,
+      );
+    }
   }
 
-  /// 把当前已知的文本补齐到事件流；完成快照只补缺失后缀，不重复追加。
+  /// 流式只追加一致后缀；收口时完整摘要替换对应块，不重复追加。
   void _flush({bool finish = false, bool done = false, TokenUsage? usage}) {
     final items = [..._items]
       ..sort((a, b) {
@@ -540,6 +550,7 @@ class _ResponsesStreamDecoder {
                 !identical(previous, part) &&
                 item.separateParts) {
               text = '\n\n$text';
+              if (part.emitted.isEmpty) part.prefix = '\n\n';
             }
             // 同一个 part 的增量落到同一个块：key 用 part 本身，
             // partId 由组装器按首现顺序分配。
@@ -551,6 +562,11 @@ class _ResponsesStreamDecoder {
               _lastContentPart = part;
             }
             part.emitted = part.text;
+          }
+          // pi 的 output_item.done 以完整公开摘要收口。晚到修订不能拼到
+          // 后续段落末尾，也不能只留在回放 metadata 而丢掉显示/落库内容。
+          if (finish && isReasoning && part.finalText != null) {
+            _parts.reasoningSnapshot(part, '${part.prefix}${part.finalText}');
           }
           if (!finish && !item.complete && !part.complete) break;
           nextIndex = entry.key.$2 + 1;
@@ -622,11 +638,17 @@ class _ResponseItem {
     int index,
     Object? value, {
     required bool snapshot,
+    bool authoritative = false,
   }) {
     if (value is! String) return;
     final part = parts.putIfAbsent((channel, index), _ResponsePart.new);
     if (snapshot) {
       if (value.startsWith(part.text)) part.text = value;
+      if (authoritative &&
+          channel != _ResponseChannel.content &&
+          value.isNotEmpty) {
+        part.finalText = value;
+      }
       part.complete = true;
     } else if (!part.complete) {
       part.text += value;
@@ -645,13 +667,17 @@ class _ResponseToolCall {
 class _ResponsePart {
   var text = '';
   var emitted = '';
+  var prefix = '';
+  String? finalText;
   var complete = false;
 
   void merge(_ResponsePart other) {
     if (other.text.startsWith(text)) text = other.text;
     if (other.emitted.startsWith(emitted) && text.startsWith(other.emitted)) {
       emitted = other.emitted;
+      prefix = other.prefix;
     }
+    finalText ??= other.finalText;
     complete |= other.complete;
   }
 }

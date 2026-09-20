@@ -39,19 +39,17 @@ void main() {
   }
 
   group('buildResponsesPayload', () {
-    test(
-      'systemPrompt 置首条 developer + input_text，assistant 用 output_text',
-      () async {
-        final payload = await buildResponsesPayload(request());
-        final input = (payload['input'] as List).cast<Map<String, dynamic>>();
-        expect(input[0]['role'], 'developer');
-        expect(input[0]['content'][0]['type'], 'input_text');
-        expect(input[1]['role'], 'user');
-        expect(input[2]['role'], 'assistant');
-        expect(input[2]['content'][0]['type'], 'output_text');
-        expect(payload['stream'], isTrue);
-      },
-    );
+    test('systemPrompt 置首条 developer 字符串，assistant 用 output_text', () async {
+      final payload = await buildResponsesPayload(request());
+      final input = (payload['input'] as List).cast<Map<String, dynamic>>();
+      expect(input[0]['role'], 'developer');
+      expect(input[0]['content'], '系统提示');
+      expect(input[1]['role'], 'user');
+      expect(input[2]['role'], 'assistant');
+      expect(input[2]['content'][0]['type'], 'output_text');
+      expect(payload['stream'], isTrue);
+      expect(payload['store'], isFalse);
+    });
 
     test('推理等级映射 reasoning.effort + summary auto', () async {
       for (final effort in [
@@ -177,15 +175,21 @@ void main() {
       ]);
     });
 
-    test('索要加密推理时下发 include', () async {
-      final payload = await buildResponsesPayload(
-        request(),
-        requestEncryptedReasoning: true,
-      );
-      expect(payload['include'], ['reasoning.encrypted_content']);
-
-      final plain = await buildResponsesPayload(request());
-      expect(plain.containsKey('include'), isFalse);
+    test('仅在模型支持且开启推理时请求回放载荷，不绑定服务商域名', () async {
+      for (final effort in ReasoningEffort.values) {
+        for (final supported in [true, false]) {
+          final payload = await buildResponsesPayload(
+            request(effort: effort),
+            supportsReasoning: supported,
+          );
+          if (supported && effort != ReasoningEffort.off) {
+            expect(payload['include'], ['reasoning.encrypted_content']);
+          } else {
+            expect(payload.containsKey('include'), isFalse);
+          }
+          expect(payload['store'], isFalse);
+        }
+      }
     });
 
     test('函数调用与结果作为顶层 item，缺协议状态的思考不回传', () async {
