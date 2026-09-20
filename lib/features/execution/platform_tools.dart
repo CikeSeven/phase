@@ -417,9 +417,15 @@ class ApplicationTool extends Tool {
   String get description => switch (action) {
     ExecutionAction.listApps =>
       '查询名单允许的已安装应用，返回名称、包名、系统属性、版本、安装时间、安装包大小及可否打开；支持搜索、排序和分页。',
-    ExecutionAction.openApp => '打开 packageName 对应应用，返回界面快照。',
-    ExecutionAction.inspectUi => '读取指定 packageName 的可见界面，返回控件快照；目标须已在前台。',
-    _ => '对 packageName 执行 $name，使用该应用最新快照的 snapshotId 和 nodeId；返回动作回调和操作后观察。',
+    ExecutionAction.openApp =>
+      '打开 packageName 对应应用，返回文字控件树 snapshot，不含截图图片。'
+          '需要查看画面或控件树信息不足时，调用可用的 capture_screen 读取当前前台截图。',
+    ExecutionAction.inspectUi =>
+      '读取指定 packageName 的可见文字控件树 snapshot，不含截图图片；目标须已在前台。'
+          '需要查看画面或控件树信息不足时，调用可用的 capture_screen。',
+    _ =>
+      '对 packageName 执行 $name，使用该应用最新控件快照的 snapshotId 和 nodeId；'
+          '返回动作回调和操作后的文字控件树，不含截图图片。需要查看画面时调用可用的 capture_screen。',
   };
   @override
   Set<String> get requiredCapabilities => action == ExecutionAction.listApps

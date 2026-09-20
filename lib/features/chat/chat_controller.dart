@@ -1893,15 +1893,26 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required String currentModelId,
   }) async {
     final records = await _recordsFor(messages);
-    final latestVisualRecord = messages
-        .expand((message) => message.parts)
-        .whereType<ToolResultPart>()
-        .map((part) => records[part.toolCallId])
-        .where(
-          (record) =>
-              record != null && visualOperationTools.contains(record.toolName),
-        )
-        .lastOrNull;
+    final visualImageRecords = <String>{};
+    String? visualImageTurn;
+    for (final part
+        in messages
+            .expand((message) => message.parts)
+            .whereType<ToolResultPart>()) {
+      final record = records[part.toolCallId];
+      if (record == null ||
+          !visualOperationTools.contains(record.toolName) ||
+          !record.artifacts.any((id) => attachments[id]?.isImage == true)) {
+        continue;
+      }
+      // 同轮多张图要一起送达；后续失败或无图手势不能抹掉已取得的观察。
+      // 只有新一轮实际返回图片时才替换，图片仍绑定原调用及其时间、应用元数据。
+      if (visualImageTurn != record.assistantMessageId) {
+        visualImageRecords.clear();
+        visualImageTurn = record.assistantMessageId;
+      }
+      visualImageRecords.add(record.id);
+    }
     // 结果文本以结果消息为准：拒绝等状态只写进结果消息，记录里可能没有。
     final results = <String, ResolvedToolResult>{};
     for (final message in messages) {
@@ -1913,7 +1924,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         results[part.toolCallId] = ResolvedToolResult(
           callId: callId,
           images:
-              record.id == latestVisualRecord?.id ||
+              visualImageRecords.contains(record.id) ||
                   record.source?.kind == ToolSourceKind.mcp
               ? [
                   for (final id in record.artifacts)

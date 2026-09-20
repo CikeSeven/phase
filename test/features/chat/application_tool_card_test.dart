@@ -301,6 +301,24 @@ void main() {
     expect(find.textContaining('windowId'), findsNothing);
   });
 
+  testWidgets('空控件观察明确没有截图，不呈现为截图成功的空卡片', (tester) async {
+    await _pump(
+      tester,
+      _record(
+        'inspect_ui',
+        args: {'packageName': _package},
+        result: {
+          'snapshot': {'packageName': _package, 'nodes': []},
+        },
+      ),
+    );
+    expect(find.text('读取界面控件'), findsOneWidget);
+    expect(find.text('未发现可见控件。本次读取不包含截图。'), findsOneWidget);
+    expect(find.text('截图观察'), findsNothing);
+    expect(find.byType(Image), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('滚动与文字输入只显示控件、方向或文字，同时保留真实失败原因', (tester) async {
     for (final (tool, extra, expected) in [
       ('scroll', {'direction': 'backward'}, '控件 n7 · 向后滚动'),

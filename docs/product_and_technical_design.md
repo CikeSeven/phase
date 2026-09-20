@@ -208,7 +208,9 @@ SAF 的 `path` 使用用户授予范围内的 URI；创建外部文件时 `direc
 - 截图最长边 1568px、PNG 最大 4MB；返回尺寸、窗口边界、旋转、时间等元数据，Dart 登记图片产物并清理临时文件。仅向支持图片和工具的模型开放截图。
 - `perform_gestures` 明确传入包名，支持 1–10 步 tap/double_tap/long_press/swipe/wait。默认屏幕像素；图片坐标声明 `image_pixels` 和宽高，在整组派发前换算。无需前置截图、截图 ID、有效期或一次性凭证。
 - 整组先校验、固定参数确认，再在同一设备队列串行派发；逐步检查实际目标、名单和坐标边界。具体参数上限以 [visual_tools.dart](../lib/features/execution/visual_tools.dart) 和原生手势校验为准，两端同步。
-- 手势只要求模型支持工具，不依赖图片或截图能力。动作成功后的截图失败记为 `observationError`，保留已完成动作；失败/取消不重发。最近一次视觉结果图片按协议回填：Responses 使用 `function_call_output.output` 内容数组；Anthropic 使用 `tool_result.content` 内容数组；Gemini 3+ 使用 `functionResponse.parts` 并保留调用 ID，2.x 与无法识别的模型别名保留完整工具结果组后的图片观察；Completions 同样在完整结果组后追加图片观察。原生图片与对应工具结果绑定，旧截图保留供查看。
+- 手势参数按动作类型分别声明：tap/double_tap 仅含 type/x/y，long_press 可带时长，swipe 必须带终点，wait 只带类型及可选时长。参数失败回填具体步骤和可用字段，不自动删除或改写已提出的动作参数。
+- 手势只要求模型支持工具，不依赖图片或截图能力。动作成功后的截图失败记为 `observationError`，保留已完成动作；失败/取消不重发。保留最近一个实际产图模型轮的全部视觉结果图片，同轮多图一起送达；后续失败或无图手势不清空已有图片，新一轮实际产图后才替换。图片仍绑定原调用及其应用、时间元数据，不将历史截图当作动作后的新观察；更早截图保留供查看。
+- 图片按协议回填：Responses 使用 `function_call_output.output` 内容数组；Anthropic 使用 `tool_result.content` 内容数组；Gemini 3+ 使用 `functionResponse.parts` 并保留调用 ID，2.x 与无法识别的模型别名保留完整工具结果组后的图片观察；Completions 同样在完整结果组后追加图片观察。`open_app`、`inspect_ui` 和控件动作返回文字控件树，不含截图；需要看画面时由模型调用可用的 `capture_screen`。
 
 ## 5. 新执行通道
 
@@ -271,6 +273,8 @@ SQLite3MultipleCiphers 通过 `sqlite3mc` 构建钩子启用，密钥由安全�
 Completions 使用 messages/tool，Responses 使用 input items/function outputs，Anthropic 使用 content blocks，Google 使用 parts/function responses；配对、签名、图片和公开思考的差异留在适配器中。服务端内置工具和服务端会话状态不是当前客户端工具循环的依赖。
 
 普通 Responses 显式使用 `store:false`；模型支持且开启推理时发送 `reasoning.summary:auto` 和 `include:["reasoning.encrypted_content"]`，不按域名省略回放载荷。完整公开摘要用于对应 Part 收口，加密内容仅作协议回放、不显示为思考。首轮请求结构的 pi 同参对照见[回归测试](../test/providers/openai_responses/responses_pi_parity_test.dart)，不等同于 Codex OAuth 协议或真实网关验收。
+
+Responses 函数工具显式发送 `strict:false`，保留工具声明的可选参数，避免服务端自动严格化后要求每种手势填写全部字段；实际派发仍按工具 schema 与参数校验执行。
 
 2026-09-20 已在本次配置的 GPT-6 Astra 上真机确认：全新会话首条消息可显示四段公开摘要；另一次短回复未返回 reasoning item，不展示虚构思考。两份脱敏流已加入[样本回归](../test/providers/openai_responses/responses_live_samples_test.dart)，首轮样本另经[真实适配器、界面与落库链路](../test/ui/reasoning_response_flow_test.dart)验证；不据此扩大为所有输入、模型或服务商均保证返回摘要。
 

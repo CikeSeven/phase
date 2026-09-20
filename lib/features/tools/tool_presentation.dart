@@ -53,7 +53,7 @@ class ToolPresentation {
     'edit_file' => '编辑文件',
     'list_files' => '列出文件',
     'http_request' => 'HTTP 请求',
-    'inspect_ui' => '观察界面',
+    'inspect_ui' => '读取界面控件',
     'list_apps' => '获取应用列表',
     'open_app' => '打开应用',
     'click_node' => '点击控件',

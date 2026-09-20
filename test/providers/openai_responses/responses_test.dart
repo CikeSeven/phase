@@ -92,6 +92,7 @@ void main() {
           'name': 'get_weather',
           'description': '查天气',
           'parameters': {'type': 'object'},
+          'strict': false,
         },
       ]);
     });

@@ -55,6 +55,9 @@ Future<Map<String, dynamic>> buildResponsesPayload(
             'name': tool.name,
             'description': tool.description,
             'parameters': tool.inputSchema,
+            // 保留工具声明的可选字段，避免 Responses 自动严格化后要求
+            // tap 等动作填满仅属于 swipe/long_press 的参数。
+            'strict': false,
           },
       ],
   };

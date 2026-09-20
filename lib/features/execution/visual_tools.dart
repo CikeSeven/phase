@@ -67,26 +67,20 @@ class VisualTool extends Tool {
         },
         'actions': {
           'type': 'array',
+          'description': '按顺序执行 1–10 步，总时长至多 15000ms；每步只填写对应类型声明的字段。',
           'minItems': 1,
           'maxItems': 10,
           'items': {
-            'type': 'object',
-            'additionalProperties': false,
-            'properties': {
-              'type': {
-                'type': 'string',
-                'enum': ['tap', 'double_tap', 'long_press', 'swipe', 'wait'],
-              },
-              'x': {'type': 'number', 'description': '除 wait 外必填，所声明坐标空间中的横坐标'},
-              'y': {'type': 'number', 'description': '除 wait 外必填，所声明坐标空间中的纵坐标'},
-              'endX': {'type': 'number', 'description': '仅 swipe 必填，终点横坐标'},
-              'endY': {'type': 'number', 'description': '仅 swipe 必填，终点纵坐标'},
-              'durationMs': {
-                'type': 'integer',
-                'description': '仅 long_press/swipe/wait；长按 500–2000ms（默认 700），其余 1–2000ms（默认 400）。总时长至多 15000ms',
-              },
-            },
-            'required': ['type'],
+            'anyOf': [
+              for (final type in [
+                'tap',
+                'double_tap',
+                'long_press',
+                'swipe',
+                'wait',
+              ])
+                _gestureSchema(type),
+            ],
           },
         },
       },
@@ -244,6 +238,34 @@ class VisualTool extends Tool {
         );
 }
 
+Map<String, dynamic> _gestureSchema(String type) {
+  final timed = const {'long_press', 'swipe', 'wait'}.contains(type);
+  final coordinates = [
+    if (type != 'wait') ...['x', 'y'],
+    if (type == 'swipe') ...['endX', 'endY'],
+  ];
+  return {
+    'type': 'object',
+    'additionalProperties': false,
+    'properties': {
+      'type': {
+        'type': 'string',
+        'enum': [type],
+      },
+      for (final coordinate in coordinates)
+        coordinate: {'type': 'number', 'minimum': 0},
+      if (timed)
+        'durationMs': {
+          'type': 'integer',
+          'minimum': type == 'long_press' ? 500 : 1,
+          'maximum': 2000,
+          'description': type == 'long_press' ? '长按毫秒数，默认 700' : '持续毫秒数，默认 400',
+        },
+    },
+    'required': ['type', ...coordinates],
+  };
+}
+
 bool _matchesScreenshot(Uint8List bytes, Map metadata) {
   const signature = [137, 80, 78, 71, 13, 10, 26, 10];
   if (bytes.length < 24) return false;
@@ -288,7 +310,7 @@ String? validateGestureActions(Object? value) {
     return '手势组合必须包含 1–10 步';
   }
   var total = 0;
-  for (final raw in value) {
+  for (final (index, raw) in value.indexed) {
     if (raw is! Map) return '每步手势必须是对象';
     final type = raw['type'];
     if (!const {
@@ -306,7 +328,9 @@ String? validateGestureActions(Object? value) {
     };
     final timed = const {'long_press', 'swipe', 'wait'}.contains(type);
     final keys = {'type', ...coordinates, if (timed) 'durationMs'};
-    if (raw.keys.any((key) => !keys.contains(key))) return '手势包含不适用的参数';
+    if (raw.keys.any((key) => !keys.contains(key))) {
+      return '第 ${index + 1} 步 $type 只接受 ${keys.join('、')}；请省略其余字段。';
+    }
     for (final key in coordinates) {
       final number = raw[key];
       if (number is! num || !number.isFinite || number < 0) {

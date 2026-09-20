@@ -13,7 +13,9 @@ void main() {
     // fixture 由 pi 6160683a4a8012f0d1cd30c145df18b4ca6f5176 的
     // openai-responses.ts::buildParams + convertResponsesMessages/Tools 生成。
     // 纯本地构造：没有联网、凭据或历史消息；包含 pi streamSimple 从
-    // fixture 模型元数据取得的 128000 上限。相月需显式提供相同参数，
+    // fixture 模型元数据取得的 128000 上限，并显式配置
+    // compat.supportsStrictMode=true，使 pi 发送 strict:false 保留可选参数。
+    // 相月需显式提供相同参数，
     // 不能用此用例声称两者的默认模型参数/完整 Agent 行为相同。
     final expected = jsonDecode(
       File('test/fixtures/providers/pi_responses_first_turn.json')

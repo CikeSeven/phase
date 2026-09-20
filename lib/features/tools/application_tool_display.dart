@@ -101,7 +101,7 @@ class ApplicationToolDisplay {
         when record.toolName == 'inspect_ui') {
       if (snapshot['nodes'] case final List nodes) {
         lines.insertAll(0, [
-          if (nodes.isEmpty) '未发现可见控件',
+          if (nodes.isEmpty) '未发现可见控件。本次读取不包含截图。',
           for (final node in nodes.whereType<Map>()) _node(node),
           if (snapshot['truncated'] == true) '控件列表已截断',
         ]);

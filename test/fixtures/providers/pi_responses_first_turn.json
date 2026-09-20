@@ -26,7 +26,8 @@
       "parameters": {
         "type": "object",
         "properties": {}
-      }
+      },
+      "strict": false
     }
   ],
   "reasoning": {
