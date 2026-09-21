@@ -81,6 +81,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('流式正文使用增量 Markdown，完成后关闭流式渲染', (tester) async {
+    final streaming = _aiMessage('第一段内容\n\n第二段内容', MessageStatus.streaming);
+    await pumpBubble(tester, streaming);
+    final live = tester.widget<GptMarkdown>(find.byType(GptMarkdown));
+    expect(live.animation, GptMarkdownAnimation.fade);
+    expect(live.isStreaming, isTrue);
+
+    await pumpBubble(
+      tester,
+      streaming.copyWith(status: MessageStatus.completed),
+    );
+    final completed = tester.widget<GptMarkdown>(find.byType(GptMarkdown));
+    expect(completed.animation, GptMarkdownAnimation.none);
+    expect(completed.isStreaming, isFalse);
+  });
+
   group('思考区块', () {
     testWidgets('分段耗时分别展示、无记录不伪造，持续接收的计时跨重建不归零', (tester) async {
       final startedAt = DateTime.now().subtract(const Duration(seconds: 4));

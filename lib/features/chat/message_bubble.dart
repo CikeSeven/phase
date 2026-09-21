@@ -282,6 +282,13 @@ class MessageBubble extends StatelessWidget {
                                     ? const ValueKey('message-markdown')
                                     : null,
                                 style: textStyle,
+                                // gpt_markdown 的增量模式会缓存已稳定的
+                                // Markdown 前缀，只重建仍可能变化的尾部。
+                                // 速度设高，避免把协议流人为变成打字机效果。
+                                animation: streaming
+                                    ? GptMarkdownAnimation.fade
+                                    : GptMarkdownAnimation.none,
+                                charactersPerSecond: 1200,
                                 isStreaming: streaming,
                                 codeBuilder:
                                     (context, language, code, closed) =>
