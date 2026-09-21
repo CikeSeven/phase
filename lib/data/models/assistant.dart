@@ -1,3 +1,5 @@
+import 'memory_entry.dart';
+
 import 'dart:convert';
 
 import 'model_selection.dart';
@@ -65,6 +67,7 @@ class Assistant {
     this.defaultModelSelection,
     this.toolPolicy = defaultToolPolicyConfig,
     this.skillIds = const {},
+    this.memoryScope = MemoryScope.disabled,
     required this.createdAt,
   });
 
@@ -74,6 +77,7 @@ class Assistant {
   final ModelSelection? defaultModelSelection;
   final ToolPolicyConfig toolPolicy;
   final Set<String> skillIds;
+  final MemoryScope memoryScope;
   final DateTime createdAt;
 
   Assistant copyWith({
@@ -82,6 +86,7 @@ class Assistant {
     ModelSelection? defaultModelSelection,
     ToolPolicyConfig? toolPolicy,
     Set<String>? skillIds,
+    MemoryScope? memoryScope,
   }) {
     return Assistant(
       id: id,
@@ -91,6 +96,7 @@ class Assistant {
           defaultModelSelection ?? this.defaultModelSelection,
       toolPolicy: toolPolicy ?? this.toolPolicy,
       skillIds: skillIds ?? this.skillIds,
+      memoryScope: memoryScope ?? this.memoryScope,
       createdAt: createdAt,
     );
   }

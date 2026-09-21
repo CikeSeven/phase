@@ -1,3 +1,6 @@
+import '../../../data/repositories/plan_repository.dart';
+import 'planning/plan_card.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
@@ -27,10 +30,12 @@ class ToolCallCard extends ConsumerWidget {
   const ToolCallCard({
     required this.toolCallId,
     this.attachments = const {},
+    this.conversationId,
     super.key,
   });
 
   final String toolCallId;
+  final String? conversationId;
 
   /// 会话附件索引：把记录里的产物 id 还原成可查看的文件。
   final Map<String, Attachment> attachments;
@@ -39,6 +44,15 @@ class ToolCallCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final record = ref.watch(toolCallRecordProvider(toolCallId)).value;
     if (record == null) return const SizedBox.shrink();
+    if (record.toolName == 'submit_plan' &&
+        record.status == ToolCallStatus.succeeded &&
+        conversationId != null) {
+      final plans = ref.watch(conversationPlansProvider(conversationId!));
+      final plan = plans.value
+          ?.where((p) => p.sourceRunId == record.runId)
+          .firstOrNull;
+      if (plan != null) return PlanCard(plan: plan);
+    }
     return ResolvedToolCard(
       record: record,
       artifacts: [

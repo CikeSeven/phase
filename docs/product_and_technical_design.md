@@ -1,6 +1,6 @@
 # 相月（Phase）产品与技术设计
 
-更新：2026-09-19｜阶段：未发布的初版建设｜平台：Android
+更新：2026-09-22｜阶段：未发布的初版建设｜平台：Android
 
 相月是 Android 多模型聊天与设备执行应用，工程名 `phase`，应用 ID `app.xiangyue.phase`。用户自带模型服务；Flutter/Dart 负责界面、模型请求与 Agent 循环，Kotlin 负责 Android 能力。
 
@@ -39,6 +39,8 @@
 | 远程 MCP、来源/修订快照、扩展管理与助手范围 | [mcp](../lib/features/mcp/)、[MCP 仓储](../lib/data/repositories/mcp_server_repository.dart) | [MCP 测试](../test/features/mcp/)；本机真实 HTTP/SSE 与四协议闭环通过；设备范围见实施计划 |
 | Skills 本地目录/ZIP、版本固定、助手范围与按需读取 | [skills](../lib/features/skills/)、[安装仓储](../lib/data/repositories/skill_repository.dart) | [Skills 测试](../test/features/skills/)；本机四协议文件产物闭环通过，真机范围见实施计划 |
 | Ubuntu 安装、会话独立工作区、shell 与 Skill 工作副本 | [workspace](../lib/features/workspace/)、[原生宿主](../android/app/src/main/kotlin/app/xiangyue/phase/workspace/) | 本机四协议首轮工作区闭环通过；此前环境/原始进程桥已装机验证，本次会话归属调整已覆盖安装、数据保留与启动验证，完整 UI/生命周期待验收 |
+| 上下文预算、分支摘要、Plan Mode 与计划批准 | [context](../lib/features/chat/context/)、[planning](../lib/features/chat/planning/) | [上下文与取消](../test/features/chat/context/)、[计划与四协议链路](../test/features/chat/planning/)；真机/摘要质量待验收 |
+| 助手/全局记忆、显式写入、关键字检索与管理 | [memory](../lib/features/memory/)、[记忆仓储](../lib/data/repositories/memory_repository.dart) | [记忆测试](../test/features/memory/)；来源、范围、确认及删除覆盖 |
 | SAF、应用名单、无障碍、原生任务控制、设备队列 | [execution](../lib/features/execution/)、[Android 执行](../android/app/src/main/kotlin/app/xiangyue/phase/) | [Dart 执行测试](../test/features/execution/)、[JVM 测试](../android/app/src/test/kotlin/app/xiangyue/phase/) |
 | Android 14+ 窗口截图、图片回填、坐标手势组合 | [visual_tools.dart](../lib/features/execution/visual_tools.dart)、[vision](../android/app/src/main/kotlin/app/xiangyue/phase/vision/) | [四协议视觉链路](../test/features/execution/visual_protocol_flow_test.dart) |
 | 结构化消息、加密 Drift、附件与产物归属 | [models](../lib/data/models/)、[local](../lib/data/datasources/local/)、[repositories](../lib/data/repositories/) | [数据测试](../test/data/) |
@@ -49,7 +51,7 @@
 |---|---|---|
 | 工具生态 | 远程 MCP 外部服务验收、本地 MCP stdio 真机与真实 npx/uvx 服务验收、Skill 脚本真机验收/网络导入、插件包及受限扩展钩子 | [MCP](./agent_extensions_design.md#extensions-mcp)、[Skills](./agent_extensions_design.md#extensions-skills)、[插件包](./agent_extensions_design.md#extensions-plugins) |
 | 命令环境 | PRoot 安装/文件 UI、通知停止和生命周期真机验收、依赖安装真机验收、PTY、Termux、Shizuku | [扩展设计 §5–§7](./agent_extensions_design.md#extensions-runtime) |
-| Agent 能力 | Plan Mode、上下文预算与摘要、长期记忆、单子代理 | [扩展设计 §8、§10](./agent_extensions_design.md#extensions-planning) |
+| Agent 能力 | 单子代理；上下文/计划/记忆的真实模型质量与真机验收 | [扩展设计 §8、§10](./agent_extensions_design.md#extensions-planning) |
 | 聊天与数据 | 完整分支导航、加密备份恢复、原生文档上传 | [扩展设计 §11](./agent_extensions_design.md#extensions-product) |
 | 配置与感知 | 多 Key、按任务选模型、成本统计、通知监听与回复 | [扩展设计 §11](./agent_extensions_design.md#extensions-product) |
 | 后续研究 | Root、更多代理并发/fork、Code Mode、定时事件、模板/角色卡生态、远程访问 | [扩展设计 §12](./agent_extensions_design.md#extensions-later) |
@@ -103,11 +105,11 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 ## 1. 职责
 
-`AgentLoop` 只推进轮次；当前 `ChatController` 提供流式请求、上下文装配、工具执行与持久化宿主。后续按实际新增职责提取上下文构建，不为迁移到框架重写现有聊天路径。Provider 不调工具，原生进程不调用模型，插件不拥有另一份会话事实来源。
+`AgentLoop` 只推进轮次；当前 `ChatController` 提供流式请求、历史解析、工具执行与持久化宿主，`ContextBuilder` 负责预算与摘要选择；摘要请求独立计量，仍受根运行停止控制。不为迁移到框架重写现有聊天路径。Provider 不调工具，原生进程不调用模型，插件不拥有另一份会话事实来源。
 
 ## 2. 运行快照
 
-一次发送创建 `AgentRun`，固定连接、模型、参数、助手提示词、工具范围和执行范围；新编辑影响新运行。凭据按配置 ID 在必要时读取，快照不保存密钥。查看其他会话不改变根任务；现阶段同一时间一个根运行。
+一次发送创建 `AgentRun`，固定连接、模型、参数、上下文窗口、计划/执行模式、记忆范围、助手提示词、工具范围和执行范围；新编辑影响新运行。凭据按配置 ID 在必要时读取，快照不保存密钥。查看其他会话不改变根任务；现阶段同一时间一个根运行。
 
 ## 3. 一轮执行
 

@@ -1,3 +1,5 @@
+import 'agent_plan.dart';
+import 'memory_entry.dart';
 import 'workspace.dart';
 import 'chat_message.dart';
 import 'skill_installation.dart';
@@ -25,6 +27,7 @@ enum RunFinishReason {
   emptyResponse,
   storageError,
   executionError,
+  contextLimit,
 }
 
 /// 运行使用的连接快照：编辑服务商不影响已开始的运行，密钥不在此保存。
@@ -69,6 +72,12 @@ class RunConfiguration {
     this.mcpServers = const [],
     this.skills = const [],
     this.workspace,
+    this.mode = AgentMode.execute,
+    this.contextWindow,
+    this.planId,
+    this.planRevision,
+    this.approvedPlan,
+    this.memoryScope = MemoryScope.disabled,
     this.toolPolicies = const {},
     this.supportsReasoning = false,
     this.supportsImages = true,
@@ -77,6 +86,12 @@ class RunConfiguration {
     this.executionScope = const ExecutionScope(),
   });
 
+  final AgentMode mode;
+  final int? contextWindow;
+  final String? planId;
+  final int? planRevision;
+  final String? approvedPlan;
+  final MemoryScope memoryScope;
   final RunConnection connection;
   final ModelSelection modelSelection;
   final String systemPrompt;
@@ -95,6 +110,12 @@ class RunConfiguration {
   final ExecutionScope executionScope;
 
   Map<String, dynamic> toJson() => {
+    'mode': mode.name,
+    'contextWindow': contextWindow,
+    'planId': planId,
+    'planRevision': planRevision,
+    'approvedPlan': approvedPlan,
+    'memoryScope': memoryScope.name,
     'connection': connection.toJson(),
     'modelSelection': modelSelection.toJson(),
     'systemPrompt': systemPrompt,
@@ -115,6 +136,14 @@ class RunConfiguration {
 
   factory RunConfiguration.fromJson(Map<String, dynamic> json) =>
       RunConfiguration(
+        mode: AgentMode.values.byName(json['mode'] as String? ?? 'execute'),
+        contextWindow: json['contextWindow'] as int?,
+        planId: json['planId'] as String?,
+        planRevision: json['planRevision'] as int?,
+        approvedPlan: json['approvedPlan'] as String?,
+        memoryScope: MemoryScope.values.byName(
+          json['memoryScope'] as String? ?? 'disabled',
+        ),
         workspace: json['workspace'] == null
             ? null
             : WorkspaceSnapshot.fromJson(

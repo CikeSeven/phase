@@ -1,3 +1,7 @@
+import 'package:phase/data/models/agent_plan.dart';
+import 'package:phase/data/models/memory_entry.dart';
+import 'package:phase/data/repositories/memory_repository.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -26,12 +30,10 @@ import 'package:phase/data/repositories/tool_call_repository.dart';
 
 import '../../../support/fake_secure_storage.dart';
 
-/// 本次装机的 v5 → v6 增量例外。只使用假配置、假密钥和临时加密库。
+/// 本次装机的 v6 → v7 增量例外。只使用假配置、假密钥和临时加密库。
 void main() {
-  test('E3 覆盖升级保留十张旧表、Skills、MCP 和凭据，重开不重复建表', () async {
-    final directory = Directory.systemTemp.createTempSync(
-      'phase_workspace_upgrade',
-    );
+  test('E5 覆盖升级保留十三张旧表、工作区、Skills、MCP 和凭据，重开不重复建表', () async {
+    final directory = Directory.systemTemp.createTempSync('phase_e5_upgrade');
     final path = '${directory.path}/phase.sqlite';
     const key =
         '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -194,23 +196,43 @@ void main() {
       ),
     );
 
-    // 按 E2 正式字段构造本次安装前的 schema 5；未生成历史升级链。
+    final workspaces = WorkspaceRepository(db, directory);
+    await workspaces.saveEnvironment(
+      const RuntimeEnvironment(
+        phase: EnvironmentPhase.ready,
+        rootPath: '/fixture',
+        revision: 'fixture',
+      ),
+    );
+    await workspaces.recordCopy(conversation.workspaceId!, 'sample.txt', {
+      'kind': 'fixture',
+    });
+
+    // 从当前初版结构去掉本批唯一的新增字段，构造本次已安装 E4 的 schema 6。
     final run =
         (await db
                 .customSelect('SELECT configuration_json FROM agent_runs')
                 .getSingle())
             .read<String>('configuration_json');
-    final config = jsonDecode(run) as Map<String, dynamic>..remove('workspace');
+    final config = jsonDecode(run) as Map<String, dynamic>;
+    for (final key in [
+      'mode',
+      'contextWindow',
+      'planId',
+      'planRevision',
+      'approvedPlan',
+      'memoryScope',
+    ]) {
+      config.remove(key);
+    }
     await db.customStatement('UPDATE agent_runs SET configuration_json = ?', [
       jsonEncode(config),
     ]);
-    await db.customStatement('DROP TABLE workspace_copies');
-    await db.customStatement(
-      'ALTER TABLE conversations DROP COLUMN workspace_id',
-    );
-    await db.customStatement('DROP TABLE workspaces');
-    await db.customStatement('DROP TABLE runtime_environments');
-    await db.customStatement('PRAGMA user_version = 5');
+    await db.customStatement('DROP TABLE context_summaries');
+    await db.customStatement('DROP TABLE agent_plans');
+    await db.customStatement('DROP TABLE memory_entries');
+    await db.customStatement('ALTER TABLE assistants DROP COLUMN memory_scope');
+    await db.customStatement('PRAGMA user_version = 6');
     const tables = [
       'provider_profiles',
       'models',
@@ -222,6 +244,9 @@ void main() {
       'tool_calls',
       'mcp_servers',
       'skill_installations',
+      'runtime_environments',
+      'workspaces',
+      'workspace_copies',
     ];
     final before = <String, List<Map<String, dynamic>>>{};
     for (final table in tables) {
@@ -231,7 +256,7 @@ void main() {
               .toList();
       expect(before[table], isNotEmpty, reason: '$table 必须有待保留的真实样本行');
     }
-    final secretsBefore = fakeKeys.values;
+    final secretsBefore = Map.of(fakeKeys.values);
     await db.close();
 
     for (var reopen = 0; reopen < 2; reopen++) {
@@ -242,7 +267,7 @@ void main() {
             (await db.customSelect('SELECT * FROM $table ORDER BY rowid').get())
                 .map((row) {
                   final values = {...row.data};
-                  if (table == 'conversations') values.remove('workspace_id');
+                  if (table == 'assistants') values.remove('memory_scope');
                   return values;
                 })
                 .toList();
@@ -250,6 +275,11 @@ void main() {
       }
       final restored = (await AssistantRepository(db).getById(assistant.id))!;
       expect(restored.skillIds, {skill.id});
+      expect(restored.memoryScope, MemoryScope.disabled);
+      expect(
+        (await AgentRunRepository(db).getById('run'))!.configuration.mode,
+        AgentMode.execute,
+      );
       expect(restored.toolPolicy.policies[tool.name], ToolPolicy.ask);
       expect(
         (await AgentRunRepository(db).getById('run'))!
@@ -279,15 +309,11 @@ void main() {
           db,
           workspaces: WorkspaceRepository(db, directory),
         ).getThread(conversation.id))!.conversation.workspaceId,
-        isNull,
+        conversation.workspaceId,
       );
-      expect(
-        (await AgentRunRepository(db).getById('run'))!.configuration.workspace,
-        isNull,
-      );
-      expect(await db.select(db.runtimeEnvironments).get(), isEmpty);
-      expect(await db.select(db.workspaces).get(), isEmpty);
-      expect(await db.select(db.workspaceCopies).get(), isEmpty);
+      expect(await db.select(db.contextSummaries).get(), isEmpty);
+      expect(await db.select(db.agentPlans).get(), isEmpty);
+      expect(await db.select(db.memoryEntries).get(), isEmpty);
       expect(await skillFile.readAsString(), 'fixture skill original');
       expect(fakeKeys.values, secretsBefore);
       expect(await keys.read(profile.id), 'fixture-model-key');
@@ -296,7 +322,7 @@ void main() {
         (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
           'user_version',
         ),
-        6,
+        7,
       );
       expect(await db.customSelect('PRAGMA foreign_key_check').get(), isEmpty);
       expect(
@@ -308,42 +334,28 @@ void main() {
       );
       if (reopen == 0) await db.close();
       if (reopen == 1) {
-        final workspaces = WorkspaceRepository(
-          db,
-          Directory('${directory.path}/linux'),
-        );
-        final workspace = await workspaces.create('升级后工作区');
-        await db.customStatement(
-          'UPDATE conversations SET workspace_id = ? WHERE id = ?',
-          [workspace.id, conversation.id],
+        final memories = MemoryRepository(db);
+        final entry = await memories.add(
+          content: '升级后的记忆',
+          assistantId: assistant.id,
+          sourceMessageId: 'input',
+          sourceRunId: 'run',
         );
         expect(
-          (await ConversationRepository(
-            db,
-            workspaces: WorkspaceRepository(db, directory),
-          ).getThread(conversation.id))!.conversation.workspaceId,
-          workspace.id,
+          (await memories.search(
+            '升级',
+            assistantId: assistant.id,
+            scope: MemoryScope.assistant,
+          )).single.id,
+          entry.id,
         );
-        await workspaces.saveEnvironment(
-          const RuntimeEnvironment(
-            phase: EnvironmentPhase.ready,
-            rootPath: '/fixture',
-            revision: 'fixture',
-          ),
-        );
-        await workspaces.recordCopy(workspace.id, 'sample.txt', {
-          'kind': 'fixture',
-        });
-        expect(await db.select(db.workspaceCopies).get(), hasLength(1));
-        await workspaces.delete(workspace.id);
+        await memories.delete(entry.id);
+        await AssistantRepository(db)
+            .save(restored.copyWith(memoryScope: MemoryScope.assistant));
         expect(
-          (await ConversationRepository(
-            db,
-            workspaces: WorkspaceRepository(db, directory),
-          ).getThread(conversation.id))!.conversation.workspaceId,
-          isNull,
+          (await AssistantRepository(db).getById(assistant.id))!.memoryScope,
+          MemoryScope.assistant,
         );
-        expect(await db.select(db.workspaceCopies).get(), isEmpty);
       }
     }
   });

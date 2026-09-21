@@ -62,6 +62,13 @@ class SettingsPage extends ConsumerWidget {
             title: '扩展',
             onTap: () => context.push('/settings/extensions'),
           ),
+          const SizedBox(height: AppSpacing.s),
+          SettingsEntry(
+            icon: Symbols.bookmark,
+            tone: AppTone.teal,
+            title: '长期记忆',
+            onTap: () => context.push('/settings/memories'),
+          ),
           const SizedBox(height: AppSpacing.l),
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.xl),

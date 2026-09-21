@@ -32,7 +32,7 @@ class ProfileModel {
   final bool supportsTools;
   final bool supportsImages;
 
-  /// 上下文窗口与输出上限；未设置时由服务端默认决定。
+  /// 上下文窗口用于本地预算；空值使用本地保守默认。输出上限为空时不下发。
   final int? contextWindow;
   final int? maxOutputTokens;
 
@@ -50,6 +50,8 @@ class ProfileModel {
     bool? supportsImages,
     int? contextWindow,
     int? maxOutputTokens,
+    bool clearContextWindow = false,
+    bool clearMaxOutputTokens = false,
     double? temperature,
   }) {
     return ProfileModel(
@@ -59,8 +61,12 @@ class ProfileModel {
       supportsReasoning: supportsReasoning ?? this.supportsReasoning,
       supportsTools: supportsTools ?? this.supportsTools,
       supportsImages: supportsImages ?? this.supportsImages,
-      contextWindow: contextWindow ?? this.contextWindow,
-      maxOutputTokens: maxOutputTokens ?? this.maxOutputTokens,
+      contextWindow: clearContextWindow
+          ? null
+          : contextWindow ?? this.contextWindow,
+      maxOutputTokens: clearMaxOutputTokens
+          ? null
+          : maxOutputTokens ?? this.maxOutputTokens,
       temperature: temperature ?? this.temperature,
     );
   }

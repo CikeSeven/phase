@@ -1,3 +1,5 @@
+import 'package:phase/data/models/profile_model.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -413,6 +415,8 @@ void main() {
     final echo = RecordingTool(name: 'echo');
     final harness = await ToolLoopHarness.create(
       registry: ToolRegistry([echo]),
+      // 此用例验证轮数而非上下文上限，显式配置足够的模型窗口。
+      models: const [ProfileModel(id: 'model-a', contextWindow: 131072)],
     );
     for (var turn = 0; turn < toolTurns; turn++) {
       harness.provider.turns.add(

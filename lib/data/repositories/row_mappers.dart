@@ -1,3 +1,5 @@
+import '../models/memory_entry.dart';
+
 import 'dart:convert';
 
 import 'package:drift/drift.dart';
@@ -53,6 +55,7 @@ Assistant assistantFromRow(AssistantRow row) => Assistant(
   systemPrompt: row.systemPrompt,
   defaultModelSelection: _decodeSelection(row.defaultSelectionJson),
   toolPolicy: ToolPolicyConfig.decode(row.toolPolicyJson),
+  memoryScope: MemoryScope.values.byName(row.memoryScope),
   skillIds: (jsonDecode(row.skillIdsJson) as List).cast<String>().toSet(),
   createdAt: row.createdAt,
 );
@@ -207,6 +210,7 @@ AssistantsCompanion assistantCompanion(Assistant assistant) =>
         _encodeSelection(assistant.defaultModelSelection),
       ),
       toolPolicyJson: Value(assistant.toolPolicy.encode()),
+      memoryScope: Value(assistant.memoryScope.name),
       skillIdsJson: Value(jsonEncode(assistant.skillIds.toList())),
       createdAt: Value(assistant.createdAt),
     );

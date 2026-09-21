@@ -84,6 +84,7 @@ class ExecutedTool {
     required this.isError,
     this.record,
     this.messageId,
+    this.finishRun = false,
   });
 
   final String callId;
@@ -95,6 +96,9 @@ class ExecutedTool {
 
   /// 已保存的结果消息 id。
   final String? messageId;
+
+  /// 宿主确认本阶段已结束（例如计划已保存），不再为收尾消耗额外模型轮。
+  final bool finishRun;
 }
 
 /// 循环结束原因。
@@ -126,18 +130,27 @@ class AgentLoop {
         return _host.finish(AgentFinishReason.completed);
       }
 
+      var finishAfterTools = false;
       // 一轮多个调用按顺序串行执行，结果按原调用配对回填。
       for (final call in turn.toolCalls) {
         if (_host.isCancelled) {
           return _host.finish(AgentFinishReason.cancelled);
         }
-        await _host.executeTool(call, turn);
+        final result = await _host.executeTool(call, turn);
+        finishAfterTools |= result.finishRun && !result.isError;
       }
 
       if (_host.isCancelled) {
         return _host.finish(AgentFinishReason.cancelled);
       }
       await _host.finishTurn(turn);
+      if (finishAfterTools) {
+        return _host.finish(
+          _host.isCancelled
+              ? AgentFinishReason.cancelled
+              : AgentFinishReason.completed,
+        );
+      }
     }
     if (_host.isCancelled) {
       return _host.finish(AgentFinishReason.cancelled);

@@ -56,7 +56,8 @@ class ChatRunBanner extends ConsumerWidget {
         !recovery.hasError &&
         !canConfirm &&
         userAction == null &&
-        retry == null) {
+        retry == null &&
+        !chat.summarizing) {
       return const SizedBox.shrink();
     }
     return Center(
@@ -68,6 +69,7 @@ class ChatRunBanner extends ConsumerWidget {
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.xs,
             children: [
+              if (chat.summarizing) const Text('正在整理上下文摘要 · 可停止'),
               if (userAction != null)
                 Semantics(
                   liveRegion: true,

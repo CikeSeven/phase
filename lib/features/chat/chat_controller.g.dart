@@ -76,7 +76,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'e930f5e034a60df12c6fdb723c5330fc3588c765';
+String _$chatControllerHash() => r'a65de1ae5c2a0f26be3bdde8aa936c85406411b5';
 
 /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 

@@ -283,18 +283,37 @@ class _ModelParametersState extends State<_ModelParameters> {
     text: widget.model.maxOutputTokens?.toString() ?? '',
   );
 
+  late final _contextController = TextEditingController(
+    text: widget.model.contextWindow?.toString() ?? '',
+  );
+  String? _budgetError;
+
   @override
   void dispose() {
     _temperatureController.dispose();
     _maxOutputController.dispose();
+    _contextController.dispose();
     super.dispose();
   }
 
   void _apply() {
     final temperature = double.tryParse(_temperatureController.text.trim());
     final maxOutput = int.tryParse(_maxOutputController.text.trim());
+    final rawWindow = _contextController.text.trim();
+    final window = int.tryParse(rawWindow);
+    final rawOutput = _maxOutputController.text.trim();
+    if ((rawWindow.isNotEmpty && (window == null || window < 2048)) ||
+        (rawOutput.isNotEmpty && (maxOutput == null || maxOutput <= 0)) ||
+        ((window ?? 32768) <= (maxOutput ?? 4096) + 1024)) {
+      setState(() => _budgetError = '窗口至少 2048，且需大于输出预留加 1024；输出上限须为正整数');
+      return;
+    }
+    setState(() => _budgetError = null);
     widget.onModelChanged(
       widget.model.withSettings(
+        contextWindow: window,
+        clearContextWindow: rawWindow.isEmpty,
+        clearMaxOutputTokens: rawOutput.isEmpty,
         temperature: temperature,
         maxOutputTokens: maxOutput,
       ),
@@ -323,6 +342,28 @@ class _ModelParametersState extends State<_ModelParameters> {
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.m,
             children: [
+              SizedBox(
+                width: constraints.maxWidth,
+                child: TextField(
+                  key: ValueKey('context-window-${widget.model.id}'),
+                  controller: _contextController,
+                  enabled: widget.enabled,
+                  keyboardType: TextInputType.number,
+                  onSubmitted: (_) => _apply(),
+                  onTapOutside: (_) {
+                    FocusScope.of(context).unfocus();
+                    _apply();
+                  },
+                  decoration: InputDecoration(
+                    labelText: '上下文窗口',
+                    hintText: '本地默认 32768',
+                    helperText: '用于本地保守预算，不是 API 用量。未设输出上限时预留 4096。',
+                    helperMaxLines: 3,
+                    errorText: _budgetError,
+                    errorMaxLines: 3,
+                  ),
+                ),
+              ),
               SizedBox(
                 width: fieldWidth,
                 child: TextField(

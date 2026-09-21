@@ -11,8 +11,10 @@ class ResolvedMessage {
     required this.role,
     required this.parts,
     this.sameModel = true,
+    this.sourceMessageId,
   });
 
+  final String? sourceMessageId;
   final ChatRole role;
   final List<ResolvedPart> parts;
 
@@ -73,6 +75,7 @@ class ResolvedToolResult extends ResolvedPart {
     required this.content,
     this.isError = false,
     this.images = const [],
+    this.artifactIds = const [],
   });
 
   final String callId;
@@ -81,6 +84,9 @@ class ResolvedToolResult extends ResolvedPart {
 
   /// Tool-produced images; persisted attachments remain the source of truth.
   final List<Attachment> images;
+
+  /// 摘要保留的产物引用；不改变协议的原始结果内容。
+  final List<String> artifactIds;
 }
 
 /// 交给 [AiProvider.streamChat] 的请求。

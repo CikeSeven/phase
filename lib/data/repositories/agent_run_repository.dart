@@ -128,6 +128,13 @@ class AgentRunRepository {
             calls.add(call);
           }
           if (afterRestart) {
+            // 派生摘要请求没有可恢复的网络会话；保留已接收正文与实际用量，不重放。
+            await (_db.update(_db.contextSummaries)..where(
+                  (t) => t.runId.equals(row.id) & t.status.equals('running'),
+                ))
+                .write(
+                  const ContextSummariesCompanion(status: Value('failed')),
+                );
             await (_db.update(_db.messages)..where(
                   (t) =>
                       t.runId.equals(row.id) &

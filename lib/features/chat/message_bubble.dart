@@ -327,6 +327,7 @@ class MessageBubble extends StatelessWidget {
                                   ),
                                 ),
                               _ToolSegment(:final toolCallId) => ToolCallCard(
+                                conversationId: message.conversationId,
                                 toolCallId: toolCallId,
                                 attachments: attachments,
                               ),

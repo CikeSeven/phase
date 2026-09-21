@@ -1,3 +1,7 @@
+import '../tools/tool_presentation.dart';
+import '../../../data/models/memory_entry.dart';
+import '../../../core/widgets/app_dropdown.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -39,6 +43,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
   ModelSelection? _defaultModel;
   ToolPolicyConfig _toolPolicy = defaultToolPolicyConfig;
   Set<String> _skillIds = {};
+  MemoryScope _memoryScope = MemoryScope.disabled;
   bool _clearDefaultModel = false;
   bool _loading = true;
   bool _saving = false;
@@ -88,6 +93,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
         _defaultModel = assistant.defaultModelSelection;
         _toolPolicy = assistant.toolPolicy;
         _skillIds = {...assistant.skillIds};
+        _memoryScope = assistant.memoryScope;
         _loading = false;
       });
     } catch (error) {
@@ -125,6 +131,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           defaultModelSelection: _defaultModel,
           toolPolicy: _toolPolicy,
           skillIds: _skillIds,
+          memoryScope: _memoryScope,
         );
       } else {
         await controller.updateAssistant(
@@ -135,6 +142,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           clearDefaultModel: _clearDefaultModel,
           toolPolicy: _toolPolicy,
           skillIds: _skillIds,
+          memoryScope: _memoryScope,
         );
       }
       if (!mounted) return;
@@ -300,6 +308,39 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                         : (policy) => setState(() => _toolPolicy = policy),
                   ),
                   const SizedBox(height: AppSpacing.xl),
+                  AppDropdown<MemoryScope>(
+                    label: '记忆读取与写入范围',
+                    value: _memoryScope,
+                    options: {
+                      for (final scope in MemoryScope.values)
+                        scope: scope.label,
+                    },
+                    onChanged: _saving
+                        ? null
+                        : (scope) => setState(() => _memoryScope = scope),
+                  ),
+                  const SizedBox(height: AppSpacing.l),
+                  if (_memoryScope != MemoryScope.disabled) ...[
+                    AppDropdown<ToolPolicy>(
+                      label: '记忆写入',
+                      value:
+                          _toolPolicy.policies['write_memory'] ??
+                          ToolPolicy.ask,
+                      options: {
+                        for (final value in ToolPolicy.values)
+                          value: ToolPresentation.policyLabel(value),
+                      },
+                      onChanged: _saving
+                          ? null
+                          : (policy) => setState(
+                              () => _toolPolicy = _toolPolicy.withPolicy(
+                                'write_memory',
+                                policy,
+                              ),
+                            ),
+                    ),
+                    const SizedBox(height: AppSpacing.l),
+                  ],
                   AssistantSkillsSection(
                     ids: _skillIds,
                     policy:

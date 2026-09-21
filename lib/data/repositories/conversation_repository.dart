@@ -214,6 +214,10 @@ class ConversationRepository {
         throw const OperationFailure('请先结束或处理此会话的任务，再复制会话');
       }
       final runIds = {for (final run in runRows) run.id: generateId()};
+      final planRows = await (_db.select(
+        _db.agentPlans,
+      )..where((t) => t.conversationId.equals(id))).get();
+      final planIds = {for (final row in planRows) row.id: generateId()};
       final callRows = await (_db.select(
         _db.toolCalls,
       )..where((t) => t.runId.isIn(runIds.keys))).get();
@@ -288,6 +292,9 @@ class ConversationRepository {
           for (final row in runRows) {
             final configuration = agentRunFromRow(row).configuration;
             final copiedConfiguration = configuration.toJson();
+            if (configuration.planId != null) {
+              copiedConfiguration['planId'] = planIds[configuration.planId];
+            }
             if (configuration.workspace case final originalWorkspace?) {
               copiedConfiguration['workspace'] = {
                 ...originalWorkspace.toJson(),
@@ -323,6 +330,28 @@ class ConversationRepository {
                       ),
                 );
           }
+          for (final row in planRows) {
+            await _db
+                .into(_db.agentPlans)
+                .insert(
+                  row
+                      .toCompanion(false)
+                      .copyWith(
+                        id: Value(planIds[row.id]!),
+                        conversationId: Value(copy.id),
+                        sourceRunId: Value(runIds[row.sourceRunId]!),
+                        sourceMessageId: Value(
+                          mappedMessage(row.sourceMessageId),
+                        ),
+                        executionRunId: Value(
+                          row.executionRunId == null
+                              ? null
+                              : runIds[row.executionRunId],
+                        ),
+                      ),
+                );
+          }
+          // 摘要是分支派生缓存，副本按新的消息身份重新构建；长期记忆不复制。
           for (final row in callRows) {
             final record = toolCallFromRow(row);
             await _db

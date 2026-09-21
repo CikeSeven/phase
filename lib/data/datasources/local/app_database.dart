@@ -77,6 +77,8 @@ class Assistants extends Table {
 
   /// 工具名 → 策略 的 JSON 对象。
   TextColumn get toolPolicyJson => text().withDefault(const Constant('{}'))();
+  TextColumn get memoryScope =>
+      text().withDefault(const Constant('disabled'))();
   TextColumn get skillIdsJson => text().withDefault(const Constant('[]'))();
   DateTimeColumn get createdAt => dateTime()();
 
@@ -274,6 +276,57 @@ class WorkspaceCopies extends Table {
   Set<Column> get primaryKey => {workspaceId, relativePath};
 }
 
+/// 派生摘要与独立请求用量，不替代消息树。
+@DataClassName('ContextSummaryRow')
+class ContextSummaries extends Table {
+  TextColumn get id => text()();
+  TextColumn get conversationId =>
+      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get runId => text()();
+  TextColumn get branchEndId => text()();
+  TextColumn get coveredIdsJson => text()();
+  TextColumn get fingerprint => text()();
+  TextColumn get sourceModel => text()();
+  IntColumn get version => integer()();
+  TextColumn get status => text()();
+  TextColumn get content => text()();
+  TextColumn get usageJson => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('AgentPlanRow')
+class AgentPlans extends Table {
+  TextColumn get id => text()();
+  IntColumn get revision => integer()();
+  TextColumn get conversationId =>
+      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get sourceRunId => text()();
+  TextColumn get sourceMessageId => text()();
+  TextColumn get title => text()();
+  TextColumn get stepsJson => text()();
+  TextColumn get status => text()();
+  TextColumn get executionRunId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  @override
+  Set<Column> get primaryKey => {id, revision};
+}
+
+@DataClassName('MemoryEntryRow')
+class MemoryEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get assistantId => text().nullable()();
+  TextColumn get sourceMessageId => text().nullable()();
+  TextColumn get sourceRunId => text().nullable()();
+  TextColumn get content => text()();
+  BoolColumn get enabled => boolean().withDefault(const Constant(true))();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// 当前初版业务库。
 ///
 /// 数据库从创建时加密；schema 变更随初版演进，不保留开发期旧 schema 的
@@ -293,28 +346,31 @@ class WorkspaceCopies extends Table {
     RuntimeEnvironments,
     Workspaces,
     WorkspaceCopies,
+    ContextSummaries,
+    AgentPlans,
+    MemoryEntries,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆。
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    // 本次 E3 装机仅允许已安装 E2 测试包的增量升级，不补历史开发期链。
+    // 本次 E5 装机仅允许已安装 E4 测试包的增量升级，不补历史开发期链。
     onUpgrade: (migrator, from, to) async {
-      if (from != 5 || to != 6) {
+      if (from != 6 || to != 7) {
         throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
       }
       await transaction(() async {
-        await migrator.createTable(runtimeEnvironments);
-        await migrator.createTable(workspaces);
-        await migrator.createTable(workspaceCopies);
-        await migrator.addColumn(conversations, conversations.workspaceId);
+        await migrator.createTable(contextSummaries);
+        await migrator.createTable(agentPlans);
+        await migrator.createTable(memoryEntries);
+        await migrator.addColumn(assistants, assistants.memoryScope);
       });
     },
     beforeOpen: _prepareDatabase,
@@ -331,6 +387,15 @@ class AppDatabase extends _$AppDatabase {
     await customStatement(
       "UPDATE agent_runs SET status = 'failed', finish_reason = 'executionError', "
       "finished_at = COALESCE(finished_at, strftime('%s', 'now')) WHERE status = 'awaitingResult'",
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_summaries_conversation ON context_summaries (conversation_id, created_at DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_plans_conversation ON agent_plans (conversation_id, created_at DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_memory_scope ON memory_entries (assistant_id, enabled, updated_at DESC)',
     );
     // 引用约束需要显式打开；索引围绕实际查询建立。
     await customStatement('PRAGMA foreign_keys = ON');

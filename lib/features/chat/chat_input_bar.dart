@@ -1,3 +1,5 @@
+import '../../../data/models/agent_plan.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -108,6 +110,32 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           onPressed: _submitting ? null : _showAttachmentSheet,
           icon: const Icon(Symbols.attach_file),
         ),
+        if (!needsConfiguration)
+          Expanded(
+            child: TextButton(
+              key: const ValueKey('chat-agent-mode'),
+              onPressed: isGenerating || _submitting
+                  ? null
+                  : () {
+                      final controller = ref.read(
+                        chatControllerProvider.notifier,
+                      );
+                      controller.setMode(
+                        ref.read(chatControllerProvider).mode == AgentMode.plan
+                            ? AgentMode.execute
+                            : AgentMode.plan,
+                      );
+                    },
+              child: Text(
+                ref.watch(chatControllerProvider.select((s) => s.mode)) ==
+                        AgentMode.plan
+                    ? '计划模式'
+                    : '执行模式',
+                maxLines: 2,
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
         if (needsConfiguration)
           Expanded(
             child: Align(
@@ -128,9 +156,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 ),
               ),
             ),
-          )
-        else
-          const Spacer(),
+          ),
         const SizedBox(width: AppSpacing.s),
         ChatSendButton(
           isGenerating: isGenerating,
