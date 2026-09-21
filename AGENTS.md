@@ -7,6 +7,7 @@
 - 产品「相月」，取自《尔雅》中农历七月的雅称；工程名 `phase`，仅支持 Android，应用 ID 为 `app.xiangyue.phase`。
 - 当前为尚未发布、0 用户的初版建设阶段；已有聊天、工具和 Android 执行基线，按目标设计继续建设，不维护开发期接口、模型或数据库的向后兼容，不建设旧格式转换与双写过渡。
 - 产品现状与有效契约见 [产品设计](./docs/product_and_technical_design.md)，新增能力见 [Agent 与扩展设计](./docs/agent_extensions_design.md)，建设顺序见 [实施计划](./docs/implementation_plan.md)。已有实现、自动化验证、真机验收和发行状态分别记录，不把规划描述为完成。
+- 上下文用量、Token/缓存统计与滚动压缩的后续建设见 [专项开发方案](./docs/context_management_and_usage_design.md)；待实施策略不替代当前行为，也不扩大设备数据操作授权。
 - 应用身份与平台范围按产品设计确定；修改聚焦当前任务，不顺带重构无关模块。设备安装与数据操作仍遵循第 6 节，不因项目处于初版阶段自动执行破坏性操作。
 
 ## 2. 技术与依赖

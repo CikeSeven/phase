@@ -52,6 +52,7 @@
 | 工具生态 | 远程 MCP 外部服务验收、本地 MCP stdio 真机与真实 npx/uvx 服务验收、Skill 脚本真机验收/网络导入、插件包及受限扩展钩子 | [MCP](./agent_extensions_design.md#extensions-mcp)、[Skills](./agent_extensions_design.md#extensions-skills)、[插件包](./agent_extensions_design.md#extensions-plugins) |
 | 命令环境 | PRoot 安装/文件 UI、通知停止和生命周期真机验收、依赖安装真机验收、PTY、Termux、Shizuku | [扩展设计 §5–§7](./agent_extensions_design.md#extensions-runtime) |
 | Agent 能力 | 单子代理；上下文/计划/记忆的真实模型质量与真机验收 | [扩展设计 §8、§10](./agent_extensions_design.md#extensions-planning) |
+| 上下文与用量增强 | 统一请求计量、缓存统计、usage 基准、滚动摘要与单次长任务压缩 | [专项开发方案](./context_management_and_usage_design.md)；E5.1 待实施 |
 | 聊天与数据 | 完整分支导航、加密备份恢复、原生文档上传 | [扩展设计 §11](./agent_extensions_design.md#extensions-product) |
 | 配置与感知 | 多 Key、按任务选模型、成本统计、通知监听与回复 | [扩展设计 §11](./agent_extensions_design.md#extensions-product) |
 | 后续研究 | Root、更多代理并发/fork、Code Mode、定时事件、模板/角色卡生态、远程访问 | [扩展设计 §12](./agent_extensions_design.md#extensions-later) |
@@ -155,7 +156,7 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 ## 8. 上下文与扩展
 
-当前分支、工具调用与结果成组构建请求；缺失结果补如实的错误信息。跨配置/模型的签名和加密状态不回放。已有工具结果限长不代表完整的上下文预算、自动摘要和长期记忆已完成；这些按 [扩展设计 §8](./agent_extensions_design.md#extensions-planning) 建设。
+当前分支、工具调用与结果成组构建请求；缺失结果补如实的错误信息。跨配置/模型的签名和加密状态不回放。已有 E5 本地预算、旧助手叙述摘要和独立长期记忆，但尚未形成 usage 驱动的上下文计量、完整请求/缓存统计及可持续滚动压缩。现有范围见 [扩展设计 §8](./agent_extensions_design.md#extensions-planning)，后续 E5.1 按 [上下文管理与用量方案](./context_management_and_usage_design.md) 建设，不将目标描述为已实现。
 
 # 第三部分 Android 执行通道
 
