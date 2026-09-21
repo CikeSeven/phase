@@ -3,9 +3,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/repositories/agent_run_repository.dart';
+import 'package:phase/features/chat/chat_controller.dart';
 import 'package:phase/features/tools/run_recovery_controller.dart';
 import 'package:phase/features/tools/tool.dart';
 
@@ -117,6 +119,73 @@ void main() {
       RunStatus.completed,
     );
   });
+
+  test('不限轮次的长任务在第 30 轮后恢复，只回填已有结果并继续', () async {
+    final echo = RecordingTool(name: 'echo');
+    final h = await ToolLoopHarness.create(registry: ToolRegistry([echo]));
+    final run = await seedInterrupted(h, [
+      ToolCallStatus.succeeded,
+    ], turnCount: 30);
+    h.provider.turns.add(textTurn('根据已有结果完成任务'));
+
+    await h.controller().resumeRun(run.id);
+
+    expect(echo.executions, isEmpty);
+    expect(h.provider.requests, hasLength(1));
+    final result = h.provider.requests.single.messages.last.parts
+        .whereType<ResolvedToolResult>()
+        .single;
+    expect(result.callId, 'call-0');
+    expect(result.content, 'already done');
+    final stored = (await (await h.runs()).getById(run.id))!;
+    expect(stored.status, RunStatus.completed);
+    expect(stored.turnCount, 31);
+    expect(stored.modelAttemptCount, 31);
+    expect(stored.maxTurns, 0);
+    expect((await h.branch()).last.text, '根据已有结果完成任务');
+  });
+
+  for (final spent in [1, 2, 3]) {
+    test('显式 2 轮预算已用 $spent 轮：耗尽时持久显示原因，不能伪装完成', () async {
+      final echo = RecordingTool(name: 'echo');
+      final h = await ToolLoopHarness.create(registry: ToolRegistry([echo]));
+      final run = await seedInterrupted(
+        h,
+        [ToolCallStatus.succeeded],
+        turnCount: spent,
+        maxTurns: 2,
+      );
+      h.onConfirmation = (_) async => ToolDecision.approved;
+      h.provider.turns.add(
+        toolTurn(callId: 'next-call', toolName: 'echo', arguments: '{}'),
+      );
+
+      await h.controller().resumeRun(run.id);
+
+      final expectedRequests = spent < 2 ? 1 : 0;
+      expect(h.provider.requests, hasLength(expectedRequests));
+      expect(echo.executions, hasLength(expectedRequests));
+      final stored = (await (await h.runs()).getById(run.id))!;
+      expect(stored.status, RunStatus.failed);
+      expect(stored.finishReason, RunFinishReason.turnLimit);
+      expect(stored.turnCount, spent + expectedRequests);
+      expect(stored.modelAttemptCount, spent + expectedRequests);
+      expect(stored.activeToolCallId, isNull);
+      final branch = await h.branch();
+      expect(branch.last.role, ChatRole.assistant);
+      expect(branch.last.status, MessageStatus.failed);
+      expect(branch.last.text, contains('应用已达到本次运行的 2 轮上限'));
+      expect(branch.last.text, contains('并不代表工作已完成'));
+      expect(branch.last.parentId, branch[branch.length - 2].id);
+      expect(stored.currentMessageId, branch.last.id);
+      final repository = await h.conversations();
+      final thread = (await repository.getThread(run.conversationId))!;
+      final visible = visibleMessages(thread, h.state());
+      expect(visible.last.status, MessageStatus.failed);
+      expect(visible.last.text, contains('可发送“继续”'));
+      expect(h.state().isGenerating, isFalse);
+    });
+  }
 
   test('确认过期后继续只回填拒绝，迟到批准不能执行', () async {
     final echo = RecordingTool(name: 'echo', policy: ToolPolicy.ask);

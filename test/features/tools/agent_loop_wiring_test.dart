@@ -408,33 +408,103 @@ void main() {
     expect((await harness.branch()).last.text, '参数不对，我重来');
   });
 
-  test('轮次上限：每轮都调用工具时在 maxTurns 处停下', () async {
+  test('长任务连续 130 轮工具调用后生成正文，不在第 30 轮静默结束', () async {
+    const toolTurns = 130;
     final echo = RecordingTool(name: 'echo');
     final harness = await ToolLoopHarness.create(
       registry: ToolRegistry([echo]),
     );
-    for (var turn = 0; turn < AgentRun.defaultMaxTurns + 2; turn++) {
+    for (var turn = 0; turn < toolTurns; turn++) {
       harness.provider.turns.add(
         toolTurn(callId: 'call_$turn', toolName: 'echo', arguments: '{}'),
       );
     }
+    harness.provider.turns.add(textTurn('全部处理完成'));
 
-    await harness.controller().send('一直调用');
+    await harness.controller().send('完成整项任务');
 
     final run = await harness.latestRun();
-    expect(run.turnCount, AgentRun.defaultMaxTurns);
-    expect(run.status, RunStatus.failed);
-    expect(run.finishReason, RunFinishReason.turnLimit);
-    expect(echo.executions, hasLength(AgentRun.defaultMaxTurns));
+    expect(run.turnCount, toolTurns + 1);
+    expect(run.maxTurns, 0);
+    expect(run.modelAttemptCount, toolTurns + 1);
+    expect(run.status, RunStatus.completed);
+    expect(run.finishReason, RunFinishReason.completed);
+    expect(echo.executions, hasLength(toolTurns));
+    expect(harness.provider.requests, hasLength(toolTurns + 1));
+    for (var turn = 1; turn <= toolTurns; turn++) {
+      final history = harness.provider.requests[turn].messages;
+      expect(history.last.role, ChatRole.tool);
+      final results = history
+          .expand((message) => message.parts)
+          .whereType<ResolvedToolResult>();
+      expect(results.map((result) => result.callId), [
+        for (var call = 0; call < turn; call++) 'call_$call',
+      ]);
+    }
     final branch = await harness.branch();
     expect(
+      branch.where((message) => message.role == ChatRole.user),
+      hasLength(1),
+    );
+    expect(branch.map((message) => message.runId).nonNulls.toSet(), {run.id});
+    expect(branch.last.text, '全部处理完成');
+    expect(branch.last.status, MessageStatus.completed);
+    expect(
       branch.where((message) => message.role == ChatRole.assistant),
-      hasLength(AgentRun.defaultMaxTurns),
+      hasLength(toolTurns + 1),
     );
     expect(
       branch.where((message) => message.role == ChatRole.tool),
-      hasLength(AgentRun.defaultMaxTurns),
+      hasLength(toolTurns),
     );
+    final records = (await harness.recordsByCall()).values;
+    expect(records, hasLength(toolTurns));
+    expect(records.every((record) => record.resultMessageId != null), isTrue);
+    expect(harness.state().isGenerating, isFalse);
+  });
+
+  test('超过 30 轮后仍能停止工具，不发出下一轮请求', () async {
+    final echo = RecordingTool(name: 'echo');
+    final reached = Completer<void>();
+    echo.executeAsync = (arguments, cancellation) async {
+      if (echo.executions.length == 31) {
+        reached.complete();
+        await cancellation.whenCancelled;
+        return const ToolOutcome.cancelled('已停止，保留此前结果');
+      }
+      return const ToolOutcome.success('已执行');
+    };
+    final harness = await ToolLoopHarness.create(
+      registry: ToolRegistry([echo]),
+    );
+    harness.provider.turns.addAll([
+      for (var turn = 0; turn < 32; turn++)
+        toolTurn(callId: 'call_$turn', toolName: 'echo', arguments: '{}'),
+    ]);
+
+    final sending = harness.controller().send('执行长任务');
+    try {
+      await reached.future.timeout(const Duration(seconds: 10));
+    } finally {
+      harness.controller().stop();
+      await sending;
+    }
+
+    final run = await harness.latestRun();
+    expect(run.status, RunStatus.stopped);
+    expect(run.finishReason, RunFinishReason.cancelled);
+    expect(run.turnCount, 31);
+    expect(run.modelAttemptCount, 31);
+    expect(harness.provider.requests, hasLength(31));
+    expect(echo.executions, hasLength(31));
+    final records = await harness.recordsByCall();
+    expect(records, hasLength(31));
+    expect(records['call_30']!.status, ToolCallStatus.cancelled);
+    expect(
+      records.values.every((record) => record.resultMessageId != null),
+      isTrue,
+    );
+    expect(harness.state().isGenerating, isFalse);
   });
 
   test('工具失败立即回填给 AI 并继续，不要求人工核验也不自动重发', () async {

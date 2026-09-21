@@ -183,8 +183,8 @@ class AgentRun {
     this.finishedAt,
   });
 
-  /// 首版轮次上限（design 第二部分 §7）。
-  static const defaultMaxTurns = 30;
+  /// 默认不按轮数截断任务；0 表示没有轮次上限。
+  static const defaultMaxTurns = 0;
 
   final String id;
   final String conversationId;
@@ -204,6 +204,8 @@ class AgentRun {
   final RunFinishReason? finishReason;
   final int turnCount;
   final int modelAttemptCount;
+
+  /// 0 表示不限轮次；正数是本次运行明确指定的总轮次预算。
   final int maxTurns;
 
   /// 整个运行的用量汇总；接口未提供时为 null。

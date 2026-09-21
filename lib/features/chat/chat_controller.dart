@@ -836,7 +836,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       );
 
       if (resuming && !await _restorePendingTools()) return;
-      await AgentLoop(this, maxTurns: run.maxTurns - run.turnCount).run();
+      await AgentLoop(
+        this,
+        maxTurns: run.maxTurns == 0 ? null : run.maxTurns - run.turnCount,
+      ).run();
     } on StorageFailure {
       // 落库失败：运行按存储失败收口后再交给界面提示，不留永远 running 的运行。
       try {
@@ -1363,7 +1366,31 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
   /// 运行终态：按原因写状态与结束原因（design 第二部分 §4）。
   @override
-  Future<void> finish(AgentFinishReason reason) {
+  Future<void> finish(AgentFinishReason reason) async {
+    final run = _run;
+    if (run == null || _runFinished) return;
+    if (reason == AgentFinishReason.turnLimit) {
+      // 工具结果不展示为正文；仅保存运行失败会看起来像模型正常完成。
+      final message = ChatMessage(
+        id: generateId(),
+        conversationId: run.conversationId,
+        parentId: _turnTailId ?? run.currentMessageId ?? run.inputMessageId,
+        runId: run.id,
+        role: ChatRole.assistant,
+        status: MessageStatus.failed,
+        parts: [
+          TextPart(
+            text:
+                '应用已达到本次运行的 ${run.maxTurns} 轮上限，任务已停止，并不代表工作已完成。'
+                '已执行的工具结果已保留，可发送“继续”接着处理。',
+          ),
+        ],
+        modelLabel: _selection?.model,
+        createdAt: DateTime.now(),
+      );
+      await _repository!.appendMessage(message);
+      _turnTailId = message.id;
+    }
     final (RunStatus, RunFinishReason?) result = switch (reason) {
       // 本轮以错误或空回复收场时，运行按具体原因失败。
       AgentFinishReason.completed =>

@@ -16,6 +16,8 @@ Future<AgentRun> seedInterrupted(
   String toolName = 'echo',
   Map<String, dynamic> arguments = const {},
   ExecutionChannel channel = ExecutionChannel.app,
+  int turnCount = 1,
+  int maxTurns = AgentRun.defaultMaxTurns,
 }) async {
   final conversations = await h.conversations();
   final conversation = await conversations.createConversation(title: '中断任务测试');
@@ -25,8 +27,9 @@ Future<AgentRun> seedInterrupted(
     inputMessageId: 'input',
     currentMessageId: 'answer',
     createdAt: DateTime.now(),
-    turnCount: 1,
-    modelAttemptCount: 1,
+    turnCount: turnCount,
+    modelAttemptCount: turnCount,
+    maxTurns: maxTurns,
     configuration: RunConfiguration(
       connection: RunConnection(
         profileId: h.profile.id,
