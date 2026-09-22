@@ -1,3 +1,7 @@
+import '../../data/models/api_protocol.dart';
+import '../usage_decoder.dart';
+import '../../data/models/token_usage.dart';
+
 import 'dart:convert';
 
 import '../../data/models/chat_chunk.dart';
@@ -240,9 +244,7 @@ class _AnthropicStreamDecoder {
 
   final _out = <ChatChunk>[];
   late final PartAssembler _parts;
-  int? _inputTokens;
-  int? _cachedInputTokens;
-  TokenUsage? _usage;
+  final _usageDecoder = UsageDecoder(ApiProtocol.anthropicMessages);
   var _terminated = false;
   var _sawEvent = false;
   var _finished = false;
@@ -264,12 +266,17 @@ class _AnthropicStreamDecoder {
     }
     if (decoded is! Map<String, dynamic>) return const [];
     _sawEvent = true;
+    final responseModel = decoded['message'] is Map
+        ? (decoded['message'] as Map)['model']
+        : null;
+    if (responseModel is String && responseModel.isNotEmpty) {
+      _out.add(ResponseModel(responseModel));
+    }
 
     switch (decoded['type']) {
       case 'message_start':
-        final start = _readUsage(decoded);
-        _inputTokens = start?.inputTokens ?? _inputTokens;
-        _cachedInputTokens = start?.cachedInputTokens ?? _cachedInputTokens;
+        final message = decoded['message'];
+        if (message is Map<String, dynamic>) _acceptUsage(message['usage']);
       case 'content_block_start':
         _parseBlockStart(decoded);
       case 'content_block_delta':
@@ -285,13 +292,7 @@ class _AnthropicStreamDecoder {
             'stop_sequence',
           }.contains(delta['stop_reason']);
         }
-        _usage =
-            _parseUsage(
-              decoded['usage'],
-              inputTokens: _inputTokens,
-              cachedInputTokens: _cachedInputTokens,
-            ) ??
-            _usage;
+        _acceptUsage(decoded['usage']);
       case 'message_stop':
         return finish(complete: _normalFinish ?? true);
       case 'error':
@@ -309,7 +310,7 @@ class _AnthropicStreamDecoder {
   List<ChatChunk> finish({TokenUsage? usage, bool complete = false}) {
     if (isDone) return const [];
     _finished = true;
-    _parts.finish(usage: usage ?? _usage, complete: complete);
+    _parts.finish(usage: usage, complete: complete);
     return _drain();
   }
 
@@ -383,28 +384,13 @@ class _AnthropicStreamDecoder {
     }
   }
 
-  TokenUsage? _readUsage(Map<String, dynamic> event) {
-    final message = event['message'];
-    if (message is! Map<String, dynamic>) return null;
-    return _parseUsage(message['usage']);
-  }
+  TokenUsage? _parseUsage(Object? value) => _usageDecoder.add(value);
 
-  /// message_delta 常省略 input_tokens 与缓存字段，用 message_start 读到的值补齐。
-  static TokenUsage? _parseUsage(
-    Object? usage, {
-    int? inputTokens,
-    int? cachedInputTokens,
-  }) {
-    if (usage is! Map<String, dynamic>) {
-      return null;
+  void _acceptUsage(Object? value) {
+    final usage = _parseUsage(value);
+    if (usage != null) {
+      _out.add(UsageChunk(usage: usage));
     }
-    int? asInt(Object? value) => value is int ? value : null;
-    return TokenUsage(
-      inputTokens: asInt(usage['input_tokens']) ?? inputTokens,
-      outputTokens: asInt(usage['output_tokens']),
-      cachedInputTokens:
-          asInt(usage['cache_read_input_tokens']) ?? cachedInputTokens,
-    );
   }
 
   List<ChatChunk> _drain() {

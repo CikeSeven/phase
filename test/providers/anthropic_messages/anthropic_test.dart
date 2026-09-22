@@ -304,15 +304,16 @@ void main() {
     test('message_delta 合成 usage（并入 message_start 的 input_tokens）', () async {
       final chunks = await decode(
         'data: {"type":"message_start","message":{"usage":{"input_tokens":42,'
-        '"cache_read_input_tokens":7}}}\n\n'
+        '"cache_read_input_tokens":7,"cache_creation_input_tokens":0}}}\n\n'
         'data: {"type":"message_delta","delta":{"stop_reason":"end_turn"},'
         '"usage":{"output_tokens":8}}\n\n'
         'data: {"type":"message_stop"}\n\n',
       ).toList();
-      final usage = chunks.whereType<UsageChunk>().single.usage;
-      expect(usage.inputTokens, 42);
+      final usage = chunks.whereType<UsageChunk>().last.usage;
+      expect(usage.promptTokens, 49);
+      expect(usage.uncachedInputTokens, 42);
       expect(usage.outputTokens, 8);
-      expect(usage.cachedInputTokens, 7);
+      expect(usage.cacheReadTokens, 7);
       expect(chunks.whereType<ResponseEnd>(), hasLength(1));
     });
 

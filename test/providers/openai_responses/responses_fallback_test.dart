@@ -1,8 +1,9 @@
+import 'package:phase/data/models/token_usage.dart';
+
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/chat_chunk.dart';
-import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/message_part.dart';
 import 'package:phase/providers/openai_responses/responses_decoder.dart';
 

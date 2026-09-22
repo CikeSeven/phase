@@ -1,7 +1,10 @@
+import '../../data/models/api_protocol.dart';
+import '../usage_decoder.dart';
+import '../../data/models/token_usage.dart';
+
 import 'dart:convert';
 
 import '../../data/models/chat_chunk.dart';
-import '../../data/models/chat_message.dart';
 import '../dio_failure_mapper.dart';
 import '../part_assembler.dart';
 import '../sse_transport.dart';
@@ -51,7 +54,7 @@ class _CompletionsStreamDecoder {
   final _out = <ChatChunk>[];
   late final PartAssembler _parts;
   final _think = ThinkTagSplitter();
-  TokenUsage? _usage;
+  final _usageDecoder = UsageDecoder(ApiProtocol.openaiCompletions);
   var _terminated = false;
   var _sawEvent = false;
   var _finished = false;
@@ -82,6 +85,10 @@ class _CompletionsStreamDecoder {
     }
     if (decoded is! Map<String, dynamic>) return const [];
     _sawEvent = true;
+    final responseModel = decoded['model'];
+    if (responseModel is String && responseModel.isNotEmpty) {
+      _out.add(ResponseModel(responseModel));
+    }
 
     // 网关在 SSE 流内返回的带内错误（HTTP 200 + {"error": ...}），
     // 必须显形；用 ResponseError 事件表达，不抛异常。
@@ -92,7 +99,7 @@ class _CompletionsStreamDecoder {
       return _drain();
     }
 
-    _usage = _parseUsage(decoded['usage']) ?? _usage;
+    _acceptUsage(decoded['usage']);
     final choices = decoded['choices'];
     if (choices is List && choices.isNotEmpty) {
       final choice = choices.first;
@@ -108,10 +115,7 @@ class _CompletionsStreamDecoder {
     if (tail.reasoning.isNotEmpty) _parts.reasoning(0, tail.reasoning);
     if (tail.content.isNotEmpty) _parts.text(0, tail.content);
     _finished = true;
-    _parts.finish(
-      usage: usage ?? _usage,
-      complete: complete ?? _normalFinish == true,
-    );
+    _parts.finish(usage: usage, complete: complete ?? _normalFinish == true);
     return _drain();
   }
 
@@ -229,28 +233,13 @@ class _CompletionsStreamDecoder {
     return [for (final key in keys) _details[key]!];
   }
 
-  static TokenUsage? _parseUsage(Object? usage) {
-    if (usage is! Map<String, dynamic>) {
-      return null;
-    }
-    int? asInt(Object? value) => value is int ? value : null;
-    final details = usage['completion_tokens_details'];
-    return TokenUsage(
-      inputTokens: asInt(usage['prompt_tokens']) ?? _cachedTokens(usage),
-      outputTokens: asInt(usage['completion_tokens']),
-      reasoningTokens: details is Map<String, dynamic>
-          ? asInt(details['reasoning_tokens'])
-          : null,
-      cachedInputTokens: _cachedTokens(usage),
-    );
-  }
+  TokenUsage? _parseUsage(Object? value) => _usageDecoder.add(value);
 
-  /// 缓存命中的输入 token（OpenAI 兼容协议的 prompt_tokens_details.cached_tokens）。
-  static int? _cachedTokens(Map<String, dynamic> usage) {
-    final details = usage['prompt_tokens_details'];
-    if (details is! Map<String, dynamic>) return null;
-    final cached = details['cached_tokens'];
-    return cached is int ? cached : null;
+  void _acceptUsage(Object? value) {
+    final usage = _parseUsage(value);
+    if (usage != null) {
+      _out.add(UsageChunk(usage: usage));
+    }
   }
 
   List<ChatChunk> _drain() {

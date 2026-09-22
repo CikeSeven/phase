@@ -323,11 +323,9 @@ void main() {
       status: RunStatus.completed,
       finishReason: RunFinishReason.completed,
       currentMessageId: 'm1',
-      usage: const TokenUsage(inputTokens: 10, outputTokens: 20),
     );
     expect(finished.status, RunStatus.completed);
     expect(finished.activeToolCallId, isNull);
-    expect(finished.usage?.inputTokens, 10);
     expect(await runs.unfinished(), isEmpty);
   });
 

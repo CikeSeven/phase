@@ -172,6 +172,7 @@ void main() {
       final h = await ToolLoopHarness.create(
         registry: ToolRegistry([echo]),
         factory: (p, k) => gateway.factory(p, k, entry.key),
+        protocol: entry.key,
       );
       await h.controller().send('review');
       expect(echo.executions, isEmpty);
@@ -215,6 +216,7 @@ void main() {
     final h = await ToolLoopHarness.create(
       registry: ToolRegistry([echo]),
       factory: (p, k) => gateway.factory(p, k, ApiProtocol.openaiResponses),
+      protocol: ApiProtocol.openaiResponses,
     );
     await h.controller().send('review');
     final input = gateway.requests.last['input'] as List;
@@ -348,6 +350,7 @@ void main() {
       final h = await ToolLoopHarness.create(
         registry: ToolRegistry([echo]),
         factory: (p, k) => gateway.factory(p, k, ApiProtocol.anthropicMessages),
+        protocol: ApiProtocol.anthropicMessages,
       );
       await h.controller().send('review');
       final messages = gateway.requests[1]['messages'] as List;
@@ -386,6 +389,7 @@ void main() {
         registry: ToolRegistry([echo]),
         factory: (p, k) =>
             gateway.factory(p, k, ApiProtocol.googleGenerativeAi),
+        protocol: ApiProtocol.googleGenerativeAi,
       );
       await h.controller().send('review');
       final model = (gateway.requests[1]['contents'] as List).singleWhere(

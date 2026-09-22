@@ -1,3 +1,5 @@
+import 'package:phase/data/models/token_usage.dart';
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -217,8 +219,8 @@ void main() {
     });
 
     test('模型名取第一条有值的，用量取最后一次有值的，思考耗时合计', () {
-      const firstUsage = TokenUsage(inputTokens: 10, outputTokens: 20);
-      const lastUsage = TokenUsage(inputTokens: 30, outputTokens: 40);
+      const firstUsage = TokenUsage(promptTokens: 10, outputTokens: 20);
+      const lastUsage = TokenUsage(promptTokens: 30, outputTokens: 40);
       final view = visibleMessages(
         threadOf([
           message(

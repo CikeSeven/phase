@@ -17,6 +17,7 @@ class ToolPresentation {
   static IconData icon(String toolName) => switch (toolName) {
     'submit_plan' => Symbols.checklist,
     'read_memory' => Symbols.bookmark,
+    'read_history' => Symbols.history,
     'write_memory' => Symbols.bookmark_add,
     'wait_for_user' => Symbols.pan_tool_alt,
     'system_info' => Symbols.schedule,
@@ -47,6 +48,7 @@ class ToolPresentation {
   static String toolLabel(String toolName) => switch (toolName) {
     'submit_plan' => '提交计划',
     'read_memory' => '检索记忆',
+    'read_history' => '读取历史详情',
     'write_memory' => '保存记忆',
     'wait_for_user' => '等待用户操作',
     'system_info' => '时间与时区',
@@ -160,6 +162,11 @@ class ToolPresentation {
   /// 关键参数的中文标签；未登记的参数用原始键名。
   static const _parameterLabels = <String, Map<String, String>>{
     'read_memory': {'query': '检索关键字'},
+    'read_history': {
+      'sourceId': '历史来源',
+      'cursor': '续读位置',
+      'maxBytes': '返回上限（字节）',
+    },
     'write_memory': {'content': '记忆内容', 'scope': '所属范围'},
     'submit_plan': {'title': '计划标题', 'steps': '计划步骤'},
     'perform_gestures': {

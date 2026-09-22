@@ -1,3 +1,7 @@
+import '../../data/models/api_protocol.dart';
+import '../usage_decoder.dart';
+import '../../data/models/token_usage.dart';
+
 import 'dart:convert';
 
 import '../../data/models/chat_chunk.dart';
@@ -234,9 +238,20 @@ class _ResponsesStreamDecoder {
     }
     if (decoded is! Map<String, dynamic>) return const [];
     _sawEvent = true;
+    final responseModel = decoded['response'] is Map
+        ? (decoded['response'] as Map)['model']
+        : null;
+    if (responseModel is String && responseModel.isNotEmpty) {
+      _out.add(ResponseModel(responseModel));
+    }
+
     final type = decoded['type'];
     var done = false;
     TokenUsage? usage;
+    final snapshotUsage = _parseUsage(decoded['response']);
+    if (snapshotUsage != null) {
+      _out.add(UsageChunk(usage: snapshotUsage));
+    }
     switch (type) {
       case 'response.output_text.delta':
       case 'response.output_text.done':
@@ -312,7 +327,7 @@ class _ResponsesStreamDecoder {
           }
         }
         done = true;
-        usage = _parseUsage(response);
+        usage = null;
       case 'response.failed':
         // 先交付已经补出的内容，再报流内错误。
         _flush(finish: false);
@@ -330,7 +345,7 @@ class _ResponsesStreamDecoder {
         _out.add(ResponseError(error: mapProtocolError(decoded)));
         return _drain();
       default:
-        return const [];
+        return _drain();
     }
     _flush(finish: done || standalone, done: done, usage: usage);
     if (done) return [..._drain(), ...finish(complete: _normalFinish == true)];
@@ -344,14 +359,11 @@ class _ResponsesStreamDecoder {
     if (isDone) return const [];
     _finished = true;
     _flush(finish: true);
-    _parts.finish(
-      usage: usage ?? _pendingUsage,
-      complete: _normalFinish ?? complete ?? false,
-    );
+    _parts.finish(usage: usage, complete: _normalFinish ?? complete ?? false);
     return _drain();
   }
 
-  TokenUsage? _pendingUsage;
+  final _usageDecoder = UsageDecoder(ApiProtocol.openaiResponses);
 
   _ResponseItem _item(Map<String, dynamic> event) {
     final value = event['item'];
@@ -576,7 +588,9 @@ class _ResponsesStreamDecoder {
         }
       }
     }
-    if (usage != null) _pendingUsage = usage;
+    if (usage != null) {
+      _out.add(UsageChunk(usage: usage));
+    }
   }
 
   /// 回放用的推理 item：只保留服务端认得的字段。
@@ -599,24 +613,9 @@ class _ResponsesStreamDecoder {
   static int? _index(Object? value) =>
       value is int && value >= 0 ? value : null;
 
-  static TokenUsage? _parseUsage(Object? response) {
-    if (response is! Map<String, dynamic>) return null;
-    final usage = response['usage'];
-    if (usage is! Map<String, dynamic>) return null;
-    int? asInt(Object? value) => value is int ? value : null;
-    final outputDetails = usage['output_tokens_details'];
-    final inputDetails = usage['input_tokens_details'];
-    return TokenUsage(
-      inputTokens: asInt(usage['input_tokens']),
-      outputTokens: asInt(usage['output_tokens']),
-      reasoningTokens: outputDetails is Map<String, dynamic>
-          ? asInt(outputDetails['reasoning_tokens'])
-          : null,
-      cachedInputTokens: inputDetails is Map<String, dynamic>
-          ? asInt(inputDetails['cached_tokens'])
-          : null,
-    );
-  }
+  TokenUsage? _parseUsage(Object? response) => response is Map<String, dynamic>
+      ? _usageDecoder.add(response['usage'])
+      : null;
 
   List<ChatChunk> _drain() {
     if (_out.isEmpty) return const [];

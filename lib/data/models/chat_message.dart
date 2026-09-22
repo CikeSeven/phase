@@ -1,3 +1,4 @@
+import 'token_usage.dart';
 import 'message_part.dart';
 
 /// 消息角色（AGENTS.md §3 约定取值）。
@@ -5,43 +6,6 @@ enum ChatRole { user, assistant, system, tool }
 
 /// 消息状态；流式中的消息在正常结束或停止后落到终态。
 enum MessageStatus { streaming, completed, failed, cancelled }
-
-/// 一次模型调用的用量；接口未提供时字段为 null，不把缺失值当成真实的零。
-///
-/// 同时承载数据库 usage_json 列与请求响应中的用量。
-class TokenUsage {
-  const TokenUsage({
-    this.inputTokens,
-    this.outputTokens,
-    this.reasoningTokens,
-    this.cachedInputTokens,
-    this.estimated = false,
-  });
-
-  final int? inputTokens;
-  final int? outputTokens;
-  final int? reasoningTokens;
-  final int? cachedInputTokens;
-
-  /// 是否为本地估算值；来自接口 usage 时为 false。
-  final bool estimated;
-
-  Map<String, dynamic> toJson() => {
-    if (inputTokens != null) 'inputTokens': inputTokens,
-    if (outputTokens != null) 'outputTokens': outputTokens,
-    if (reasoningTokens != null) 'reasoningTokens': reasoningTokens,
-    if (cachedInputTokens != null) 'cachedInputTokens': cachedInputTokens,
-    if (estimated) 'estimated': true,
-  };
-
-  factory TokenUsage.fromJson(Map<String, dynamic> json) => TokenUsage(
-    inputTokens: json['inputTokens'] as int?,
-    outputTokens: json['outputTokens'] as int?,
-    reasoningTokens: json['reasoningTokens'] as int?,
-    cachedInputTokens: json['cachedInputTokens'] as int?,
-    estimated: json['estimated'] as bool? ?? false,
-  );
-}
 
 /// 一条聊天消息。
 ///
@@ -57,6 +21,7 @@ class ChatMessage {
     this.status = MessageStatus.completed,
     this.parts = const [],
     this.modelLabel,
+    this.requestId,
     this.usage,
     this.thinkingDurationMs,
     required this.createdAt,
@@ -78,6 +43,9 @@ class ChatMessage {
   /// 产生该消息的模型展示名；用户消息为 null。
   final String? modelLabel;
 
+  final String? requestId;
+
+  /// 从请求记录联表取得的只读投影，不写回消息表。
   final TokenUsage? usage;
   final int? thinkingDurationMs;
   final DateTime createdAt;
@@ -112,6 +80,7 @@ class ChatMessage {
       status: status,
       parts: parts ?? this.parts,
       modelLabel: modelLabel,
+      requestId: requestId,
       usage: usage,
       thinkingDurationMs: thinkingDurationMs,
       createdAt: createdAt,
@@ -136,6 +105,7 @@ class ChatMessage {
       status: status ?? this.status,
       parts: parts ?? this.parts,
       modelLabel: modelLabel ?? this.modelLabel,
+      requestId: requestId,
       usage: usage ?? this.usage,
       thinkingDurationMs: thinkingDurationMs ?? this.thinkingDurationMs,
       createdAt: createdAt,

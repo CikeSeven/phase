@@ -1,5 +1,5 @@
+import '../data/models/token_usage.dart';
 import '../data/models/chat_chunk.dart';
-import '../data/models/chat_message.dart';
 import '../data/models/message_part.dart';
 
 /// 事件出口：组装出的事件立即交给调用方。

@@ -1,11 +1,12 @@
+import '../../../data/models/token_usage.dart';
+
 import 'dart:async';
 
-import '../../../../core/error/failure.dart';
-import '../../../../data/models/chat_chunk.dart';
-import '../../../../data/models/chat_message.dart';
-import '../../../../data/models/chat_request.dart';
-import '../../../../data/models/message_part.dart';
-import '../../../../providers/ai_provider.dart';
+import '../../../core/error/failure.dart';
+import '../../../data/models/chat_chunk.dart';
+import '../../../data/models/chat_request.dart';
+import '../../../data/models/message_part.dart';
+import '../../../providers/ai_provider.dart';
 import '../../tools/tool.dart';
 
 class SummaryResponse {
@@ -20,15 +21,51 @@ class SummaryResponse {
 Future<SummaryResponse> requestSummary(
   AiProvider provider,
   ChatRequest request,
-  RunCancellation cancellation,
-) async {
+  RunCancellation cancellation, {
+  Future<bool> Function()? onStart,
+  Future<void> Function(
+    String text,
+    TokenUsage? usage,
+    int revision,
+    String? responseModel,
+  )?
+  onProgress,
+}) async {
   final done = Completer<void>();
   final texts = <String, String>{};
   TokenUsage? usage;
+  String? responseModel;
+  var revision = 0;
+  Timer? flushTimer;
+  Future<void> pending = Future.value();
+  StorageFailure? storageError;
+  StackTrace? storageTrace;
   var complete = false;
   var failed = false;
   var accepting = true;
   StreamSubscription<ChatChunk>? subscription;
+  void flush() {
+    flushTimer?.cancel();
+    flushTimer = null;
+    final text = texts.values.join('\n');
+    final snapshot = usage;
+    final sample = revision;
+    final model = responseModel;
+    pending = pending.then((_) async {
+      if (storageError != null) return;
+      try {
+        await onProgress?.call(text, snapshot, sample, model);
+      } catch (e, st) {
+        storageError = e is StorageFailure
+            ? e
+            : StorageFailure('保存摘要进度失败', cause: e);
+        storageTrace = st;
+        accepting = false;
+        if (!done.isCompleted) done.complete();
+      }
+    });
+  }
+
   void finish() {
     accepting = false;
     if (!done.isCompleted) done.complete();
@@ -42,6 +79,12 @@ Future<SummaryResponse> requestSummary(
     }),
   );
   try {
+    if (cancellation.isCancelled) {
+      return const SummaryResponse('', null, false, true);
+    }
+    if (onStart != null && !await onStart()) {
+      return const SummaryResponse('', null, false, true);
+    }
     if (cancellation.isCancelled) {
       return const SummaryResponse('', null, false, true);
     }
@@ -63,6 +106,10 @@ Future<SummaryResponse> requestSummary(
                 texts[partId] = text;
               case UsageChunk(usage: final value):
                 usage = value;
+                revision++;
+              case ResponseModel(:final modelId):
+                responseModel = modelId;
+                revision++;
               case ResponseEnd(complete: final value):
                 complete = value;
                 finish();
@@ -76,6 +123,9 @@ Future<SummaryResponse> requestSummary(
                 finish();
               default:
                 break;
+            }
+            if (onProgress != null) {
+              flushTimer ??= Timer(const Duration(milliseconds: 100), flush);
             }
             // 对异常服务端忽略输出上限也有本地界限。
             if (texts.values.fold(0, (n, s) => n + s.length) > 16000) {
@@ -99,17 +149,26 @@ Future<SummaryResponse> requestSummary(
           cancelOnError: true,
         );
     await done.future;
-  } on StorageFailure {
-    rethrow;
+  } on StorageFailure catch (e, st) {
+    storageError = e;
+    storageTrace = st;
   } catch (_) {
     failed = true;
   } finally {
     accepting = false;
+    flushTimer?.cancel();
     try {
       await subscription?.cancel();
     } catch (_) {
       failed = true;
     }
+  }
+  if (onProgress != null) {
+    flush();
+    await pending;
+  }
+  if (storageError case final error?) {
+    Error.throwWithStackTrace(error, storageTrace!);
   }
   final text = texts.values.join('\n');
   return SummaryResponse(

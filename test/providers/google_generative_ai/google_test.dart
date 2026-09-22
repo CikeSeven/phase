@@ -355,14 +355,15 @@ void main() {
       final chunks = await decode(
         'data: {"candidates":[{"content":{"role":"model","parts":[]},'
         '"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":5,'
-        '"candidatesTokenCount":7,"totalTokenCount":12,'
+        '"candidatesTokenCount":7,"totalTokenCount":15,'
         '"thoughtsTokenCount":3,"cachedContentTokenCount":2}}\n\n',
       ).toList();
       final usage = chunks.whereType<UsageChunk>().single.usage;
-      expect(usage.inputTokens, 5);
-      expect(usage.outputTokens, 7);
+      expect(usage.promptTokens, 5);
+      expect(usage.outputTokens, 10);
+      expect(usage.totalTokens, 15);
       expect(usage.reasoningTokens, 3);
-      expect(usage.cachedInputTokens, 2);
+      expect(usage.cacheReadTokens, 2);
       expect(chunks.last, isA<ResponseEnd>());
       expect((chunks.last as ResponseEnd).hasVisibleContent, isFalse);
     });

@@ -126,8 +126,6 @@ class Messages extends Table {
   TextColumn get partsJson => text().withDefault(const Constant('[]'))();
   TextColumn get modelLabel => text().nullable()();
 
-  /// TokenUsage 的 JSON；接口未提供用量时为 null。
-  TextColumn get usageJson => text().nullable()();
   IntColumn get thinkingDurationMs => integer().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
@@ -178,8 +176,6 @@ class AgentRuns extends Table {
   IntColumn get modelAttemptCount => integer().withDefault(const Constant(0))();
   IntColumn get maxTurns => integer()();
 
-  /// TokenUsage 的 JSON；未收口时为 null。
-  TextColumn get usageJson => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get finishedAt => dateTime().nullable()();
 
@@ -282,7 +278,7 @@ class ContextSummaries extends Table {
   TextColumn get id => text()();
   TextColumn get conversationId =>
       text().references(Conversations, #id, onDelete: KeyAction.cascade)();
-  TextColumn get runId => text()();
+  TextColumn get runId => text().nullable()();
   TextColumn get branchEndId => text()();
   TextColumn get coveredIdsJson => text()();
   TextColumn get fingerprint => text()();
@@ -290,8 +286,41 @@ class ContextSummaries extends Table {
   IntColumn get version => integer()();
   TextColumn get status => text()();
   TextColumn get content => text()();
-  TextColumn get usageJson => text().nullable()();
+  TextColumn get checkpointJson => text().withDefault(const Constant('{}'))();
   DateTimeColumn get createdAt => dateTime()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+/// API 用量的唯一持久化事实；不引用可被删除的服务商配置。
+@DataClassName('ModelRequestRow')
+class ModelRequests extends Table {
+  TextColumn get id => text()();
+  TextColumn get conversationId =>
+      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get runId => text().nullable()();
+  IntColumn get logicalTurn => integer()();
+  IntColumn get attemptIndex => integer()();
+  TextColumn get purpose => text()();
+  TextColumn get status => text()();
+  TextColumn get profileId => text()();
+  TextColumn get protocol => text()();
+  TextColumn get requestedModelId => text()();
+  TextColumn get responseModelId => text().nullable()();
+  TextColumn get assistantMessageId => text().nullable().unique()();
+  TextColumn get summaryId => text().nullable().unique()();
+  TextColumn get summaryJobId => text().nullable()();
+  TextColumn get usageJson => text().nullable()();
+  IntColumn get usageRevision => integer().withDefault(const Constant(0))();
+  BoolColumn get usageComplete =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get contextJson => text()();
+  TextColumn get originRequestId => text().nullable()();
+  BoolColumn get isInherited => boolean().withDefault(const Constant(false))();
+  TextColumn get errorCode => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get startedAt => dateTime().nullable()();
+  DateTimeColumn get finishedAt => dateTime().nullable()();
   @override
   Set<Column> get primaryKey => {id};
 }
@@ -347,6 +376,7 @@ class MemoryEntries extends Table {
     Workspaces,
     WorkspaceCopies,
     ContextSummaries,
+    ModelRequests,
     AgentPlans,
     MemoryEntries,
   ],
@@ -355,29 +385,30 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点。
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    // 本次 E5 装机仅允许已安装 E4 测试包的增量升级，不补历史开发期链。
+    // E5.1 改动初版数据契约；尚未授权覆盖升级已有测试安装。
     onUpgrade: (migrator, from, to) async {
-      if (from != 6 || to != 7) {
-        throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
-      }
-      await transaction(() async {
-        await migrator.createTable(contextSummaries);
-        await migrator.createTable(agentPlans);
-        await migrator.createTable(memoryEntries);
-        await migrator.addColumn(assistants, assistants.memoryScope);
-      });
+      throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
     },
     beforeOpen: _prepareDatabase,
   );
 
   /// 每次打开都确保外键与索引就绪（建表、升级后都会执行）。
   Future<void> _prepareDatabase(OpeningDetails details) async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_model_requests_conversation ON model_requests (conversation_id, created_at DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_model_requests_run ON model_requests (run_id, purpose, status)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_model_requests_summary ON model_requests (summary_job_id)',
+    );
     // 删除人工核验机制时一并收口其挂起状态；在枚举解码前执行，保留消息和动作记录。
     await customStatement(
       "UPDATE tool_calls SET status = 'failed', error_code = 'interrupted', "

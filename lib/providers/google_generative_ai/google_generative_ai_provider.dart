@@ -48,11 +48,16 @@ class GoogleGenerativeAiProvider implements AiProvider {
         _profile.baseUrl,
         'v1beta/models/${request.modelId}:streamGenerateContent?alt=sse',
       ),
-      payload: await buildGooglePayload(
-        request,
-        supportsImages: modelSupportsImages(_profile, request.modelId),
-        supportsReasoning: modelSupportsReasoning(_profile, request.modelId),
-      ),
+      payload:
+          request.preparedPayload ??
+          await buildGooglePayload(
+            request,
+            supportsImages: modelSupportsImages(_profile, request.modelId),
+            supportsReasoning: modelSupportsReasoning(
+              _profile,
+              request.modelId,
+            ),
+          ),
       headers: _headers,
       // 协议状态块写入当次模型 id，与后续请求绑定。
       decode: GoogleSseDecoder.decode,

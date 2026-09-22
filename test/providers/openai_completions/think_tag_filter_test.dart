@@ -146,7 +146,7 @@ void main() {
         ),
       ).toList();
       final usage = chunks.whereType<UsageChunk>().single.usage;
-      expect(usage.inputTokens, 1);
+      expect(usage.promptTokens, 1);
       expect(usage.outputTokens, 2);
       expect(chunks.whereType<ResponseEnd>(), hasLength(1));
       expect(chunks.last, isA<ResponseEnd>());

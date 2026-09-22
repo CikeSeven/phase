@@ -17,11 +17,11 @@ final class ContextSummariesProvider
         $FunctionalProvider<
           AsyncValue<List<ContextSummary>>,
           List<ContextSummary>,
-          FutureOr<List<ContextSummary>>
+          Stream<List<ContextSummary>>
         >
     with
         $FutureModifier<List<ContextSummary>>,
-        $FutureProvider<List<ContextSummary>> {
+        $StreamProvider<List<ContextSummary>> {
   ContextSummariesProvider._({
     required ContextSummariesFamily super.from,
     required String super.argument,
@@ -45,12 +45,12 @@ final class ContextSummariesProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<ContextSummary>> $createElement(
+  $StreamProviderElement<List<ContextSummary>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $StreamProviderElement(pointer);
 
   @override
-  FutureOr<List<ContextSummary>> create(Ref ref) {
+  Stream<List<ContextSummary>> create(Ref ref) {
     final argument = this.argument as String;
     return contextSummaries(ref, argument);
   }
@@ -66,10 +66,10 @@ final class ContextSummariesProvider
   }
 }
 
-String _$contextSummariesHash() => r'ea7a4fe2c3369bb17b31fa62a1a26eaebdf0d8d3';
+String _$contextSummariesHash() => r'6f80e70d5f7eb783b60118b6b29840cacfbfef9b';
 
 final class ContextSummariesFamily extends $Family
-    with $FunctionalFamilyOverride<FutureOr<List<ContextSummary>>, String> {
+    with $FunctionalFamilyOverride<Stream<List<ContextSummary>>, String> {
   ContextSummariesFamily._()
     : super(
         retry: null,

@@ -44,11 +44,16 @@ class OpenAiResponsesProvider implements AiProvider {
     yield* postSseStream(
       dio: _dio,
       uri: resolveEndpoint(_profile.baseUrl, 'responses'),
-      payload: await buildResponsesPayload(
-        request,
-        supportsImages: modelSupportsImages(_profile, request.modelId),
-        supportsReasoning: modelSupportsReasoning(_profile, request.modelId),
-      ),
+      payload:
+          request.preparedPayload ??
+          await buildResponsesPayload(
+            request,
+            supportsImages: modelSupportsImages(_profile, request.modelId),
+            supportsReasoning: modelSupportsReasoning(
+              _profile,
+              request.modelId,
+            ),
+          ),
       headers: _headers,
       decode: ResponsesSseDecoder.decode,
     );

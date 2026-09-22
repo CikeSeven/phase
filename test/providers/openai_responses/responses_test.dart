@@ -277,10 +277,10 @@ void main() {
         '"input_tokens_details":{"cached_tokens":6}}}}\n\n',
       ).toList();
       final usage = chunks.whereType<UsageChunk>().single.usage;
-      expect(usage.inputTokens, 10);
+      expect(usage.promptTokens, 10);
       expect(usage.outputTokens, 20);
       expect(usage.reasoningTokens, 4);
-      expect(usage.cachedInputTokens, 6);
+      expect(usage.cacheReadTokens, 6);
       expect(chunks.last, isA<ResponseEnd>());
     });
 

@@ -1,3 +1,5 @@
+import 'model_request_repository.dart';
+
 import 'package:drift/drift.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
@@ -76,6 +78,12 @@ class AgentRunRepository {
     return _guard(
       '读取中断任务失败',
       () => _db.transaction(() async {
+        if (afterRestart) {
+          await ModelRequestRepository(_db).interruptPending();
+          await (_db.update(_db.contextSummaries)
+                ..where((t) => t.status.equals('running')))
+              .write(const ContextSummariesCompanion(status: Value('failed')));
+        }
         final rows =
             await (_db.select(_db.agentRuns)
                   ..where(
@@ -270,7 +278,6 @@ class AgentRunRepository {
     required RunStatus status,
     RunFinishReason? finishReason,
     String? currentMessageId,
-    TokenUsage? usage,
   }) {
     return _guard('结束运行失败', () async {
       await _db.transaction(() async {
@@ -286,7 +293,6 @@ class AgentRunRepository {
           finishReason: finishReason,
           currentMessageId: currentMessageId,
           clearActiveToolCall: true,
-          usage: usage,
           finishedAt: DateTime.now(),
         );
         await (_db.update(

@@ -1,7 +1,7 @@
+import 'context_policy.dart';
 import 'agent_plan.dart';
 import 'memory_entry.dart';
 import 'workspace.dart';
-import 'chat_message.dart';
 import 'skill_installation.dart';
 import 'model_selection.dart';
 import 'tool_policy.dart';
@@ -74,6 +74,7 @@ class RunConfiguration {
     this.workspace,
     this.mode = AgentMode.execute,
     this.contextWindow,
+    this.contextPolicy = const ContextPolicy(),
     this.planId,
     this.planRevision,
     this.approvedPlan,
@@ -88,6 +89,7 @@ class RunConfiguration {
 
   final AgentMode mode;
   final int? contextWindow;
+  final ContextPolicy contextPolicy;
   final String? planId;
   final int? planRevision;
   final String? approvedPlan;
@@ -112,6 +114,7 @@ class RunConfiguration {
   Map<String, dynamic> toJson() => {
     'mode': mode.name,
     'contextWindow': contextWindow,
+    'contextPolicy': contextPolicy.toJson(),
     'planId': planId,
     'planRevision': planRevision,
     'approvedPlan': approvedPlan,
@@ -134,62 +137,64 @@ class RunConfiguration {
     'executionScope': executionScope.toJson(),
   };
 
-  factory RunConfiguration.fromJson(Map<String, dynamic> json) =>
-      RunConfiguration(
-        mode: AgentMode.values.byName(json['mode'] as String? ?? 'execute'),
-        contextWindow: json['contextWindow'] as int?,
-        planId: json['planId'] as String?,
-        planRevision: json['planRevision'] as int?,
-        approvedPlan: json['approvedPlan'] as String?,
-        memoryScope: MemoryScope.values.byName(
-          json['memoryScope'] as String? ?? 'disabled',
-        ),
-        workspace: json['workspace'] == null
-            ? null
-            : WorkspaceSnapshot.fromJson(
-                json['workspace'] as Map<String, dynamic>,
-              ),
-        executionScope: ExecutionScope.fromJson(
-          (json['executionScope'] as Map<String, dynamic>?) ?? {},
-        ),
-        connection: RunConnection.fromJson(
-          json['connection'] as Map<String, dynamic>,
-        ),
-        modelSelection: ModelSelection.fromJson(
-          json['modelSelection'] as Map<String, dynamic>,
-        ),
-        systemPrompt: json['systemPrompt'] as String? ?? '',
-        supportsReasoning: json['supportsReasoning'] as bool? ?? false,
-        supportsImages: json['supportsImages'] as bool? ?? true,
-        supportsTools: json['supportsTools'] as bool? ?? true,
-        compatOverrides: json['compatOverrides'] == null
-            ? null
-            : OpenAiCompat.fromJson(
-                json['compatOverrides'] as Map<String, dynamic>,
-              ),
-        toolSnapshots: [
-          for (final t in json['toolSnapshots'] as List? ?? [])
-            ToolSnapshot.fromJson(t as Map<String, dynamic>),
-        ],
-        skills: [
-          for (final s in json['skills'] as List? ?? [])
-            SkillSnapshot.fromJson(s as Map<String, dynamic>),
-        ],
-        mcpServers: [
-          for (final s in json['mcpServers'] as List? ?? [])
-            McpServerProfile.fromJson(s as Map<String, dynamic>),
-        ],
-        enabledTools: {
-          for (final tool in json['enabledTools'] as List? ?? const [])
-            tool as String,
-        },
-        toolPolicies: {
-          for (final entry
-              in (json['toolPolicies'] as Map<String, dynamic>? ?? const {})
-                  .entries)
-            entry.key: toolPolicyFromName(entry.value as String?),
-        },
-      );
+  factory RunConfiguration.fromJson(
+    Map<String, dynamic> json,
+  ) => RunConfiguration(
+    mode: AgentMode.values.byName(json['mode'] as String? ?? 'execute'),
+    contextWindow: json['contextWindow'] as int?,
+    contextPolicy: json['contextPolicy'] == null
+        ? const ContextPolicy()
+        : ContextPolicy.fromJson(json['contextPolicy'] as Map<String, dynamic>),
+    planId: json['planId'] as String?,
+    planRevision: json['planRevision'] as int?,
+    approvedPlan: json['approvedPlan'] as String?,
+    memoryScope: MemoryScope.values.byName(
+      json['memoryScope'] as String? ?? 'disabled',
+    ),
+    workspace: json['workspace'] == null
+        ? null
+        : WorkspaceSnapshot.fromJson(json['workspace'] as Map<String, dynamic>),
+    executionScope: ExecutionScope.fromJson(
+      (json['executionScope'] as Map<String, dynamic>?) ?? {},
+    ),
+    connection: RunConnection.fromJson(
+      json['connection'] as Map<String, dynamic>,
+    ),
+    modelSelection: ModelSelection.fromJson(
+      json['modelSelection'] as Map<String, dynamic>,
+    ),
+    systemPrompt: json['systemPrompt'] as String? ?? '',
+    supportsReasoning: json['supportsReasoning'] as bool? ?? false,
+    supportsImages: json['supportsImages'] as bool? ?? true,
+    supportsTools: json['supportsTools'] as bool? ?? true,
+    compatOverrides: json['compatOverrides'] == null
+        ? null
+        : OpenAiCompat.fromJson(
+            json['compatOverrides'] as Map<String, dynamic>,
+          ),
+    toolSnapshots: [
+      for (final t in json['toolSnapshots'] as List? ?? [])
+        ToolSnapshot.fromJson(t as Map<String, dynamic>),
+    ],
+    skills: [
+      for (final s in json['skills'] as List? ?? [])
+        SkillSnapshot.fromJson(s as Map<String, dynamic>),
+    ],
+    mcpServers: [
+      for (final s in json['mcpServers'] as List? ?? [])
+        McpServerProfile.fromJson(s as Map<String, dynamic>),
+    ],
+    enabledTools: {
+      for (final tool in json['enabledTools'] as List? ?? const [])
+        tool as String,
+    },
+    toolPolicies: {
+      for (final entry
+          in (json['toolPolicies'] as Map<String, dynamic>? ?? const {})
+              .entries)
+        entry.key: toolPolicyFromName(entry.value as String?),
+    },
+  );
 }
 
 /// 一次用户发送产生的运行；保存循环位置与计数，供中断后按已存状态恢复。
@@ -208,7 +213,6 @@ class AgentRun {
     this.turnCount = 0,
     this.modelAttemptCount = 0,
     this.maxTurns = defaultMaxTurns,
-    this.usage,
     this.finishedAt,
   });
 
@@ -237,8 +241,6 @@ class AgentRun {
   /// 0 表示不限轮次；正数是本次运行明确指定的总轮次预算。
   final int maxTurns;
 
-  /// 整个运行的用量汇总；接口未提供时为 null。
-  final TokenUsage? usage;
   final DateTime createdAt;
   final DateTime? finishedAt;
 
@@ -249,7 +251,6 @@ class AgentRun {
     RunFinishReason? finishReason,
     int? turnCount,
     int? modelAttemptCount,
-    TokenUsage? usage,
     DateTime? finishedAt,
     bool clearActiveToolCall = false,
   }) {
@@ -268,7 +269,6 @@ class AgentRun {
       turnCount: turnCount ?? this.turnCount,
       modelAttemptCount: modelAttemptCount ?? this.modelAttemptCount,
       maxTurns: maxTurns,
-      usage: usage ?? this.usage,
       createdAt: createdAt,
       finishedAt: finishedAt ?? this.finishedAt,
     );

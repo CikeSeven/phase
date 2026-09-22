@@ -1,3 +1,5 @@
+import 'package:phase/data/models/token_usage.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -456,7 +458,7 @@ void main() {
     h.provider.turns.addAll([
       Stream.fromIterable([
         const ReasoningDelta(partId: 'r', text: 'old'),
-        const UsageChunk(usage: TokenUsage(inputTokens: 999)),
+        const UsageChunk(usage: TokenUsage(promptTokens: 999)),
         const ResponseError(
           error: ProviderError(ProviderErrorCategory.network, 'fixture'),
         ),

@@ -44,7 +44,10 @@ GoRouter appRouter(Ref ref) {
         path: '/conversations/:id/context',
         pageBuilder: (context, state) => materialPage(
           state,
-          ConversationContextPage(conversationId: state.pathParameters['id']!),
+          ConversationContextPage(
+            conversationId: state.pathParameters['id']!,
+            runId: state.uri.queryParameters['run'],
+          ),
         ),
       ),
       GoRoute(

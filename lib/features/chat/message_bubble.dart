@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
+import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
@@ -360,6 +361,7 @@ class MessageBubble extends StatelessWidget {
       context,
       canCopy: message.text.isNotEmpty,
       canRegenerate: canRegenerate,
+      canViewUsage: message.role == ChatRole.assistant && message.runId != null,
     );
     if (!context.mounted) return;
     switch (action) {
@@ -367,6 +369,10 @@ class MessageBubble extends StatelessWidget {
         await _copy(context);
       case MessageAction.regenerate:
         await onRegenerate?.call();
+      case MessageAction.usage:
+        await context.push(
+          '/conversations/${message.conversationId}/context?run=${Uri.encodeComponent(message.runId!)}',
+        );
       case null:
         break;
     }

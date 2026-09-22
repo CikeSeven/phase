@@ -59,7 +59,12 @@ class ResolvedToolCall extends ResolvedPart {
     required this.toolName,
     required this.arguments,
     this.providerData,
+    this.recordId,
+    this.historyReadOnly = false,
   });
+
+  final String? recordId;
+  final bool historyReadOnly;
 
   /// Provider 侧的调用 id。
   final String callId;
@@ -76,11 +81,17 @@ class ResolvedToolResult extends ResolvedPart {
     this.isError = false,
     this.images = const [],
     this.artifactIds = const [],
+    this.recordId,
+    this.status,
+    this.closed = true,
   });
 
   final String callId;
   final String content;
   final bool isError;
+  final String? recordId;
+  final String? status;
+  final bool closed;
 
   /// Tool-produced images; persisted attachments remain the source of truth.
   final List<Attachment> images;
@@ -101,6 +112,7 @@ class ChatRequest {
     this.reasoningEffort = ReasoningEffort.off,
     this.temperature,
     this.maxOutputTokens,
+    this.preparedPayload,
   });
 
   final String modelId;
@@ -113,6 +125,23 @@ class ChatRequest {
   final ReasoningEffort reasoningEffort;
   final double? temperature;
   final int? maxOutputTokens;
+
+  /// 适配器规划得到的本次网络体，仅驻留内存，不持久化或记录日志。
+  final Map<String, dynamic>? preparedPayload;
+
+  ChatRequest copyWith({
+    List<ResolvedMessage>? messages,
+    Map<String, dynamic>? preparedPayload,
+  }) => ChatRequest(
+    modelId: modelId,
+    messages: messages ?? this.messages,
+    systemPrompt: systemPrompt,
+    tools: tools,
+    reasoningEffort: reasoningEffort,
+    temperature: temperature,
+    maxOutputTokens: maxOutputTokens,
+    preparedPayload: preparedPayload,
+  );
 }
 
 /// 工具定义：名称、描述、参数 schema、所需能力与默认策略。

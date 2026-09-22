@@ -1,3 +1,7 @@
+import 'package:phase/data/models/model_request_record.dart';
+import 'package:phase/data/repositories/model_request_repository.dart';
+import 'package:phase/data/models/token_usage.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -291,11 +295,6 @@ void main() {
             role: ChatRole.assistant,
             status: MessageStatus.completed,
             partsJson: Value(encodeMessageParts(parts)),
-            usageJson: Value(
-              jsonEncode(
-                const TokenUsage(inputTokens: 12, outputTokens: 34).toJson(),
-              ),
-            ),
             createdAt: now,
           ),
         );
@@ -311,10 +310,27 @@ void main() {
     expect((decoded[2] as ToolCallPart).toolCallId, 'call_1');
     expect(decoded[3], isA<ProviderPart>());
 
-    final usage = TokenUsage.fromJson(
-      jsonDecode(row.usageJson!) as Map<String, dynamic>,
+    final requests = ModelRequestRepository(db);
+    await requests.prepare(
+      ModelRequestRecord(
+        id: 'usage',
+        conversationId: 'conv_1',
+        profileId: 'fixture',
+        protocol: 'openaiCompletions',
+        requestedModelId: 'test',
+        assistantMessageId: row.id,
+        createdAt: now,
+      ),
     );
-    expect(usage.inputTokens, 12);
+    await requests.start('usage');
+    await requests.settle(
+      'usage',
+      status: ModelRequestStatus.completed,
+      usage: const TokenUsage(promptTokens: 12, outputTokens: 34),
+      revision: 1,
+    );
+    final usage = (await requests.list('conv_1')).single.usage!;
+    expect(usage.promptTokens, 12);
     expect(usage.outputTokens, 34);
   });
 

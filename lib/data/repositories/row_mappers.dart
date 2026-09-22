@@ -1,4 +1,5 @@
 import '../models/memory_entry.dart';
+import 'model_request_repository.dart';
 
 import 'dart:convert';
 
@@ -35,19 +36,21 @@ Conversation conversationFromRow(ConversationRow row) => Conversation(
   updatedAt: row.updatedAt,
 );
 
-ChatMessage messageFromRow(MessageRow row) => ChatMessage(
-  id: row.id,
-  conversationId: row.conversationId,
-  parentId: row.parentId,
-  runId: row.runId,
-  role: row.role,
-  status: row.status,
-  parts: decodeMessageParts(jsonDecode(row.partsJson)),
-  modelLabel: row.modelLabel,
-  usage: _decodeUsage(row.usageJson),
-  thinkingDurationMs: row.thinkingDurationMs,
-  createdAt: row.createdAt,
-);
+ChatMessage messageFromRow(MessageRow row, [ModelRequestRow? request]) =>
+    ChatMessage(
+      id: row.id,
+      conversationId: row.conversationId,
+      parentId: row.parentId,
+      runId: row.runId,
+      role: row.role,
+      status: row.status,
+      parts: decodeMessageParts(jsonDecode(row.partsJson)),
+      modelLabel: row.modelLabel,
+      requestId: request?.id,
+      usage: request == null ? null : modelRequestFromRow(request).usage,
+      thinkingDurationMs: row.thinkingDurationMs,
+      createdAt: row.createdAt,
+    );
 
 Assistant assistantFromRow(AssistantRow row) => Assistant(
   id: row.id,
@@ -121,7 +124,6 @@ AgentRun agentRunFromRow(AgentRunRow row) => AgentRun(
   turnCount: row.turnCount,
   modelAttemptCount: row.modelAttemptCount,
   maxTurns: row.maxTurns,
-  usage: _decodeUsage(row.usageJson),
   createdAt: row.createdAt,
   finishedAt: row.finishedAt,
 );
@@ -196,7 +198,6 @@ MessagesCompanion messageCompanion(ChatMessage message) => MessagesCompanion(
   status: Value(message.status),
   partsJson: Value(encodeMessageParts(message.parts)),
   modelLabel: Value(message.modelLabel),
-  usageJson: Value(_encodeUsageJson(message.usage)),
   thinkingDurationMs: Value(message.thinkingDurationMs),
   createdAt: Value(message.createdAt),
 );
@@ -228,7 +229,6 @@ AgentRunsCompanion agentRunCompanion(AgentRun run) => AgentRunsCompanion(
   turnCount: Value(run.turnCount),
   modelAttemptCount: Value(run.modelAttemptCount),
   maxTurns: Value(run.maxTurns),
-  usageJson: Value(_encodeUsageJson(run.usage)),
   createdAt: Value(run.createdAt),
   finishedAt: Value(run.finishedAt),
 );
@@ -284,23 +284,12 @@ AttachmentsCompanion attachmentCompanion(Attachment attachment) =>
 
 // --- JSON 列 ---
 
-/// usage_json 列的编码；运行与消息共用。
-String encodeUsageJson(TokenUsage usage) => jsonEncode(usage.toJson());
-
 String? _encodeSelection(ModelSelection? selection) =>
     selection == null ? null : jsonEncode(selection.toJson());
 
 ModelSelection? _decodeSelection(String? json) {
   if (json == null || json.isEmpty) return null;
   return ModelSelection.fromJson(_decodeMap(json));
-}
-
-String? _encodeUsageJson(TokenUsage? usage) =>
-    usage == null ? null : encodeUsageJson(usage);
-
-TokenUsage? _decodeUsage(String? json) {
-  if (json == null || json.isEmpty) return null;
-  return TokenUsage.fromJson(_decodeMap(json));
 }
 
 Map<String, dynamic> _decodeMap(String json) =>

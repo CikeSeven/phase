@@ -30,10 +30,12 @@ import 'package:phase/data/repositories/tool_call_repository.dart';
 
 import '../../../support/fake_secure_storage.dart';
 
-/// 本次装机的 v6 → v7 增量例外。只使用假配置、假密钥和临时加密库。
+/// 当前初版契约的加密库重开：只使用假配置、假密钥和临时数据。
 void main() {
-  test('E5 覆盖升级保留十三张旧表、工作区、Skills、MCP 和凭据，重开不重复建表', () async {
-    final directory = Directory.systemTemp.createTempSync('phase_e5_upgrade');
+  test('当前初版重开保留工作区、Skills、MCP 和凭据', () async {
+    final directory = Directory.systemTemp.createTempSync(
+      'phase_initial_reopen',
+    );
     final path = '${directory.path}/phase.sqlite';
     const key =
         '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
@@ -208,31 +210,6 @@ void main() {
       'kind': 'fixture',
     });
 
-    // 从当前初版结构去掉本批唯一的新增字段，构造本次已安装 E4 的 schema 6。
-    final run =
-        (await db
-                .customSelect('SELECT configuration_json FROM agent_runs')
-                .getSingle())
-            .read<String>('configuration_json');
-    final config = jsonDecode(run) as Map<String, dynamic>;
-    for (final key in [
-      'mode',
-      'contextWindow',
-      'planId',
-      'planRevision',
-      'approvedPlan',
-      'memoryScope',
-    ]) {
-      config.remove(key);
-    }
-    await db.customStatement('UPDATE agent_runs SET configuration_json = ?', [
-      jsonEncode(config),
-    ]);
-    await db.customStatement('DROP TABLE context_summaries');
-    await db.customStatement('DROP TABLE agent_plans');
-    await db.customStatement('DROP TABLE memory_entries');
-    await db.customStatement('ALTER TABLE assistants DROP COLUMN memory_scope');
-    await db.customStatement('PRAGMA user_version = 6');
     const tables = [
       'provider_profiles',
       'models',
@@ -267,7 +244,6 @@ void main() {
             (await db.customSelect('SELECT * FROM $table ORDER BY rowid').get())
                 .map((row) {
                   final values = {...row.data};
-                  if (table == 'assistants') values.remove('memory_scope');
                   return values;
                 })
                 .toList();
@@ -322,7 +298,7 @@ void main() {
         (await db.customSelect('PRAGMA user_version').getSingle()).read<int>(
           'user_version',
         ),
-        7,
+        db.schemaVersion,
       );
       expect(await db.customSelect('PRAGMA foreign_key_check').get(), isEmpty);
       expect(

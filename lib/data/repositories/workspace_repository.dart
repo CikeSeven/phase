@@ -296,6 +296,24 @@ class WorkspaceRepository {
     _installingDependencies = false;
   }
 
+  /// 只读规划与运行租约共用同一环境可用性判断。
+  Future<WorkspaceSnapshot> snapshot(String id) async {
+    final workspace = await get(id);
+    final env = await environment();
+    if (workspace == null || workspace.deleting) {
+      throw const OperationFailure('会话工作区不可用，请完成会话删除后重新开始');
+    }
+    return WorkspaceSnapshot(
+      id: id,
+      name: workspace.name,
+      rootPath: workspace.rootPath,
+      environmentRoot: !_mutatingEnvironment && env.ready ? env.rootPath : null,
+      environmentRevision: !_mutatingEnvironment && env.ready
+          ? env.revision
+          : null,
+    );
+  }
+
   Future<WorkspaceLease> acquire(
     String id, {
     WorkspaceSnapshot? expected,
@@ -303,22 +321,7 @@ class WorkspaceRepository {
     if (!_leases.add(id)) throw const OperationFailure('此工作区正在使用');
     var retained = false;
     try {
-      final workspace = await get(id);
-      final env = await environment();
-      if (workspace == null || workspace.deleting) {
-        throw const OperationFailure('会话工作区不可用，请完成会话删除后重新开始');
-      }
-      final snapshot = WorkspaceSnapshot(
-        id: id,
-        name: workspace.name,
-        rootPath: workspace.rootPath,
-        environmentRoot: !_mutatingEnvironment && env.ready
-            ? env.rootPath
-            : null,
-        environmentRevision: !_mutatingEnvironment && env.ready
-            ? env.revision
-            : null,
-      );
+      final snapshot = await this.snapshot(id);
       if (expected != null &&
           jsonEncode(expected.toJson()) != jsonEncode(snapshot.toJson())) {
         throw const OperationFailure('运行所用环境或工作区已改变，不能继续旧任务');

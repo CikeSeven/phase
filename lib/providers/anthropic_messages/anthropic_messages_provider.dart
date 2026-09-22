@@ -48,11 +48,16 @@ class AnthropicMessagesProvider implements AiProvider {
     yield* postSseStream(
       dio: _dio,
       uri: resolveEndpoint(_profile.baseUrl, 'v1/messages'),
-      payload: await buildAnthropicPayload(
-        request,
-        supportsImages: modelSupportsImages(_profile, request.modelId),
-        supportsReasoning: modelSupportsReasoning(_profile, request.modelId),
-      ),
+      payload:
+          request.preparedPayload ??
+          await buildAnthropicPayload(
+            request,
+            supportsImages: modelSupportsImages(_profile, request.modelId),
+            supportsReasoning: modelSupportsReasoning(
+              _profile,
+              request.modelId,
+            ),
+          ),
       headers: _headers,
       decode: AnthropicSseDecoder.decode,
     );

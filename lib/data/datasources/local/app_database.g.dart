@@ -2848,17 +2848,6 @@ class $MessagesTable extends Messages
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
-  static const VerificationMeta _usageJsonMeta = const VerificationMeta(
-    'usageJson',
-  );
-  @override
-  late final GeneratedColumn<String> usageJson = GeneratedColumn<String>(
-    'usage_json',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _thinkingDurationMsMeta =
       const VerificationMeta('thinkingDurationMs');
   @override
@@ -2890,7 +2879,6 @@ class $MessagesTable extends Messages
     status,
     partsJson,
     modelLabel,
-    usageJson,
     thinkingDurationMs,
     createdAt,
   ];
@@ -2944,12 +2932,6 @@ class $MessagesTable extends Messages
       context.handle(
         _modelLabelMeta,
         modelLabel.isAcceptableOrUnknown(data['model_label']!, _modelLabelMeta),
-      );
-    }
-    if (data.containsKey('usage_json')) {
-      context.handle(
-        _usageJsonMeta,
-        usageJson.isAcceptableOrUnknown(data['usage_json']!, _usageJsonMeta),
       );
     }
     if (data.containsKey('thinking_duration_ms')) {
@@ -3014,10 +2996,6 @@ class $MessagesTable extends Messages
         DriftSqlType.string,
         data['${effectivePrefix}model_label'],
       ),
-      usageJson: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}usage_json'],
-      ),
       thinkingDurationMs: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}thinking_duration_ms'],
@@ -3051,9 +3029,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
   final MessageStatus status;
   final String partsJson;
   final String? modelLabel;
-
-  /// TokenUsage 的 JSON；接口未提供用量时为 null。
-  final String? usageJson;
   final int? thinkingDurationMs;
   final DateTime createdAt;
   const MessageRow({
@@ -3065,7 +3040,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     required this.status,
     required this.partsJson,
     this.modelLabel,
-    this.usageJson,
     this.thinkingDurationMs,
     required this.createdAt,
   });
@@ -3092,9 +3066,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     if (!nullToAbsent || modelLabel != null) {
       map['model_label'] = Variable<String>(modelLabel);
     }
-    if (!nullToAbsent || usageJson != null) {
-      map['usage_json'] = Variable<String>(usageJson);
-    }
     if (!nullToAbsent || thinkingDurationMs != null) {
       map['thinking_duration_ms'] = Variable<int>(thinkingDurationMs);
     }
@@ -3118,9 +3089,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       modelLabel: modelLabel == null && nullToAbsent
           ? const Value.absent()
           : Value(modelLabel),
-      usageJson: usageJson == null && nullToAbsent
-          ? const Value.absent()
-          : Value(usageJson),
       thinkingDurationMs: thinkingDurationMs == null && nullToAbsent
           ? const Value.absent()
           : Value(thinkingDurationMs),
@@ -3146,7 +3114,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       ),
       partsJson: serializer.fromJson<String>(json['partsJson']),
       modelLabel: serializer.fromJson<String?>(json['modelLabel']),
-      usageJson: serializer.fromJson<String?>(json['usageJson']),
       thinkingDurationMs: serializer.fromJson<int?>(json['thinkingDurationMs']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -3167,7 +3134,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       ),
       'partsJson': serializer.toJson<String>(partsJson),
       'modelLabel': serializer.toJson<String?>(modelLabel),
-      'usageJson': serializer.toJson<String?>(usageJson),
       'thinkingDurationMs': serializer.toJson<int?>(thinkingDurationMs),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -3182,7 +3148,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     MessageStatus? status,
     String? partsJson,
     Value<String?> modelLabel = const Value.absent(),
-    Value<String?> usageJson = const Value.absent(),
     Value<int?> thinkingDurationMs = const Value.absent(),
     DateTime? createdAt,
   }) => MessageRow(
@@ -3194,7 +3159,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     status: status ?? this.status,
     partsJson: partsJson ?? this.partsJson,
     modelLabel: modelLabel.present ? modelLabel.value : this.modelLabel,
-    usageJson: usageJson.present ? usageJson.value : this.usageJson,
     thinkingDurationMs: thinkingDurationMs.present
         ? thinkingDurationMs.value
         : this.thinkingDurationMs,
@@ -3214,7 +3178,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
       modelLabel: data.modelLabel.present
           ? data.modelLabel.value
           : this.modelLabel,
-      usageJson: data.usageJson.present ? data.usageJson.value : this.usageJson,
       thinkingDurationMs: data.thinkingDurationMs.present
           ? data.thinkingDurationMs.value
           : this.thinkingDurationMs,
@@ -3233,7 +3196,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           ..write('status: $status, ')
           ..write('partsJson: $partsJson, ')
           ..write('modelLabel: $modelLabel, ')
-          ..write('usageJson: $usageJson, ')
           ..write('thinkingDurationMs: $thinkingDurationMs, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -3250,7 +3212,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
     status,
     partsJson,
     modelLabel,
-    usageJson,
     thinkingDurationMs,
     createdAt,
   );
@@ -3266,7 +3227,6 @@ class MessageRow extends DataClass implements Insertable<MessageRow> {
           other.status == this.status &&
           other.partsJson == this.partsJson &&
           other.modelLabel == this.modelLabel &&
-          other.usageJson == this.usageJson &&
           other.thinkingDurationMs == this.thinkingDurationMs &&
           other.createdAt == this.createdAt);
 }
@@ -3280,7 +3240,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
   final Value<MessageStatus> status;
   final Value<String> partsJson;
   final Value<String?> modelLabel;
-  final Value<String?> usageJson;
   final Value<int?> thinkingDurationMs;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
@@ -3293,7 +3252,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     this.status = const Value.absent(),
     this.partsJson = const Value.absent(),
     this.modelLabel = const Value.absent(),
-    this.usageJson = const Value.absent(),
     this.thinkingDurationMs = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -3307,7 +3265,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     required MessageStatus status,
     this.partsJson = const Value.absent(),
     this.modelLabel = const Value.absent(),
-    this.usageJson = const Value.absent(),
     this.thinkingDurationMs = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
@@ -3325,7 +3282,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Expression<String>? status,
     Expression<String>? partsJson,
     Expression<String>? modelLabel,
-    Expression<String>? usageJson,
     Expression<int>? thinkingDurationMs,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
@@ -3339,7 +3295,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       if (status != null) 'status': status,
       if (partsJson != null) 'parts_json': partsJson,
       if (modelLabel != null) 'model_label': modelLabel,
-      if (usageJson != null) 'usage_json': usageJson,
       if (thinkingDurationMs != null)
         'thinking_duration_ms': thinkingDurationMs,
       if (createdAt != null) 'created_at': createdAt,
@@ -3356,7 +3311,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     Value<MessageStatus>? status,
     Value<String>? partsJson,
     Value<String?>? modelLabel,
-    Value<String?>? usageJson,
     Value<int?>? thinkingDurationMs,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
@@ -3370,7 +3324,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
       status: status ?? this.status,
       partsJson: partsJson ?? this.partsJson,
       modelLabel: modelLabel ?? this.modelLabel,
-      usageJson: usageJson ?? this.usageJson,
       thinkingDurationMs: thinkingDurationMs ?? this.thinkingDurationMs,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
@@ -3408,9 +3361,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
     if (modelLabel.present) {
       map['model_label'] = Variable<String>(modelLabel.value);
     }
-    if (usageJson.present) {
-      map['usage_json'] = Variable<String>(usageJson.value);
-    }
     if (thinkingDurationMs.present) {
       map['thinking_duration_ms'] = Variable<int>(thinkingDurationMs.value);
     }
@@ -3434,7 +3384,6 @@ class MessagesCompanion extends UpdateCompanion<MessageRow> {
           ..write('status: $status, ')
           ..write('partsJson: $partsJson, ')
           ..write('modelLabel: $modelLabel, ')
-          ..write('usageJson: $usageJson, ')
           ..write('thinkingDurationMs: $thinkingDurationMs, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
@@ -4353,17 +4302,6 @@ class $AgentRunsTable extends AgentRuns
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _usageJsonMeta = const VerificationMeta(
-    'usageJson',
-  );
-  @override
-  late final GeneratedColumn<String> usageJson = GeneratedColumn<String>(
-    'usage_json',
-    aliasedName,
-    true,
-    type: DriftSqlType.string,
-    requiredDuringInsert: false,
-  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -4400,7 +4338,6 @@ class $AgentRunsTable extends AgentRuns
     turnCount,
     modelAttemptCount,
     maxTurns,
-    usageJson,
     createdAt,
     finishedAt,
   ];
@@ -4504,12 +4441,6 @@ class $AgentRunsTable extends AgentRuns
     } else if (isInserting) {
       context.missing(_maxTurnsMeta);
     }
-    if (data.containsKey('usage_json')) {
-      context.handle(
-        _usageJsonMeta,
-        usageJson.isAcceptableOrUnknown(data['usage_json']!, _usageJsonMeta),
-      );
-    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -4585,10 +4516,6 @@ class $AgentRunsTable extends AgentRuns
         DriftSqlType.int,
         data['${effectivePrefix}max_turns'],
       )!,
-      usageJson: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}usage_json'],
-      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -4632,9 +4559,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
   final int turnCount;
   final int modelAttemptCount;
   final int maxTurns;
-
-  /// TokenUsage 的 JSON；未收口时为 null。
-  final String? usageJson;
   final DateTime createdAt;
   final DateTime? finishedAt;
   const AgentRunRow({
@@ -4650,7 +4574,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
     required this.turnCount,
     required this.modelAttemptCount,
     required this.maxTurns,
-    this.usageJson,
     required this.createdAt,
     this.finishedAt,
   });
@@ -4683,9 +4606,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
     map['turn_count'] = Variable<int>(turnCount);
     map['model_attempt_count'] = Variable<int>(modelAttemptCount);
     map['max_turns'] = Variable<int>(maxTurns);
-    if (!nullToAbsent || usageJson != null) {
-      map['usage_json'] = Variable<String>(usageJson);
-    }
     map['created_at'] = Variable<DateTime>(createdAt);
     if (!nullToAbsent || finishedAt != null) {
       map['finished_at'] = Variable<DateTime>(finishedAt);
@@ -4715,9 +4635,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
       turnCount: Value(turnCount),
       modelAttemptCount: Value(modelAttemptCount),
       maxTurns: Value(maxTurns),
-      usageJson: usageJson == null && nullToAbsent
-          ? const Value.absent()
-          : Value(usageJson),
       createdAt: Value(createdAt),
       finishedAt: finishedAt == null && nullToAbsent
           ? const Value.absent()
@@ -4747,7 +4664,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
       turnCount: serializer.fromJson<int>(json['turnCount']),
       modelAttemptCount: serializer.fromJson<int>(json['modelAttemptCount']),
       maxTurns: serializer.fromJson<int>(json['maxTurns']),
-      usageJson: serializer.fromJson<String?>(json['usageJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       finishedAt: serializer.fromJson<DateTime?>(json['finishedAt']),
     );
@@ -4772,7 +4688,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
       'turnCount': serializer.toJson<int>(turnCount),
       'modelAttemptCount': serializer.toJson<int>(modelAttemptCount),
       'maxTurns': serializer.toJson<int>(maxTurns),
-      'usageJson': serializer.toJson<String?>(usageJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'finishedAt': serializer.toJson<DateTime?>(finishedAt),
     };
@@ -4791,7 +4706,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
     int? turnCount,
     int? modelAttemptCount,
     int? maxTurns,
-    Value<String?> usageJson = const Value.absent(),
     DateTime? createdAt,
     Value<DateTime?> finishedAt = const Value.absent(),
   }) => AgentRunRow(
@@ -4811,7 +4725,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
     turnCount: turnCount ?? this.turnCount,
     modelAttemptCount: modelAttemptCount ?? this.modelAttemptCount,
     maxTurns: maxTurns ?? this.maxTurns,
-    usageJson: usageJson.present ? usageJson.value : this.usageJson,
     createdAt: createdAt ?? this.createdAt,
     finishedAt: finishedAt.present ? finishedAt.value : this.finishedAt,
   );
@@ -4845,7 +4758,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
           ? data.modelAttemptCount.value
           : this.modelAttemptCount,
       maxTurns: data.maxTurns.present ? data.maxTurns.value : this.maxTurns,
-      usageJson: data.usageJson.present ? data.usageJson.value : this.usageJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       finishedAt: data.finishedAt.present
           ? data.finishedAt.value
@@ -4868,7 +4780,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
           ..write('turnCount: $turnCount, ')
           ..write('modelAttemptCount: $modelAttemptCount, ')
           ..write('maxTurns: $maxTurns, ')
-          ..write('usageJson: $usageJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('finishedAt: $finishedAt')
           ..write(')'))
@@ -4889,7 +4800,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
     turnCount,
     modelAttemptCount,
     maxTurns,
-    usageJson,
     createdAt,
     finishedAt,
   );
@@ -4909,7 +4819,6 @@ class AgentRunRow extends DataClass implements Insertable<AgentRunRow> {
           other.turnCount == this.turnCount &&
           other.modelAttemptCount == this.modelAttemptCount &&
           other.maxTurns == this.maxTurns &&
-          other.usageJson == this.usageJson &&
           other.createdAt == this.createdAt &&
           other.finishedAt == this.finishedAt);
 }
@@ -4927,7 +4836,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
   final Value<int> turnCount;
   final Value<int> modelAttemptCount;
   final Value<int> maxTurns;
-  final Value<String?> usageJson;
   final Value<DateTime> createdAt;
   final Value<DateTime?> finishedAt;
   final Value<int> rowid;
@@ -4944,7 +4852,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
     this.turnCount = const Value.absent(),
     this.modelAttemptCount = const Value.absent(),
     this.maxTurns = const Value.absent(),
-    this.usageJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.finishedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4962,7 +4869,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
     this.turnCount = const Value.absent(),
     this.modelAttemptCount = const Value.absent(),
     required int maxTurns,
-    this.usageJson = const Value.absent(),
     required DateTime createdAt,
     this.finishedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4986,7 +4892,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
     Expression<int>? turnCount,
     Expression<int>? modelAttemptCount,
     Expression<int>? maxTurns,
-    Expression<String>? usageJson,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? finishedAt,
     Expression<int>? rowid,
@@ -5004,7 +4909,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
       if (turnCount != null) 'turn_count': turnCount,
       if (modelAttemptCount != null) 'model_attempt_count': modelAttemptCount,
       if (maxTurns != null) 'max_turns': maxTurns,
-      if (usageJson != null) 'usage_json': usageJson,
       if (createdAt != null) 'created_at': createdAt,
       if (finishedAt != null) 'finished_at': finishedAt,
       if (rowid != null) 'rowid': rowid,
@@ -5024,7 +4928,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
     Value<int>? turnCount,
     Value<int>? modelAttemptCount,
     Value<int>? maxTurns,
-    Value<String?>? usageJson,
     Value<DateTime>? createdAt,
     Value<DateTime?>? finishedAt,
     Value<int>? rowid,
@@ -5042,7 +4945,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
       turnCount: turnCount ?? this.turnCount,
       modelAttemptCount: modelAttemptCount ?? this.modelAttemptCount,
       maxTurns: maxTurns ?? this.maxTurns,
-      usageJson: usageJson ?? this.usageJson,
       createdAt: createdAt ?? this.createdAt,
       finishedAt: finishedAt ?? this.finishedAt,
       rowid: rowid ?? this.rowid,
@@ -5092,9 +4994,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
     if (maxTurns.present) {
       map['max_turns'] = Variable<int>(maxTurns.value);
     }
-    if (usageJson.present) {
-      map['usage_json'] = Variable<String>(usageJson.value);
-    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -5122,7 +5021,6 @@ class AgentRunsCompanion extends UpdateCompanion<AgentRunRow> {
           ..write('turnCount: $turnCount, ')
           ..write('modelAttemptCount: $modelAttemptCount, ')
           ..write('maxTurns: $maxTurns, ')
-          ..write('usageJson: $usageJson, ')
           ..write('createdAt: $createdAt, ')
           ..write('finishedAt: $finishedAt, ')
           ..write('rowid: $rowid')
@@ -7769,9 +7667,9 @@ class $ContextSummariesTable extends ContextSummaries
   late final GeneratedColumn<String> runId = GeneratedColumn<String>(
     'run_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
   );
   static const VerificationMeta _branchEndIdMeta = const VerificationMeta(
     'branchEndId',
@@ -7848,16 +7746,17 @@ class $ContextSummariesTable extends ContextSummaries
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
-  static const VerificationMeta _usageJsonMeta = const VerificationMeta(
-    'usageJson',
+  static const VerificationMeta _checkpointJsonMeta = const VerificationMeta(
+    'checkpointJson',
   );
   @override
-  late final GeneratedColumn<String> usageJson = GeneratedColumn<String>(
-    'usage_json',
+  late final GeneratedColumn<String> checkpointJson = GeneratedColumn<String>(
+    'checkpoint_json',
     aliasedName,
-    true,
+    false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
+    defaultValue: const Constant('{}'),
   );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
@@ -7882,7 +7781,7 @@ class $ContextSummariesTable extends ContextSummaries
     version,
     status,
     content,
-    usageJson,
+    checkpointJson,
     createdAt,
   ];
   @override
@@ -7918,8 +7817,6 @@ class $ContextSummariesTable extends ContextSummaries
         _runIdMeta,
         runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta),
       );
-    } else if (isInserting) {
-      context.missing(_runIdMeta);
     }
     if (data.containsKey('branch_end_id')) {
       context.handle(
@@ -7989,10 +7886,13 @@ class $ContextSummariesTable extends ContextSummaries
     } else if (isInserting) {
       context.missing(_contentMeta);
     }
-    if (data.containsKey('usage_json')) {
+    if (data.containsKey('checkpoint_json')) {
       context.handle(
-        _usageJsonMeta,
-        usageJson.isAcceptableOrUnknown(data['usage_json']!, _usageJsonMeta),
+        _checkpointJsonMeta,
+        checkpointJson.isAcceptableOrUnknown(
+          data['checkpoint_json']!,
+          _checkpointJsonMeta,
+        ),
       );
     }
     if (data.containsKey('created_at')) {
@@ -8023,7 +7923,7 @@ class $ContextSummariesTable extends ContextSummaries
       runId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}run_id'],
-      )!,
+      ),
       branchEndId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}branch_end_id'],
@@ -8052,10 +7952,10 @@ class $ContextSummariesTable extends ContextSummaries
         DriftSqlType.string,
         data['${effectivePrefix}content'],
       )!,
-      usageJson: attachedDatabase.typeMapping.read(
+      checkpointJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}usage_json'],
-      ),
+        data['${effectivePrefix}checkpoint_json'],
+      )!,
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -8073,7 +7973,7 @@ class ContextSummaryRow extends DataClass
     implements Insertable<ContextSummaryRow> {
   final String id;
   final String conversationId;
-  final String runId;
+  final String? runId;
   final String branchEndId;
   final String coveredIdsJson;
   final String fingerprint;
@@ -8081,12 +7981,12 @@ class ContextSummaryRow extends DataClass
   final int version;
   final String status;
   final String content;
-  final String? usageJson;
+  final String checkpointJson;
   final DateTime createdAt;
   const ContextSummaryRow({
     required this.id,
     required this.conversationId,
-    required this.runId,
+    this.runId,
     required this.branchEndId,
     required this.coveredIdsJson,
     required this.fingerprint,
@@ -8094,7 +7994,7 @@ class ContextSummaryRow extends DataClass
     required this.version,
     required this.status,
     required this.content,
-    this.usageJson,
+    required this.checkpointJson,
     required this.createdAt,
   });
   @override
@@ -8102,7 +8002,9 @@ class ContextSummaryRow extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['conversation_id'] = Variable<String>(conversationId);
-    map['run_id'] = Variable<String>(runId);
+    if (!nullToAbsent || runId != null) {
+      map['run_id'] = Variable<String>(runId);
+    }
     map['branch_end_id'] = Variable<String>(branchEndId);
     map['covered_ids_json'] = Variable<String>(coveredIdsJson);
     map['fingerprint'] = Variable<String>(fingerprint);
@@ -8110,9 +8012,7 @@ class ContextSummaryRow extends DataClass
     map['version'] = Variable<int>(version);
     map['status'] = Variable<String>(status);
     map['content'] = Variable<String>(content);
-    if (!nullToAbsent || usageJson != null) {
-      map['usage_json'] = Variable<String>(usageJson);
-    }
+    map['checkpoint_json'] = Variable<String>(checkpointJson);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
   }
@@ -8121,7 +8021,9 @@ class ContextSummaryRow extends DataClass
     return ContextSummariesCompanion(
       id: Value(id),
       conversationId: Value(conversationId),
-      runId: Value(runId),
+      runId: runId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(runId),
       branchEndId: Value(branchEndId),
       coveredIdsJson: Value(coveredIdsJson),
       fingerprint: Value(fingerprint),
@@ -8129,9 +8031,7 @@ class ContextSummaryRow extends DataClass
       version: Value(version),
       status: Value(status),
       content: Value(content),
-      usageJson: usageJson == null && nullToAbsent
-          ? const Value.absent()
-          : Value(usageJson),
+      checkpointJson: Value(checkpointJson),
       createdAt: Value(createdAt),
     );
   }
@@ -8144,7 +8044,7 @@ class ContextSummaryRow extends DataClass
     return ContextSummaryRow(
       id: serializer.fromJson<String>(json['id']),
       conversationId: serializer.fromJson<String>(json['conversationId']),
-      runId: serializer.fromJson<String>(json['runId']),
+      runId: serializer.fromJson<String?>(json['runId']),
       branchEndId: serializer.fromJson<String>(json['branchEndId']),
       coveredIdsJson: serializer.fromJson<String>(json['coveredIdsJson']),
       fingerprint: serializer.fromJson<String>(json['fingerprint']),
@@ -8152,7 +8052,7 @@ class ContextSummaryRow extends DataClass
       version: serializer.fromJson<int>(json['version']),
       status: serializer.fromJson<String>(json['status']),
       content: serializer.fromJson<String>(json['content']),
-      usageJson: serializer.fromJson<String?>(json['usageJson']),
+      checkpointJson: serializer.fromJson<String>(json['checkpointJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -8162,7 +8062,7 @@ class ContextSummaryRow extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'conversationId': serializer.toJson<String>(conversationId),
-      'runId': serializer.toJson<String>(runId),
+      'runId': serializer.toJson<String?>(runId),
       'branchEndId': serializer.toJson<String>(branchEndId),
       'coveredIdsJson': serializer.toJson<String>(coveredIdsJson),
       'fingerprint': serializer.toJson<String>(fingerprint),
@@ -8170,7 +8070,7 @@ class ContextSummaryRow extends DataClass
       'version': serializer.toJson<int>(version),
       'status': serializer.toJson<String>(status),
       'content': serializer.toJson<String>(content),
-      'usageJson': serializer.toJson<String?>(usageJson),
+      'checkpointJson': serializer.toJson<String>(checkpointJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -8178,7 +8078,7 @@ class ContextSummaryRow extends DataClass
   ContextSummaryRow copyWith({
     String? id,
     String? conversationId,
-    String? runId,
+    Value<String?> runId = const Value.absent(),
     String? branchEndId,
     String? coveredIdsJson,
     String? fingerprint,
@@ -8186,12 +8086,12 @@ class ContextSummaryRow extends DataClass
     int? version,
     String? status,
     String? content,
-    Value<String?> usageJson = const Value.absent(),
+    String? checkpointJson,
     DateTime? createdAt,
   }) => ContextSummaryRow(
     id: id ?? this.id,
     conversationId: conversationId ?? this.conversationId,
-    runId: runId ?? this.runId,
+    runId: runId.present ? runId.value : this.runId,
     branchEndId: branchEndId ?? this.branchEndId,
     coveredIdsJson: coveredIdsJson ?? this.coveredIdsJson,
     fingerprint: fingerprint ?? this.fingerprint,
@@ -8199,7 +8099,7 @@ class ContextSummaryRow extends DataClass
     version: version ?? this.version,
     status: status ?? this.status,
     content: content ?? this.content,
-    usageJson: usageJson.present ? usageJson.value : this.usageJson,
+    checkpointJson: checkpointJson ?? this.checkpointJson,
     createdAt: createdAt ?? this.createdAt,
   );
   ContextSummaryRow copyWithCompanion(ContextSummariesCompanion data) {
@@ -8224,7 +8124,9 @@ class ContextSummaryRow extends DataClass
       version: data.version.present ? data.version.value : this.version,
       status: data.status.present ? data.status.value : this.status,
       content: data.content.present ? data.content.value : this.content,
-      usageJson: data.usageJson.present ? data.usageJson.value : this.usageJson,
+      checkpointJson: data.checkpointJson.present
+          ? data.checkpointJson.value
+          : this.checkpointJson,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -8242,7 +8144,7 @@ class ContextSummaryRow extends DataClass
           ..write('version: $version, ')
           ..write('status: $status, ')
           ..write('content: $content, ')
-          ..write('usageJson: $usageJson, ')
+          ..write('checkpointJson: $checkpointJson, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -8260,7 +8162,7 @@ class ContextSummaryRow extends DataClass
     version,
     status,
     content,
-    usageJson,
+    checkpointJson,
     createdAt,
   );
   @override
@@ -8277,14 +8179,14 @@ class ContextSummaryRow extends DataClass
           other.version == this.version &&
           other.status == this.status &&
           other.content == this.content &&
-          other.usageJson == this.usageJson &&
+          other.checkpointJson == this.checkpointJson &&
           other.createdAt == this.createdAt);
 }
 
 class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
   final Value<String> id;
   final Value<String> conversationId;
-  final Value<String> runId;
+  final Value<String?> runId;
   final Value<String> branchEndId;
   final Value<String> coveredIdsJson;
   final Value<String> fingerprint;
@@ -8292,7 +8194,7 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
   final Value<int> version;
   final Value<String> status;
   final Value<String> content;
-  final Value<String?> usageJson;
+  final Value<String> checkpointJson;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const ContextSummariesCompanion({
@@ -8306,14 +8208,14 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
     this.version = const Value.absent(),
     this.status = const Value.absent(),
     this.content = const Value.absent(),
-    this.usageJson = const Value.absent(),
+    this.checkpointJson = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ContextSummariesCompanion.insert({
     required String id,
     required String conversationId,
-    required String runId,
+    this.runId = const Value.absent(),
     required String branchEndId,
     required String coveredIdsJson,
     required String fingerprint,
@@ -8321,12 +8223,11 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
     required int version,
     required String status,
     required String content,
-    this.usageJson = const Value.absent(),
+    this.checkpointJson = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        conversationId = Value(conversationId),
-       runId = Value(runId),
        branchEndId = Value(branchEndId),
        coveredIdsJson = Value(coveredIdsJson),
        fingerprint = Value(fingerprint),
@@ -8346,7 +8247,7 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
     Expression<int>? version,
     Expression<String>? status,
     Expression<String>? content,
-    Expression<String>? usageJson,
+    Expression<String>? checkpointJson,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -8361,7 +8262,7 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
       if (version != null) 'version': version,
       if (status != null) 'status': status,
       if (content != null) 'content': content,
-      if (usageJson != null) 'usage_json': usageJson,
+      if (checkpointJson != null) 'checkpoint_json': checkpointJson,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -8370,7 +8271,7 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
   ContextSummariesCompanion copyWith({
     Value<String>? id,
     Value<String>? conversationId,
-    Value<String>? runId,
+    Value<String?>? runId,
     Value<String>? branchEndId,
     Value<String>? coveredIdsJson,
     Value<String>? fingerprint,
@@ -8378,7 +8279,7 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
     Value<int>? version,
     Value<String>? status,
     Value<String>? content,
-    Value<String?>? usageJson,
+    Value<String>? checkpointJson,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -8393,7 +8294,7 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
       version: version ?? this.version,
       status: status ?? this.status,
       content: content ?? this.content,
-      usageJson: usageJson ?? this.usageJson,
+      checkpointJson: checkpointJson ?? this.checkpointJson,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -8432,8 +8333,8 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
     if (content.present) {
       map['content'] = Variable<String>(content.value);
     }
-    if (usageJson.present) {
-      map['usage_json'] = Variable<String>(usageJson.value);
+    if (checkpointJson.present) {
+      map['checkpoint_json'] = Variable<String>(checkpointJson.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -8457,8 +8358,1370 @@ class ContextSummariesCompanion extends UpdateCompanion<ContextSummaryRow> {
           ..write('version: $version, ')
           ..write('status: $status, ')
           ..write('content: $content, ')
-          ..write('usageJson: $usageJson, ')
+          ..write('checkpointJson: $checkpointJson, ')
           ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ModelRequestsTable extends ModelRequests
+    with TableInfo<$ModelRequestsTable, ModelRequestRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ModelRequestsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES conversations (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+    'run_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _logicalTurnMeta = const VerificationMeta(
+    'logicalTurn',
+  );
+  @override
+  late final GeneratedColumn<int> logicalTurn = GeneratedColumn<int>(
+    'logical_turn',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _attemptIndexMeta = const VerificationMeta(
+    'attemptIndex',
+  );
+  @override
+  late final GeneratedColumn<int> attemptIndex = GeneratedColumn<int>(
+    'attempt_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _purposeMeta = const VerificationMeta(
+    'purpose',
+  );
+  @override
+  late final GeneratedColumn<String> purpose = GeneratedColumn<String>(
+    'purpose',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _profileIdMeta = const VerificationMeta(
+    'profileId',
+  );
+  @override
+  late final GeneratedColumn<String> profileId = GeneratedColumn<String>(
+    'profile_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _protocolMeta = const VerificationMeta(
+    'protocol',
+  );
+  @override
+  late final GeneratedColumn<String> protocol = GeneratedColumn<String>(
+    'protocol',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _requestedModelIdMeta = const VerificationMeta(
+    'requestedModelId',
+  );
+  @override
+  late final GeneratedColumn<String> requestedModelId = GeneratedColumn<String>(
+    'requested_model_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _responseModelIdMeta = const VerificationMeta(
+    'responseModelId',
+  );
+  @override
+  late final GeneratedColumn<String> responseModelId = GeneratedColumn<String>(
+    'response_model_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _assistantMessageIdMeta =
+      const VerificationMeta('assistantMessageId');
+  @override
+  late final GeneratedColumn<String> assistantMessageId =
+      GeneratedColumn<String>(
+        'assistant_message_id',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+      );
+  static const VerificationMeta _summaryIdMeta = const VerificationMeta(
+    'summaryId',
+  );
+  @override
+  late final GeneratedColumn<String> summaryId = GeneratedColumn<String>(
+    'summary_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _summaryJobIdMeta = const VerificationMeta(
+    'summaryJobId',
+  );
+  @override
+  late final GeneratedColumn<String> summaryJobId = GeneratedColumn<String>(
+    'summary_job_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _usageJsonMeta = const VerificationMeta(
+    'usageJson',
+  );
+  @override
+  late final GeneratedColumn<String> usageJson = GeneratedColumn<String>(
+    'usage_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _usageRevisionMeta = const VerificationMeta(
+    'usageRevision',
+  );
+  @override
+  late final GeneratedColumn<int> usageRevision = GeneratedColumn<int>(
+    'usage_revision',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  static const VerificationMeta _usageCompleteMeta = const VerificationMeta(
+    'usageComplete',
+  );
+  @override
+  late final GeneratedColumn<bool> usageComplete = GeneratedColumn<bool>(
+    'usage_complete',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("usage_complete" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _contextJsonMeta = const VerificationMeta(
+    'contextJson',
+  );
+  @override
+  late final GeneratedColumn<String> contextJson = GeneratedColumn<String>(
+    'context_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _originRequestIdMeta = const VerificationMeta(
+    'originRequestId',
+  );
+  @override
+  late final GeneratedColumn<String> originRequestId = GeneratedColumn<String>(
+    'origin_request_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isInheritedMeta = const VerificationMeta(
+    'isInherited',
+  );
+  @override
+  late final GeneratedColumn<bool> isInherited = GeneratedColumn<bool>(
+    'is_inherited',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_inherited" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _errorCodeMeta = const VerificationMeta(
+    'errorCode',
+  );
+  @override
+  late final GeneratedColumn<String> errorCode = GeneratedColumn<String>(
+    'error_code',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _startedAtMeta = const VerificationMeta(
+    'startedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> startedAt = GeneratedColumn<DateTime>(
+    'started_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _finishedAtMeta = const VerificationMeta(
+    'finishedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> finishedAt = GeneratedColumn<DateTime>(
+    'finished_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    conversationId,
+    runId,
+    logicalTurn,
+    attemptIndex,
+    purpose,
+    status,
+    profileId,
+    protocol,
+    requestedModelId,
+    responseModelId,
+    assistantMessageId,
+    summaryId,
+    summaryJobId,
+    usageJson,
+    usageRevision,
+    usageComplete,
+    contextJson,
+    originRequestId,
+    isInherited,
+    errorCode,
+    createdAt,
+    startedAt,
+    finishedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'model_requests';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ModelRequestRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('run_id')) {
+      context.handle(
+        _runIdMeta,
+        runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta),
+      );
+    }
+    if (data.containsKey('logical_turn')) {
+      context.handle(
+        _logicalTurnMeta,
+        logicalTurn.isAcceptableOrUnknown(
+          data['logical_turn']!,
+          _logicalTurnMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_logicalTurnMeta);
+    }
+    if (data.containsKey('attempt_index')) {
+      context.handle(
+        _attemptIndexMeta,
+        attemptIndex.isAcceptableOrUnknown(
+          data['attempt_index']!,
+          _attemptIndexMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_attemptIndexMeta);
+    }
+    if (data.containsKey('purpose')) {
+      context.handle(
+        _purposeMeta,
+        purpose.isAcceptableOrUnknown(data['purpose']!, _purposeMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_purposeMeta);
+    }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_statusMeta);
+    }
+    if (data.containsKey('profile_id')) {
+      context.handle(
+        _profileIdMeta,
+        profileId.isAcceptableOrUnknown(data['profile_id']!, _profileIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_profileIdMeta);
+    }
+    if (data.containsKey('protocol')) {
+      context.handle(
+        _protocolMeta,
+        protocol.isAcceptableOrUnknown(data['protocol']!, _protocolMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_protocolMeta);
+    }
+    if (data.containsKey('requested_model_id')) {
+      context.handle(
+        _requestedModelIdMeta,
+        requestedModelId.isAcceptableOrUnknown(
+          data['requested_model_id']!,
+          _requestedModelIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_requestedModelIdMeta);
+    }
+    if (data.containsKey('response_model_id')) {
+      context.handle(
+        _responseModelIdMeta,
+        responseModelId.isAcceptableOrUnknown(
+          data['response_model_id']!,
+          _responseModelIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('assistant_message_id')) {
+      context.handle(
+        _assistantMessageIdMeta,
+        assistantMessageId.isAcceptableOrUnknown(
+          data['assistant_message_id']!,
+          _assistantMessageIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('summary_id')) {
+      context.handle(
+        _summaryIdMeta,
+        summaryId.isAcceptableOrUnknown(data['summary_id']!, _summaryIdMeta),
+      );
+    }
+    if (data.containsKey('summary_job_id')) {
+      context.handle(
+        _summaryJobIdMeta,
+        summaryJobId.isAcceptableOrUnknown(
+          data['summary_job_id']!,
+          _summaryJobIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('usage_json')) {
+      context.handle(
+        _usageJsonMeta,
+        usageJson.isAcceptableOrUnknown(data['usage_json']!, _usageJsonMeta),
+      );
+    }
+    if (data.containsKey('usage_revision')) {
+      context.handle(
+        _usageRevisionMeta,
+        usageRevision.isAcceptableOrUnknown(
+          data['usage_revision']!,
+          _usageRevisionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('usage_complete')) {
+      context.handle(
+        _usageCompleteMeta,
+        usageComplete.isAcceptableOrUnknown(
+          data['usage_complete']!,
+          _usageCompleteMeta,
+        ),
+      );
+    }
+    if (data.containsKey('context_json')) {
+      context.handle(
+        _contextJsonMeta,
+        contextJson.isAcceptableOrUnknown(
+          data['context_json']!,
+          _contextJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_contextJsonMeta);
+    }
+    if (data.containsKey('origin_request_id')) {
+      context.handle(
+        _originRequestIdMeta,
+        originRequestId.isAcceptableOrUnknown(
+          data['origin_request_id']!,
+          _originRequestIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('is_inherited')) {
+      context.handle(
+        _isInheritedMeta,
+        isInherited.isAcceptableOrUnknown(
+          data['is_inherited']!,
+          _isInheritedMeta,
+        ),
+      );
+    }
+    if (data.containsKey('error_code')) {
+      context.handle(
+        _errorCodeMeta,
+        errorCode.isAcceptableOrUnknown(data['error_code']!, _errorCodeMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('started_at')) {
+      context.handle(
+        _startedAtMeta,
+        startedAt.isAcceptableOrUnknown(data['started_at']!, _startedAtMeta),
+      );
+    }
+    if (data.containsKey('finished_at')) {
+      context.handle(
+        _finishedAtMeta,
+        finishedAt.isAcceptableOrUnknown(data['finished_at']!, _finishedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ModelRequestRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ModelRequestRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      runId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}run_id'],
+      ),
+      logicalTurn: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}logical_turn'],
+      )!,
+      attemptIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}attempt_index'],
+      )!,
+      purpose: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}purpose'],
+      )!,
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      profileId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}profile_id'],
+      )!,
+      protocol: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}protocol'],
+      )!,
+      requestedModelId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}requested_model_id'],
+      )!,
+      responseModelId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}response_model_id'],
+      ),
+      assistantMessageId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}assistant_message_id'],
+      ),
+      summaryId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary_id'],
+      ),
+      summaryJobId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary_job_id'],
+      ),
+      usageJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}usage_json'],
+      ),
+      usageRevision: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}usage_revision'],
+      )!,
+      usageComplete: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}usage_complete'],
+      )!,
+      contextJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}context_json'],
+      )!,
+      originRequestId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}origin_request_id'],
+      ),
+      isInherited: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_inherited'],
+      )!,
+      errorCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}error_code'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      startedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}started_at'],
+      ),
+      finishedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}finished_at'],
+      ),
+    );
+  }
+
+  @override
+  $ModelRequestsTable createAlias(String alias) {
+    return $ModelRequestsTable(attachedDatabase, alias);
+  }
+}
+
+class ModelRequestRow extends DataClass implements Insertable<ModelRequestRow> {
+  final String id;
+  final String conversationId;
+  final String? runId;
+  final int logicalTurn;
+  final int attemptIndex;
+  final String purpose;
+  final String status;
+  final String profileId;
+  final String protocol;
+  final String requestedModelId;
+  final String? responseModelId;
+  final String? assistantMessageId;
+  final String? summaryId;
+  final String? summaryJobId;
+  final String? usageJson;
+  final int usageRevision;
+  final bool usageComplete;
+  final String contextJson;
+  final String? originRequestId;
+  final bool isInherited;
+  final String? errorCode;
+  final DateTime createdAt;
+  final DateTime? startedAt;
+  final DateTime? finishedAt;
+  const ModelRequestRow({
+    required this.id,
+    required this.conversationId,
+    this.runId,
+    required this.logicalTurn,
+    required this.attemptIndex,
+    required this.purpose,
+    required this.status,
+    required this.profileId,
+    required this.protocol,
+    required this.requestedModelId,
+    this.responseModelId,
+    this.assistantMessageId,
+    this.summaryId,
+    this.summaryJobId,
+    this.usageJson,
+    required this.usageRevision,
+    required this.usageComplete,
+    required this.contextJson,
+    this.originRequestId,
+    required this.isInherited,
+    this.errorCode,
+    required this.createdAt,
+    this.startedAt,
+    this.finishedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['conversation_id'] = Variable<String>(conversationId);
+    if (!nullToAbsent || runId != null) {
+      map['run_id'] = Variable<String>(runId);
+    }
+    map['logical_turn'] = Variable<int>(logicalTurn);
+    map['attempt_index'] = Variable<int>(attemptIndex);
+    map['purpose'] = Variable<String>(purpose);
+    map['status'] = Variable<String>(status);
+    map['profile_id'] = Variable<String>(profileId);
+    map['protocol'] = Variable<String>(protocol);
+    map['requested_model_id'] = Variable<String>(requestedModelId);
+    if (!nullToAbsent || responseModelId != null) {
+      map['response_model_id'] = Variable<String>(responseModelId);
+    }
+    if (!nullToAbsent || assistantMessageId != null) {
+      map['assistant_message_id'] = Variable<String>(assistantMessageId);
+    }
+    if (!nullToAbsent || summaryId != null) {
+      map['summary_id'] = Variable<String>(summaryId);
+    }
+    if (!nullToAbsent || summaryJobId != null) {
+      map['summary_job_id'] = Variable<String>(summaryJobId);
+    }
+    if (!nullToAbsent || usageJson != null) {
+      map['usage_json'] = Variable<String>(usageJson);
+    }
+    map['usage_revision'] = Variable<int>(usageRevision);
+    map['usage_complete'] = Variable<bool>(usageComplete);
+    map['context_json'] = Variable<String>(contextJson);
+    if (!nullToAbsent || originRequestId != null) {
+      map['origin_request_id'] = Variable<String>(originRequestId);
+    }
+    map['is_inherited'] = Variable<bool>(isInherited);
+    if (!nullToAbsent || errorCode != null) {
+      map['error_code'] = Variable<String>(errorCode);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    if (!nullToAbsent || startedAt != null) {
+      map['started_at'] = Variable<DateTime>(startedAt);
+    }
+    if (!nullToAbsent || finishedAt != null) {
+      map['finished_at'] = Variable<DateTime>(finishedAt);
+    }
+    return map;
+  }
+
+  ModelRequestsCompanion toCompanion(bool nullToAbsent) {
+    return ModelRequestsCompanion(
+      id: Value(id),
+      conversationId: Value(conversationId),
+      runId: runId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(runId),
+      logicalTurn: Value(logicalTurn),
+      attemptIndex: Value(attemptIndex),
+      purpose: Value(purpose),
+      status: Value(status),
+      profileId: Value(profileId),
+      protocol: Value(protocol),
+      requestedModelId: Value(requestedModelId),
+      responseModelId: responseModelId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(responseModelId),
+      assistantMessageId: assistantMessageId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(assistantMessageId),
+      summaryId: summaryId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(summaryId),
+      summaryJobId: summaryJobId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(summaryJobId),
+      usageJson: usageJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(usageJson),
+      usageRevision: Value(usageRevision),
+      usageComplete: Value(usageComplete),
+      contextJson: Value(contextJson),
+      originRequestId: originRequestId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(originRequestId),
+      isInherited: Value(isInherited),
+      errorCode: errorCode == null && nullToAbsent
+          ? const Value.absent()
+          : Value(errorCode),
+      createdAt: Value(createdAt),
+      startedAt: startedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(startedAt),
+      finishedAt: finishedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(finishedAt),
+    );
+  }
+
+  factory ModelRequestRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ModelRequestRow(
+      id: serializer.fromJson<String>(json['id']),
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      runId: serializer.fromJson<String?>(json['runId']),
+      logicalTurn: serializer.fromJson<int>(json['logicalTurn']),
+      attemptIndex: serializer.fromJson<int>(json['attemptIndex']),
+      purpose: serializer.fromJson<String>(json['purpose']),
+      status: serializer.fromJson<String>(json['status']),
+      profileId: serializer.fromJson<String>(json['profileId']),
+      protocol: serializer.fromJson<String>(json['protocol']),
+      requestedModelId: serializer.fromJson<String>(json['requestedModelId']),
+      responseModelId: serializer.fromJson<String?>(json['responseModelId']),
+      assistantMessageId: serializer.fromJson<String?>(
+        json['assistantMessageId'],
+      ),
+      summaryId: serializer.fromJson<String?>(json['summaryId']),
+      summaryJobId: serializer.fromJson<String?>(json['summaryJobId']),
+      usageJson: serializer.fromJson<String?>(json['usageJson']),
+      usageRevision: serializer.fromJson<int>(json['usageRevision']),
+      usageComplete: serializer.fromJson<bool>(json['usageComplete']),
+      contextJson: serializer.fromJson<String>(json['contextJson']),
+      originRequestId: serializer.fromJson<String?>(json['originRequestId']),
+      isInherited: serializer.fromJson<bool>(json['isInherited']),
+      errorCode: serializer.fromJson<String?>(json['errorCode']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      startedAt: serializer.fromJson<DateTime?>(json['startedAt']),
+      finishedAt: serializer.fromJson<DateTime?>(json['finishedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'conversationId': serializer.toJson<String>(conversationId),
+      'runId': serializer.toJson<String?>(runId),
+      'logicalTurn': serializer.toJson<int>(logicalTurn),
+      'attemptIndex': serializer.toJson<int>(attemptIndex),
+      'purpose': serializer.toJson<String>(purpose),
+      'status': serializer.toJson<String>(status),
+      'profileId': serializer.toJson<String>(profileId),
+      'protocol': serializer.toJson<String>(protocol),
+      'requestedModelId': serializer.toJson<String>(requestedModelId),
+      'responseModelId': serializer.toJson<String?>(responseModelId),
+      'assistantMessageId': serializer.toJson<String?>(assistantMessageId),
+      'summaryId': serializer.toJson<String?>(summaryId),
+      'summaryJobId': serializer.toJson<String?>(summaryJobId),
+      'usageJson': serializer.toJson<String?>(usageJson),
+      'usageRevision': serializer.toJson<int>(usageRevision),
+      'usageComplete': serializer.toJson<bool>(usageComplete),
+      'contextJson': serializer.toJson<String>(contextJson),
+      'originRequestId': serializer.toJson<String?>(originRequestId),
+      'isInherited': serializer.toJson<bool>(isInherited),
+      'errorCode': serializer.toJson<String?>(errorCode),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'startedAt': serializer.toJson<DateTime?>(startedAt),
+      'finishedAt': serializer.toJson<DateTime?>(finishedAt),
+    };
+  }
+
+  ModelRequestRow copyWith({
+    String? id,
+    String? conversationId,
+    Value<String?> runId = const Value.absent(),
+    int? logicalTurn,
+    int? attemptIndex,
+    String? purpose,
+    String? status,
+    String? profileId,
+    String? protocol,
+    String? requestedModelId,
+    Value<String?> responseModelId = const Value.absent(),
+    Value<String?> assistantMessageId = const Value.absent(),
+    Value<String?> summaryId = const Value.absent(),
+    Value<String?> summaryJobId = const Value.absent(),
+    Value<String?> usageJson = const Value.absent(),
+    int? usageRevision,
+    bool? usageComplete,
+    String? contextJson,
+    Value<String?> originRequestId = const Value.absent(),
+    bool? isInherited,
+    Value<String?> errorCode = const Value.absent(),
+    DateTime? createdAt,
+    Value<DateTime?> startedAt = const Value.absent(),
+    Value<DateTime?> finishedAt = const Value.absent(),
+  }) => ModelRequestRow(
+    id: id ?? this.id,
+    conversationId: conversationId ?? this.conversationId,
+    runId: runId.present ? runId.value : this.runId,
+    logicalTurn: logicalTurn ?? this.logicalTurn,
+    attemptIndex: attemptIndex ?? this.attemptIndex,
+    purpose: purpose ?? this.purpose,
+    status: status ?? this.status,
+    profileId: profileId ?? this.profileId,
+    protocol: protocol ?? this.protocol,
+    requestedModelId: requestedModelId ?? this.requestedModelId,
+    responseModelId: responseModelId.present
+        ? responseModelId.value
+        : this.responseModelId,
+    assistantMessageId: assistantMessageId.present
+        ? assistantMessageId.value
+        : this.assistantMessageId,
+    summaryId: summaryId.present ? summaryId.value : this.summaryId,
+    summaryJobId: summaryJobId.present ? summaryJobId.value : this.summaryJobId,
+    usageJson: usageJson.present ? usageJson.value : this.usageJson,
+    usageRevision: usageRevision ?? this.usageRevision,
+    usageComplete: usageComplete ?? this.usageComplete,
+    contextJson: contextJson ?? this.contextJson,
+    originRequestId: originRequestId.present
+        ? originRequestId.value
+        : this.originRequestId,
+    isInherited: isInherited ?? this.isInherited,
+    errorCode: errorCode.present ? errorCode.value : this.errorCode,
+    createdAt: createdAt ?? this.createdAt,
+    startedAt: startedAt.present ? startedAt.value : this.startedAt,
+    finishedAt: finishedAt.present ? finishedAt.value : this.finishedAt,
+  );
+  ModelRequestRow copyWithCompanion(ModelRequestsCompanion data) {
+    return ModelRequestRow(
+      id: data.id.present ? data.id.value : this.id,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      runId: data.runId.present ? data.runId.value : this.runId,
+      logicalTurn: data.logicalTurn.present
+          ? data.logicalTurn.value
+          : this.logicalTurn,
+      attemptIndex: data.attemptIndex.present
+          ? data.attemptIndex.value
+          : this.attemptIndex,
+      purpose: data.purpose.present ? data.purpose.value : this.purpose,
+      status: data.status.present ? data.status.value : this.status,
+      profileId: data.profileId.present ? data.profileId.value : this.profileId,
+      protocol: data.protocol.present ? data.protocol.value : this.protocol,
+      requestedModelId: data.requestedModelId.present
+          ? data.requestedModelId.value
+          : this.requestedModelId,
+      responseModelId: data.responseModelId.present
+          ? data.responseModelId.value
+          : this.responseModelId,
+      assistantMessageId: data.assistantMessageId.present
+          ? data.assistantMessageId.value
+          : this.assistantMessageId,
+      summaryId: data.summaryId.present ? data.summaryId.value : this.summaryId,
+      summaryJobId: data.summaryJobId.present
+          ? data.summaryJobId.value
+          : this.summaryJobId,
+      usageJson: data.usageJson.present ? data.usageJson.value : this.usageJson,
+      usageRevision: data.usageRevision.present
+          ? data.usageRevision.value
+          : this.usageRevision,
+      usageComplete: data.usageComplete.present
+          ? data.usageComplete.value
+          : this.usageComplete,
+      contextJson: data.contextJson.present
+          ? data.contextJson.value
+          : this.contextJson,
+      originRequestId: data.originRequestId.present
+          ? data.originRequestId.value
+          : this.originRequestId,
+      isInherited: data.isInherited.present
+          ? data.isInherited.value
+          : this.isInherited,
+      errorCode: data.errorCode.present ? data.errorCode.value : this.errorCode,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      startedAt: data.startedAt.present ? data.startedAt.value : this.startedAt,
+      finishedAt: data.finishedAt.present
+          ? data.finishedAt.value
+          : this.finishedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ModelRequestRow(')
+          ..write('id: $id, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('runId: $runId, ')
+          ..write('logicalTurn: $logicalTurn, ')
+          ..write('attemptIndex: $attemptIndex, ')
+          ..write('purpose: $purpose, ')
+          ..write('status: $status, ')
+          ..write('profileId: $profileId, ')
+          ..write('protocol: $protocol, ')
+          ..write('requestedModelId: $requestedModelId, ')
+          ..write('responseModelId: $responseModelId, ')
+          ..write('assistantMessageId: $assistantMessageId, ')
+          ..write('summaryId: $summaryId, ')
+          ..write('summaryJobId: $summaryJobId, ')
+          ..write('usageJson: $usageJson, ')
+          ..write('usageRevision: $usageRevision, ')
+          ..write('usageComplete: $usageComplete, ')
+          ..write('contextJson: $contextJson, ')
+          ..write('originRequestId: $originRequestId, ')
+          ..write('isInherited: $isInherited, ')
+          ..write('errorCode: $errorCode, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('finishedAt: $finishedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hashAll([
+    id,
+    conversationId,
+    runId,
+    logicalTurn,
+    attemptIndex,
+    purpose,
+    status,
+    profileId,
+    protocol,
+    requestedModelId,
+    responseModelId,
+    assistantMessageId,
+    summaryId,
+    summaryJobId,
+    usageJson,
+    usageRevision,
+    usageComplete,
+    contextJson,
+    originRequestId,
+    isInherited,
+    errorCode,
+    createdAt,
+    startedAt,
+    finishedAt,
+  ]);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ModelRequestRow &&
+          other.id == this.id &&
+          other.conversationId == this.conversationId &&
+          other.runId == this.runId &&
+          other.logicalTurn == this.logicalTurn &&
+          other.attemptIndex == this.attemptIndex &&
+          other.purpose == this.purpose &&
+          other.status == this.status &&
+          other.profileId == this.profileId &&
+          other.protocol == this.protocol &&
+          other.requestedModelId == this.requestedModelId &&
+          other.responseModelId == this.responseModelId &&
+          other.assistantMessageId == this.assistantMessageId &&
+          other.summaryId == this.summaryId &&
+          other.summaryJobId == this.summaryJobId &&
+          other.usageJson == this.usageJson &&
+          other.usageRevision == this.usageRevision &&
+          other.usageComplete == this.usageComplete &&
+          other.contextJson == this.contextJson &&
+          other.originRequestId == this.originRequestId &&
+          other.isInherited == this.isInherited &&
+          other.errorCode == this.errorCode &&
+          other.createdAt == this.createdAt &&
+          other.startedAt == this.startedAt &&
+          other.finishedAt == this.finishedAt);
+}
+
+class ModelRequestsCompanion extends UpdateCompanion<ModelRequestRow> {
+  final Value<String> id;
+  final Value<String> conversationId;
+  final Value<String?> runId;
+  final Value<int> logicalTurn;
+  final Value<int> attemptIndex;
+  final Value<String> purpose;
+  final Value<String> status;
+  final Value<String> profileId;
+  final Value<String> protocol;
+  final Value<String> requestedModelId;
+  final Value<String?> responseModelId;
+  final Value<String?> assistantMessageId;
+  final Value<String?> summaryId;
+  final Value<String?> summaryJobId;
+  final Value<String?> usageJson;
+  final Value<int> usageRevision;
+  final Value<bool> usageComplete;
+  final Value<String> contextJson;
+  final Value<String?> originRequestId;
+  final Value<bool> isInherited;
+  final Value<String?> errorCode;
+  final Value<DateTime> createdAt;
+  final Value<DateTime?> startedAt;
+  final Value<DateTime?> finishedAt;
+  final Value<int> rowid;
+  const ModelRequestsCompanion({
+    this.id = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.runId = const Value.absent(),
+    this.logicalTurn = const Value.absent(),
+    this.attemptIndex = const Value.absent(),
+    this.purpose = const Value.absent(),
+    this.status = const Value.absent(),
+    this.profileId = const Value.absent(),
+    this.protocol = const Value.absent(),
+    this.requestedModelId = const Value.absent(),
+    this.responseModelId = const Value.absent(),
+    this.assistantMessageId = const Value.absent(),
+    this.summaryId = const Value.absent(),
+    this.summaryJobId = const Value.absent(),
+    this.usageJson = const Value.absent(),
+    this.usageRevision = const Value.absent(),
+    this.usageComplete = const Value.absent(),
+    this.contextJson = const Value.absent(),
+    this.originRequestId = const Value.absent(),
+    this.isInherited = const Value.absent(),
+    this.errorCode = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.startedAt = const Value.absent(),
+    this.finishedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ModelRequestsCompanion.insert({
+    required String id,
+    required String conversationId,
+    this.runId = const Value.absent(),
+    required int logicalTurn,
+    required int attemptIndex,
+    required String purpose,
+    required String status,
+    required String profileId,
+    required String protocol,
+    required String requestedModelId,
+    this.responseModelId = const Value.absent(),
+    this.assistantMessageId = const Value.absent(),
+    this.summaryId = const Value.absent(),
+    this.summaryJobId = const Value.absent(),
+    this.usageJson = const Value.absent(),
+    this.usageRevision = const Value.absent(),
+    this.usageComplete = const Value.absent(),
+    required String contextJson,
+    this.originRequestId = const Value.absent(),
+    this.isInherited = const Value.absent(),
+    this.errorCode = const Value.absent(),
+    required DateTime createdAt,
+    this.startedAt = const Value.absent(),
+    this.finishedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       conversationId = Value(conversationId),
+       logicalTurn = Value(logicalTurn),
+       attemptIndex = Value(attemptIndex),
+       purpose = Value(purpose),
+       status = Value(status),
+       profileId = Value(profileId),
+       protocol = Value(protocol),
+       requestedModelId = Value(requestedModelId),
+       contextJson = Value(contextJson),
+       createdAt = Value(createdAt);
+  static Insertable<ModelRequestRow> custom({
+    Expression<String>? id,
+    Expression<String>? conversationId,
+    Expression<String>? runId,
+    Expression<int>? logicalTurn,
+    Expression<int>? attemptIndex,
+    Expression<String>? purpose,
+    Expression<String>? status,
+    Expression<String>? profileId,
+    Expression<String>? protocol,
+    Expression<String>? requestedModelId,
+    Expression<String>? responseModelId,
+    Expression<String>? assistantMessageId,
+    Expression<String>? summaryId,
+    Expression<String>? summaryJobId,
+    Expression<String>? usageJson,
+    Expression<int>? usageRevision,
+    Expression<bool>? usageComplete,
+    Expression<String>? contextJson,
+    Expression<String>? originRequestId,
+    Expression<bool>? isInherited,
+    Expression<String>? errorCode,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? startedAt,
+    Expression<DateTime>? finishedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (runId != null) 'run_id': runId,
+      if (logicalTurn != null) 'logical_turn': logicalTurn,
+      if (attemptIndex != null) 'attempt_index': attemptIndex,
+      if (purpose != null) 'purpose': purpose,
+      if (status != null) 'status': status,
+      if (profileId != null) 'profile_id': profileId,
+      if (protocol != null) 'protocol': protocol,
+      if (requestedModelId != null) 'requested_model_id': requestedModelId,
+      if (responseModelId != null) 'response_model_id': responseModelId,
+      if (assistantMessageId != null)
+        'assistant_message_id': assistantMessageId,
+      if (summaryId != null) 'summary_id': summaryId,
+      if (summaryJobId != null) 'summary_job_id': summaryJobId,
+      if (usageJson != null) 'usage_json': usageJson,
+      if (usageRevision != null) 'usage_revision': usageRevision,
+      if (usageComplete != null) 'usage_complete': usageComplete,
+      if (contextJson != null) 'context_json': contextJson,
+      if (originRequestId != null) 'origin_request_id': originRequestId,
+      if (isInherited != null) 'is_inherited': isInherited,
+      if (errorCode != null) 'error_code': errorCode,
+      if (createdAt != null) 'created_at': createdAt,
+      if (startedAt != null) 'started_at': startedAt,
+      if (finishedAt != null) 'finished_at': finishedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ModelRequestsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? conversationId,
+    Value<String?>? runId,
+    Value<int>? logicalTurn,
+    Value<int>? attemptIndex,
+    Value<String>? purpose,
+    Value<String>? status,
+    Value<String>? profileId,
+    Value<String>? protocol,
+    Value<String>? requestedModelId,
+    Value<String?>? responseModelId,
+    Value<String?>? assistantMessageId,
+    Value<String?>? summaryId,
+    Value<String?>? summaryJobId,
+    Value<String?>? usageJson,
+    Value<int>? usageRevision,
+    Value<bool>? usageComplete,
+    Value<String>? contextJson,
+    Value<String?>? originRequestId,
+    Value<bool>? isInherited,
+    Value<String?>? errorCode,
+    Value<DateTime>? createdAt,
+    Value<DateTime?>? startedAt,
+    Value<DateTime?>? finishedAt,
+    Value<int>? rowid,
+  }) {
+    return ModelRequestsCompanion(
+      id: id ?? this.id,
+      conversationId: conversationId ?? this.conversationId,
+      runId: runId ?? this.runId,
+      logicalTurn: logicalTurn ?? this.logicalTurn,
+      attemptIndex: attemptIndex ?? this.attemptIndex,
+      purpose: purpose ?? this.purpose,
+      status: status ?? this.status,
+      profileId: profileId ?? this.profileId,
+      protocol: protocol ?? this.protocol,
+      requestedModelId: requestedModelId ?? this.requestedModelId,
+      responseModelId: responseModelId ?? this.responseModelId,
+      assistantMessageId: assistantMessageId ?? this.assistantMessageId,
+      summaryId: summaryId ?? this.summaryId,
+      summaryJobId: summaryJobId ?? this.summaryJobId,
+      usageJson: usageJson ?? this.usageJson,
+      usageRevision: usageRevision ?? this.usageRevision,
+      usageComplete: usageComplete ?? this.usageComplete,
+      contextJson: contextJson ?? this.contextJson,
+      originRequestId: originRequestId ?? this.originRequestId,
+      isInherited: isInherited ?? this.isInherited,
+      errorCode: errorCode ?? this.errorCode,
+      createdAt: createdAt ?? this.createdAt,
+      startedAt: startedAt ?? this.startedAt,
+      finishedAt: finishedAt ?? this.finishedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (logicalTurn.present) {
+      map['logical_turn'] = Variable<int>(logicalTurn.value);
+    }
+    if (attemptIndex.present) {
+      map['attempt_index'] = Variable<int>(attemptIndex.value);
+    }
+    if (purpose.present) {
+      map['purpose'] = Variable<String>(purpose.value);
+    }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (profileId.present) {
+      map['profile_id'] = Variable<String>(profileId.value);
+    }
+    if (protocol.present) {
+      map['protocol'] = Variable<String>(protocol.value);
+    }
+    if (requestedModelId.present) {
+      map['requested_model_id'] = Variable<String>(requestedModelId.value);
+    }
+    if (responseModelId.present) {
+      map['response_model_id'] = Variable<String>(responseModelId.value);
+    }
+    if (assistantMessageId.present) {
+      map['assistant_message_id'] = Variable<String>(assistantMessageId.value);
+    }
+    if (summaryId.present) {
+      map['summary_id'] = Variable<String>(summaryId.value);
+    }
+    if (summaryJobId.present) {
+      map['summary_job_id'] = Variable<String>(summaryJobId.value);
+    }
+    if (usageJson.present) {
+      map['usage_json'] = Variable<String>(usageJson.value);
+    }
+    if (usageRevision.present) {
+      map['usage_revision'] = Variable<int>(usageRevision.value);
+    }
+    if (usageComplete.present) {
+      map['usage_complete'] = Variable<bool>(usageComplete.value);
+    }
+    if (contextJson.present) {
+      map['context_json'] = Variable<String>(contextJson.value);
+    }
+    if (originRequestId.present) {
+      map['origin_request_id'] = Variable<String>(originRequestId.value);
+    }
+    if (isInherited.present) {
+      map['is_inherited'] = Variable<bool>(isInherited.value);
+    }
+    if (errorCode.present) {
+      map['error_code'] = Variable<String>(errorCode.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (startedAt.present) {
+      map['started_at'] = Variable<DateTime>(startedAt.value);
+    }
+    if (finishedAt.present) {
+      map['finished_at'] = Variable<DateTime>(finishedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ModelRequestsCompanion(')
+          ..write('id: $id, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('runId: $runId, ')
+          ..write('logicalTurn: $logicalTurn, ')
+          ..write('attemptIndex: $attemptIndex, ')
+          ..write('purpose: $purpose, ')
+          ..write('status: $status, ')
+          ..write('profileId: $profileId, ')
+          ..write('protocol: $protocol, ')
+          ..write('requestedModelId: $requestedModelId, ')
+          ..write('responseModelId: $responseModelId, ')
+          ..write('assistantMessageId: $assistantMessageId, ')
+          ..write('summaryId: $summaryId, ')
+          ..write('summaryJobId: $summaryJobId, ')
+          ..write('usageJson: $usageJson, ')
+          ..write('usageRevision: $usageRevision, ')
+          ..write('usageComplete: $usageComplete, ')
+          ..write('contextJson: $contextJson, ')
+          ..write('originRequestId: $originRequestId, ')
+          ..write('isInherited: $isInherited, ')
+          ..write('errorCode: $errorCode, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('startedAt: $startedAt, ')
+          ..write('finishedAt: $finishedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -9653,6 +10916,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ContextSummariesTable contextSummaries = $ContextSummariesTable(
     this,
   );
+  late final $ModelRequestsTable modelRequests = $ModelRequestsTable(this);
   late final $AgentPlansTable agentPlans = $AgentPlansTable(this);
   late final $MemoryEntriesTable memoryEntries = $MemoryEntriesTable(this);
   @override
@@ -9674,6 +10938,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     runtimeEnvironments,
     workspaceCopies,
     contextSummaries,
+    modelRequests,
     agentPlans,
     memoryEntries,
   ];
@@ -9734,6 +10999,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('context_summaries', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'conversations',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('model_requests', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -11367,6 +12639,24 @@ final class $$ConversationsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$ModelRequestsTable, List<ModelRequestRow>>
+  _modelRequestsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.modelRequests,
+    aliasName: 'conversations__id__model_requests__conversation_id',
+  );
+
+  $$ModelRequestsTableProcessedTableManager get modelRequestsRefs {
+    final manager = $$ModelRequestsTableTableManager(
+      $_db,
+      $_db.modelRequests,
+    ).filter((f) => f.conversationId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_modelRequestsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$AgentPlansTable, List<AgentPlanRow>>
   _agentPlansRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.agentPlans,
@@ -11549,6 +12839,31 @@ class $$ConversationsTableFilterComposer
           }) => $$ContextSummariesTableFilterComposer(
             $db: $db,
             $table: $db.contextSummaries,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> modelRequestsRefs(
+    Expression<bool> Function($$ModelRequestsTableFilterComposer f) f,
+  ) {
+    final $$ModelRequestsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.modelRequests,
+      getReferencedColumn: (t) => t.conversationId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ModelRequestsTableFilterComposer(
+            $db: $db,
+            $table: $db.modelRequests,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -11819,6 +13134,31 @@ class $$ConversationsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> modelRequestsRefs<T extends Object>(
+    Expression<T> Function($$ModelRequestsTableAnnotationComposer a) f,
+  ) {
+    final $$ModelRequestsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.modelRequests,
+      getReferencedColumn: (t) => t.conversationId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ModelRequestsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.modelRequests,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> agentPlansRefs<T extends Object>(
     Expression<T> Function($$AgentPlansTableAnnotationComposer a) f,
   ) {
@@ -11864,6 +13204,7 @@ class $$ConversationsTableTableManager
             bool attachmentsRefs,
             bool agentRunsRefs,
             bool contextSummariesRefs,
+            bool modelRequestsRefs,
             bool agentPlansRefs,
           })
         > {
@@ -11941,6 +13282,7 @@ class $$ConversationsTableTableManager
                 attachmentsRefs = false,
                 agentRunsRefs = false,
                 contextSummariesRefs = false,
+                modelRequestsRefs = false,
                 agentPlansRefs = false,
               }) {
                 return PrefetchHooks(
@@ -11950,6 +13292,7 @@ class $$ConversationsTableTableManager
                     if (attachmentsRefs) db.attachments,
                     if (agentRunsRefs) db.agentRuns,
                     if (contextSummariesRefs) db.contextSummaries,
+                    if (modelRequestsRefs) db.modelRequests,
                     if (agentPlansRefs) db.agentPlans,
                   ],
                   addJoins:
@@ -12068,6 +13411,27 @@ class $$ConversationsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (modelRequestsRefs)
+                        await $_getPrefetchedData<
+                          ConversationRow,
+                          $ConversationsTable,
+                          ModelRequestRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ConversationsTableReferences
+                              ._modelRequestsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ConversationsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).modelRequestsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.conversationId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (agentPlansRefs)
                         await $_getPrefetchedData<
                           ConversationRow,
@@ -12115,6 +13479,7 @@ typedef $$ConversationsTableProcessedTableManager =
         bool attachmentsRefs,
         bool agentRunsRefs,
         bool contextSummariesRefs,
+        bool modelRequestsRefs,
         bool agentPlansRefs,
       })
     >;
@@ -12127,7 +13492,6 @@ typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
   required MessageStatus status,
   Value<String> partsJson,
   Value<String?> modelLabel,
-  Value<String?> usageJson,
   Value<int?> thinkingDurationMs,
   required DateTime createdAt,
   Value<int> rowid,
@@ -12141,7 +13505,6 @@ typedef $$MessagesTableUpdateCompanionBuilder = MessagesCompanion Function({
   Value<MessageStatus> status,
   Value<String> partsJson,
   Value<String?> modelLabel,
-  Value<String?> usageJson,
   Value<int?> thinkingDurationMs,
   Value<DateTime> createdAt,
   Value<int> rowid,
@@ -12213,11 +13576,6 @@ class $$MessagesTableFilterComposer
 
   ColumnFilters<String> get modelLabel => $composableBuilder(
     column: $table.modelLabel,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get usageJson => $composableBuilder(
-    column: $table.usageJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12299,11 +13657,6 @@ class $$MessagesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get usageJson => $composableBuilder(
-    column: $table.usageJson,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<int> get thinkingDurationMs => $composableBuilder(
     column: $table.thinkingDurationMs,
     builder: (column) => ColumnOrderings(column),
@@ -12369,9 +13722,6 @@ class $$MessagesTableAnnotationComposer
     column: $table.modelLabel,
     builder: (column) => column,
   );
-
-  GeneratedColumn<String> get usageJson =>
-      $composableBuilder(column: $table.usageJson, builder: (column) => column);
 
   GeneratedColumn<int> get thinkingDurationMs => $composableBuilder(
     column: $table.thinkingDurationMs,
@@ -12441,7 +13791,6 @@ class $$MessagesTableTableManager
                 Value<MessageStatus> status = const Value.absent(),
                 Value<String> partsJson = const Value.absent(),
                 Value<String?> modelLabel = const Value.absent(),
-                Value<String?> usageJson = const Value.absent(),
                 Value<int?> thinkingDurationMs = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -12454,7 +13803,6 @@ class $$MessagesTableTableManager
                 status: status,
                 partsJson: partsJson,
                 modelLabel: modelLabel,
-                usageJson: usageJson,
                 thinkingDurationMs: thinkingDurationMs,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -12469,7 +13817,6 @@ class $$MessagesTableTableManager
                 required MessageStatus status,
                 Value<String> partsJson = const Value.absent(),
                 Value<String?> modelLabel = const Value.absent(),
-                Value<String?> usageJson = const Value.absent(),
                 Value<int?> thinkingDurationMs = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
@@ -12482,7 +13829,6 @@ class $$MessagesTableTableManager
                 status: status,
                 partsJson: partsJson,
                 modelLabel: modelLabel,
-                usageJson: usageJson,
                 thinkingDurationMs: thinkingDurationMs,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -13037,7 +14383,6 @@ typedef $$AgentRunsTableCreateCompanionBuilder = AgentRunsCompanion Function({
   Value<int> turnCount,
   Value<int> modelAttemptCount,
   required int maxTurns,
-  Value<String?> usageJson,
   required DateTime createdAt,
   Value<DateTime?> finishedAt,
   Value<int> rowid,
@@ -13055,7 +14400,6 @@ typedef $$AgentRunsTableUpdateCompanionBuilder = AgentRunsCompanion Function({
   Value<int> turnCount,
   Value<int> modelAttemptCount,
   Value<int> maxTurns,
-  Value<String?> usageJson,
   Value<DateTime> createdAt,
   Value<DateTime?> finishedAt,
   Value<int> rowid,
@@ -13165,11 +14509,6 @@ class $$AgentRunsTableFilterComposer
 
   ColumnFilters<int> get maxTurns => $composableBuilder(
     column: $table.maxTurns,
-    builder: (column) => ColumnFilters(column),
-  );
-
-  ColumnFilters<String> get usageJson => $composableBuilder(
-    column: $table.usageJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13296,11 +14635,6 @@ class $$AgentRunsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get usageJson => $composableBuilder(
-    column: $table.usageJson,
-    builder: (column) => ColumnOrderings(column),
-  );
-
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -13391,9 +14725,6 @@ class $$AgentRunsTableAnnotationComposer
 
   GeneratedColumn<int> get maxTurns =>
       $composableBuilder(column: $table.maxTurns, builder: (column) => column);
-
-  GeneratedColumn<String> get usageJson =>
-      $composableBuilder(column: $table.usageJson, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -13492,7 +14823,6 @@ class $$AgentRunsTableTableManager
                 Value<int> turnCount = const Value.absent(),
                 Value<int> modelAttemptCount = const Value.absent(),
                 Value<int> maxTurns = const Value.absent(),
-                Value<String?> usageJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime?> finishedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13509,7 +14839,6 @@ class $$AgentRunsTableTableManager
                 turnCount: turnCount,
                 modelAttemptCount: modelAttemptCount,
                 maxTurns: maxTurns,
-                usageJson: usageJson,
                 createdAt: createdAt,
                 finishedAt: finishedAt,
                 rowid: rowid,
@@ -13528,7 +14857,6 @@ class $$AgentRunsTableTableManager
                 Value<int> turnCount = const Value.absent(),
                 Value<int> modelAttemptCount = const Value.absent(),
                 required int maxTurns,
-                Value<String?> usageJson = const Value.absent(),
                 required DateTime createdAt,
                 Value<DateTime?> finishedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13545,7 +14873,6 @@ class $$AgentRunsTableTableManager
                 turnCount: turnCount,
                 modelAttemptCount: modelAttemptCount,
                 maxTurns: maxTurns,
-                usageJson: usageJson,
                 createdAt: createdAt,
                 finishedAt: finishedAt,
                 rowid: rowid,
@@ -15224,7 +16551,7 @@ typedef $$ContextSummariesTableCreateCompanionBuilder =
     ContextSummariesCompanion Function({
       required String id,
       required String conversationId,
-      required String runId,
+      Value<String?> runId,
       required String branchEndId,
       required String coveredIdsJson,
       required String fingerprint,
@@ -15232,7 +16559,7 @@ typedef $$ContextSummariesTableCreateCompanionBuilder =
       required int version,
       required String status,
       required String content,
-      Value<String?> usageJson,
+      Value<String> checkpointJson,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -15240,7 +16567,7 @@ typedef $$ContextSummariesTableUpdateCompanionBuilder =
     ContextSummariesCompanion Function({
       Value<String> id,
       Value<String> conversationId,
-      Value<String> runId,
+      Value<String?> runId,
       Value<String> branchEndId,
       Value<String> coveredIdsJson,
       Value<String> fingerprint,
@@ -15248,7 +16575,7 @@ typedef $$ContextSummariesTableUpdateCompanionBuilder =
       Value<int> version,
       Value<String> status,
       Value<String> content,
-      Value<String?> usageJson,
+      Value<String> checkpointJson,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -15339,8 +16666,8 @@ class $$ContextSummariesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get usageJson => $composableBuilder(
-    column: $table.usageJson,
+  ColumnFilters<String> get checkpointJson => $composableBuilder(
+    column: $table.checkpointJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15427,8 +16754,8 @@ class $$ContextSummariesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get usageJson => $composableBuilder(
-    column: $table.usageJson,
+  ColumnOrderings<String> get checkpointJson => $composableBuilder(
+    column: $table.checkpointJson,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -15505,8 +16832,10 @@ class $$ContextSummariesTableAnnotationComposer
   GeneratedColumn<String> get content =>
       $composableBuilder(column: $table.content, builder: (column) => column);
 
-  GeneratedColumn<String> get usageJson =>
-      $composableBuilder(column: $table.usageJson, builder: (column) => column);
+  GeneratedColumn<String> get checkpointJson => $composableBuilder(
+    column: $table.checkpointJson,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -15567,7 +16896,7 @@ class $$ContextSummariesTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> conversationId = const Value.absent(),
-                Value<String> runId = const Value.absent(),
+                Value<String?> runId = const Value.absent(),
                 Value<String> branchEndId = const Value.absent(),
                 Value<String> coveredIdsJson = const Value.absent(),
                 Value<String> fingerprint = const Value.absent(),
@@ -15575,7 +16904,7 @@ class $$ContextSummariesTableTableManager
                 Value<int> version = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String> content = const Value.absent(),
-                Value<String?> usageJson = const Value.absent(),
+                Value<String> checkpointJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ContextSummariesCompanion(
@@ -15589,7 +16918,7 @@ class $$ContextSummariesTableTableManager
                 version: version,
                 status: status,
                 content: content,
-                usageJson: usageJson,
+                checkpointJson: checkpointJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -15597,7 +16926,7 @@ class $$ContextSummariesTableTableManager
               ({
                 required String id,
                 required String conversationId,
-                required String runId,
+                Value<String?> runId = const Value.absent(),
                 required String branchEndId,
                 required String coveredIdsJson,
                 required String fingerprint,
@@ -15605,7 +16934,7 @@ class $$ContextSummariesTableTableManager
                 required int version,
                 required String status,
                 required String content,
-                Value<String?> usageJson = const Value.absent(),
+                Value<String> checkpointJson = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => ContextSummariesCompanion.insert(
@@ -15619,7 +16948,7 @@ class $$ContextSummariesTableTableManager
                 version: version,
                 status: status,
                 content: content,
-                usageJson: usageJson,
+                checkpointJson: checkpointJson,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -15686,6 +17015,712 @@ typedef $$ContextSummariesTableProcessedTableManager =
       $$ContextSummariesTableUpdateCompanionBuilder,
       (ContextSummaryRow, $$ContextSummariesTableReferences),
       ContextSummaryRow,
+      PrefetchHooks Function({bool conversationId})
+    >;
+typedef $$ModelRequestsTableCreateCompanionBuilder =
+    ModelRequestsCompanion Function({
+      required String id,
+      required String conversationId,
+      Value<String?> runId,
+      required int logicalTurn,
+      required int attemptIndex,
+      required String purpose,
+      required String status,
+      required String profileId,
+      required String protocol,
+      required String requestedModelId,
+      Value<String?> responseModelId,
+      Value<String?> assistantMessageId,
+      Value<String?> summaryId,
+      Value<String?> summaryJobId,
+      Value<String?> usageJson,
+      Value<int> usageRevision,
+      Value<bool> usageComplete,
+      required String contextJson,
+      Value<String?> originRequestId,
+      Value<bool> isInherited,
+      Value<String?> errorCode,
+      required DateTime createdAt,
+      Value<DateTime?> startedAt,
+      Value<DateTime?> finishedAt,
+      Value<int> rowid,
+    });
+typedef $$ModelRequestsTableUpdateCompanionBuilder =
+    ModelRequestsCompanion Function({
+      Value<String> id,
+      Value<String> conversationId,
+      Value<String?> runId,
+      Value<int> logicalTurn,
+      Value<int> attemptIndex,
+      Value<String> purpose,
+      Value<String> status,
+      Value<String> profileId,
+      Value<String> protocol,
+      Value<String> requestedModelId,
+      Value<String?> responseModelId,
+      Value<String?> assistantMessageId,
+      Value<String?> summaryId,
+      Value<String?> summaryJobId,
+      Value<String?> usageJson,
+      Value<int> usageRevision,
+      Value<bool> usageComplete,
+      Value<String> contextJson,
+      Value<String?> originRequestId,
+      Value<bool> isInherited,
+      Value<String?> errorCode,
+      Value<DateTime> createdAt,
+      Value<DateTime?> startedAt,
+      Value<DateTime?> finishedAt,
+      Value<int> rowid,
+    });
+
+final class $$ModelRequestsTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $ModelRequestsTable, ModelRequestRow> {
+  $$ModelRequestsTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ConversationsTable _conversationIdTable(_$AppDatabase db) => db
+      .conversations
+      .createAlias('model_requests__conversation_id__conversations__id');
+
+  $$ConversationsTableProcessedTableManager get conversationId {
+    final $_column = $_itemColumn<String>('conversation_id')!;
+
+    final manager = $$ConversationsTableTableManager(
+      $_db,
+      $_db.conversations,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_conversationIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$ModelRequestsTableFilterComposer
+    extends Composer<_$AppDatabase, $ModelRequestsTable> {
+  $$ModelRequestsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get runId => $composableBuilder(
+    column: $table.runId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get logicalTurn => $composableBuilder(
+    column: $table.logicalTurn,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get attemptIndex => $composableBuilder(
+    column: $table.attemptIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get purpose => $composableBuilder(
+    column: $table.purpose,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get protocol => $composableBuilder(
+    column: $table.protocol,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get requestedModelId => $composableBuilder(
+    column: $table.requestedModelId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get responseModelId => $composableBuilder(
+    column: $table.responseModelId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get assistantMessageId => $composableBuilder(
+    column: $table.assistantMessageId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summaryId => $composableBuilder(
+    column: $table.summaryId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summaryJobId => $composableBuilder(
+    column: $table.summaryJobId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get usageJson => $composableBuilder(
+    column: $table.usageJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get usageRevision => $composableBuilder(
+    column: $table.usageRevision,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get usageComplete => $composableBuilder(
+    column: $table.usageComplete,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contextJson => $composableBuilder(
+    column: $table.contextJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get originRequestId => $composableBuilder(
+    column: $table.originRequestId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isInherited => $composableBuilder(
+    column: $table.isInherited,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get errorCode => $composableBuilder(
+    column: $table.errorCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ConversationsTableFilterComposer get conversationId {
+    final $$ConversationsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableFilterComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ModelRequestsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ModelRequestsTable> {
+  $$ModelRequestsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get runId => $composableBuilder(
+    column: $table.runId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get logicalTurn => $composableBuilder(
+    column: $table.logicalTurn,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get attemptIndex => $composableBuilder(
+    column: $table.attemptIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get purpose => $composableBuilder(
+    column: $table.purpose,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get profileId => $composableBuilder(
+    column: $table.profileId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get protocol => $composableBuilder(
+    column: $table.protocol,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get requestedModelId => $composableBuilder(
+    column: $table.requestedModelId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get responseModelId => $composableBuilder(
+    column: $table.responseModelId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get assistantMessageId => $composableBuilder(
+    column: $table.assistantMessageId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summaryId => $composableBuilder(
+    column: $table.summaryId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summaryJobId => $composableBuilder(
+    column: $table.summaryJobId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get usageJson => $composableBuilder(
+    column: $table.usageJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get usageRevision => $composableBuilder(
+    column: $table.usageRevision,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get usageComplete => $composableBuilder(
+    column: $table.usageComplete,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contextJson => $composableBuilder(
+    column: $table.contextJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get originRequestId => $composableBuilder(
+    column: $table.originRequestId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isInherited => $composableBuilder(
+    column: $table.isInherited,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get errorCode => $composableBuilder(
+    column: $table.errorCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get startedAt => $composableBuilder(
+    column: $table.startedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ConversationsTableOrderingComposer get conversationId {
+    final $$ConversationsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableOrderingComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ModelRequestsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ModelRequestsTable> {
+  $$ModelRequestsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<int> get logicalTurn => $composableBuilder(
+    column: $table.logicalTurn,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get attemptIndex => $composableBuilder(
+    column: $table.attemptIndex,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get purpose =>
+      $composableBuilder(column: $table.purpose, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<String> get profileId =>
+      $composableBuilder(column: $table.profileId, builder: (column) => column);
+
+  GeneratedColumn<String> get protocol =>
+      $composableBuilder(column: $table.protocol, builder: (column) => column);
+
+  GeneratedColumn<String> get requestedModelId => $composableBuilder(
+    column: $table.requestedModelId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get responseModelId => $composableBuilder(
+    column: $table.responseModelId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get assistantMessageId => $composableBuilder(
+    column: $table.assistantMessageId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get summaryId =>
+      $composableBuilder(column: $table.summaryId, builder: (column) => column);
+
+  GeneratedColumn<String> get summaryJobId => $composableBuilder(
+    column: $table.summaryJobId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get usageJson =>
+      $composableBuilder(column: $table.usageJson, builder: (column) => column);
+
+  GeneratedColumn<int> get usageRevision => $composableBuilder(
+    column: $table.usageRevision,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get usageComplete => $composableBuilder(
+    column: $table.usageComplete,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get contextJson => $composableBuilder(
+    column: $table.contextJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get originRequestId => $composableBuilder(
+    column: $table.originRequestId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get isInherited => $composableBuilder(
+    column: $table.isInherited,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get errorCode =>
+      $composableBuilder(column: $table.errorCode, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get startedAt =>
+      $composableBuilder(column: $table.startedAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get finishedAt => $composableBuilder(
+    column: $table.finishedAt,
+    builder: (column) => column,
+  );
+
+  $$ConversationsTableAnnotationComposer get conversationId {
+    final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ModelRequestsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ModelRequestsTable,
+          ModelRequestRow,
+          $$ModelRequestsTableFilterComposer,
+          $$ModelRequestsTableOrderingComposer,
+          $$ModelRequestsTableAnnotationComposer,
+          $$ModelRequestsTableCreateCompanionBuilder,
+          $$ModelRequestsTableUpdateCompanionBuilder,
+          (ModelRequestRow, $$ModelRequestsTableReferences),
+          ModelRequestRow,
+          PrefetchHooks Function({bool conversationId})
+        > {
+  $$ModelRequestsTableTableManager(_$AppDatabase db, $ModelRequestsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ModelRequestsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ModelRequestsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ModelRequestsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> conversationId = const Value.absent(),
+                Value<String?> runId = const Value.absent(),
+                Value<int> logicalTurn = const Value.absent(),
+                Value<int> attemptIndex = const Value.absent(),
+                Value<String> purpose = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<String> profileId = const Value.absent(),
+                Value<String> protocol = const Value.absent(),
+                Value<String> requestedModelId = const Value.absent(),
+                Value<String?> responseModelId = const Value.absent(),
+                Value<String?> assistantMessageId = const Value.absent(),
+                Value<String?> summaryId = const Value.absent(),
+                Value<String?> summaryJobId = const Value.absent(),
+                Value<String?> usageJson = const Value.absent(),
+                Value<int> usageRevision = const Value.absent(),
+                Value<bool> usageComplete = const Value.absent(),
+                Value<String> contextJson = const Value.absent(),
+                Value<String?> originRequestId = const Value.absent(),
+                Value<bool> isInherited = const Value.absent(),
+                Value<String?> errorCode = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime?> startedAt = const Value.absent(),
+                Value<DateTime?> finishedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ModelRequestsCompanion(
+                id: id,
+                conversationId: conversationId,
+                runId: runId,
+                logicalTurn: logicalTurn,
+                attemptIndex: attemptIndex,
+                purpose: purpose,
+                status: status,
+                profileId: profileId,
+                protocol: protocol,
+                requestedModelId: requestedModelId,
+                responseModelId: responseModelId,
+                assistantMessageId: assistantMessageId,
+                summaryId: summaryId,
+                summaryJobId: summaryJobId,
+                usageJson: usageJson,
+                usageRevision: usageRevision,
+                usageComplete: usageComplete,
+                contextJson: contextJson,
+                originRequestId: originRequestId,
+                isInherited: isInherited,
+                errorCode: errorCode,
+                createdAt: createdAt,
+                startedAt: startedAt,
+                finishedAt: finishedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String conversationId,
+                Value<String?> runId = const Value.absent(),
+                required int logicalTurn,
+                required int attemptIndex,
+                required String purpose,
+                required String status,
+                required String profileId,
+                required String protocol,
+                required String requestedModelId,
+                Value<String?> responseModelId = const Value.absent(),
+                Value<String?> assistantMessageId = const Value.absent(),
+                Value<String?> summaryId = const Value.absent(),
+                Value<String?> summaryJobId = const Value.absent(),
+                Value<String?> usageJson = const Value.absent(),
+                Value<int> usageRevision = const Value.absent(),
+                Value<bool> usageComplete = const Value.absent(),
+                required String contextJson,
+                Value<String?> originRequestId = const Value.absent(),
+                Value<bool> isInherited = const Value.absent(),
+                Value<String?> errorCode = const Value.absent(),
+                required DateTime createdAt,
+                Value<DateTime?> startedAt = const Value.absent(),
+                Value<DateTime?> finishedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ModelRequestsCompanion.insert(
+                id: id,
+                conversationId: conversationId,
+                runId: runId,
+                logicalTurn: logicalTurn,
+                attemptIndex: attemptIndex,
+                purpose: purpose,
+                status: status,
+                profileId: profileId,
+                protocol: protocol,
+                requestedModelId: requestedModelId,
+                responseModelId: responseModelId,
+                assistantMessageId: assistantMessageId,
+                summaryId: summaryId,
+                summaryJobId: summaryJobId,
+                usageJson: usageJson,
+                usageRevision: usageRevision,
+                usageComplete: usageComplete,
+                contextJson: contextJson,
+                originRequestId: originRequestId,
+                isInherited: isInherited,
+                errorCode: errorCode,
+                createdAt: createdAt,
+                startedAt: startedAt,
+                finishedAt: finishedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ModelRequestsTable, ModelRequestRow>(table),
+                  $$ModelRequestsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({conversationId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (conversationId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.conversationId,
+                        referencedTable: $$ModelRequestsTableReferences
+                            ._conversationIdTable(db),
+                        referencedColumn: $$ModelRequestsTableReferences
+                            ._conversationIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$ModelRequestsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ModelRequestsTable,
+      ModelRequestRow,
+      $$ModelRequestsTableFilterComposer,
+      $$ModelRequestsTableOrderingComposer,
+      $$ModelRequestsTableAnnotationComposer,
+      $$ModelRequestsTableCreateCompanionBuilder,
+      $$ModelRequestsTableUpdateCompanionBuilder,
+      (ModelRequestRow, $$ModelRequestsTableReferences),
+      ModelRequestRow,
       PrefetchHooks Function({bool conversationId})
     >;
 typedef $$AgentPlansTableCreateCompanionBuilder = AgentPlansCompanion Function({
@@ -16407,6 +18442,8 @@ class $AppDatabaseManager {
       $$WorkspaceCopiesTableTableManager(_db, _db.workspaceCopies);
   $$ContextSummariesTableTableManager get contextSummaries =>
       $$ContextSummariesTableTableManager(_db, _db.contextSummaries);
+  $$ModelRequestsTableTableManager get modelRequests =>
+      $$ModelRequestsTableTableManager(_db, _db.modelRequests);
   $$AgentPlansTableTableManager get agentPlans =>
       $$AgentPlansTableTableManager(_db, _db.agentPlans);
   $$MemoryEntriesTableTableManager get memoryEntries =>

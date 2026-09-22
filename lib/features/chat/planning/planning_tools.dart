@@ -1,3 +1,4 @@
+import '../context/read_history_tool.dart';
 import '../../memory/memory_tools.dart';
 import '../../../../core/error/failure.dart';
 import '../../../../data/models/tool_policy.dart';
@@ -14,6 +15,7 @@ bool allowedInPlan(Tool tool) =>
     tool is ReadFileTool ||
     tool is ListFilesTool ||
     tool is ReadSkillTool ||
+    tool is ReadHistoryTool ||
     tool is SubmitPlanTool ||
     (tool is ScopedFileTool &&
         (tool.name == 'read_file' || tool.name == 'list_files'));

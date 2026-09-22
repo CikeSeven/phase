@@ -109,7 +109,7 @@ void main() {
         ).list(h.conversationId()!)).single;
         expect(summary.status, SummaryStatus.cancelled);
         expect(
-          (await (await h.runs()).getById(summary.runId))!.status,
+          (await (await h.runs()).getById(summary.runId!))!.status,
           RunStatus.stopped,
         );
         expect(requests, 3);

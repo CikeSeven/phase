@@ -65,6 +65,7 @@ void main() {
     expect(h.provider.requests.first.tools.map((t) => t.name).toSet(), {
       'system_info',
       'submit_plan',
+      'read_history',
     });
     final records = await h.recordsByCall();
     expect(records['shell']!.status, ToolCallStatus.rejected);

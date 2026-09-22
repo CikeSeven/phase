@@ -1,10 +1,11 @@
+import 'package:phase/data/models/token_usage.dart';
+
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/provider_error.dart';
 import 'package:phase/data/models/chat_chunk.dart';
-import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/message_part.dart';
 import 'package:phase/providers/dio_failure_mapper.dart';
 import 'package:phase/providers/openai_completions/sse_decoder.dart';
@@ -65,10 +66,10 @@ void main() {
         '"prompt_tokens_details":{"cached_tokens":1}}}',
       );
       final usage = _usage(chunks);
-      expect(usage?.inputTokens, 3);
+      expect(usage?.promptTokens, 3);
       expect(usage?.outputTokens, 5);
       expect(usage?.reasoningTokens, 2);
-      expect(usage?.cachedInputTokens, 1);
+      expect(usage?.cacheReadTokens, 1);
     });
 
     test('空行、注释与非 data 行不产生事件', () {

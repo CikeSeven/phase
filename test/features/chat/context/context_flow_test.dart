@@ -1,9 +1,10 @@
+import 'package:phase/data/models/token_usage.dart';
+
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/chat_chunk.dart';
-import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/context_summary.dart';
 import 'package:phase/data/models/profile_model.dart';
@@ -33,10 +34,10 @@ void main() {
     h.provider.turns.addAll([
       Stream.fromIterable([
         ...(await textTurn(
-          '先前背景的简洁结论',
+          '约束：不要付费或重复外部动作。先前背景的简洁结论',
         ).toList()).where((c) => c is! ResponseEnd),
         const UsageChunk(
-          usage: TokenUsage(inputTokens: 2100, outputTokens: 20),
+          usage: TokenUsage(promptTokens: 2100, outputTokens: 20),
         ),
         const ResponseEnd(),
       ]),
@@ -52,7 +53,7 @@ void main() {
     expect(stored, hasLength(1));
     expect(stored.single.status, SummaryStatus.completed);
     expect(stored.single.coveredMessageIds, before.take(2).map((m) => m.id));
-    expect(stored.single.usage?.inputTokens, 2100);
+    expect(stored.single.usage?.promptTokens, 2100);
     final answerRequest = h.provider.requests.last;
     final texts = answerRequest.messages
         .expand((m) => m.parts)
@@ -128,7 +129,7 @@ void main() {
     ).list(h.conversationId()!)).single;
     expect(summary.status, SummaryStatus.cancelled);
     expect(
-      (await (await h.runs()).getById(summary.runId))!.status,
+      (await (await h.runs()).getById(summary.runId!))!.status,
       RunStatus.stopped,
     );
     expect(h.provider.requests, hasLength(3));

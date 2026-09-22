@@ -1,5 +1,5 @@
+import 'token_usage.dart';
 import '../../core/error/provider_error.dart';
-import 'chat_message.dart';
 import 'message_part.dart';
 
 /// 一次响应中内容块的种类；增量事件按 [ChatChunk.partId] 归并。
@@ -98,4 +98,10 @@ class ResponseError extends ChatChunk {
   const ResponseError({required this.error});
 
   final ProviderError error;
+}
+
+/// 服务端明确提供的实际模型 ID，不按展示名推断。
+class ResponseModel extends ChatChunk {
+  const ResponseModel(this.modelId);
+  final String modelId;
 }

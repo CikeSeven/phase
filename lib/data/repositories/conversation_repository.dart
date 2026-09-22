@@ -330,6 +330,32 @@ class ConversationRepository {
                       ),
                 );
           }
+          final requests = await (_db.select(
+            _db.modelRequests,
+          )..where((t) => t.conversationId.equals(id))).get();
+          for (final request in requests) {
+            await _db
+                .into(_db.modelRequests)
+                .insert(
+                  request
+                      .toCompanion(false)
+                      .copyWith(
+                        id: Value(generateId()),
+                        conversationId: Value(copy.id),
+                        runId: Value(runIds[request.runId]),
+                        assistantMessageId: Value(
+                          idMap[request.assistantMessageId],
+                        ),
+                        summaryId: const Value(null),
+                        summaryJobId: const Value(null),
+                        originRequestId: Value(
+                          request.originRequestId ?? request.id,
+                        ),
+                        isInherited: const Value(true),
+                        contextJson: const Value('{}'),
+                      ),
+                );
+          }
           for (final row in planRows) {
             await _db
                 .into(_db.agentPlans)
@@ -492,7 +518,6 @@ class ConversationRepository {
     required String messageId,
     required List<MessagePart> parts,
     required MessageStatus status,
-    TokenUsage? usage,
     int? thinkingDurationMs,
   }) {
     return _guard('更新消息失败', () async {
@@ -502,7 +527,6 @@ class ConversationRepository {
         MessagesCompanion(
           partsJson: Value(encodeMessageParts(parts)),
           status: Value(status),
-          usageJson: Value(usage == null ? null : encodeUsageJson(usage)),
           thinkingDurationMs: Value(thinkingDurationMs),
         ),
       );
@@ -515,7 +539,6 @@ class ConversationRepository {
     required String runId,
     required List<MessagePart> parts,
     required List<ToolCallRecord> calls,
-    TokenUsage? usage,
     int? thinkingDurationMs,
   }) => _guard(
     '保存模型响应失败',
@@ -524,7 +547,6 @@ class ConversationRepository {
         messageId: messageId,
         parts: parts,
         status: MessageStatus.completed,
-        usage: usage,
         thinkingDurationMs: thinkingDurationMs,
       );
       for (final call in calls) {
@@ -655,6 +677,10 @@ class ConversationRepository {
           _db.messages,
           _db.messages.conversationId.equalsExp(_db.conversations.id),
         ),
+        leftOuterJoin(
+          _db.modelRequests,
+          _db.modelRequests.assistantMessageId.equalsExp(_db.messages.id),
+        ),
       ])
       ..where(_db.conversations.id.equals(conversationId))
       ..orderBy([OrderingTerm.asc(_db.messages.createdAt)]);
@@ -662,17 +688,17 @@ class ConversationRepository {
 
   ConversationThread? _threadFromRows(List<TypedResult> rows) {
     if (rows.isEmpty) return null;
-    return _buildThread(
-      rows.first.readTable(_db.conversations),
-      rows.map((row) => row.readTableOrNull(_db.messages)).nonNulls.toList(),
-    );
+    return _buildThread(rows.first.readTable(_db.conversations), [
+      for (final row in rows)
+        if (row.readTableOrNull(_db.messages) case final message?)
+          messageFromRow(message, row.readTableOrNull(_db.modelRequests)),
+    ]);
   }
 
   ConversationThread _buildThread(
     ConversationRow row,
-    List<MessageRow> messageRows,
+    List<ChatMessage> messages,
   ) {
-    final messages = messageRows.map(messageFromRow).toList();
     final byId = {for (final message in messages) message.id: message};
 
     final branch = <ChatMessage>[];

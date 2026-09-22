@@ -1,3 +1,5 @@
+import 'package:phase/data/models/token_usage.dart';
+
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -163,12 +165,12 @@ void main() {
 
     test('token 用量缺失时不写成零', () {
       final usage = TokenUsage.fromJson(const {});
-      expect(usage.inputTokens, isNull);
+      expect(usage.promptTokens, isNull);
       expect(usage.outputTokens, isNull);
-      expect(usage.estimated, isFalse);
+      expect(usage.source(UsageField.promptTokens), isNull);
       expect(
-        TokenUsage(inputTokens: 5, estimated: true).toJson()['estimated'],
-        isTrue,
+        const TokenUsage(promptTokens: 5).source(UsageField.promptTokens),
+        UsageSource.reported,
       );
     });
 

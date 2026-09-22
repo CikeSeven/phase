@@ -1,3 +1,7 @@
+import '../../data/models/api_protocol.dart';
+import '../usage_decoder.dart';
+import '../../data/models/token_usage.dart';
+
 import 'dart:convert';
 
 import '../../data/models/chat_chunk.dart';
@@ -232,7 +236,7 @@ class _GoogleStreamDecoder {
 
   /// functionCall 在响应内的序号；Gemini 不给块编号，按出现顺序编号。
   var _toolIndex = 0;
-  TokenUsage? _usage;
+  final _usageDecoder = UsageDecoder(ApiProtocol.googleGenerativeAi);
   var _terminated = false;
   var _sawEvent = false;
   var _finished = false;
@@ -254,6 +258,10 @@ class _GoogleStreamDecoder {
     }
     if (decoded is! Map<String, dynamic>) return const [];
     _sawEvent = true;
+    final responseModel = decoded['modelVersion'];
+    if (responseModel is String && responseModel.isNotEmpty) {
+      _out.add(ResponseModel(responseModel));
+    }
 
     if (decoded['error'] is Map<String, dynamic>) {
       // 协议明确的错误字段是唯一分类依据。
@@ -262,7 +270,7 @@ class _GoogleStreamDecoder {
       return _drain();
     }
 
-    _usage = _parseUsage(decoded['usageMetadata']) ?? _usage;
+    _acceptUsage(decoded['usageMetadata']);
     final candidates = decoded['candidates'];
     if (candidates is List && candidates.isNotEmpty) {
       final candidate = candidates.first;
@@ -275,7 +283,7 @@ class _GoogleStreamDecoder {
   List<ChatChunk> finish({TokenUsage? usage, bool? complete}) {
     if (isDone) return const [];
     _finished = true;
-    _parts.finish(usage: usage ?? _usage, complete: complete ?? _normalFinish);
+    _parts.finish(usage: usage, complete: complete ?? _normalFinish);
     return _drain();
   }
 
@@ -330,17 +338,13 @@ class _GoogleStreamDecoder {
     // P0 不使用服务端内置工具（搜索/代码执行），其余 part 类型不进入内容。
   }
 
-  static TokenUsage? _parseUsage(Object? usageMetadata) {
-    if (usageMetadata is! Map<String, dynamic>) {
-      return null;
+  TokenUsage? _parseUsage(Object? value) => _usageDecoder.add(value);
+
+  void _acceptUsage(Object? value) {
+    final usage = _parseUsage(value);
+    if (usage != null) {
+      _out.add(UsageChunk(usage: usage));
     }
-    int? asInt(Object? value) => value is int ? value : null;
-    return TokenUsage(
-      inputTokens: asInt(usageMetadata['promptTokenCount']),
-      outputTokens: asInt(usageMetadata['candidatesTokenCount']),
-      reasoningTokens: asInt(usageMetadata['thoughtsTokenCount']),
-      cachedInputTokens: asInt(usageMetadata['cachedContentTokenCount']),
-    );
   }
 
   List<ChatChunk> _drain() {

@@ -7,6 +7,7 @@ import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/tool_call_record.dart';
+import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/features/tools/tool.dart';
 
@@ -111,7 +112,11 @@ void main() {
     final assistants = AssistantRepository(h.database);
     final assistant = (await assistants.getAssistants()).single;
     await assistants.save(
-      assistant.copyWith(toolPolicy: const ToolPolicyConfig()),
+      assistant.copyWith(
+        toolPolicy: const ToolPolicyConfig(
+          policies: {'read_history': ToolPolicy.deny},
+        ),
+      ),
     );
     h.provider.turns.addAll([
       toolTurn(callId: 'call', toolName: 'echo', arguments: '{}'),

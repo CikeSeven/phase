@@ -22,6 +22,12 @@ import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/chat_chunk.dart';
+import 'package:phase/data/models/context_summary.dart';
+import 'package:phase/data/models/model_request_record.dart';
+import 'package:phase/data/models/token_usage.dart';
+import 'package:phase/data/repositories/agent_context_repository.dart';
+import 'package:phase/data/repositories/model_request_repository.dart';
+import 'package:phase/features/chat/context/context_preview.dart';
 import 'package:phase/data/models/attachment.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/api_protocol.dart';
@@ -63,6 +69,48 @@ final _profile = ProviderProfile(
 /// 内存版运行仓储：布局测试只走发送流程，运行状态与计数留在内存。
 ///
 /// 真实仓储的行为由 repositories_test 与工具循环测试覆盖。
+class _MemoryRequests implements ModelRequestRepository {
+  @override
+  Future<void> prepare(ModelRequestRecord record) async {}
+  @override
+  Future<void> start(String id, {Future<void> Function()? onStart}) async =>
+      onStart?.call();
+  @override
+  Future<void> sample(
+    String id,
+    TokenUsage? usage,
+    int revision, {
+    String? responseModelId,
+  }) async {}
+  @override
+  Future<List<ModelRequestRecord>> list(String id) async => [];
+  @override
+  Future<void> interruptPending({
+    String? runId,
+    String errorCode = 'interrupted',
+  }) async {}
+  @override
+  Future<void> settle(
+    String id, {
+    required ModelRequestStatus status,
+    required TokenUsage? usage,
+    required int revision,
+    bool usageComplete = false,
+    String? responseModelId,
+    String? errorCode,
+    Future<void> Function()? persistResult,
+  }) async => persistResult?.call();
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+class _MemorySummaries implements AgentContextRepository {
+  @override
+  Future<List<ContextSummary>> list(String id) async => [];
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _MemoryRuns implements AgentRunRepository {
   final runs = <String, AgentRun>{};
 
@@ -120,7 +168,6 @@ class _MemoryRuns implements AgentRunRepository {
     required RunStatus status,
     RunFinishReason? finishReason,
     String? currentMessageId,
-    TokenUsage? usage,
   }) => _update(
     runId,
     (run) => run.copyWith(
@@ -128,7 +175,6 @@ class _MemoryRuns implements AgentRunRepository {
       finishReason: finishReason,
       currentMessageId: currentMessageId,
       clearActiveToolCall: true,
-      usage: usage,
       finishedAt: DateTime.now(),
     ),
   );
@@ -166,13 +212,11 @@ class _MemoryConversations implements ConversationRepository {
     required String runId,
     required List<MessagePart> parts,
     required List<ToolCallRecord> calls,
-    TokenUsage? usage,
     int? thinkingDurationMs,
   }) => updateMessage(
     messageId: messageId,
     parts: parts,
     status: MessageStatus.completed,
-    usage: usage,
     thinkingDurationMs: thinkingDurationMs,
   );
 
@@ -321,7 +365,6 @@ class _MemoryConversations implements ConversationRepository {
     required String messageId,
     required List<MessagePart> parts,
     required MessageStatus status,
-    TokenUsage? usage,
     int? thinkingDurationMs,
   }) async {
     for (final entries in messages.values) {
@@ -330,7 +373,6 @@ class _MemoryConversations implements ConversationRepository {
       entries[index] = entries[index].copyWith(
         parts: parts,
         status: status,
-        usage: usage,
         thinkingDurationMs: thinkingDurationMs,
       );
     }
@@ -496,6 +538,13 @@ void main() {
           ),
           conversationRepositoryProvider.overrideWith((ref) => conversations),
           agentRunRepositoryProvider.overrideWith((ref) => _MemoryRuns()),
+          modelRequestRepositoryProvider.overrideWith(
+            (ref) => _MemoryRequests(),
+          ),
+          agentContextRepositoryProvider.overrideWith(
+            (ref) => _MemorySummaries(),
+          ),
+          contextPreviewProvider.overrideWith((ref, id) async => null),
           toolCallRepositoryProvider.overrideWith((ref) => _UnusedToolCalls()),
           assistantRepositoryProvider.overrideWith((ref) => MemoryAssistants()),
           providerProfilesProvider.overrideWith(

@@ -16,6 +16,8 @@ import 'chat_controller.dart';
 import 'chat_input_surface.dart';
 import 'chat_send_button.dart';
 import 'model_selection.dart';
+import 'context/context_preview.dart';
+import 'usage/usage_panel.dart';
 
 /// 文本与动作分层的输入栏；由页面 Scaffold 处理键盘位移。
 class ChatInputBar extends ConsumerStatefulWidget {
@@ -66,7 +68,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       _,
       generating,
     ) {
-      if (!generating) return;
+      if (!generating || _pendingText == null) return;
       // 生成状态意味着 controller 已接收并落库，之前的草稿不能提前清掉。
       if (_pendingText != null && _controller.text == _pendingText) {
         _controller.clear();
@@ -75,6 +77,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       if (_attachments.isNotEmpty) setState(() => _attachments = const []);
     });
     final selection = ref.watch(modelSelectionProvider);
+    final conversationId = ref.watch(
+      activeConversationProvider.select((s) => s.conversationId),
+    );
+    final preview = conversationId == null
+        ? null
+        : ref.watch(contextPreviewProvider(conversationId));
     final theme = Theme.of(context);
     final needsConfiguration =
         selection.hasError || (!selection.isLoading && selection.value == null);
@@ -215,6 +223,37 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           }),
                         ),
                       Flexible(child: field),
+                      if (conversationId != null)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton(
+                            key: const ValueKey('chat-context-usage'),
+                            style: TextButton.styleFrom(
+                              foregroundColor:
+                                  theme.colorScheme.onSurfaceVariant,
+                              minimumSize: const Size(48, 48),
+                            ),
+                            onPressed: () => context.push(
+                              '/conversations/$conversationId/context',
+                            ),
+                            child: preview!.when(
+                              skipLoadingOnReload: false,
+                              skipLoadingOnRefresh: false,
+                              loading: () => const Text('上下文 · 待估算'),
+                              error: (_, _) => const Text('上下文 · 暂不可用'),
+                              data: (build) => build?.measurement == null
+                                  ? const Text('上下文 · 待估算')
+                                  : Semantics(
+                                      excludeSemantics: true,
+                                      label:
+                                          '上下文预计输入 ${build!.estimatedTokens} token，${build.measurement!.defaultWindow ? '本地默认' : '用户配置'}窗口 ${build.measurement!.windowTokens} token',
+                                      child: Text(
+                                        '上下文 ≈${formatTokenCount(build.estimatedTokens)} / ${formatTokenCount(build.measurement!.windowTokens)}',
+                                      ),
+                                    ),
+                            ),
+                          ),
+                        ),
                       actions,
                     ],
                   ),

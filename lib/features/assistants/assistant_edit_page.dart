@@ -320,6 +320,25 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                         : (scope) => setState(() => _memoryScope = scope),
                   ),
                   const SizedBox(height: AppSpacing.l),
+                  AppDropdown<ToolPolicy>(
+                    label: '历史详情读取',
+                    value:
+                        _toolPolicy.policies['read_history'] ??
+                        ToolPolicy.allow,
+                    options: {
+                      for (final policy in ToolPolicy.values)
+                        policy: ToolPresentation.policyLabel(policy),
+                    },
+                    onChanged: _saving
+                        ? null
+                        : (policy) => setState(
+                            () => _toolPolicy = _toolPolicy.withPolicy(
+                              'read_history',
+                              policy,
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: AppSpacing.l),
                   if (_memoryScope != MemoryScope.disabled) ...[
                     AppDropdown<ToolPolicy>(
                       label: '记忆写入',
