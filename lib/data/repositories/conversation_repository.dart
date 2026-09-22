@@ -356,6 +356,18 @@ class ConversationRepository {
                       ),
                 );
           }
+          final archives = await (_db.select(
+            _db.usageArchives,
+          )..where((t) => t.conversationId.equals(id))).get();
+          for (final archive in archives) {
+            await _db
+                .into(_db.usageArchives)
+                .insert(
+                  archive
+                      .toCompanion(false)
+                      .copyWith(conversationId: Value(copy.id)),
+                );
+          }
           for (final row in planRows) {
             await _db
                 .into(_db.agentPlans)

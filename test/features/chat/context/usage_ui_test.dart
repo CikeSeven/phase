@@ -168,7 +168,7 @@ void main() {
           expect(find.text('输入总量：100 · 1 次请求未提供'), findsOneWidget);
           expect(find.text('已报告请求命中率：80.0% · 覆盖 1/2 次'), findsOneWidget);
           await tester.scrollUntilVisible(
-            find.textContaining('继承记录'),
+            find.textContaining('不计本会话消耗'),
             180,
             scrollable: find.byType(Scrollable).first,
           );

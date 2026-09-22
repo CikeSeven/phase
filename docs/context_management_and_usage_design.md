@@ -187,7 +187,7 @@ OpenAI/Google 的输入总量包含缓存；Anthropic 的 `input_tokens` 不等�
 
 ### 7.4 数据发布边界
 
-当前初版 schema 为 8：新增请求表，移除消息/运行/摘要的重复 usage_json，摘要增加检查点元数据、可空 runId。已同步生成物，不建设开发期 JSON 转换或双写。旧 v6 → v7 安装例外保留在历史记录，不授权 v7 → v8；当前拒绝旧库直接升级。后续装机需明确保数据范围并另做备份/升级验证，禁止清数据绕过。
+当前初版 schema 为 8：新增请求表，移除消息/运行/摘要的重复 usage_json，摘要增加检查点元数据、可空 runId。2026-09-22 用户明确要求安装后，仅为已有 E5 安装加入 v7 → v8 例外：三处旧 usage 原始文本保存在 `usage_archives`，不解析旧口径、不伪造请求记录、不计入新统计；旧摘要和其他业务列原样保留。档案随会话复制、级联删除，不形成双写或其他版本升级链。假数据加密库验证重复打开、引用失败回滚和复制归属；设备备份与验证结果见实施计划。
 
 ## 8. 上下文计量服务
 
@@ -561,6 +561,8 @@ C = W - O - M
 下列为验收标准。当前本地回归入口是 `test/providers/usage_normalization_test.dart`、`test/data/repositories/model_request_repository_test.dart` 与 `test/features/chat/context/`：真实本地 HTTP/SSE 经四协议、控制器到数据库；重复/缺失用量、失败/停止、继承记录、预算投影、连续至少三次单任务压缩、分段失败、激活回滚和分页范围。`summary_transport_test.dart` 验证真实等待响应/空闲 SSE 断连。固定摘要只验证流程，不代表真实模型质量。
 
 2026-09-22 本机检查：`build_runner` 生成完成；`dart format --output=none --set-exit-if-changed lib test`、`flutter analyze`、全量 `flutter test`（1211 通过，4 项已有预览跳过）与 `git diff --check` 通过。布局回归包含 320/360dp、横屏、1x/2x 字号和既有输入/键盘用例。未新增依赖，未改原生代码，未运行 APK/JVM 构建或设备操作；未验证真实模型摘要质量、外部付费网关、视觉/读屏和真机 Profile 性能。
+
+随后获用户安装授权，加入且仅验证 v7 → v8 保数据例外；全量测试更新为 1213 通过、4 项跳过。已用同签名 Profile 包覆盖到 `1b8418ca`，升级前后原业务数据及旧用量完整性检查通过，最终产品包安装和启动成功。备份、精确范围与未验证项见 [实施计划 §7.1](./implementation_plan.md#71-e51上下文计量与用量增强)，不把装机成功等同于摘要质量或新功能真机验收。
 
 | 场景 | 必须观察到的结果 |
 |---|---|

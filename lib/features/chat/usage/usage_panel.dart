@@ -97,12 +97,12 @@ class _UsagePanelState extends ConsumerState<UsagePanel> {
             ),
             const SizedBox(height: 8),
             Text('已报告用量 · ${totals.requestCount} 次实际请求（摘要 $summaryCount 次）'),
-            const Text('消耗包含重复发送的历史，不代表当前窗口占用或账单金额。'),
+            const Text('仅统计有请求记录的已报告用量；升级前档案与继承记录不计入。不代表当前窗口占用或账单金额。'),
             if (totals.includesPending) const Text('包含进行中请求，统计尚未收口'),
             if (totals.requestCount == 0)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
-                child: Text('此范围尚无实际请求'),
+                child: Text('此范围尚无请求计量记录'),
               ),
             for (final field in UsageField.values)
               Padding(

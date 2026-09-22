@@ -325,6 +325,19 @@ class ModelRequests extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// 本次升级保留的旧用量原始报告，不参与请求统计或上下文基准。
+/// sourceId 只记录归档时的来源，不解析旧口径、不伪造请求身份。
+@DataClassName('UsageArchiveRow')
+class UsageArchives extends Table {
+  TextColumn get conversationId =>
+      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get sourceKind => text()();
+  TextColumn get sourceId => text()();
+  TextColumn get reportJson => text()();
+  @override
+  Set<Column> get primaryKey => {conversationId, sourceKind, sourceId};
+}
+
 @DataClassName('AgentPlanRow')
 class AgentPlans extends Table {
   TextColumn get id => text()();
@@ -377,6 +390,7 @@ class MemoryEntries extends Table {
     WorkspaceCopies,
     ContextSummaries,
     ModelRequests,
+    UsageArchives,
     AgentPlans,
     MemoryEntries,
   ],
@@ -391,9 +405,45 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    // E5.1 改动初版数据契约；尚未授权覆盖升级已有测试安装。
+    // 用户本次要求覆盖安装：只支持已安装 E5 的 7 → 8，不补历史链。
     onUpgrade: (migrator, from, to) async {
-      throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
+      if (from != 7 || to != 8) {
+        throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
+      }
+      // 重建父表期间禁止级联；事务内核对全部引用，失败整体回滚。
+      await customStatement('PRAGMA foreign_keys = OFF');
+      try {
+        await transaction(() async {
+          await migrator.createTable(modelRequests);
+          await migrator.createTable(usageArchives);
+          for (final source in const {
+            'messages': 'message',
+            'agent_runs': 'run',
+            'context_summaries': 'summary',
+          }.entries) {
+            await customStatement(
+              'INSERT INTO usage_archives (conversation_id, source_kind, source_id, report_json) '
+              'SELECT conversation_id, ?, id, usage_json FROM ${source.key} WHERE usage_json IS NOT NULL',
+              [source.value],
+            );
+          }
+          await migrator.alterTable(TableMigration(messages));
+          await migrator.alterTable(TableMigration(agentRuns));
+          await migrator.alterTable(
+            TableMigration(
+              contextSummaries,
+              newColumns: [contextSummaries.checkpointJson],
+            ),
+          );
+          if ((await customSelect(
+            'PRAGMA foreign_key_check',
+          ).get()).isNotEmpty) {
+            throw const OperationFailure('升级引用检查失败，已保留原数据');
+          }
+        });
+      } finally {
+        await customStatement('PRAGMA foreign_keys = ON');
+      }
     },
     beforeOpen: _prepareDatabase,
   );

@@ -9728,6 +9728,343 @@ class ModelRequestsCompanion extends UpdateCompanion<ModelRequestRow> {
   }
 }
 
+class $UsageArchivesTable extends UsageArchives
+    with TableInfo<$UsageArchivesTable, UsageArchiveRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $UsageArchivesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES conversations (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _sourceKindMeta = const VerificationMeta(
+    'sourceKind',
+  );
+  @override
+  late final GeneratedColumn<String> sourceKind = GeneratedColumn<String>(
+    'source_kind',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceIdMeta = const VerificationMeta(
+    'sourceId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceId = GeneratedColumn<String>(
+    'source_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _reportJsonMeta = const VerificationMeta(
+    'reportJson',
+  );
+  @override
+  late final GeneratedColumn<String> reportJson = GeneratedColumn<String>(
+    'report_json',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    conversationId,
+    sourceKind,
+    sourceId,
+    reportJson,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'usage_archives';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<UsageArchiveRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('source_kind')) {
+      context.handle(
+        _sourceKindMeta,
+        sourceKind.isAcceptableOrUnknown(data['source_kind']!, _sourceKindMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceKindMeta);
+    }
+    if (data.containsKey('source_id')) {
+      context.handle(
+        _sourceIdMeta,
+        sourceId.isAcceptableOrUnknown(data['source_id']!, _sourceIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceIdMeta);
+    }
+    if (data.containsKey('report_json')) {
+      context.handle(
+        _reportJsonMeta,
+        reportJson.isAcceptableOrUnknown(data['report_json']!, _reportJsonMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_reportJsonMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {
+    conversationId,
+    sourceKind,
+    sourceId,
+  };
+  @override
+  UsageArchiveRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return UsageArchiveRow(
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      sourceKind: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_kind'],
+      )!,
+      sourceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_id'],
+      )!,
+      reportJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}report_json'],
+      )!,
+    );
+  }
+
+  @override
+  $UsageArchivesTable createAlias(String alias) {
+    return $UsageArchivesTable(attachedDatabase, alias);
+  }
+}
+
+class UsageArchiveRow extends DataClass implements Insertable<UsageArchiveRow> {
+  final String conversationId;
+  final String sourceKind;
+  final String sourceId;
+  final String reportJson;
+  const UsageArchiveRow({
+    required this.conversationId,
+    required this.sourceKind,
+    required this.sourceId,
+    required this.reportJson,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['conversation_id'] = Variable<String>(conversationId);
+    map['source_kind'] = Variable<String>(sourceKind);
+    map['source_id'] = Variable<String>(sourceId);
+    map['report_json'] = Variable<String>(reportJson);
+    return map;
+  }
+
+  UsageArchivesCompanion toCompanion(bool nullToAbsent) {
+    return UsageArchivesCompanion(
+      conversationId: Value(conversationId),
+      sourceKind: Value(sourceKind),
+      sourceId: Value(sourceId),
+      reportJson: Value(reportJson),
+    );
+  }
+
+  factory UsageArchiveRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return UsageArchiveRow(
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      sourceKind: serializer.fromJson<String>(json['sourceKind']),
+      sourceId: serializer.fromJson<String>(json['sourceId']),
+      reportJson: serializer.fromJson<String>(json['reportJson']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'conversationId': serializer.toJson<String>(conversationId),
+      'sourceKind': serializer.toJson<String>(sourceKind),
+      'sourceId': serializer.toJson<String>(sourceId),
+      'reportJson': serializer.toJson<String>(reportJson),
+    };
+  }
+
+  UsageArchiveRow copyWith({
+    String? conversationId,
+    String? sourceKind,
+    String? sourceId,
+    String? reportJson,
+  }) => UsageArchiveRow(
+    conversationId: conversationId ?? this.conversationId,
+    sourceKind: sourceKind ?? this.sourceKind,
+    sourceId: sourceId ?? this.sourceId,
+    reportJson: reportJson ?? this.reportJson,
+  );
+  UsageArchiveRow copyWithCompanion(UsageArchivesCompanion data) {
+    return UsageArchiveRow(
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      sourceKind: data.sourceKind.present
+          ? data.sourceKind.value
+          : this.sourceKind,
+      sourceId: data.sourceId.present ? data.sourceId.value : this.sourceId,
+      reportJson: data.reportJson.present
+          ? data.reportJson.value
+          : this.reportJson,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UsageArchiveRow(')
+          ..write('conversationId: $conversationId, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('reportJson: $reportJson')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(conversationId, sourceKind, sourceId, reportJson);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is UsageArchiveRow &&
+          other.conversationId == this.conversationId &&
+          other.sourceKind == this.sourceKind &&
+          other.sourceId == this.sourceId &&
+          other.reportJson == this.reportJson);
+}
+
+class UsageArchivesCompanion extends UpdateCompanion<UsageArchiveRow> {
+  final Value<String> conversationId;
+  final Value<String> sourceKind;
+  final Value<String> sourceId;
+  final Value<String> reportJson;
+  final Value<int> rowid;
+  const UsageArchivesCompanion({
+    this.conversationId = const Value.absent(),
+    this.sourceKind = const Value.absent(),
+    this.sourceId = const Value.absent(),
+    this.reportJson = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  UsageArchivesCompanion.insert({
+    required String conversationId,
+    required String sourceKind,
+    required String sourceId,
+    required String reportJson,
+    this.rowid = const Value.absent(),
+  }) : conversationId = Value(conversationId),
+       sourceKind = Value(sourceKind),
+       sourceId = Value(sourceId),
+       reportJson = Value(reportJson);
+  static Insertable<UsageArchiveRow> custom({
+    Expression<String>? conversationId,
+    Expression<String>? sourceKind,
+    Expression<String>? sourceId,
+    Expression<String>? reportJson,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (sourceKind != null) 'source_kind': sourceKind,
+      if (sourceId != null) 'source_id': sourceId,
+      if (reportJson != null) 'report_json': reportJson,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  UsageArchivesCompanion copyWith({
+    Value<String>? conversationId,
+    Value<String>? sourceKind,
+    Value<String>? sourceId,
+    Value<String>? reportJson,
+    Value<int>? rowid,
+  }) {
+    return UsageArchivesCompanion(
+      conversationId: conversationId ?? this.conversationId,
+      sourceKind: sourceKind ?? this.sourceKind,
+      sourceId: sourceId ?? this.sourceId,
+      reportJson: reportJson ?? this.reportJson,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (sourceKind.present) {
+      map['source_kind'] = Variable<String>(sourceKind.value);
+    }
+    if (sourceId.present) {
+      map['source_id'] = Variable<String>(sourceId.value);
+    }
+    if (reportJson.present) {
+      map['report_json'] = Variable<String>(reportJson.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('UsageArchivesCompanion(')
+          ..write('conversationId: $conversationId, ')
+          ..write('sourceKind: $sourceKind, ')
+          ..write('sourceId: $sourceId, ')
+          ..write('reportJson: $reportJson, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $AgentPlansTable extends AgentPlans
     with TableInfo<$AgentPlansTable, AgentPlanRow> {
   @override
@@ -10917,6 +11254,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $ModelRequestsTable modelRequests = $ModelRequestsTable(this);
+  late final $UsageArchivesTable usageArchives = $UsageArchivesTable(this);
   late final $AgentPlansTable agentPlans = $AgentPlansTable(this);
   late final $MemoryEntriesTable memoryEntries = $MemoryEntriesTable(this);
   @override
@@ -10939,6 +11277,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     workspaceCopies,
     contextSummaries,
     modelRequests,
+    usageArchives,
     agentPlans,
     memoryEntries,
   ];
@@ -11006,6 +11345,13 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('model_requests', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'conversations',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('usage_archives', kind: UpdateKind.delete)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -12657,6 +13003,24 @@ final class $$ConversationsTableReferences
     );
   }
 
+  static MultiTypedResultKey<$UsageArchivesTable, List<UsageArchiveRow>>
+  _usageArchivesRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.usageArchives,
+    aliasName: 'conversations__id__usage_archives__conversation_id',
+  );
+
+  $$UsageArchivesTableProcessedTableManager get usageArchivesRefs {
+    final manager = $$UsageArchivesTableTableManager(
+      $_db,
+      $_db.usageArchives,
+    ).filter((f) => f.conversationId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_usageArchivesRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
   static MultiTypedResultKey<$AgentPlansTable, List<AgentPlanRow>>
   _agentPlansRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
     db.agentPlans,
@@ -12864,6 +13228,31 @@ class $$ConversationsTableFilterComposer
           }) => $$ModelRequestsTableFilterComposer(
             $db: $db,
             $table: $db.modelRequests,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> usageArchivesRefs(
+    Expression<bool> Function($$UsageArchivesTableFilterComposer f) f,
+  ) {
+    final $$UsageArchivesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.usageArchives,
+      getReferencedColumn: (t) => t.conversationId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsageArchivesTableFilterComposer(
+            $db: $db,
+            $table: $db.usageArchives,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -13159,6 +13548,31 @@ class $$ConversationsTableAnnotationComposer
     return f(composer);
   }
 
+  Expression<T> usageArchivesRefs<T extends Object>(
+    Expression<T> Function($$UsageArchivesTableAnnotationComposer a) f,
+  ) {
+    final $$UsageArchivesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.usageArchives,
+      getReferencedColumn: (t) => t.conversationId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$UsageArchivesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.usageArchives,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
   Expression<T> agentPlansRefs<T extends Object>(
     Expression<T> Function($$AgentPlansTableAnnotationComposer a) f,
   ) {
@@ -13205,6 +13619,7 @@ class $$ConversationsTableTableManager
             bool agentRunsRefs,
             bool contextSummariesRefs,
             bool modelRequestsRefs,
+            bool usageArchivesRefs,
             bool agentPlansRefs,
           })
         > {
@@ -13283,6 +13698,7 @@ class $$ConversationsTableTableManager
                 agentRunsRefs = false,
                 contextSummariesRefs = false,
                 modelRequestsRefs = false,
+                usageArchivesRefs = false,
                 agentPlansRefs = false,
               }) {
                 return PrefetchHooks(
@@ -13293,6 +13709,7 @@ class $$ConversationsTableTableManager
                     if (agentRunsRefs) db.agentRuns,
                     if (contextSummariesRefs) db.contextSummaries,
                     if (modelRequestsRefs) db.modelRequests,
+                    if (usageArchivesRefs) db.usageArchives,
                     if (agentPlansRefs) db.agentPlans,
                   ],
                   addJoins:
@@ -13432,6 +13849,27 @@ class $$ConversationsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (usageArchivesRefs)
+                        await $_getPrefetchedData<
+                          ConversationRow,
+                          $ConversationsTable,
+                          UsageArchiveRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ConversationsTableReferences
+                              ._usageArchivesRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ConversationsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).usageArchivesRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.conversationId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (agentPlansRefs)
                         await $_getPrefetchedData<
                           ConversationRow,
@@ -13480,6 +13918,7 @@ typedef $$ConversationsTableProcessedTableManager =
         bool agentRunsRefs,
         bool contextSummariesRefs,
         bool modelRequestsRefs,
+        bool usageArchivesRefs,
         bool agentPlansRefs,
       })
     >;
@@ -17723,6 +18162,312 @@ typedef $$ModelRequestsTableProcessedTableManager =
       ModelRequestRow,
       PrefetchHooks Function({bool conversationId})
     >;
+typedef $$UsageArchivesTableCreateCompanionBuilder =
+    UsageArchivesCompanion Function({
+      required String conversationId,
+      required String sourceKind,
+      required String sourceId,
+      required String reportJson,
+      Value<int> rowid,
+    });
+typedef $$UsageArchivesTableUpdateCompanionBuilder =
+    UsageArchivesCompanion Function({
+      Value<String> conversationId,
+      Value<String> sourceKind,
+      Value<String> sourceId,
+      Value<String> reportJson,
+      Value<int> rowid,
+    });
+
+final class $$UsageArchivesTableReferences
+    extends
+        BaseReferences<_$AppDatabase, $UsageArchivesTable, UsageArchiveRow> {
+  $$UsageArchivesTableReferences(
+    super.$_db,
+    super.$_table,
+    super.$_typedResult,
+  );
+
+  static $ConversationsTable _conversationIdTable(_$AppDatabase db) => db
+      .conversations
+      .createAlias('usage_archives__conversation_id__conversations__id');
+
+  $$ConversationsTableProcessedTableManager get conversationId {
+    final $_column = $_itemColumn<String>('conversation_id')!;
+
+    final manager = $$ConversationsTableTableManager(
+      $_db,
+      $_db.conversations,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_conversationIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$UsageArchivesTableFilterComposer
+    extends Composer<_$AppDatabase, $UsageArchivesTable> {
+  $$UsageArchivesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get reportJson => $composableBuilder(
+    column: $table.reportJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ConversationsTableFilterComposer get conversationId {
+    final $$ConversationsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableFilterComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UsageArchivesTableOrderingComposer
+    extends Composer<_$AppDatabase, $UsageArchivesTable> {
+  $$UsageArchivesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceId => $composableBuilder(
+    column: $table.sourceId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get reportJson => $composableBuilder(
+    column: $table.reportJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ConversationsTableOrderingComposer get conversationId {
+    final $$ConversationsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableOrderingComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UsageArchivesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $UsageArchivesTable> {
+  $$UsageArchivesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get sourceKind => $composableBuilder(
+    column: $table.sourceKind,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sourceId =>
+      $composableBuilder(column: $table.sourceId, builder: (column) => column);
+
+  GeneratedColumn<String> get reportJson => $composableBuilder(
+    column: $table.reportJson,
+    builder: (column) => column,
+  );
+
+  $$ConversationsTableAnnotationComposer get conversationId {
+    final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$UsageArchivesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $UsageArchivesTable,
+          UsageArchiveRow,
+          $$UsageArchivesTableFilterComposer,
+          $$UsageArchivesTableOrderingComposer,
+          $$UsageArchivesTableAnnotationComposer,
+          $$UsageArchivesTableCreateCompanionBuilder,
+          $$UsageArchivesTableUpdateCompanionBuilder,
+          (UsageArchiveRow, $$UsageArchivesTableReferences),
+          UsageArchiveRow,
+          PrefetchHooks Function({bool conversationId})
+        > {
+  $$UsageArchivesTableTableManager(_$AppDatabase db, $UsageArchivesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$UsageArchivesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$UsageArchivesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$UsageArchivesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> conversationId = const Value.absent(),
+                Value<String> sourceKind = const Value.absent(),
+                Value<String> sourceId = const Value.absent(),
+                Value<String> reportJson = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => UsageArchivesCompanion(
+                conversationId: conversationId,
+                sourceKind: sourceKind,
+                sourceId: sourceId,
+                reportJson: reportJson,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String conversationId,
+                required String sourceKind,
+                required String sourceId,
+                required String reportJson,
+                Value<int> rowid = const Value.absent(),
+              }) => UsageArchivesCompanion.insert(
+                conversationId: conversationId,
+                sourceKind: sourceKind,
+                sourceId: sourceId,
+                reportJson: reportJson,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$UsageArchivesTable, UsageArchiveRow>(table),
+                  $$UsageArchivesTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: ({conversationId = false}) {
+            return PrefetchHooks(
+              db: db,
+              explicitlyWatchedTables: [],
+              addJoins:
+                  <
+                    T extends TableManagerState<
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic,
+                      dynamic
+                    >
+                  >(state) {
+                    if (conversationId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.conversationId,
+                        referencedTable: $$UsageArchivesTableReferences
+                            ._conversationIdTable(db),
+                        referencedColumn: $$UsageArchivesTableReferences
+                            ._conversationIdTable(db)
+                            .id,
+                      ) as T;
+                    }
+
+                    return state;
+                  },
+              getPrefetchedDataCallback: (items) async {
+                return [];
+              },
+            );
+          },
+        ),
+      );
+}
+
+typedef $$UsageArchivesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $UsageArchivesTable,
+      UsageArchiveRow,
+      $$UsageArchivesTableFilterComposer,
+      $$UsageArchivesTableOrderingComposer,
+      $$UsageArchivesTableAnnotationComposer,
+      $$UsageArchivesTableCreateCompanionBuilder,
+      $$UsageArchivesTableUpdateCompanionBuilder,
+      (UsageArchiveRow, $$UsageArchivesTableReferences),
+      UsageArchiveRow,
+      PrefetchHooks Function({bool conversationId})
+    >;
 typedef $$AgentPlansTableCreateCompanionBuilder = AgentPlansCompanion Function({
   required String id,
   required int revision,
@@ -18444,6 +19189,8 @@ class $AppDatabaseManager {
       $$ContextSummariesTableTableManager(_db, _db.contextSummaries);
   $$ModelRequestsTableTableManager get modelRequests =>
       $$ModelRequestsTableTableManager(_db, _db.modelRequests);
+  $$UsageArchivesTableTableManager get usageArchives =>
+      $$UsageArchivesTableTableManager(_db, _db.usageArchives);
   $$AgentPlansTableTableManager get agentPlans =>
       $$AgentPlansTableTableManager(_db, _db.agentPlans);
   $$MemoryEntriesTableTableManager get memoryEntries =>
