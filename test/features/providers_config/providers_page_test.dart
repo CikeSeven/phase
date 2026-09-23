@@ -3,8 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
+import 'package:phase/core/error/provider_error.dart';
 import 'package:phase/core/widgets/app_card.dart';
+import 'package:phase/data/datasources/local/model_catalog_cache.dart';
+import 'package:phase/data/datasources/remote/models_dev_client.dart';
 import 'package:phase/data/models/api_protocol.dart';
+import 'package:phase/data/models/model_catalog.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/features/providers_config/provider_edit_page.dart';
@@ -199,4 +203,314 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('模型目录初始显示内置快照，刷新成功后写入缓存并更新状态', (tester) async {
+    final harness = ProviderTestHarness();
+    addTearDown(harness.dispose);
+    await harness.seed(tester);
+    harness.modelsDev.handler = ({etag}) async {
+      expect(etag, isNull);
+      return ModelsDevFetched(
+        catalog: ModelCatalog(
+          providers: const {
+            'groq': {
+              'llama-x': ModelCatalogEntry(
+                contextWindow: 131072,
+                maxOutputTokens: 16384,
+              ),
+            },
+          },
+          fetchedAt: DateTime(2026, 9, 23, 12, 30),
+        ),
+        etag: '"tag-1"',
+      );
+    };
+    await harness.pump(tester);
+    expect(find.text('模型目录：内置快照'), findsOneWidget);
+    // 刷新按钮的进度动画会卡死 pumpAndSettle，走定帧轮次。
+    await tapProviderControl(
+      tester,
+      keyed('refresh-model-catalog'),
+      settle: false,
+    );
+    await harness.settleCatalog(tester);
+    expect(find.text('模型目录已更新（1 个服务商 / 1 个模型）'), findsOneWidget);
+    expect(find.text('模型目录：更新于 2026-09-23 12:30'), findsOneWidget);
+    expect(harness.modelsDev.fetchCount, 1);
+    // ETag 落盘：二次刷新应带上它（304 路径由 busy 测试覆盖）。
+    final cached = await tester.runAsync(
+      () => ModelCatalogCache(harness.catalogDir).read(),
+    );
+    expect(cached?.etag, '"tag-1"');
+    expect(cached?.catalog.fetchedAt, DateTime(2026, 9, 23, 12, 30));
+    expect(find.text('模型目录：更新于 2026-09-23 12:30'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('目录刷新失败显示中文错误且不中断页面', (tester) async {
+    final harness = ProviderTestHarness();
+    addTearDown(harness.dispose);
+    await harness.seed(tester);
+    harness.modelsDev.handler = ({etag}) async =>
+        throw const ProviderError(ProviderErrorCategory.network, '网络连接失败');
+    await harness.pump(tester);
+    await tapProviderControl(
+      tester,
+      keyed('refresh-model-catalog'),
+      settle: false,
+    );
+    await harness.settleCatalog(tester);
+    expect(harness.modelsDev.fetchCount, 1);
+    expect(find.text('网络连接失败，请检查网络后重试'), findsOneWidget);
+    expect(find.text('模型目录：内置快照'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('目录刷新进行中按钮禁用，完成后恢复', (tester) async {
+    final harness = ProviderTestHarness();
+    addTearDown(harness.dispose);
+    await harness.seed(tester);
+    final cache = ModelCatalogCache(harness.catalogDir);
+    final previous = ModelCatalog(
+      providers: const {
+        'openai': {'x': ModelCatalogEntry(contextWindow: 200000)},
+      },
+      fetchedAt: DateTime(2026, 9, 23, 12, 30),
+    );
+    await tester.runAsync(
+      () => cache.write(CachedModelCatalog(catalog: previous, etag: '"saved"')),
+    );
+    final gate = Completer<void>();
+    harness.modelsDev.handler = ({etag}) async {
+      expect(etag, '"saved"');
+      await gate.future;
+      return ModelsDevNotModified();
+    };
+    await harness.pump(tester);
+    IconButton button() =>
+        tester.widget<IconButton>(keyed('refresh-model-catalog'));
+    expect(button().onPressed, isNotNull);
+    await tapProviderControl(
+      tester,
+      keyed('refresh-model-catalog'),
+      settle: false,
+    );
+    // 等缓存读取完成后进入 fetch，确认按钮处于禁用态。
+    await pumpProviderUntil(tester, () => harness.modelsDev.fetchCount == 1);
+    expect(button().onPressed, isNull);
+    await tester.tap(keyed('refresh-model-catalog'));
+    await tester.pump();
+    expect(harness.modelsDev.fetchCount, 1);
+    gate.complete();
+    await harness.settleCatalog(tester);
+    expect(button().onPressed, isNotNull);
+    expect(find.text('模型目录已是最新'), findsOneWidget);
+    expect(find.text('模型目录：更新于 2026-09-23 12:30'), findsOneWidget);
+    expect(
+      (await tester.runAsync(cache.read))!.catalog.fetchedAt,
+      previous.fetchedAt,
+    );
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('无服务商时首次刷新等待缓存初始化，显示目录状态且无需第二次点击', (tester) async {
+    final gate = Completer<ModelCatalogCache>();
+    final harness = ProviderTestHarness(openCatalogCache: () => gate.future);
+    addTearDown(harness.dispose);
+    harness.modelsDev.handler = ({etag}) async => ModelsDevFetched(
+      catalog: ModelCatalog(
+        providers: const {
+          'openai': {'x': ModelCatalogEntry(contextWindow: 200000)},
+        },
+        fetchedAt: DateTime(2026, 9, 23, 12, 30),
+      ),
+    );
+    await harness.pump(tester, settle: false);
+    await settleProviderUi(tester);
+    expect(find.text('暂无服务商'), findsOneWidget);
+    expect(find.text('模型目录：读取中'), findsOneWidget);
+    await tapProviderControl(
+      tester,
+      keyed('refresh-model-catalog'),
+      settle: false,
+    );
+    expect(harness.modelsDev.fetchCount, 0);
+    expect(
+      tester.widget<IconButton>(keyed('refresh-model-catalog')).onPressed,
+      isNull,
+    );
+    gate.complete(ModelCatalogCache(harness.catalogDir));
+    await harness.settleCatalog(tester);
+    expect(harness.modelsDev.fetchCount, 1);
+    expect(find.text('模型目录：更新于 2026-09-23 12:30'), findsOneWidget);
+    expect(find.text('模型目录已更新（1 个服务商 / 1 个模型）'), findsOneWidget);
+  });
+
+  testWidgets('缓存写入失败保留旧目录和 ETag，不提示更新成功', (tester) async {
+    late final ProviderTestHarness harness;
+    harness = ProviderTestHarness(
+      openCatalogCache: () async => _ReadOnlyCatalogCache(harness.catalogDir),
+    );
+    addTearDown(harness.dispose);
+    final cache = ModelCatalogCache(harness.catalogDir);
+    await tester.runAsync(
+      () => cache.write(
+        CachedModelCatalog(
+          catalog: ModelCatalog(
+            providers: const {
+              'openai': {'x': ModelCatalogEntry(contextWindow: 200000)},
+            },
+            fetchedAt: DateTime(2026, 9, 23, 12, 30),
+          ),
+          etag: 'old',
+        ),
+      ),
+    );
+    harness.modelsDev.handler = ({etag}) async => ModelsDevFetched(
+      catalog: ModelCatalog(
+        providers: const {
+          'openai': {'x': ModelCatalogEntry(contextWindow: 300000)},
+        },
+        fetchedAt: DateTime(2026, 9, 24),
+      ),
+      etag: 'new',
+    );
+    await harness.pump(tester);
+    await tapProviderControl(
+      tester,
+      keyed('refresh-model-catalog'),
+      settle: false,
+    );
+    await harness.settleCatalog(tester);
+    expect(find.text('数据读取或保存失败，请稍后重试'), findsOneWidget);
+    expect(find.textContaining('模型目录已更新'), findsNothing);
+    expect(find.text('模型目录：更新于 2026-09-23 12:30'), findsOneWidget);
+    expect((await tester.runAsync(cache.read))!.etag, 'old');
+  });
+
+  testWidgets('缓存初始化失败立即回退内置快照，手动刷新可重新初始化', (tester) async {
+    var opens = 0;
+    late final ProviderTestHarness harness;
+    harness = ProviderTestHarness(
+      openCatalogCache: () async {
+        if (++opens == 1) throw const StorageFailure('fixture');
+        return ModelCatalogCache(harness.catalogDir);
+      },
+    );
+    addTearDown(harness.dispose);
+    harness.modelsDev.handler = ({etag}) async => ModelsDevFetched(
+      catalog: ModelCatalog(
+        providers: const {
+          'openai': {'x': ModelCatalogEntry(contextWindow: 200000)},
+        },
+        fetchedAt: DateTime(2026, 9, 23, 12, 30),
+      ),
+    );
+    await harness.pump(tester);
+    expect(find.text('模型目录：内置快照'), findsOneWidget);
+    expect(opens, 1);
+    await tapProviderControl(
+      tester,
+      keyed('refresh-model-catalog'),
+      settle: false,
+    );
+    await harness.settleCatalog(tester);
+    expect(opens, 2);
+    expect(find.text('模型目录：更新于 2026-09-23 12:30'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('已开始的缓存写入在页面退出后仍同步生效目录', (tester) async {
+    late final ProviderTestHarness harness;
+    late final _DelayedCatalogCache cache;
+    harness = ProviderTestHarness(openCatalogCache: () async => cache);
+    cache = _DelayedCatalogCache(harness.catalogDir);
+    addTearDown(harness.dispose);
+    harness.modelsDev.handler = ({etag}) async => ModelsDevFetched(
+      catalog: ModelCatalog(
+        providers: const {
+          'openai': {'fixture': ModelCatalogEntry(contextWindow: 300000)},
+        },
+        fetchedAt: DateTime(2026, 9, 23, 12, 30),
+      ),
+    );
+    await harness.pump(tester);
+    await tapProviderControl(
+      tester,
+      keyed('refresh-model-catalog'),
+      settle: false,
+    );
+    await pumpProviderUntil(tester, () => cache.writing);
+    await tester.pumpWidget(const SizedBox.shrink());
+    cache.gate.complete();
+    await pumpProviderUntil(
+      tester,
+      () =>
+          harness.container.read(modelCatalogProvider).value?.fetchedAt != null,
+    );
+    expect(
+      harness.container
+          .read(modelCatalogProvider)
+          .requireValue
+          .lookup('openai', 'fixture')
+          ?.contextWindow,
+      300000,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('离开页面取消目录请求，迟到响应不写入缓存', (tester) async {
+    final harness = ProviderTestHarness();
+    addTearDown(harness.dispose);
+    final gate = Completer<ModelsDevFetchResult>();
+    harness.modelsDev.handler = ({etag}) => gate.future;
+    await harness.pump(tester);
+    await tapProviderControl(
+      tester,
+      keyed('refresh-model-catalog'),
+      settle: false,
+    );
+    await pumpProviderUntil(tester, () => harness.modelsDev.fetchCount == 1);
+    final cancellation = harness.modelsDev.lastCancellation!;
+    expect(cancellation.isCancelled, isFalse);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(cancellation.isCancelled, isTrue);
+    gate.complete(
+      ModelsDevFetched(
+        catalog: ModelCatalog(
+          providers: const {
+            'openai': {'x': ModelCatalogEntry(contextWindow: 200000)},
+          },
+          fetchedAt: DateTime(2026, 9, 23),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      await tester.runAsync(() => ModelCatalogCache(harness.catalogDir).read()),
+      isNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+}
+
+class _ReadOnlyCatalogCache extends ModelCatalogCache {
+  _ReadOnlyCatalogCache(super.root);
+
+  @override
+  Future<void> write(CachedModelCatalog value) async {
+    throw const StorageFailure('fixture');
+  }
+}
+
+class _DelayedCatalogCache extends ModelCatalogCache {
+  _DelayedCatalogCache(super.root);
+  final gate = Completer<void>();
+  var writing = false;
+
+  @override
+  Future<void> write(CachedModelCatalog value) async {
+    writing = true;
+    await gate.future;
+    await super.write(value);
+  }
 }

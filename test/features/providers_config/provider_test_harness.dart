@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,8 +11,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/datasources/local/key_store.dart';
+import 'package:phase/data/datasources/local/model_catalog_cache.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
+import 'package:phase/data/datasources/remote/models_dev_client.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_chunk.dart';
 import 'package:phase/data/models/chat_request.dart';
@@ -25,7 +29,7 @@ import 'package:phase/providers/ai_provider.dart';
 import 'package:phase/providers/provider_factory.dart';
 
 class ProviderTestHarness {
-  ProviderTestHarness({this.profileStream}) {
+  ProviderTestHarness({this.profileStream, this.openCatalogCache}) {
     repository = ProviderProfileRepository(
       database,
       SecureKeyStorage(keyStorage),
@@ -61,9 +65,14 @@ class ProviderTestHarness {
   }
 
   final Stream<List<ProviderProfile>> Function()? profileStream;
+  final Future<ModelCatalogCache> Function()? openCatalogCache;
   final database = AppDatabase(NativeDatabase.memory());
   final keyStorage = MemoryKeyStorage();
   final provider = FakeAiProvider();
+  final modelsDev = FakeModelsDevClient();
+  final catalogDir = Directory.systemTemp.createTempSync(
+    'phase_provider_catalog',
+  );
   final requests = <({ProviderProfile profile, String apiKey})>[];
   late final ProviderProfileRepository repository;
   late final ProviderContainer container;
@@ -73,6 +82,7 @@ class ProviderTestHarness {
     router.dispose();
     container.dispose();
     await database.close();
+    if (catalogDir.existsSync()) catalogDir.deleteSync(recursive: true);
   }
 
   Future<void> seed(
@@ -134,6 +144,12 @@ class ProviderTestHarness {
             return provider;
           },
         ),
+        modelCatalogCacheProvider.overrideWith(
+          (ref) async => openCatalogCache == null
+              ? ModelCatalogCache(catalogDir)
+              : await openCatalogCache!(),
+        ),
+        modelsDevClientProvider.overrideWith((ref) => modelsDev),
         if (profileStream != null)
           providerProfilesProvider.overrideWith((ref) => profileStream!()),
       ],
@@ -152,11 +168,40 @@ class ProviderTestHarness {
         ),
       ),
     );
-    if (settle) await settleProviderUi(tester);
+    if (settle) {
+      await settleProviderUi(tester);
+      // 目录 provider 的 rootBundle/缓存读取是真实异步（含文件 I/O），
+      // 需在真实事件循环里等它解析完再断言状态行。
+      await settleCatalog(tester);
+    }
   }
+
+  Future<void> settleCatalog(WidgetTester tester) =>
+      pumpProviderUntil(tester, () {
+        final catalog = container.read(modelCatalogProvider);
+        final buttons = keyed('refresh-model-catalog').evaluate();
+        final busy =
+            buttons.isNotEmpty &&
+            (buttons.single.widget as IconButton).onPressed == null;
+        return !catalog.isLoading && !busy;
+      });
 }
 
-/// 内存密钥库：记录读写次数与可注入的失败，不触碰平台安全存储。
+/// 真实 IO 与 fake-async 微任务交替推进，按完成状态等待，而不是固定帧数猜测。
+Future<void> pumpProviderUntil(
+  WidgetTester tester,
+  bool Function() ready,
+) async {
+  for (var i = 0; i < 200; i++) {
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 5)),
+    );
+    await tester.pump(const Duration(milliseconds: 20));
+    if (ready()) return;
+  }
+  fail('配置页面异步操作未完成');
+}
+
 class MemoryKeyStorage implements KeyStore {
   final keys = <String, String>{};
   Object? readError;
@@ -205,6 +250,26 @@ class FakeAiProvider implements AiProvider {
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) =>
       throw StateError('配置页面不应调用生成接口');
+}
+
+/// 目录拉取替身：记录调用，默认返回"未变化"。
+class FakeModelsDevClient extends ModelsDevClient {
+  FakeModelsDevClient() : super(dio: Dio());
+
+  Future<ModelsDevFetchResult> Function({String? etag}) handler = ({
+    etag,
+  }) async => ModelsDevNotModified();
+  int fetchCount = 0;
+  String? lastEtag;
+  CancelToken? lastCancellation;
+
+  @override
+  Future<ModelsDevFetchResult> fetch({String? etag, CancelToken? cancelToken}) {
+    fetchCount++;
+    lastEtag = etag;
+    lastCancellation = cancelToken;
+    return handler(etag: etag);
+  }
 }
 
 Finder keyed(String value) => find.byKey(ValueKey(value), skipOffstage: false);

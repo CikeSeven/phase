@@ -13,6 +13,7 @@ import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/models/attachment.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/message_part.dart';
+import 'package:phase/data/models/model_catalog.dart';
 import 'package:phase/data/models/model_selection.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/reasoning_effort.dart';
@@ -327,6 +328,76 @@ void main() {
     expect(finished.status, RunStatus.completed);
     expect(finished.activeToolCallId, isNull);
     expect(await runs.unfinished(), isEmpty);
+  });
+
+  test('运行配置的目录来源字段随运行持久化往返', () async {
+    final conversation = await conversations.createConversation();
+    await conversations.appendMessage(
+      message(
+        id: 'm1',
+        conversationId: conversation.id,
+        role: ChatRole.user,
+        parts: const [TextPart(text: '跑一下')],
+      ),
+    );
+    await runs.create(
+      AgentRun(
+        id: 'r1',
+        conversationId: conversation.id,
+        inputMessageId: 'm1',
+        configuration: RunConfiguration(
+          connection: const RunConnection(
+            profileId: 'p1',
+            protocol: 'openaiCompletions',
+            baseUrl: 'https://example.com/v1',
+            requiresKey: true,
+          ),
+          modelSelection: const ModelSelection(
+            profileId: 'p1',
+            modelId: 'claude-haiku-4-5',
+          ),
+          systemPrompt: '',
+          contextWindow: 200000,
+          contextWindowSource: ContextWindowSource.catalog.name,
+          catalogMaxOutputTokens: 64000,
+        ),
+        createdAt: DateTime.now(),
+      ),
+    );
+
+    final restored = (await runs.getById('r1'))!.configuration;
+    expect(restored.contextWindow, 200000);
+    expect(restored.contextWindowSource, ContextWindowSource.catalog.name);
+    expect(restored.catalogMaxOutputTokens, 64000);
+    expect(restored.resolvedWindowSource, ContextWindowSource.catalog);
+  });
+
+  test('老运行快照缺目录字段解码为 null，来源按窗口是否手填归类', () {
+    Map<String, dynamic> legacyJson({int? contextWindow}) => {
+      'connection': {
+        'profileId': 'p1',
+        'protocol': 'openaiCompletions',
+        'baseUrl': 'https://example.com/v1',
+        'requiresKey': true,
+      },
+      'modelSelection': {'profileId': 'p1', 'modelId': 'gpt-x'},
+      'systemPrompt': '',
+      'contextWindow': ?contextWindow,
+    };
+
+    final withoutWindow = RunConfiguration.fromJson(legacyJson());
+    expect(withoutWindow.contextWindow, isNull);
+    expect(withoutWindow.contextWindowSource, isNull);
+    expect(withoutWindow.catalogMaxOutputTokens, isNull);
+    expect(
+      withoutWindow.resolvedWindowSource,
+      ContextWindowSource.localDefault,
+    );
+
+    final withWindow = RunConfiguration.fromJson(legacyJson(contextWindow: 1));
+    expect(withWindow.contextWindowSource, isNull);
+    expect(withWindow.catalogMaxOutputTokens, isNull);
+    expect(withWindow.resolvedWindowSource, ContextWindowSource.user);
   });
 
   test('工具记录：确认后执行，结果与拒绝各自落库', () async {

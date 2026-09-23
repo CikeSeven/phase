@@ -3,6 +3,8 @@ import 'context/context_configuration.dart';
 import 'context/compaction_coordinator.dart';
 import 'context/read_history_tool.dart';
 import '../../../data/models/model_request_record.dart';
+import '../../../data/models/model_catalog.dart';
+import '../../../data/datasources/local/model_catalog_cache.dart';
 import '../../../data/repositories/model_request_repository.dart';
 import 'context/context_meter.dart';
 import '../../data/models/token_usage.dart';
@@ -161,6 +163,7 @@ class ChatState {
     currentAssistant,
     ActiveConversation,
     settingsStorage,
+    modelCatalog,
   ],
 )
 class ChatController extends _$ChatController implements AgentLoopHost {
@@ -701,6 +704,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final config = selection.profile.models
         .where((m) => m.id == selection.model)
         .firstOrNull;
+    // 窗口/输出上限解析：用户手填 > models.dev 目录 > 本地默认 128000。
+    final limits = resolveContextLimits(
+      presetId: selection.profile.presetId,
+      modelId: selection.model,
+      userContextWindow: config?.contextWindow,
+      userMaxOutputTokens: config?.maxOutputTokens,
+      catalog: await ref.read(modelCatalogProvider.future),
+    );
+    if (!ref.mounted) return null;
     final configuration = RunConfiguration(
       connection: RunConnection(
         profileId: selection.profile.id,
@@ -717,7 +729,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       ),
       systemPrompt: assistant?.systemPrompt ?? '',
       mode: mode,
-      contextWindow: config?.contextWindow,
+      contextWindow: limits.contextWindow,
+      contextWindowSource: limits.source.name,
+      catalogMaxOutputTokens: limits.catalogMaxOutputTokens,
       skills: skills,
       workspace: workspace,
       enabledTools: enabled,
@@ -818,6 +832,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                 _historyAllowed(prepared.request.tools, prepared.assistantId),
             reloadMessages: prepared.reloadMessages,
             contextWindow: prepared.configuration.contextWindow,
+            windowSource: prepared.configuration.resolvedWindowSource,
+            catalogMaxOutputTokens:
+                prepared.configuration.catalogMaxOutputTokens,
             policy: prepared.configuration.contextPolicy,
             force: true,
           );
@@ -857,6 +874,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final modelConfig = selection.profile.models
         .where((m) => m.id == selection.model)
         .firstOrNull;
+    // 窗口/输出上限解析：用户手填 > models.dev 目录 > 本地默认 128000。
+    // 目录输出上限只进本地预留，modelSelection 的 maxOutputTokens 仍只用用户值。
+    final limits = resolveContextLimits(
+      presetId: selection.profile.presetId,
+      modelId: selection.model,
+      userContextWindow: modelConfig?.contextWindow,
+      userMaxOutputTokens: modelConfig?.maxOutputTokens,
+      catalog: await ref.read(modelCatalogProvider.future),
+    );
+    if (!ref.mounted) throw const CancelledFailure('创建运行前已退出');
 
     if (mode == AgentMode.plan && !selection.supportsTools) {
       throw const OperationFailure('计划模式需要支持工具调用的模型');
@@ -943,7 +970,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         inputMessageId: inputMessageId,
         configuration: RunConfiguration(
           mode: mode,
-          contextWindow: modelConfig?.contextWindow,
+          contextWindow: limits.contextWindow,
+          contextWindowSource: limits.source.name,
+          catalogMaxOutputTokens: limits.catalogMaxOutputTokens,
           memoryScope: assistant?.memoryScope ?? MemoryScope.disabled,
           planId: approvedPlan?.id,
           planRevision: approvedPlan?.revision,
@@ -2133,6 +2162,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                   );
           },
           contextWindow: run.configuration.contextWindow,
+          windowSource: run.configuration.resolvedWindowSource,
+          catalogMaxOutputTokens: run.configuration.catalogMaxOutputTokens,
           policy: run.configuration.contextPolicy,
           force: force,
           onSummarizing: (value) {

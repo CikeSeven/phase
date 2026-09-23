@@ -14,9 +14,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/datasources/local/attachment_storage.dart';
+import 'package:phase/data/datasources/local/model_catalog_cache.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/agent_run.dart';
+import 'package:phase/data/models/model_catalog.dart';
 import 'package:phase/data/models/attachment.dart';
 import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
@@ -230,6 +232,9 @@ class ToolLoopHarness {
     ProcessDriver? processes,
     McpConnections? mcpConnections,
     List<ProfileModel>? models,
+    String presetId = 'custom',
+    ModelCatalog catalog = ModelCatalog.empty,
+    ModelCatalog Function()? readCatalog,
     AiProvider Function(ProviderProfile profile, String apiKey)? factory,
     Future<void> Function(Attachment attachment)? saveArtifact,
     ApiProtocol protocol = ApiProtocol.openaiCompletions,
@@ -253,6 +258,7 @@ class ToolLoopHarness {
     );
     final profile = await profileRepository.createProfile(
       name: '测试服务商',
+      presetId: presetId,
       baseUrl: 'https://example.com/v1',
       protocol: protocol,
       models: models ?? const [ProfileModel(id: 'model-a', enabled: true)],
@@ -303,6 +309,10 @@ class ToolLoopHarness {
         // 附件与产物写到临时目录，不依赖平台文档目录。
         attachmentStorageProvider.overrideWith(
           (ref) => AttachmentStorage(Directory(p.join(tempDir.path, 'files'))),
+        ),
+        // 控制器测试只使用确定的目录，不依赖 asset/platform channel。
+        modelCatalogProvider.overrideWith(
+          (ref) async => readCatalog?.call() ?? catalog,
         ),
         aiProviderFactoryProvider.overrideWith(
           (ref) =>

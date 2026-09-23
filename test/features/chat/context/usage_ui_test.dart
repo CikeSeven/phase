@@ -6,6 +6,7 @@ import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/model_request_record.dart';
+import 'package:phase/data/models/model_catalog.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/data/models/token_usage.dart';
 import 'package:phase/data/repositories/model_request_repository.dart';
@@ -56,6 +57,11 @@ void main() {
           tester.view.devicePixelRatio = 1;
           tester.view.physicalSize = size;
           addTearDown(tester.view.reset);
+          final windowSource = switch (size.width) {
+            320 => ContextWindowSource.catalog,
+            360 => ContextWindowSource.user,
+            _ => ContextWindowSource.localDefault,
+          };
           final plan = await planRequest(
             ProviderProfile(
               id: 'p',
@@ -64,8 +70,11 @@ void main() {
               baseUrl: 'https://fixture.test',
               createdAt: DateTime(2026),
             ),
-            const ChatRequest(
+            ChatRequest(
               modelId: 'm',
+              maxOutputTokens: windowSource == ContextWindowSource.user
+                  ? 8192
+                  : null,
               messages: [
                 ResolvedMessage(
                   role: ChatRole.user,
@@ -80,6 +89,15 @@ void main() {
             plan: plan,
             generation: 'original',
             requests: [],
+            windowSource: windowSource,
+            contextWindow: windowSource == ContextWindowSource.catalog
+                ? 200000
+                : windowSource == ContextWindowSource.user
+                ? 65536
+                : null,
+            catalogMaxOutputTokens: windowSource == ContextWindowSource.catalog
+                ? 64000
+                : null,
           );
           final container = ProviderContainer(
             overrides: [
@@ -87,7 +105,10 @@ void main() {
                 (ref) async => ContextBuild(
                   plan.request.messages,
                   measurement.estimatedInputTokens,
-                  const ContextBudget(),
+                  ContextBudget(
+                    contextWindow: measurement.windowTokens,
+                    maxOutputTokens: measurement.outputReserveTokens,
+                  ),
                   measurement: measurement,
                 ),
               ),
@@ -134,7 +155,22 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(find.textContaining('下一请求预计输入 ≈'), findsOneWidget);
-          expect(find.textContaining('本地默认窗口'), findsOneWidget);
+          expect(
+            find.textContaining(switch (windowSource) {
+              ContextWindowSource.catalog => 'models.dev 目录窗口',
+              ContextWindowSource.user => '用户配置窗口',
+              ContextWindowSource.localDefault => '本地默认窗口',
+            }),
+            findsOneWidget,
+          );
+          expect(
+            find.textContaining(switch (windowSource) {
+              ContextWindowSource.catalog => '（models.dev 目录上限）',
+              ContextWindowSource.user => '（协议实际参数）',
+              ContextWindowSource.localDefault => '（本地预留，服务端上限未知）',
+            }),
+            findsOneWidget,
+          );
           await tester.scrollUntilVisible(
             find.textContaining('不含未发送草稿'),
             160,

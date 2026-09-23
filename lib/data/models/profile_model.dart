@@ -32,7 +32,8 @@ class ProfileModel {
   final bool supportsTools;
   final bool supportsImages;
 
-  /// 上下文窗口用于本地预算；空值使用本地保守默认。输出上限为空时不下发。
+  /// 上下文窗口用于本地预算；空值按目录、本地默认依次解析。
+  /// 输出上限空值不覆盖协议默认，目录值不进入请求参数。
   final int? contextWindow;
   final int? maxOutputTokens;
 

@@ -285,6 +285,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                     ),
                   ),
                   ProviderModelEditor(
+                    presetId: _presetId,
                     models: _models,
                     enabled: !_busy,
                     onAdd: _addModel,

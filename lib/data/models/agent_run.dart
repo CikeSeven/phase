@@ -1,6 +1,7 @@
 import 'context_policy.dart';
 import 'agent_plan.dart';
 import 'memory_entry.dart';
+import 'model_catalog.dart';
 import 'workspace.dart';
 import 'skill_installation.dart';
 import 'model_selection.dart';
@@ -74,6 +75,8 @@ class RunConfiguration {
     this.workspace,
     this.mode = AgentMode.execute,
     this.contextWindow,
+    this.contextWindowSource,
+    this.catalogMaxOutputTokens,
     this.contextPolicy = const ContextPolicy(),
     this.planId,
     this.planRevision,
@@ -89,7 +92,20 @@ class RunConfiguration {
 
   final AgentMode mode;
   final int? contextWindow;
+
+  /// 窗口来源（ContextWindowSource.name）：user/catalog/localDefault；
+  /// 老数据为 null 时按 contextWindow 非空→user、空→localDefault 解读。
+  final String? contextWindowSource;
+
+  /// models.dev 目录输出上限快照；只用于本地输出预留，绝不下发请求。
+  final int? catalogMaxOutputTokens;
   final ContextPolicy contextPolicy;
+
+  /// 窗口来源枚举视图；兼容老快照的 null 来源字段。
+  ContextWindowSource get resolvedWindowSource => windowSourceFromSnapshot(
+    contextWindowSource,
+    contextWindow: contextWindow,
+  );
   final String? planId;
   final int? planRevision;
   final String? approvedPlan;
@@ -114,6 +130,8 @@ class RunConfiguration {
   Map<String, dynamic> toJson() => {
     'mode': mode.name,
     'contextWindow': contextWindow,
+    'contextWindowSource': contextWindowSource,
+    'catalogMaxOutputTokens': catalogMaxOutputTokens,
     'contextPolicy': contextPolicy.toJson(),
     'planId': planId,
     'planRevision': planRevision,
@@ -142,6 +160,8 @@ class RunConfiguration {
   ) => RunConfiguration(
     mode: AgentMode.values.byName(json['mode'] as String? ?? 'execute'),
     contextWindow: json['contextWindow'] as int?,
+    contextWindowSource: json['contextWindowSource'] as String?,
+    catalogMaxOutputTokens: json['catalogMaxOutputTokens'] as int?,
     contextPolicy: json['contextPolicy'] == null
         ? const ContextPolicy()
         : ContextPolicy.fromJson(json['contextPolicy'] as Map<String, dynamic>),

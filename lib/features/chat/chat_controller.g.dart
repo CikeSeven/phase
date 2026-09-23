@@ -29,6 +29,7 @@ final class ChatControllerProvider
           currentAssistantProvider,
           activeConversationProvider,
           settingsStorageProvider,
+          modelCatalogProvider,
         ],
         $allTransitiveDependencies: <ProviderOrFamily>{
           ChatControllerProvider.$allTransitiveDependencies0,
@@ -40,6 +41,8 @@ final class ChatControllerProvider
           ChatControllerProvider.$allTransitiveDependencies6,
           ChatControllerProvider.$allTransitiveDependencies7,
           ChatControllerProvider.$allTransitiveDependencies8,
+          ChatControllerProvider.$allTransitiveDependencies9,
+          ChatControllerProvider.$allTransitiveDependencies10,
         },
       );
 
@@ -59,6 +62,9 @@ final class ChatControllerProvider
   static final $allTransitiveDependencies7 =
       ModelSelectionProvider.$allTransitiveDependencies6;
   static final $allTransitiveDependencies8 = currentAssistantProvider;
+  static final $allTransitiveDependencies9 = modelCatalogProvider;
+  static final $allTransitiveDependencies10 =
+      ModelCatalogProvider.$allTransitiveDependencies0;
 
   @override
   String debugGetCreateSourceHash() => _$chatControllerHash();
@@ -76,7 +82,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'1308590bde3d0472666c0155268b0c4c46d82890';
+String _$chatControllerHash() => r'682a4d164c08bf2b6ab14762b1cda7d0770db03b';
 
 /// 聊天状态在应用生命周期内保留：切到设置页再回来不应丢失当前会话与流式状态。
 

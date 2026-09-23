@@ -9,6 +9,7 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/models/attachment.dart';
+import '../../../data/models/model_catalog.dart';
 import 'attachment_chips.dart';
 import 'attachment_picker.dart';
 import 'attachment_source_sheet.dart';
@@ -246,7 +247,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                                   : Semantics(
                                       excludeSemantics: true,
                                       label:
-                                          '上下文预计输入 ${build!.estimatedTokens} token，${build.measurement!.defaultWindow ? '本地默认' : '用户配置'}窗口 ${build.measurement!.windowTokens} token',
+                                          '上下文预计输入 ${build!.estimatedTokens} token，${switch (build.measurement!.windowSource) {
+                                            ContextWindowSource.user => '用户配置',
+                                            ContextWindowSource.catalog => 'models.dev 目录',
+                                            ContextWindowSource.localDefault => '本地默认',
+                                          }}窗口 ${build.measurement!.windowTokens} token',
                                       child: Text(
                                         '上下文 ≈${formatTokenCount(build.estimatedTokens)} / ${formatTokenCount(build.measurement!.windowTokens)}',
                                       ),

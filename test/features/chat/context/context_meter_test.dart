@@ -4,6 +4,7 @@ import 'package:phase/data/models/attachment.dart';
 import 'package:phase/data/models/chat_message.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/model_request_record.dart';
+import 'package:phase/data/models/model_catalog.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/data/models/reasoning_effort.dart';
@@ -151,8 +152,55 @@ void main() {
       generation: 'original',
       requests: [],
     );
-    expect(m.outputLimitUnknown, isTrue);
+    expect(m.outputReserveSource, OutputReserveSource.localDefault);
     expect(m.outputReserveTokens, 4096);
+  });
+
+  test('窗口来源三态：目录/用户/本地默认，目录输出上限只进预留', () async {
+    final p = profile(ApiProtocol.openaiCompletions);
+    final request = ChatRequest(modelId: 'm', messages: [text('u', '任务')]);
+    final plan = await planRequest(p, request);
+
+    // 未编目、未手填 → 本地默认 128000。
+    final fallback = await meter.measure(
+      conversationId: 'c',
+      plan: plan,
+      generation: 'original',
+      requests: [],
+    );
+    expect(fallback.windowTokens, ModelCatalog.localDefaultWindow);
+    expect(fallback.windowSource, ContextWindowSource.localDefault);
+    expect(fallback.outputReserveSource, OutputReserveSource.localDefault);
+
+    // 目录窗口进入测量，目录输出上限填充预留。
+    final catalog = await meter.measure(
+      conversationId: 'c',
+      plan: plan,
+      generation: 'original',
+      requests: [],
+      contextWindow: 200000,
+      windowSource: ContextWindowSource.catalog,
+      catalogMaxOutputTokens: 64000,
+    );
+    expect(catalog.windowTokens, 200000);
+    expect(catalog.windowSource, ContextWindowSource.catalog);
+    expect(catalog.outputReserveTokens, 64000);
+    expect(catalog.outputReserveSource, OutputReserveSource.catalog);
+    expect(catalog.triggerTokens, ((200000 - 64000 - 1024) * 0.8).floor());
+
+    // 用户手填优先于目录（调用方传解析值，此处模拟用户来源）。
+    final user = await meter.measure(
+      conversationId: 'c',
+      plan: plan,
+      generation: 'original',
+      requests: [],
+      contextWindow: 65536,
+      windowSource: ContextWindowSource.user,
+      catalogMaxOutputTokens: 64000,
+    );
+    expect(user.windowTokens, 65536);
+    expect(user.windowSource, ContextWindowSource.user);
+    expect(user.outputReserveTokens, 64000);
   });
 
   test('估算忽略未回放思考，缺失图片按实际占位文本计量', () async {

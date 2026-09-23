@@ -9,6 +9,8 @@ import 'package:go_router/go_router.dart';
 import 'package:path/path.dart' as p;
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/datasources/local/app_database.dart';
+import 'package:phase/data/datasources/local/model_catalog_cache.dart';
+import 'package:phase/data/models/model_catalog.dart';
 import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
@@ -140,6 +142,7 @@ void main() {
     addTearDown(router.dispose);
     final container = ProviderContainer(
       overrides: [
+        modelCatalogProvider.overrideWith((ref) async => ModelCatalog.empty),
         sharedPreferencesProvider.overrideWith((ref) => preferences),
         appDatabaseProvider.overrideWith((ref) => db),
         secureKeyStorageProvider.overrideWith(

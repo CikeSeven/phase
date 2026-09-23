@@ -1,4 +1,5 @@
 import '../../../data/models/context_policy.dart';
+import '../../../data/models/model_catalog.dart';
 import '../../../data/models/model_request_record.dart';
 import '../../../data/models/token_usage.dart';
 import '../../../providers/request_plan.dart';
@@ -19,8 +20,8 @@ class ContextMeasurement {
     required this.windowTokens,
     required this.outputReserveTokens,
     required this.marginTokens,
-    required this.defaultWindow,
-    required this.outputLimitUnknown,
+    required this.windowSource,
+    required this.outputReserveSource,
     required this.systemTokens,
     required this.toolTokens,
     required this.messageTokens,
@@ -43,8 +44,8 @@ class ContextMeasurement {
   final int windowTokens;
   final int outputReserveTokens;
   final int marginTokens;
-  final bool defaultWindow;
-  final bool outputLimitUnknown;
+  final ContextWindowSource windowSource;
+  final OutputReserveSource outputReserveSource;
   final int systemTokens;
   final int toolTokens;
   final int messageTokens;
@@ -69,8 +70,8 @@ class ContextMeasurement {
     'windowTokens': windowTokens,
     'outputReserveTokens': outputReserveTokens,
     'marginTokens': marginTokens,
-    'defaultWindow': defaultWindow,
-    'outputLimitUnknown': outputLimitUnknown,
+    'windowSource': windowSource.name,
+    'outputReserveSource': outputReserveSource.name,
   };
 }
 
@@ -82,6 +83,8 @@ class ContextMeter {
     required String generation,
     required Iterable<ModelRequestRecord> requests,
     int? contextWindow,
+    ContextWindowSource? windowSource,
+    int? catalogMaxOutputTokens,
     ContextPolicy policy = const ContextPolicy(),
   }) async {
     final ids = plan.request.messages.map((m) => m.sourceMessageId).toList();
@@ -129,6 +132,23 @@ class ContextMeter {
       anchorId = record.id;
       break;
     }
+    // 生效窗口：解析值优先（用户 > 目录 > 本地默认 128000）；
+    // 输出预留：协议实参 > 目录上限 > 本地 4096。目录值只进预留，不下发请求。
+    final window = contextWindow ?? ModelCatalog.localDefaultWindow;
+    final reserve =
+        plan.effectiveOutputTokens ??
+        catalogMaxOutputTokens ??
+        ModelCatalog.localDefaultOutputReserve;
+    final resolvedWindowSource =
+        windowSource ??
+        (contextWindow != null
+            ? ContextWindowSource.user
+            : ContextWindowSource.localDefault);
+    final resolvedReserveSource = plan.effectiveOutputTokens != null
+        ? OutputReserveSource.protocol
+        : catalogMaxOutputTokens != null
+        ? OutputReserveSource.catalog
+        : OutputReserveSource.localDefault;
     return ContextMeasurement(
       conversationId: conversationId,
       branchHeadId: ids.lastOrNull,
@@ -139,28 +159,20 @@ class ContextMeter {
       messageIds: ids,
       localInputTokens: local,
       estimatedInputTokens: estimated,
-      windowTokens: contextWindow ?? 32768,
-      outputReserveTokens: plan.effectiveOutputTokens ?? 4096,
+      windowTokens: window,
+      outputReserveTokens: reserve,
       marginTokens: policy.margin,
-      defaultWindow: contextWindow == null,
-      outputLimitUnknown: plan.effectiveOutputTokens == null,
+      windowSource: resolvedWindowSource,
+      outputReserveSource: resolvedReserveSource,
       systemTokens: plan.systemTokens,
       toolTokens: plan.toolTokens,
       messageTokens: plan.messageTokens,
       imageTokens: plan.imageTokens,
       measuredAt: DateTime.now(),
-      triggerTokens:
-          (((contextWindow ?? 32768) -
-                      (plan.effectiveOutputTokens ?? 4096) -
-                      policy.margin) *
-                  policy.trigger)
-              .floor(),
-      targetTokens:
-          (((contextWindow ?? 32768) -
-                      (plan.effectiveOutputTokens ?? 4096) -
-                      policy.margin) *
-                  policy.target)
-              .floor(),
+      triggerTokens: ((window - reserve - policy.margin) * policy.trigger)
+          .floor(),
+      targetTokens: ((window - reserve - policy.margin) * policy.target)
+          .floor(),
       anchorRequestId: anchorId,
     );
   }

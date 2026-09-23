@@ -19,6 +19,8 @@ import 'package:phase/core/widgets/app_background.dart';
 import 'package:phase/core/widgets/app_top_bar.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 import 'package:phase/data/datasources/local/attachment_storage.dart';
+import 'package:phase/data/datasources/local/model_catalog_cache.dart';
+import 'package:phase/data/models/model_catalog.dart';
 import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/chat_chunk.dart';
@@ -531,6 +533,7 @@ void main() {
       ProviderScope(
         retry: (retryCount, error) => null,
         overrides: [
+          modelCatalogProvider.overrideWith((ref) async => ModelCatalog.empty),
           sharedPreferencesProvider.overrideWith((ref) => preferences),
           attachmentStorageProvider.overrideWith(
             (ref) =>

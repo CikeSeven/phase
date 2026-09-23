@@ -7,6 +7,7 @@ import '../../../core/error/failure.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../data/models/context_summary.dart';
+import '../../../data/models/model_catalog.dart';
 import '../../../data/repositories/agent_context_repository.dart';
 import '../../../data/repositories/plan_repository.dart';
 import '../../../data/repositories/model_request_repository.dart';
@@ -71,10 +72,18 @@ class ConversationContextPage extends ConsumerWidget {
                     '${chat.isGenerating ? '运行请求' : '下一请求'}预计输入 ≈${m.estimatedInputTokens} / ${m.windowTokens} token',
                   ),
                   Text(
-                    '${m.defaultWindow ? '本地默认窗口' : '用户配置窗口'} · 可用输入预算 ${m.inputBudget}',
+                    '${switch (m.windowSource) {
+                      ContextWindowSource.user => '用户配置窗口',
+                      ContextWindowSource.catalog => 'models.dev 目录窗口',
+                      ContextWindowSource.localDefault => '本地默认窗口',
+                    }} · 可用输入预算 ${m.inputBudget}',
                   ),
                   Text(
-                    '输出预留 ${m.outputReserveTokens}${m.outputLimitUnknown ? '（本地预留，服务端上限未知）' : '（协议实际参数）'} · 协议余量 ${m.marginTokens}',
+                    '输出预留 ${m.outputReserveTokens}${switch (m.outputReserveSource) {
+                      OutputReserveSource.protocol => '（协议实际参数）',
+                      OutputReserveSource.catalog => '（models.dev 目录上限）',
+                      OutputReserveSource.localDefault => '（本地预留，服务端上限未知）',
+                    }} · 协议余量 ${m.marginTokens}',
                   ),
                   Text('自动整理阈值 ≈${m.triggerTokens} · 目标 ≈${m.targetTokens}'),
                   Text(

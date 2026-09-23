@@ -12,6 +12,7 @@ Future<AgentRun> seedInterrupted(
   ToolLoopHarness h,
   List<ToolCallStatus> states, {
   DateTime? expiresAt,
+  RunConfiguration? configuration,
   bool saveKnownResults = true,
   String toolName = 'echo',
   Map<String, dynamic> arguments = const {},
@@ -30,23 +31,25 @@ Future<AgentRun> seedInterrupted(
     turnCount: turnCount,
     modelAttemptCount: turnCount,
     maxTurns: maxTurns,
-    configuration: RunConfiguration(
-      connection: RunConnection(
-        profileId: h.profile.id,
-        protocol: h.profile.protocol.name,
-        baseUrl: h.profile.baseUrl,
-        requiresKey: false,
-      ),
-      modelSelection: ModelSelection(
-        profileId: h.profile.id,
-        modelId: 'model-a',
-        temperature: 0.4,
-        maxOutputTokens: 300,
-      ),
-      systemPrompt: 'saved prompt',
-      enabledTools: {toolName},
-      toolPolicies: {toolName: ToolPolicy.ask},
-    ),
+    configuration:
+        configuration ??
+        RunConfiguration(
+          connection: RunConnection(
+            profileId: h.profile.id,
+            protocol: h.profile.protocol.name,
+            baseUrl: h.profile.baseUrl,
+            requiresKey: false,
+          ),
+          modelSelection: ModelSelection(
+            profileId: h.profile.id,
+            modelId: 'model-a',
+            temperature: 0.4,
+            maxOutputTokens: 300,
+          ),
+          systemPrompt: 'saved prompt',
+          enabledTools: {toolName},
+          toolPolicies: {toolName: ToolPolicy.ask},
+        ),
   );
   await (await h.runs()).create(run);
   await conversations.appendMessage(

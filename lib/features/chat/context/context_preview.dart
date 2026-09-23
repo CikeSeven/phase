@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../data/datasources/local/model_catalog_cache.dart';
 import '../../../data/repositories/agent_context_repository.dart';
 import '../../../data/repositories/model_request_repository.dart';
 import '../../../data/repositories/skill_repository.dart';
@@ -22,6 +23,7 @@ part 'context_preview.g.dart';
     currentAssistant,
     ActiveConversation,
     conversationThread,
+    modelCatalog,
   ],
 )
 Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
@@ -53,6 +55,9 @@ Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
   final assistant = ref.watch(currentAssistantProvider(active));
   if (selected == null || thread == null) return null;
   ref.watch(runtimeEnvironmentProvider);
+  // 目录刷新后空闲预览与输入条标签随解析结果重建。
+  await ref.watch(modelCatalogProvider.future);
+  if (!ref.mounted) return null;
   if (assistant?.skillIds.isNotEmpty ?? false) {
     ref.watch(skillInstallationsProvider);
   }
@@ -83,6 +88,8 @@ Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
     protectedIds: prepared.protectedIds,
     canReadHistory: prepared.canReadHistory,
     contextWindow: prepared.configuration.contextWindow,
+    windowSource: prepared.configuration.resolvedWindowSource,
+    catalogMaxOutputTokens: prepared.configuration.catalogMaxOutputTokens,
     policy: prepared.configuration.contextPolicy,
     measureOnly: true,
   );

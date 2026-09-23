@@ -6,6 +6,7 @@ import '../../../data/models/chat_message.dart';
 import '../../../data/models/chat_request.dart';
 import '../../../data/models/context_policy.dart';
 import '../../../data/models/context_summary.dart';
+import '../../../data/models/model_catalog.dart';
 import '../../../data/models/model_request_record.dart';
 import '../../../data/models/provider_profile.dart';
 import '../../../data/models/token_usage.dart';
@@ -42,6 +43,8 @@ class CompactionCoordinator {
     Future<bool> Function()? canReadHistoryNow,
     Future<List<ResolvedMessage>> Function()? reloadMessages,
     int? contextWindow,
+    ContextWindowSource? windowSource,
+    int? catalogMaxOutputTokens,
     ContextPolicy policy = const ContextPolicy(),
     bool force = false,
     bool measureOnly = false,
@@ -71,6 +74,8 @@ class CompactionCoordinator {
       generation: sourceGeneration,
       requests: records,
       contextWindow: contextWindow,
+      windowSource: windowSource,
+      catalogMaxOutputTokens: catalogMaxOutputTokens,
       policy: policy,
     );
     void checkBudget() {
@@ -84,7 +89,11 @@ class CompactionCoordinator {
     }
 
     if (measurement.inputBudget <= 0 || measurement.outputReserveTokens <= 0) {
-      checkBudget();
+      throw OperationFailure(
+        '上下文预算配置不可用：窗口 ${measurement.windowTokens}，输出预留 '
+        '${measurement.outputReserveTokens}，协议余量 ${measurement.marginTokens}。'
+        '请在模型设置中检查上下文窗口与输出上限。',
+      );
     }
     var applied = active;
     String? notice;
@@ -151,7 +160,11 @@ class CompactionCoordinator {
                 ],
               ),
             ],
-            maxOutputTokens: measurement.outputReserveTokens.clamp(1, 4096),
+            // 摘要沿用既有协议参数/本地上限策略，不能把目录预留注入请求。
+            maxOutputTokens:
+                (plan.effectiveOutputTokens ??
+                        ModelCatalog.localDefaultOutputReserve)
+                    .clamp(1, 4096),
             temperature: request.temperature,
             reasoningEffort: request.reasoningEffort,
           );
@@ -204,6 +217,8 @@ class CompactionCoordinator {
           generation: sourceGeneration,
           requests: const [],
           contextWindow: contextWindow,
+          windowSource: windowSource,
+          catalogMaxOutputTokens: catalogMaxOutputTokens,
           policy: policy,
         );
         await requests.prepare(
@@ -385,6 +400,8 @@ class CompactionCoordinator {
             generation: finished.id,
             requests: const [],
             contextWindow: contextWindow,
+            windowSource: windowSource,
+            catalogMaxOutputTokens: catalogMaxOutputTokens,
             policy: policy,
           );
           break;
@@ -414,6 +431,8 @@ class CompactionCoordinator {
         generation: applied?.id ?? 'original',
         requests: const [],
         contextWindow: contextWindow,
+        windowSource: windowSource,
+        catalogMaxOutputTokens: catalogMaxOutputTokens,
         policy: policy,
       );
     }

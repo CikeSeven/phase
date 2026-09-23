@@ -7,6 +7,7 @@ import 'package:crypto/crypto.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/chat_request.dart';
 import '../../../data/models/context_summary.dart';
+import '../../../data/models/model_catalog.dart';
 
 /// 请求预算；完整输入由 ContextMeter 按协议负载测量。
 class ContextBudget {
@@ -16,8 +17,8 @@ class ContextBudget {
     this.margin = 1024,
   }) : window = contextWindow ?? defaultWindow,
        output = maxOutputTokens ?? defaultOutput;
-  static const defaultWindow = 32768;
-  static const defaultOutput = 4096;
+  static const defaultWindow = ModelCatalog.localDefaultWindow;
+  static const defaultOutput = ModelCatalog.localDefaultOutputReserve;
   final int window;
   final int output;
   final int margin;

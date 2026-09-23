@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_section.dart';
+import '../../../data/datasources/local/model_catalog_cache.dart';
+import '../../../data/models/model_catalog.dart';
 import '../../../data/models/profile_model.dart';
 import 'provider_ui.dart';
 
@@ -14,6 +17,7 @@ import 'provider_ui.dart';
 /// 的模型选择列表。
 class ProviderModelEditor extends StatefulWidget {
   const ProviderModelEditor({
+    required this.presetId,
     required this.models,
     required this.enabled,
     required this.onAdd,
@@ -22,6 +26,8 @@ class ProviderModelEditor extends StatefulWidget {
     super.key,
   });
 
+  /// 当前表单的 presetId，决定查 models.dev 目录的哪个服务商。
+  final String presetId;
   final List<ProfileModel> models;
 
   /// 表单是否可编辑，由页面的提交、弹层和删除状态决定。
@@ -140,6 +146,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s),
             itemBuilder: (context, index) => _ModelCard(
               key: ValueKey('provider-model-${models[index].id}'),
+              presetId: widget.presetId,
               model: models[index],
               enabled: widget.enabled,
               onModelChanged: widget.onModelChanged,
@@ -155,6 +162,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
 /// 单个模型的紧凑卡片：左侧勾选框控制启用，下方是能力开关。
 class _ModelCard extends StatelessWidget {
   const _ModelCard({
+    required this.presetId,
     required this.model,
     required this.enabled,
     required this.onModelChanged,
@@ -162,6 +170,7 @@ class _ModelCard extends StatelessWidget {
     super.key,
   });
 
+  final String presetId;
   final ProfileModel model;
 
   /// 表单是否可编辑，由页面的提交、弹层和删除状态决定。
@@ -249,6 +258,7 @@ class _ModelCard extends StatelessWidget {
           ),
           // 采样参数：留空表示不下发，由服务端默认决定。
           _ModelParameters(
+            presetId: presetId,
             model: model,
             enabled: enabled,
             onModelChanged: onModelChanged,
@@ -259,23 +269,28 @@ class _ModelCard extends StatelessWidget {
   }
 }
 
-/// 单个模型的采样参数：温度与输出上限，留空即不下发。
-class _ModelParameters extends StatefulWidget {
+/// 单个模型的预算与采样参数；目录值不改变协议请求。
+///
+/// 上下文窗口与输出上限的提示来自 models.dev 目录（命中时）或本地默认；
+/// 目录值只做提示与校验基线，绝不回写用户输入。
+class _ModelParameters extends ConsumerStatefulWidget {
   const _ModelParameters({
+    required this.presetId,
     required this.model,
     required this.enabled,
     required this.onModelChanged,
   });
 
+  final String presetId;
   final ProfileModel model;
   final bool enabled;
   final ValueChanged<ProfileModel> onModelChanged;
 
   @override
-  State<_ModelParameters> createState() => _ModelParametersState();
+  ConsumerState<_ModelParameters> createState() => _ModelParametersState();
 }
 
-class _ModelParametersState extends State<_ModelParameters> {
+class _ModelParametersState extends ConsumerState<_ModelParameters> {
   late final _temperatureController = TextEditingController(
     text: widget.model.temperature?.toString() ?? '',
   );
@@ -287,6 +302,7 @@ class _ModelParametersState extends State<_ModelParameters> {
     text: widget.model.contextWindow?.toString() ?? '',
   );
   String? _budgetError;
+  int _applyRevision = 0;
 
   @override
   void dispose() {
@@ -296,15 +312,35 @@ class _ModelParametersState extends State<_ModelParameters> {
     super.dispose();
   }
 
-  void _apply() {
+  ModelCatalogEntry? _lookup(ModelCatalog catalog) =>
+      catalog.lookup(widget.presetId, widget.model.id);
+
+  Future<void> _apply() async {
+    final revision = ++_applyRevision;
+    ModelCatalog catalog;
+    try {
+      catalog = await ref.read(modelCatalogProvider.future);
+    } on Object {
+      if (mounted && revision == _applyRevision) {
+        setState(() => _budgetError = '模型目录读取失败，请重试。');
+      }
+      return;
+    }
+    if (!mounted || !widget.enabled || revision != _applyRevision) return;
+    // 首次加载期间提交也按最终目录校验，不能用临时默认放行无效预算。
+    final entry = _lookup(catalog);
     final temperature = double.tryParse(_temperatureController.text.trim());
     final maxOutput = int.tryParse(_maxOutputController.text.trim());
     final rawWindow = _contextController.text.trim();
     final window = int.tryParse(rawWindow);
     final rawOutput = _maxOutputController.text.trim();
+    final fallbackWindow =
+        entry?.contextWindow ?? ModelCatalog.localDefaultWindow;
+    final fallbackOutput =
+        entry?.maxOutputTokens ?? ModelCatalog.localDefaultOutputReserve;
     if ((rawWindow.isNotEmpty && (window == null || window < 2048)) ||
         (rawOutput.isNotEmpty && (maxOutput == null || maxOutput <= 0)) ||
-        ((window ?? 32768) <= (maxOutput ?? 4096) + 1024)) {
+        ((window ?? fallbackWindow) <= (maxOutput ?? fallbackOutput) + 1024)) {
       setState(() => _budgetError = '窗口至少 2048，且需大于输出预留加 1024；输出上限须为正整数');
       return;
     }
@@ -323,6 +359,11 @@ class _ModelParametersState extends State<_ModelParameters> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final entry = _lookup(
+      ref.watch(modelCatalogProvider).value ?? ModelCatalog.empty,
+    );
+    final catalogWindow = entry?.contextWindow;
+    final catalogOutput = entry?.maxOutputTokens;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.m,
@@ -356,9 +397,11 @@ class _ModelParametersState extends State<_ModelParameters> {
                   },
                   decoration: InputDecoration(
                     labelText: '上下文窗口',
-                    hintText: '本地默认 32768',
-                    helperText: '用于本地保守预算，不是 API 用量。未设输出上限时预留 4096。',
-                    helperMaxLines: 3,
+                    hintText: catalogWindow != null
+                        ? 'models.dev $catalogWindow'
+                        : '本地默认 ${ModelCatalog.localDefaultWindow}',
+                    helperText: '本地预算，非 API 用量。留空：models.dev 目录 → 128000；手填优先。',
+                    helperMaxLines: 6,
                     errorText: _budgetError,
                     errorMaxLines: 3,
                   ),
@@ -402,13 +445,15 @@ class _ModelParametersState extends State<_ModelParameters> {
                     FocusScope.of(context).unfocus();
                     _apply();
                   },
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: '输出上限',
-                    hintText: '默认',
+                    hintText: catalogOutput != null
+                        ? 'models.dev $catalogOutput'
+                        : '本地默认 ${ModelCatalog.localDefaultOutputReserve}',
                     isDense: true,
-                    helperText: 'token 数，留空用默认',
+                    helperText: '留空不覆盖协议默认；本地预留：协议实参 → models.dev → 4096',
                     helperStyle: TextStyle(fontSize: 11),
-                    helperMaxLines: 3,
+                    helperMaxLines: 5,
                   ),
                   style: theme.textTheme.bodySmall,
                 ),
