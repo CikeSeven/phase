@@ -1032,7 +1032,8 @@ void main() {
         scale: scale,
       );
       final usage = find.byKey(const ValueKey('chat-context-usage'));
-      expect(usage, findsNothing);
+      expect(usage, findsOneWidget);
+      expect(find.text('0%'), findsOneWidget);
       h.container.read(activeConversationProvider.notifier).open('seed-0');
       await tester.pumpAndSettle();
       await enterDraft(tester, '保留上下文面板前的草稿');

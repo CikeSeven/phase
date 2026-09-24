@@ -116,6 +116,16 @@ void main() {
         );
         await tester.tap(_button);
         await tester.pumpAndSettle();
+        final menu = tester.widget<MenuAnchor>(
+          find.ancestor(of: _button, matching: find.byType(MenuAnchor)),
+        );
+        expect(
+          menu.style!.maximumSize!.resolve({})!.width,
+          closeTo(304 * 2 / 3, .01),
+        );
+        for (final mode in PermissionMode.values) {
+          expect(find.text(mode.description), findsNothing);
+        }
         expect(
           h.container.read(conversationPermissionsProvider).value!.mode,
           PermissionMode.basic,

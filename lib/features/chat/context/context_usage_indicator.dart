@@ -3,20 +3,31 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../data/datasources/local/model_catalog_cache.dart';
 import '../../../data/models/model_catalog.dart';
 import '../../../data/models/model_request_record.dart';
 import '../../../data/repositories/model_request_repository.dart';
+import '../chat_controller.dart';
+import '../model_selection.dart';
 import '../usage/usage_panel.dart';
 import 'context_builder.dart';
+import 'context_meter.dart';
 import 'context_preview.dart';
 
 /// 上下文占用不是 API 累计消耗；缓存统计仅在展开时订阅。
 class ContextUsageIndicator extends ConsumerStatefulWidget {
-  const ContextUsageIndicator({required this.conversationId, super.key});
+  const ContextUsageIndicator({
+    required this.conversationId,
+    this.submitting = false,
+    super.key,
+  });
 
-  final String conversationId;
+  static const diameter = 40 * 2 / 3;
+  final String? conversationId;
+  final bool submitting;
 
   @override
   ConsumerState<ContextUsageIndicator> createState() =>
@@ -26,6 +37,8 @@ class ContextUsageIndicator extends ConsumerStatefulWidget {
 class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
   final _overlay = OverlayPortalController();
   LocalHistoryEntry? _history;
+  ContextMeasurement? _displayed;
+  late bool _empty = widget.conversationId == null;
 
   void _removeHistory() {
     final entry = _history;
@@ -65,7 +78,20 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
   @override
   void didUpdateWidget(ContextUsageIndicator oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.conversationId != widget.conversationId) _close();
+    if (oldWidget.conversationId != widget.conversationId) {
+      // 首次发送从草稿接管新会话时，保留同一个 0% 基线到本轮结束。
+      final running = ref.read(chatControllerProvider);
+      final adopting =
+          oldWidget.conversationId == null &&
+          widget.submitting &&
+          (!running.isGenerating ||
+              running.runningConversationId == widget.conversationId);
+      if (!adopting) {
+        _displayed = null;
+        _empty = widget.conversationId == null;
+      }
+      _close();
+    }
   }
 
   @override
@@ -76,17 +102,40 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
 
   @override
   Widget build(BuildContext context) {
-    final preview = ref.watch(contextPreviewProvider(widget.conversationId));
-    // 配置或分支改变后不用 AsyncValue 保留的旧估算冒充当前值。
-    final measurement = preview.isLoading || preview.hasError
+    final id = widget.conversationId;
+    final preview = id == null
+        ? const AsyncData<ContextBuild?>(null)
+        : ref.watch(contextPreviewProvider(id));
+    final running = ref.watch(
+      chatControllerProvider.select(
+        (s) => (s.isGenerating, s.runningConversationId),
+      ),
+    );
+    final generatingHere = running.$1 && running.$2 == id;
+    final frozen = generatingHere || (widget.submitting && !running.$1);
+    final measured = preview.isLoading || preview.hasError
         ? null
         : preview.value?.measurement;
-    final ratio = measurement == null || measurement.windowTokens <= 0
+    // 请求开始时 controller 会清空计量，工具轮之间也会换测量；这些都不重置圆环。
+    if (!frozen && measured != null) {
+      _displayed = measured;
+      _empty = false;
+    } else if (frozen && !_empty && _displayed == null && measured != null) {
+      // 中途首次进入运行中的会话，只采用第一份可用快照，随后冻结。
+      _displayed = measured;
+    }
+    final measurement = _displayed;
+    final ratio = _empty
+        ? 0.0
+        : measurement == null || measurement.windowTokens <= 0
         ? null
         : measurement.estimatedInputTokens / measurement.windowTokens;
-    final label = ratio == null ? '—' : '${(ratio * 100).round()}%';
+    final label = _percentage(ratio);
     final colors = Theme.of(context).colorScheme;
-    final diameter = math.max(40.0, MediaQuery.textScalerOf(context).scale(40));
+    final diameter = math.max(
+      ContextUsageIndicator.diameter,
+      MediaQuery.textScalerOf(context).scale(ContextUsageIndicator.diameter),
+    );
     return TextFieldTapRegion(
       child: OverlayPortal.overlayChildLayoutBuilder(
         controller: _overlay,
@@ -97,7 +146,7 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
             Offset.zero & info.childSize,
           );
           final width = math.min(
-            288.0,
+            240.0,
             info.overlaySize.width - media.padding.horizontal - AppSpacing.xl,
           );
           final bottom = math.min(
@@ -108,7 +157,7 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
             0.0,
             bottom - media.padding.top - AppSpacing.m,
           );
-          final left = (anchor.right - width).clamp(
+          final left = (anchor.center.dx - width / 2).clamp(
             media.padding.left + AppSpacing.m,
             info.overlaySize.width - media.padding.right - AppSpacing.m - width,
           );
@@ -135,10 +184,12 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
                     clipBehavior: Clip.antiAlias,
                     child: SingleChildScrollView(
                       primary: false,
-                      padding: const EdgeInsets.all(AppSpacing.l),
+                      padding: const EdgeInsets.all(AppSpacing.m),
                       child: _ContextUsageDetails(
                         conversationId: widget.conversationId,
-                        preview: preview,
+                        measurement: measurement,
+                        empty: _empty,
+                        failed: preview.hasError,
                       ),
                     ),
                   ),
@@ -149,7 +200,9 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
         },
         child: Semantics(
           label: '上下文占用',
-          value: measurement == null
+          value: _empty
+              ? '0%'
+              : measurement == null
               ? preview.hasError
                     ? '暂不可用'
                     : '待估算'
@@ -167,23 +220,38 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
             child: ExcludeSemantics(
               child: SizedBox.square(
                 dimension: diameter,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Positioned.fill(
-                      child: CircularProgressIndicator(
-                        // 未知时只画静态轨道，不伪造零占用或持续转圈。
-                        value: ratio?.clamp(0.0, 1.0) ?? 0,
-                        strokeWidth: 3,
-                        strokeCap: StrokeCap.round,
-                        color: ratio != null && ratio >= 1
-                            ? colors.error
-                            : colors.primary,
-                        backgroundColor: colors.outlineVariant,
+                child: TweenAnimationBuilder<double>(
+                  key: ValueKey(id),
+                  tween: Tween(begin: ratio ?? 0, end: ratio ?? 0),
+                  duration: AppMotion.reduce(context)
+                      ? Duration.zero
+                      : const Duration(milliseconds: 360),
+                  curve: Curves.easeInOutCubic,
+                  builder: (context, value, _) => Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Positioned.fill(
+                        child: CircularProgressIndicator(
+                          value: value.clamp(0.0, 1.0),
+                          strokeWidth: 6,
+                          strokeAlign: 0,
+                          strokeCap: StrokeCap.round,
+                          color: ratio != null && ratio >= 1
+                              ? colors.error
+                              : colors.primary,
+                          backgroundColor: colors.outlineVariant,
+                        ),
                       ),
-                    ),
-                    Text(label, style: Theme.of(context).textTheme.labelSmall),
-                  ],
+                      Text(
+                        _percentage(ratio == null ? null : value),
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          fontSize: 11 * 2 / 3,
+                          height: 1,
+                          letterSpacing: 0,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -200,23 +268,49 @@ String _windowSourceLabel(ContextWindowSource source) => switch (source) {
   ContextWindowSource.localDefault => '本地默认窗口',
 };
 
+String _percentage(double? ratio) {
+  if (ratio == null) return '—';
+  if (ratio > 0 && ratio < .01) return '<1%';
+  return '${(ratio * 100).round()}%';
+}
+
 class _ContextUsageDetails extends ConsumerWidget {
   const _ContextUsageDetails({
     required this.conversationId,
-    required this.preview,
+    required this.measurement,
+    required this.empty,
+    required this.failed,
   });
 
-  final String conversationId;
-  final AsyncValue<ContextBuild?> preview;
+  final String? conversationId;
+  final ContextMeasurement? measurement;
+  final bool empty;
+  final bool failed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final requests = ref.watch(conversationRequestsProvider(conversationId));
-    final measurement = preview.isLoading || preview.hasError
-        ? null
-        : preview.value?.measurement;
-    final unavailable = preview.hasError ? '暂不可用' : '待估算';
+    final id = conversationId;
+    final requests = id == null
+        ? const AsyncData<List<ModelRequestRecord>>([])
+        : ref.watch(conversationRequestsProvider(id));
+    var window = measurement?.windowTokens;
+    if (empty) {
+      final selection = ref.watch(modelSelectionProvider).value;
+      if (selection != null) {
+        final model = selection.profile.models
+            .where((model) => model.id == selection.model)
+            .firstOrNull;
+        window = resolveContextLimits(
+          presetId: selection.profile.presetId,
+          modelId: selection.model,
+          userContextWindow: model?.contextWindow,
+          userMaxOutputTokens: model?.maxOutputTokens,
+          catalog: ref.watch(modelCatalogProvider).value ?? ModelCatalog.empty,
+        ).contextWindow;
+      }
+    }
+    final unavailable = failed ? '暂不可用' : '待估算';
     final totals = requests.isLoading || requests.hasError
         ? null
         : RequestUsageTotals(requests.value ?? []);
@@ -227,48 +321,34 @@ class _ContextUsageDetails extends ConsumerWidget {
         : totals.cacheRequests.isEmpty
         ? '未提供'
         : cacheRateLabel(totals.cacheHitRate);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text('上下文用量', style: theme.textTheme.titleSmall),
-        const SizedBox(height: AppSpacing.m),
-        _Metric(
-          label: '已占用上下文',
-          value: measurement == null
-              ? unavailable
-              : '≈${measurement.estimatedInputTokens} token',
-        ),
-        _Metric(
-          label: '总上下文',
-          value: measurement == null
-              ? unavailable
-              : '${measurement.windowTokens} token',
-        ),
-        _Metric(label: '缓存命中率', value: cacheLabel),
-        const SizedBox(height: AppSpacing.s),
-        DefaultTextStyle(
-          style: theme.textTheme.bodySmall!.copyWith(
-            color: theme.colorScheme.onSurfaceVariant,
+    return DefaultTextStyle(
+      style: theme.textTheme.bodySmall!,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('上下文用量', style: theme.textTheme.titleSmall),
+          const SizedBox(height: AppSpacing.s),
+          _Metric(
+            label: '已占用上下文',
+            value: empty
+                ? '0 token'
+                : measurement == null
+                ? unavailable
+                : '≈${measurement!.estimatedInputTokens} token',
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (measurement != null)
-                Text(_windowSourceLabel(measurement.windowSource)),
-              const Text('预计输入，不含未发送草稿'),
-              if (totals != null)
-                Text(
-                  '本会话缓存统计 · 覆盖 ${totals.cacheRequests.length}/${totals.requestCount} 次请求',
-                ),
-              if (totals != null &&
-                  !totals.completeCacheCoverage &&
-                  totals.requestCount > 0)
-                Text(totals.includesPending ? '包含进行中请求，统计未收口' : '部分请求未提供缓存用量'),
-            ],
+          _Metric(
+            label: '总上下文',
+            value: window == null ? unavailable : '$window token',
           ),
-        ),
-      ],
+          Semantics(
+            label: totals == null
+                ? null
+                : '缓存用量覆盖 ${totals.cacheRequests.length}/${totals.requestCount} 次请求',
+            child: _Metric(label: '缓存命中率', value: cacheLabel),
+          ),
+        ],
+      ),
     );
   }
 }

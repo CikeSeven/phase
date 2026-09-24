@@ -106,7 +106,7 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
     final colors = Theme.of(context).colorScheme;
     final reduced = AppMotion.reduce(context);
     final media = MediaQuery.of(context);
-    final width = math.min(304.0, media.size.width - AppSpacing.section);
+    final width = math.min(304.0 * 2 / 3, media.size.width - AppSpacing.xl);
     final label = permissions.hasError ? '重试权限模式' : mode?.label ?? '读取权限模式…';
     return MenuAnchor(
       controller: _menu,
@@ -135,13 +135,13 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
           ),
         ),
         shape: const WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: AppRadius.largeAll),
+          RoundedRectangleBorder(borderRadius: AppRadius.mediumAll),
         ),
       ),
       menuChildren: [
         for (final option in PermissionMode.values)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
             child: MenuItemButton(
               key: ValueKey('permission-mode-${option.name}'),
               onPressed: enabled
@@ -151,8 +151,8 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
                 minimumSize: const WidgetStatePropertyAll(Size(48, 48)),
                 padding: const WidgetStatePropertyAll(
                   EdgeInsets.symmetric(
-                    horizontal: AppSpacing.l,
-                    vertical: AppSpacing.m,
+                    horizontal: AppSpacing.m,
+                    vertical: AppSpacing.s,
                   ),
                 ),
                 backgroundColor: WidgetStatePropertyAll(
@@ -166,37 +166,27 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
                 shape: WidgetStateProperty.resolveWith(
                   (states) => RoundedRectangleBorder(
                     borderRadius: states.contains(WidgetState.pressed)
-                        ? AppRadius.smallAll
+                        ? AppRadius.extraSmallAll
                         : option == mode
-                        ? AppRadius.largeAll
-                        : AppRadius.mediumAll,
+                        ? AppRadius.controlAll
+                        : AppRadius.smallAll,
                   ),
                 ),
                 animationDuration: reduced ? Duration.zero : AppMotion.effects,
               ),
               trailingIcon: SizedBox.square(
-                dimension: 24,
+                dimension: 20,
                 child: option == mode
                     ? const ExcludeSemantics(
-                        child: Icon(Symbols.check_circle, fill: 1),
+                        child: Icon(Symbols.check_circle, fill: 1, size: 20),
                       )
                     : null,
               ),
               child: Semantics(
                 selected: option == mode,
                 child: SizedBox(
-                  width: math.max(48, width - 88),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(option.label),
-                      Text(
-                        option.description,
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
+                  width: math.max(48, width - 76),
+                  child: Text(option.label),
                 ),
               ),
             ),

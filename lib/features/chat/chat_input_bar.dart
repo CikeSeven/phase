@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'permission_mode_menu.dart';
 
 import 'package:flutter/material.dart';
@@ -29,6 +31,7 @@ class ChatInputBar extends ConsumerStatefulWidget {
 class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
+  final _contextUsageKey = GlobalKey();
   bool _canSend = false;
   bool _submitting = false;
   String? _pendingText;
@@ -138,12 +141,11 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
             ),
           )
         : PermissionModeMenu(submitting: _submitting);
-    final usage = conversationId == null
-        ? null
-        : ContextUsageIndicator(
-            key: ValueKey(conversationId),
-            conversationId: conversationId,
-          );
+    final usage = ContextUsageIndicator(
+      key: _contextUsageKey,
+      conversationId: conversationId,
+      submitting: _submitting,
+    );
     final send = ChatSendButton(
       isGenerating: isGenerating,
       onPressed: isGenerating
@@ -169,9 +171,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               final scaler = MediaQuery.textScalerOf(context);
               // 大字窄屏将模式和圆环移到单独一行，不挤压发送与附件触区。
               final stacked =
-                  usage != null &&
                   constraints.maxWidth <
-                      scaler.scale(14) * 4 + scaler.scale(40) + 160;
+                  scaler.scale(14) * 5 +
+                      math.max(
+                        48,
+                        scaler.scale(ContextUsageIndicator.diameter) + 8,
+                      ) +
+                      128;
               final actions = stacked
                   ? Column(
                       mainAxisSize: MainAxisSize.min,
@@ -189,7 +195,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       children: [
                         attachment,
                         Expanded(child: mode),
-                        ?usage,
+                        usage,
                         const SizedBox(width: AppSpacing.s),
                         send,
                       ],
@@ -204,7 +210,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                   scaler.scale(16) * 1.5 +
                   AppSpacing.xl +
                   actionHeight +
-                  (stacked ? scaler.scale(40) + AppSpacing.s : 0);
+                  (stacked
+                      ? math.max(
+                          48,
+                          scaler.scale(ContextUsageIndicator.diameter) + 8,
+                        )
+                      : 0);
               return SingleChildScrollView(
                 // 极短可用高度时优先保留底部操作，输入内容仍可向上滚动。
                 reverse: true,
