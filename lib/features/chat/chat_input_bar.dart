@@ -144,7 +144,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
               ),
             ),
           )
-        : PermissionModeMenu(submitting: _submitting);
+        : Align(
+            alignment: AlignmentDirectional.centerEnd,
+            child: PermissionModeMenu(submitting: _submitting),
+          );
     final usage = ContextUsageIndicator(
       key: _contextUsageKey,
       conversationId: conversationId,
@@ -181,7 +184,8 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                         48,
                         scaler.scale(ContextUsageIndicator.diameter) + 8,
                       ) +
-                      128;
+                      128 +
+                      AppSpacing.s;
               final actions = stacked
                   ? Column(
                       mainAxisSize: MainAxisSize.min,
@@ -190,6 +194,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                         Row(
                           children: [
                             Expanded(child: mode),
+                            const SizedBox(width: AppSpacing.s),
                             usage,
                           ],
                         ),
@@ -199,6 +204,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                       children: [
                         attachment,
                         Expanded(child: mode),
+                        const SizedBox(width: AppSpacing.s),
                         usage,
                         const SizedBox(width: AppSpacing.s),
                         send,

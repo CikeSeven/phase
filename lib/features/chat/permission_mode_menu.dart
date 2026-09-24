@@ -8,6 +8,8 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/brand_colors.dart';
+import '../../../core/theme/frosted_surface.dart';
 import '../../../core/widgets/app_menu_anchor.dart';
 import '../../../data/models/permission_mode.dart';
 import 'chat_controller.dart';
@@ -103,7 +105,27 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
         !permissions.hasError;
     if (!enabled) _closeAfterBuild();
     final mode = permissions.value?.mode;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    final brand = context.brandColors;
+    final tones = {
+      PermissionMode.plan: (
+        accent: brand.teal,
+        container: brand.tealContainer,
+        onContainer: brand.onTealContainer,
+      ),
+      PermissionMode.basic: (
+        accent: colors.primary,
+        container: colors.primaryContainer,
+        onContainer: colors.onPrimaryContainer,
+      ),
+      PermissionMode.fullAccess: (
+        accent: brand.lavender,
+        container: brand.lavenderContainer,
+        onContainer: brand.onLavenderContainer,
+      ),
+    };
     final reduced = AppMotion.reduce(context);
     final media = MediaQuery.of(context);
     final width = math.min(304.0 * 2 / 3, media.size.width - AppSpacing.xl);
@@ -115,9 +137,15 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
       onOpen: _opened,
       onClose: _closed,
       alignmentOffset: Offset(-width / 2, AppSpacing.xs),
+      surfaceBuilder: (context, animation, child) => FrostedSurface(
+        borderRadius: AppRadius.mediumAll,
+        color: colors.surfaceContainerLow.withValues(alpha: dark ? 0.70 : 0.62),
+        blur: 20,
+        revealAnimation: animation,
+        child: child,
+      ),
       style: MenuStyle(
         alignment: AlignmentDirectional.bottomCenter,
-        backgroundColor: WidgetStatePropertyAll(colors.surfaceContainer),
         minimumSize: WidgetStatePropertyAll(Size(width, 0)),
         maximumSize: WidgetStatePropertyAll(
           Size(
@@ -130,9 +158,6 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
                   AppSpacing.xl,
             ),
           ),
-        ),
-        shape: const WidgetStatePropertyAll(
-          RoundedRectangleBorder(borderRadius: AppRadius.mediumAll),
         ),
       ),
       menuChildren: [
@@ -153,12 +178,28 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
                   ),
                 ),
                 backgroundColor: WidgetStatePropertyAll(
-                  option == mode
-                      ? colors.primaryContainer
-                      : colors.surfaceContainer,
+                  tones[option]!.container.withValues(
+                    alpha: option == mode ? 0.72 : 0.12,
+                  ),
                 ),
-                foregroundColor: WidgetStatePropertyAll(
-                  option == mode ? colors.onPrimaryContainer : colors.onSurface,
+                foregroundColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? colors.onSurface.withValues(alpha: 0.38)
+                      : tones[option]!.onContainer,
+                ),
+                iconColor: WidgetStateProperty.resolveWith(
+                  (states) => states.contains(WidgetState.disabled)
+                      ? colors.onSurface.withValues(alpha: 0.38)
+                      : tones[option]!.onContainer,
+                ),
+                overlayColor: WidgetStateProperty.resolveWith(
+                  (states) =>
+                      states.contains(WidgetState.pressed) ||
+                          states.contains(WidgetState.focused)
+                      ? tones[option]!.accent.withValues(alpha: 0.10)
+                      : states.contains(WidgetState.hovered)
+                      ? tones[option]!.accent.withValues(alpha: 0.08)
+                      : null,
                 ),
                 shape: WidgetStateProperty.resolveWith(
                   (states) => RoundedRectangleBorder(
@@ -197,6 +238,14 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
           child: TextButton(
             key: const ValueKey('chat-agent-mode'),
             focusNode: _focus,
+            style: TextButton.styleFrom(
+              foregroundColor: tones[mode]?.accent,
+              iconColor: tones[mode]?.accent,
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.s,
+                vertical: AppSpacing.m,
+              ),
+            ),
             onPressed: enabled
                 ? () => _animation.isForwardOrCompleted
                       ? _menu.close()
@@ -216,7 +265,8 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (MediaQuery.textScalerOf(context).scale(14) * label.length +
-                        64 <=
+                        18 +
+                        AppSpacing.s * 3 <=
                     constraints.maxWidth) ...[
                   const Icon(Symbols.keyboard_arrow_up, size: 18),
                   const SizedBox(width: AppSpacing.s),

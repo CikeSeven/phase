@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/frosted_surface.dart';
 import '../../../data/datasources/local/model_catalog_cache.dart';
 import '../../../data/models/model_catalog.dart';
 import '../../../data/models/model_request_record.dart';
@@ -131,7 +132,9 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
         ? null
         : measurement.estimatedInputTokens / measurement.windowTokens;
     final label = _percentage(ratio);
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
     final diameter = math.max(
       ContextUsageIndicator.diameter,
       MediaQuery.textScalerOf(context).scale(ContextUsageIndicator.diameter),
@@ -177,19 +180,27 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
                   constraints: BoxConstraints(maxHeight: height),
                   child: Material(
                     key: const ValueKey('context-usage-popover'),
-                    color: colors.surfaceContainer,
+                    color: Colors.transparent,
+                    surfaceTintColor: Colors.transparent,
                     elevation: 4,
                     shadowColor: colors.shadow.withValues(alpha: 0.2),
                     borderRadius: AppRadius.controlAll,
                     clipBehavior: Clip.antiAlias,
-                    child: SingleChildScrollView(
-                      primary: false,
-                      padding: const EdgeInsets.all(AppSpacing.m),
-                      child: _ContextUsageDetails(
-                        conversationId: widget.conversationId,
-                        measurement: measurement,
-                        empty: _empty,
-                        failed: preview.hasError,
+                    child: FrostedSurface(
+                      borderRadius: AppRadius.controlAll,
+                      color: colors.surfaceContainerLow.withValues(
+                        alpha: dark ? 0.70 : 0.62,
+                      ),
+                      blur: 20,
+                      child: SingleChildScrollView(
+                        primary: false,
+                        padding: const EdgeInsets.all(AppSpacing.m),
+                        child: _ContextUsageDetails(
+                          conversationId: widget.conversationId,
+                          measurement: measurement,
+                          empty: _empty,
+                          failed: preview.hasError,
+                        ),
                       ),
                     ),
                   ),

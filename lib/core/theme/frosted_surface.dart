@@ -13,6 +13,7 @@ class FrostedSurface extends StatelessWidget {
     this.color,
     this.borderColor,
     this.blur = 12,
+    this.revealAnimation,
     this.padding = EdgeInsets.zero,
   }) : assert(blur >= 0);
 
@@ -21,10 +22,28 @@ class FrostedSurface extends StatelessWidget {
   final Color? color;
   final Color? borderColor;
   final double blur;
+
+  /// 渐变底色、边缘、模糊强度与内容，不把背景采样放入整体透明度层。
+  final Animation<double>? revealAnimation;
   final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
+    final animation = revealAnimation;
+    if (animation == null) return _buildSurface(context, 1, child);
+    return AnimatedBuilder(
+      animation: animation,
+      child: FadeTransition(
+        opacity: animation,
+        alwaysIncludeSemantics: true,
+        child: child,
+      ),
+      builder: (context, child) =>
+          _buildSurface(context, animation.value, child!),
+    );
+  }
+
+  Widget _buildSurface(BuildContext context, double progress, Widget child) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
@@ -35,16 +54,20 @@ class FrostedSurface extends StatelessWidget {
         color ??
         (dark ? colors.surfaceContainerLow : colors.surfaceContainerLowest)
             .withValues(alpha: dark ? 0.88 : 0.80);
+    final fill = reducedEffects ? Color.alphaBlend(tint, colors.surface) : tint;
+    final border =
+        borderColor ??
+        colors.outlineVariant.withValues(alpha: dark ? 0.58 : 0.48);
     final surface = Material(
-      color: reducedEffects ? Color.alphaBlend(tint, colors.surface) : tint,
+      color: fill.withValues(alpha: fill.a * progress),
       surfaceTintColor: colors.surfaceTint.withValues(alpha: 0),
+      // 显式进度已经驱动边缘，避免 Material 再叠一层隐式动画产生拖尾。
+      animationDuration: revealAnimation == null
+          ? kThemeChangeDuration
+          : Duration.zero,
       shape: RoundedRectangleBorder(
         borderRadius: borderRadius,
-        side: BorderSide(
-          color:
-              borderColor ??
-              colors.outlineVariant.withValues(alpha: dark ? 0.58 : 0.48),
-        ),
+        side: BorderSide(color: border.withValues(alpha: border.a * progress)),
       ),
       child: Padding(padding: padding, child: child),
     );
@@ -54,7 +77,10 @@ class FrostedSurface extends StatelessWidget {
       child: blur == 0 || reducedEffects
           ? surface
           : BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+              filter: ImageFilter.blur(
+                sigmaX: blur * progress,
+                sigmaY: blur * progress,
+              ),
               child: surface,
             ),
     );

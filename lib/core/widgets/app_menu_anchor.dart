@@ -19,6 +19,7 @@ class AppMenuAnchor extends StatefulWidget {
     this.onOpen,
     this.onClose,
     this.onAnimationStatusChanged,
+    this.surfaceBuilder,
     super.key,
   });
 
@@ -31,6 +32,14 @@ class AppMenuAnchor extends StatefulWidget {
   final VoidCallback? onOpen;
   final VoidCallback? onClose;
   final ValueChanged<AnimationStatus>? onAnimationStatusChanged;
+
+  /// 替换默认表面并自行处理淡入；玻璃可在不包裹背景采样层的情况下过渡。
+  final Widget Function(
+    BuildContext context,
+    Animation<double> animation,
+    Widget child,
+  )?
+  surfaceBuilder;
 
   @override
   State<AppMenuAnchor> createState() => _AppMenuAnchorState();
@@ -218,6 +227,53 @@ class _AppMenuAnchorState extends State<AppMenuAnchor>
     final maximum =
         style.maximumSize?.resolve({}) ??
         const Size(double.infinity, double.infinity);
+    final content = Padding(
+      padding: style.padding?.resolve({}) ?? const EdgeInsets.all(AppSpacing.s),
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          scrollbars: false,
+          overscroll: false,
+          physics: const ClampingScrollPhysics(),
+        ),
+        child: Scrollbar(
+          controller: _scroll,
+          thumbVisibility: _animation.status == AnimationStatus.completed,
+          child: SingleChildScrollView(
+            controller: _scroll,
+            primary: false,
+            child: ListBody(children: widget.menuChildren),
+          ),
+        ),
+      ),
+    );
+    final surface =
+        widget.surfaceBuilder?.call(context, _progress, content) ??
+        Material(
+          color:
+              style.backgroundColor?.resolve({}) ??
+              theme.colorScheme.surfaceContainer,
+          surfaceTintColor:
+              style.surfaceTintColor?.resolve({}) ?? Colors.transparent,
+          shadowColor: style.shadowColor?.resolve({}),
+          elevation: style.elevation?.resolve({}) ?? 2,
+          shape:
+              style.shape?.resolve({}) ??
+              const RoundedRectangleBorder(borderRadius: AppRadius.largeAll),
+          clipBehavior: Clip.antiAlias,
+          child: content,
+        );
+    Widget panel = ScaleTransition(
+      scale: _scale,
+      // 按最终尺寸布局，文字不逐帧重排；玻璃表面自行渐变底色和内容。
+      child: RepaintBoundary(child: IntrinsicWidth(child: surface)),
+    );
+    if (widget.surfaceBuilder == null) {
+      panel = FadeTransition(
+        opacity: _progress,
+        alwaysIncludeSemantics: true,
+        child: panel,
+      );
+    }
     return ConstrainedBox(
       constraints: BoxConstraints(
         minWidth: minimum.width,
@@ -225,55 +281,7 @@ class _AppMenuAnchorState extends State<AppMenuAnchor>
         maxWidth: maximum.width,
         maxHeight: maximum.height,
       ),
-      child: FadeTransition(
-        opacity: _progress,
-        alwaysIncludeSemantics: true,
-        child: ScaleTransition(
-          scale: _scale,
-          // 动画只改变合成属性，菜单按最终尺寸布局，文字不逐帧重排。
-          child: RepaintBoundary(
-            child: IntrinsicWidth(
-              child: Material(
-                color:
-                    style.backgroundColor?.resolve({}) ??
-                    theme.colorScheme.surfaceContainer,
-                surfaceTintColor:
-                    style.surfaceTintColor?.resolve({}) ?? Colors.transparent,
-                shadowColor: style.shadowColor?.resolve({}),
-                elevation: style.elevation?.resolve({}) ?? 2,
-                shape:
-                    style.shape?.resolve({}) ??
-                    const RoundedRectangleBorder(
-                      borderRadius: AppRadius.largeAll,
-                    ),
-                clipBehavior: Clip.antiAlias,
-                child: Padding(
-                  padding:
-                      style.padding?.resolve({}) ??
-                      const EdgeInsets.all(AppSpacing.s),
-                  child: ScrollConfiguration(
-                    behavior: ScrollConfiguration.of(context).copyWith(
-                      scrollbars: false,
-                      overscroll: false,
-                      physics: const ClampingScrollPhysics(),
-                    ),
-                    child: Scrollbar(
-                      controller: _scroll,
-                      thumbVisibility:
-                          _animation.status == AnimationStatus.completed,
-                      child: SingleChildScrollView(
-                        controller: _scroll,
-                        primary: false,
-                        child: ListBody(children: widget.menuChildren),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+      child: panel,
     );
   }
 }
