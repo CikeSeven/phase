@@ -60,7 +60,7 @@ class ChatInputSurface extends StatelessWidget {
               AppSpacing.m,
               0,
               AppSpacing.m,
-              AppSpacing.s,
+              AppSpacing.xs,
             ),
             child: child,
           ),

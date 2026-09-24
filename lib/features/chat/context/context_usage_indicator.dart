@@ -233,7 +233,7 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
                       Positioned.fill(
                         child: CircularProgressIndicator(
                           value: value.clamp(0.0, 1.0),
-                          strokeWidth: 6,
+                          strokeWidth: 4.5,
                           strokeAlign: 0,
                           strokeCap: StrokeCap.round,
                           color: ratio != null && ratio >= 1

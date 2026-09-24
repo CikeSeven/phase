@@ -29,6 +29,13 @@ class ChatInputBar extends ConsumerStatefulWidget {
 }
 
 class _ChatInputBarState extends ConsumerState<ChatInputBar> {
+  static const _textPadding = EdgeInsets.fromLTRB(
+    AppSpacing.xs,
+    AppSpacing.m,
+    AppSpacing.xs,
+    AppSpacing.xs,
+  );
+
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   final _contextUsageKey = GlobalKey();
@@ -109,10 +116,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         enabledBorder: InputBorder.none,
         focusedBorder: InputBorder.none,
         filled: false,
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xs,
-          vertical: AppSpacing.m,
-        ),
+        contentPadding: _textPadding,
       ),
     );
     final attachment = IconButton(
@@ -207,8 +211,10 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     )
                   : AppControlStyle.mediumHeight;
               final minimumHeight =
-                  scaler.scale(16) * 1.5 +
-                  AppSpacing.xl +
+                  math.max(
+                    AppControlStyle.touchTarget,
+                    scaler.scale(16) * 1.5 + _textPadding.vertical,
+                  ) +
                   actionHeight +
                   (stacked
                       ? math.max(
