@@ -132,7 +132,6 @@ class ToolCallDisplay {
             }
           }
         case 'read_file':
-        case 'list_files':
           return ToolCallDisplay(
             metadata: [
               if (args['offset'] != null) '起始位置 ${args['offset']}',
@@ -140,6 +139,7 @@ class ToolCallDisplay {
             ].where((s) => s.isNotEmpty).join(' · '),
             output: output,
           );
+        case 'list_files':
         case 'read_skill':
         case 'prepare_skill':
           return ToolCallDisplay(output: output);

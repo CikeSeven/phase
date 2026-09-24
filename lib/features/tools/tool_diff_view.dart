@@ -34,9 +34,9 @@ class ToolDiffView extends StatelessWidget {
             key: ValueKey('diff-${groups[i].kind.name}-$i'),
             color: switch (groups[i].kind) {
               ToolDiffKind.added =>
-                dark ? const Color(0xFF26332D) : const Color(0xFFEBF2ED),
+                dark ? const Color(0xFF174B2D) : const Color(0xFFB9EDC8),
               ToolDiffKind.removed =>
-                dark ? const Color(0xFF382C2D) : const Color(0xFFF5EEEE),
+                dark ? const Color(0xFF622B33) : const Color(0xFFFFC2C2),
               _ => Colors.transparent,
             },
             child: Padding(
@@ -45,7 +45,13 @@ class ToolDiffView extends StatelessWidget {
                 groups[i].text,
                 style: theme.textTheme.bodySmall?.copyWith(
                   fontFamily: 'monospace',
-                  color: theme.colorScheme.onSurface,
+                  color: switch (groups[i].kind) {
+                    ToolDiffKind.added =>
+                      dark ? const Color(0xFFBEF4CB) : const Color(0xFF0D4A25),
+                    ToolDiffKind.removed =>
+                      dark ? const Color(0xFFFFE0E0) : const Color(0xFF761B24),
+                    _ => theme.colorScheme.onSurface,
+                  },
                   height: 1.6,
                 ),
               ),

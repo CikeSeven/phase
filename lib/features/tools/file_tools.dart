@@ -9,7 +9,7 @@ import '../workspace/workspace_files.dart';
 import 'file_text.dart';
 import 'tool.dart';
 
-const _pathDescription = '相对于本会话产物目录的路径；/workspace/ 开头访问当前工作区。';
+const _pathDescription = '相对于本会话工作区根目录的路径。';
 
 class ReadFileTool extends Tool {
   const ReadFileTool();
@@ -196,10 +196,7 @@ class ListFilesTool extends Tool {
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
-      'path': {
-        'type': 'string',
-        'description': '目录路径，默认 .（会话产物及附件）；工作区用 /workspace',
-      },
+      'path': {'type': 'string', 'description': '工作区内的目录路径，默认 .（工作区根目录）'},
       'offset': {'type': 'integer', 'minimum': 0, 'description': '跳过的条目数，默认 0'},
       'limit': {
         'type': 'integer',
@@ -245,45 +242,23 @@ class ListFilesTool extends Tool {
     if (await directory.exists()) {
       await for (final entity in directory.list(followLinks: false)) {
         cancellation.throwIfCancelled();
-        final attachment = context.attachments
-            .where((a) => p.normalize(a.localPath) == p.normalize(entity.path))
-            .firstOrNull;
-        if (context.attachments.any(
-          (a) =>
-              a.extractedTextPath != null &&
-              p.normalize(a.extractedTextPath!) == p.normalize(entity.path),
-        )) {
-          continue;
-        }
-        final relative = p.relative(
-          entity.path,
-          from: context.artifactsDirectory,
-        );
-        final importedCopy = attachment != null && attachment.name != relative;
         entries.add({
-          if (importedCopy) ...{
-            'path': 'attachment:${attachment.id}',
-            'name': attachment.name,
-            'type': 'attachment',
-          } else ...{
-            'path': p.posix.normalize(
-              p.posix.join(path, p.basename(entity.path)),
-            ),
-            'type': entity is Directory
-                ? 'directory'
-                : entity is Link
-                ? 'link'
-                : 'file',
-          },
+          'path': p.relative(entity.path, from: context.workspaceDirectory),
+          'type': entity is Directory
+              ? 'directory'
+              : entity is Link
+              ? 'link'
+              : 'file',
         });
       }
-    } else if (path != '.') {
+    } else {
       throw const FileToolException('fileNotFound', '目录不存在');
     }
-    if (p.posix.normalize(path) == '.') {
+    final relative = p.relative(location, from: context.workspaceDirectory);
+    if (relative == '.') {
       for (final attachment in context.attachments) {
         if (p.isWithin(
-          p.absolute(context.artifactsDirectory),
+          p.absolute(context.workspaceDirectory),
           p.absolute(attachment.localPath),
         )) {
           continue;
@@ -293,9 +268,6 @@ class ListFilesTool extends Tool {
           'name': attachment.name,
           'type': 'attachment',
         });
-      }
-      if (context.workspaceDirectory.isNotEmpty) {
-        entries.add({'path': '/workspace', 'type': 'directory'});
       }
     }
     entries.sort(
@@ -314,7 +286,7 @@ class ListFilesTool extends Tool {
     final end = offset + selected.length;
     return ToolOutcome.success(
       jsonEncode({
-        'path': path,
+        'path': relative,
         'files': selected,
         'total': entries.length,
         if (end < entries.length) 'nextOffset': end,
@@ -328,14 +300,10 @@ Future<String> _location(
   ToolContext context, {
   bool directory = false,
 }) async {
-  final workspace = path == '/workspace' || path.startsWith('/workspace/');
-  if (workspace && context.workspaceDirectory.isEmpty) {
+  if (context.workspaceDirectory.isEmpty) {
     throw const FileToolException('workspaceUnavailable', '本次运行的会话工作区不可用');
   }
-  final root = workspace
-      ? context.workspaceDirectory
-      : context.artifactsDirectory;
-  final relative = workspace
+  final relative = path == '/workspace' || path.startsWith('/workspace/')
       ? (path == '/workspace' ? '.' : path.substring(11))
       : path;
   if (relative.startsWith('attachment:')) {
@@ -348,15 +316,9 @@ Future<String> _location(
       p.posix.split(relative).contains('..') ||
       (!directory &&
           (p.posix.normalize(relative) == '.' || relative.endsWith('/')))) {
-    throw const FileToolException(
-      'invalidPath',
-      '路径不合法：请使用会话产物目录内的相对路径或 /workspace/ 路径',
-    );
+    throw const FileToolException('invalidPath', '路径不合法：请使用工作区内的相对路径');
   }
-  if (!await Directory(root).exists() && !workspace) {
-    return p.join(root, p.posix.normalize(relative));
-  }
-  return workspacePath(root, relative, mustExist: false);
+  return workspacePath(context.workspaceDirectory, relative, mustExist: false);
 }
 
 Future<File> _localFile(String path, ToolContext context) async =>
@@ -400,19 +362,7 @@ Future<ToolOutcome> _write(
   await _localFile(path, context);
   cancellation.throwIfCancelled();
   await file.writeAsBytes(bytes, flush: true);
-  final ids = <String>[];
-  if (!path.startsWith('/workspace/')) {
-    final attachment = await context.storage.registerArtifact(
-      conversationId: context.conversationId,
-      path: file.path,
-      name: p.relative(file.path, from: context.artifactsDirectory),
-    );
-    ids.add(attachment.id);
-  }
-  return ToolOutcome.success(
-    '已写入「$path」（${bytes.length} bytes）',
-    artifacts: ids,
-  );
+  return ToolOutcome.success('已写入「$path」（${bytes.length} bytes）');
 }
 
 Future<ToolOutcome> _fileOperation(

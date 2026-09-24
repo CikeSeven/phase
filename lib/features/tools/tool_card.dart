@@ -147,7 +147,7 @@ class _ToolCardState extends State<ToolCard>
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Material(
         key: ValueKey('tool-card-${record.id}'),
-        color: brand.tealContainer,
+        color: brand.lavenderContainer,
         borderRadius: AppRadius.mediumAll,
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -177,7 +177,7 @@ class _ToolCardState extends State<ToolCard>
                           Text(
                             ToolCallDisplay.title(record),
                             style: theme.textTheme.labelLarge?.copyWith(
-                              color: brand.onTealContainer,
+                              color: brand.onLavenderContainer,
                             ),
                           ),
                           if (detail != null &&
@@ -202,7 +202,7 @@ class _ToolCardState extends State<ToolCard>
                           Icon(
                             ToolPresentation.icon(record.toolName),
                             size: 18,
-                            color: brand.onTealContainer,
+                            color: brand.onLavenderContainer,
                           ),
                           const SizedBox(width: AppSpacing.s),
                           Expanded(
@@ -228,7 +228,7 @@ class _ToolCardState extends State<ToolCard>
                                 ? Symbols.expand_less_rounded
                                 : Symbols.expand_more_rounded,
                             size: 18,
-                            color: brand.onTealContainer,
+                            color: brand.onLavenderContainer,
                           ),
                         ],
                       );

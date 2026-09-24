@@ -32,6 +32,7 @@ String presentToolOutput(ToolCallRecord record, String result) {
             if (decoded['previewTruncated'] == true)
               record.artifacts.isEmpty ? '输出预览已截断' : '输出预览已截断，完整输出见附件',
             if (decoded['error'] case final String error) error,
+            if (decoded['warning'] case final String warning) warning,
           ].join('\n\n');
         }
       case 'read_file':
@@ -45,6 +46,11 @@ String presentToolOutput(ToolCallRecord record, String result) {
             'sha256',
           });
         }
+      case 'list_files':
+        final listing = _fileList(decoded);
+        if (listing != null) return listing;
+        if (decoded['reason'] case final String reason) return reason;
+        if (decoded['error'] case final String error) return error;
       case 'read_skill':
         if (decoded['content'] case final String content) {
           return _contentWithDetails(content, decoded, const {
@@ -72,6 +78,30 @@ String presentToolOutput(ToolCallRecord record, String result) {
   return decoded is Map || decoded is List
       ? const JsonEncoder.withIndent('  ').convert(decoded)
       : result;
+}
+
+String? _fileList(Map<String, dynamic> result) {
+  final files = result['files'];
+  if (files is! List) return null;
+  final names = <String>[];
+  for (final file in files) {
+    if (file is! Map<String, dynamic>) return null;
+    final name = file['name'] ?? file['path'];
+    if (name is! String) return null;
+    final directory = file['type'] == 'directory' || file['directory'] == true;
+    final label = name.replaceAll('\r', r'\r').replaceAll('\n', r'\n');
+    names.add('$label${directory && !label.endsWith('/') ? '/' : ''}');
+  }
+  return [
+    if (names.isEmpty)
+      result['total'] is num && (result['total'] as num) > 0
+          ? '（没有更多文件）'
+          : '（空目录）',
+    ...names,
+    if (result['nextOffset'] is num) '…（还有更多文件）',
+    for (final key in ['warning', 'reason', 'error'])
+      if (result[key] case final String notice when notice.isNotEmpty) notice,
+  ].join('\n');
 }
 
 String _contentWithDetails(

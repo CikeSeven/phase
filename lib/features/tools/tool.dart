@@ -54,10 +54,10 @@ class ToolContext {
 
   final ToolStorage storage;
 
-  /// 当前会话的附件；文件工具还可访问会话产物和已选择的工作区。
+  /// 当前会话的附件；本地文件路径以会话独立工作区为根目录。
   final List<Attachment> attachments;
 
-  /// 允许读写的应用私有工作目录。
+  /// 当前会话允许读写的应用私有工作区根目录。
   final String workspaceDirectory;
 
   String get artifactsDirectory => storage.artifactsDirectory(conversationId);

@@ -186,7 +186,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
     final colors = theme.colorScheme;
     final brand = context.brandColors;
     return Material(
-      color: brand.lavenderContainer,
+      color: brand.tealContainer,
       borderRadius: AppRadius.mediumAll,
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -208,7 +208,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                       Icon(
                         Symbols.cognition_rounded,
                         size: 18,
-                        color: brand.onLavenderContainer,
+                        color: brand.onTealContainer,
                       ),
                       const SizedBox(width: AppSpacing.s),
                       Expanded(
@@ -217,7 +217,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                           builder: (context, now, _) => Text(
                             _headerLabel(now),
                             style: theme.textTheme.labelMedium?.copyWith(
-                              color: brand.onLavenderContainer,
+                              color: brand.onTealContainer,
                             ),
                           ),
                         ),
@@ -228,7 +228,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                             ? Symbols.expand_less_rounded
                             : Symbols.expand_more_rounded,
                         size: 18,
-                        color: brand.onLavenderContainer,
+                        color: brand.onTealContainer,
                       ),
                     ],
                   ),

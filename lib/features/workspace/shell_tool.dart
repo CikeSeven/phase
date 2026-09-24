@@ -95,6 +95,17 @@ class ShellTool extends Tool {
     LinuxProcess? process;
     final imported = <String>[];
     String? fileError;
+    String? artifactWarning;
+    Future<Map<String, String>?> collectOutputs() async {
+      try {
+        return await files!.outputs(binding);
+      } on WorkspaceFailure catch (error) {
+        if (error.code != 'artifactLimit') rethrow;
+        artifactWarning = error.userMessage;
+        return null;
+      }
+    }
+
     try {
       cancellation.throwIfCancelled();
       for (final attachment in context.attachments.where(
@@ -113,7 +124,8 @@ class ShellTool extends Tool {
           ),
         );
       }
-      final before = await files!.outputs(binding);
+      // 工作区文件过多只影响自动附加产物，不能阻止命令继续处理这些文件。
+      final before = await collectOutputs();
       cancellation.throwIfCancelled();
       process = await driver!.start(
         LinuxProcessSpec(
@@ -185,16 +197,20 @@ class ShellTool extends Tool {
         );
         artifacts.add(attachment.id);
       }
-      final after = await files!.outputs(binding);
-      for (final entry in after.entries) {
-        if (before[entry.key] == entry.value) continue;
-        final attachment = await files!.artifact(
-          binding,
-          entry.key,
-          context,
-          RunCancellation(),
-        );
-        artifacts.add(attachment.id);
+      if (before != null) {
+        final after = await collectOutputs();
+        if (after != null) {
+          for (final entry in after.entries) {
+            if (before[entry.key] == entry.value) continue;
+            final attachment = await files!.artifact(
+              binding,
+              entry.key,
+              context,
+              RunCancellation(),
+            );
+            artifacts.add(attachment.id);
+          }
+        }
       }
     } on StorageFailure {
       rethrow;
@@ -241,6 +257,7 @@ class ShellTool extends Tool {
       'previewTruncated': sizes.any((s) => s > ShellLimits.previewBytes),
       'artifactIds': artifacts,
       'importedFiles': imported,
+      'warning': ?artifactWarning,
       if (fileError != null || exit?.error != null)
         'error': fileError ?? '命令进程未返回完整结果',
       'knownEffects': '已收集输出；工作区中的文件变化保留，失败或停止不代表撤销',

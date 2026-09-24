@@ -218,24 +218,19 @@ class WorkspaceFiles {
 
   Future<Map<String, String>> outputs(WorkspaceSnapshot workspace) async {
     final result = <String, String>{};
-    final path = await workspacePath(
-      workspace.rootPath,
-      'output',
-      mustExist: false,
-    );
-    if (!await Directory(path).exists()) return result;
+    final path = await workspacePath(workspace.rootPath, '.');
     var total = 0;
-    await for (final entity in Directory(
-      path,
-    ).list(recursive: true, followLinks: false)) {
-      if (entity is! File) continue;
+    await for (final entity in _outputFiles(
+      Directory(path),
+      workspaceRoot: true,
+    )) {
       final relative = p.relative(entity.path, from: workspace.rootPath);
       await workspacePath(workspace.rootPath, relative);
       total += await entity.length();
       if (result.length >= 100 || total > maxCopyBytes) {
         throw const WorkspaceFailure(
           'artifactLimit',
-          'output 目录超过 100 个文件或 64 MiB，请整理后再导出',
+          '工作区文件超过自动收集上限（100 个文件 / 64 MiB），未附加文件，原文件保留在工作区',
         );
       }
       result[relative] = (await sha256.bind(entity.openRead()).first)
@@ -243,14 +238,32 @@ class WorkspaceFiles {
     }
     return result;
   }
+
+  Stream<File> _outputFiles(
+    Directory directory, {
+    bool workspaceRoot = false,
+  }) async* {
+    await for (final entity in directory.list(followLinks: false)) {
+      if (entity is File) {
+        yield entity;
+      } else if (entity is Directory) {
+        // 导入附件与 Skill 资源副本不作为命令产物收集。
+        if (workspaceRoot &&
+            {'imports', '.skills'}.contains(p.basename(entity.path))) {
+          continue;
+        }
+        yield* _outputFiles(entity);
+      }
+    }
+  }
 }
 
 String workspacePrompt(WorkspaceSnapshot? workspace) {
   if (workspace == null) return '';
   final files =
-      '\n\n本会话独立工作区：${jsonEncode(workspace.name)}，路径 /workspace，文件随会话持久保存。';
+      '\n\n本会话独立工作区：${jsonEncode(workspace.name)}，文件路径相对于根目录，随会话持久保存。';
   if (!workspace.linuxAvailable) {
     return '$files Ubuntu 环境未就绪，当前无法执行 shell 命令。';
   }
-  return '$files Ubuntu ${workspace.environmentRevision}。需交付的文件写入 /workspace/output，shell 调用后保存为会话产物；附件在执行前复制到 /workspace/imports/<附件ID>/<文件名>。';
+  return '$files Ubuntu ${workspace.environmentRevision}。附件在执行前复制到 imports/<附件ID>/<文件名>。';
 }
