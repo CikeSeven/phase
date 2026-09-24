@@ -136,9 +136,12 @@ class MessageBubble extends StatelessWidget {
         child: GestureDetector(
           onLongPress: () => _showActions(context),
           child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.l,
-              vertical: AppSpacing.m,
+            // 同一问答紧凑排列，下一条用户消息仍保留分组留白。
+            padding: EdgeInsets.only(
+              left: AppSpacing.l,
+              top: _isUser ? AppSpacing.m : AppSpacing.xs,
+              right: AppSpacing.l,
+              bottom: _isUser ? AppSpacing.xs : AppSpacing.m,
             ),
             child: LayoutBuilder(
               builder: (context, constraints) {
@@ -292,8 +295,8 @@ class MessageBubble extends StatelessWidget {
                                   key: ValueKey(
                                     'thinking-${message.id}-${thinkingOrdinal++}',
                                   ),
-                                  padding: const EdgeInsets.only(
-                                    bottom: AppSpacing.xs,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: AppSpacing.xs,
                                   ),
                                   child: ThinkingPanel(
                                     reasoning: reasoning,

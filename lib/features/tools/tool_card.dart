@@ -44,8 +44,7 @@ class ToolCard extends StatefulWidget {
 class _ToolCardState extends State<ToolCard>
     with AutomaticKeepAliveClientMixin {
   final _headerKey = GlobalKey();
-  final _inputController = ScrollController();
-  final _outputController = ScrollController();
+  final _contentController = ScrollController();
   bool _expanded = false;
   bool _userToggled = false;
   ToolCallRecord? _displayRecord;
@@ -76,8 +75,7 @@ class _ToolCardState extends State<ToolCard>
 
   @override
   void dispose() {
-    _inputController.dispose();
-    _outputController.dispose();
+    _contentController.dispose();
     super.dispose();
   }
 
@@ -245,8 +243,10 @@ class _ToolCardState extends State<ToolCard>
                   AppSpacing.m,
                   AppSpacing.s,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                child: _ToolCardContent(
+                  scrollKey: PageStorageKey('tool-content-${record.id}'),
+                  controller: _contentController,
+                  onOverscroll: _onContentOverscroll,
                   children: [
                     if (record.errorCode == 'storageError' &&
                         display.output !=
@@ -292,15 +292,10 @@ class _ToolCardState extends State<ToolCard>
                         ],
                       ),
                     if (display.diff case final diff?)
-                      _ToolContentSection(
-                        scrollKey: PageStorageKey('tool-input-${record.id}'),
-                        controller: _inputController,
-                        maxHeight: 240,
-                        onOverscroll: _onContentOverscroll,
-                        child: diff.isEmpty
-                            ? const Text('（空文件）')
-                            : ToolDiffView(lines: diff),
-                      )
+                      if (diff.isEmpty)
+                        const Text('（空文件）')
+                      else
+                        ToolDiffView(lines: diff)
                     else if (display.call case final String call
                         when call.isNotEmpty)
                       Row(
@@ -311,21 +306,13 @@ class _ToolCardState extends State<ToolCard>
                               padding: const EdgeInsets.symmetric(
                                 vertical: AppSpacing.s,
                               ),
-                              child: _ToolContentSection(
-                                scrollKey: PageStorageKey(
-                                  'tool-input-${record.id}',
-                                ),
-                                controller: _inputController,
-                                maxHeight: 160,
-                                onOverscroll: _onContentOverscroll,
-                                child: Text(
-                                  call,
-                                  key: ValueKey('tool-arguments-${record.id}'),
-                                  style: theme.textTheme.bodySmall?.copyWith(
-                                    fontFamily: 'monospace',
-                                    fontWeight: FontWeight.w600,
-                                    height: 1.6,
-                                  ),
+                              child: Text(
+                                call,
+                                key: ValueKey('tool-arguments-${record.id}'),
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w600,
+                                  height: 1.6,
                                 ),
                               ),
                             ),
@@ -354,21 +341,22 @@ class _ToolCardState extends State<ToolCard>
                         ),
                       if (display.diff != null ||
                           (display.call?.isNotEmpty ?? false))
-                        const SizedBox(height: AppSpacing.m),
-                      _ToolContentSection(
-                        scrollKey: PageStorageKey('tool-output-${record.id}'),
-                        controller: _outputController,
-                        maxHeight: 240,
-                        onOverscroll: _onContentOverscroll,
-                        child: Text(
-                          output,
-                          key: ValueKey('tool-result-${record.id}'),
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            height: 1.5,
-                            color: record.status == ToolCallStatus.failed
-                                ? colors.error
-                                : colors.onSurface,
+                        Divider(
+                          height: AppSpacing.xl,
+                          thickness: 2,
+                          radius: AppRadius.fullAll,
+                          color: brand.onLavenderContainer.withValues(
+                            alpha: 0.2,
                           ),
+                        ),
+                      Text(
+                        output,
+                        key: ValueKey('tool-result-${record.id}'),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          height: 1.5,
+                          color: record.status == ToolCallStatus.failed
+                              ? colors.error
+                              : colors.onSurface,
                         ),
                       ),
                     ],
@@ -438,24 +426,22 @@ class _ToolCardState extends State<ToolCard>
   }
 }
 
-class _ToolContentSection extends StatelessWidget {
-  const _ToolContentSection({
-    required this.child,
+class _ToolCardContent extends StatelessWidget {
+  const _ToolCardContent({
+    required this.children,
     required this.scrollKey,
     required this.controller,
-    required this.maxHeight,
     required this.onOverscroll,
   });
 
-  final Widget child;
+  final List<Widget> children;
   final PageStorageKey<String> scrollKey;
   final ScrollController controller;
-  final double maxHeight;
   final bool Function(OverscrollNotification) onOverscroll;
 
   @override
   Widget build(BuildContext context) => ConstrainedBox(
-    constraints: BoxConstraints(maxHeight: maxHeight),
+    constraints: const BoxConstraints(maxHeight: 320),
     child: Scrollbar(
       controller: controller,
       thumbVisibility: true,
@@ -465,7 +451,13 @@ class _ToolContentSection extends StatelessWidget {
           key: scrollKey,
           controller: controller,
           primary: false,
-          child: SelectionArea(child: child),
+          child: SelectionArea(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: children,
+            ),
+          ),
         ),
       ),
     ),
