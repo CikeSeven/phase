@@ -16,6 +16,7 @@ import '../../models/tool_policy.dart';
 import '../../models/permission_mode.dart';
 import 'database_key.dart';
 import 'key_store.dart';
+import 'permission_mode_upgrade.dart';
 
 part 'app_database.g.dart';
 
@@ -412,9 +413,12 @@ class AppDatabase extends _$AppDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    // 本次只更新初版契约；未授权旧设备数据转换，不补开发期升级链。
+    // 仅本次已安装 schema 8 的保数据例外，不扩展其他开发期升级链。
     onUpgrade: (migrator, from, to) async {
-      throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
+      if (from != 8 || to != 9) {
+        throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
+      }
+      await upgradePermissionModes(this, migrator);
     },
     beforeOpen: _prepareDatabase,
   );
@@ -516,7 +520,10 @@ AppDatabase openAppDatabase({
   return AppDatabase(executor);
 }
 
-@Riverpod(keepAlive: true)
+// 本地库打开失败需要明确提示和手动重试，自动重试不能修复结构或密钥。
+Duration? _databaseRetry(int retryCount, Object error) => null;
+
+@Riverpod(keepAlive: true, retry: _databaseRetry)
 Future<AppDatabase> appDatabase(Ref ref) async {
   try {
     final directory = await getApplicationDocumentsDirectory();
@@ -524,11 +531,17 @@ Future<AppDatabase> appDatabase(Ref ref) async {
       directory: directory,
       keyStore: const SecureKeyStore(),
     );
+    if (!ref.mounted) {
+      await database.close();
+      throw const StorageFailure('数据库加载已取消');
+    }
     ref.onDispose(database.close);
     return database;
+  } on Failure {
+    rethrow;
   } on Exception catch (e, st) {
-    AppLogger.error('打开数据库失败', e, st);
-    throw UnknownFailure('打开数据库失败', cause: e);
+    AppLogger.error('打开数据库失败 (${e.runtimeType})', null, st);
+    throw StorageFailure('打开数据库失败', cause: e);
   }
 }
 
@@ -556,8 +569,13 @@ Future<AppDatabase> openDeviceDatabase({
     hexKey: hexKey,
     background: background,
   );
-  await database.assertEncryptionAvailable();
-  return database;
+  try {
+    await database.assertEncryptionAvailable();
+    return database;
+  } catch (_) {
+    await database.close();
+    rethrow;
+  }
 }
 
 /// 文件是否为明文 SQLite 库（SQLite3MultipleCiphers 的密文没有这个文件头）。

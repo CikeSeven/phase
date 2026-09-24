@@ -54,7 +54,7 @@ class ModelCatalog {
   /// 输出上限未知时的本地保守预留。
   static const localDefaultOutputReserve = 4096;
 
-  /// 应用 presetId → models.dev providerId；custom/ollama 等无映射。
+  /// 同名候选并列时优先已选预设的目录；不限制模型的全局匹配范围。
   static const presetToModelsDev = <String, String>{
     'openai': 'openai',
     'anthropic': 'anthropic',
@@ -81,43 +81,53 @@ class ModelCatalog {
     'vercel-ai-gateway': 'vercel',
   };
 
-  static const _envelopeVersion = 1;
+  // 全量目录不复用旧白名单目录的 ETag，避免 304 永久保留缺失条目。
+  static const _envelopeVersion = 2;
 
   int get modelCount =>
       providers.values.fold(0, (sum, models) => sum + models.length);
 
-  /// 查找模型的目录上限。只查映射到的一个服务商，不做跨服务商全局搜索：
-  /// 报错窗口不如保守默认。匹配顺序：精确 id → 命名空间末段互配
-  /// （用户填裸 id 而目录是 `openai/gpt-5`，或反之）；末段并列时按 key
-  /// 排序取首个，保证确定性。
+  /// 按模型名跨服务商查找，包括 custom / ollama 配置。
+  /// 精确 id 优先于命名空间末段互配；同级优先已选预设，再按模型 id、
+  /// 服务商 id 排序，避免目录返回顺序影响预算。不改写请求中的模型 id。
   ModelCatalogEntry? lookup(String presetId, String modelId) {
-    final providerId = presetToModelsDev[presetId];
-    if (providerId == null || modelId.isEmpty) return null;
-    final models = providers[providerId];
-    if (models == null) return null;
-    final exact = models[modelId];
-    if (exact != null) return exact;
-    final segment = modelId.split('/').last;
+    final id = modelId.trim();
+    final segment = id.split('/').last;
+    if (segment.isEmpty) return null;
+    final preferredProvider = presetToModelsDev[presetId];
+    ModelCatalogEntry? matched;
+    var matchedRank = 4;
     String? matchedKey;
-    for (final key in models.keys) {
-      if (key.split('/').last != segment) continue;
-      if (matchedKey == null || key.compareTo(matchedKey) < 0) {
-        matchedKey = key;
+    String? matchedProvider;
+    for (final MapEntry(key: providerId, value: models) in providers.entries) {
+      for (final MapEntry(:key, :value) in models.entries) {
+        if (key != id && key.split('/').last != segment) continue;
+        final rank =
+            (key == id ? 0 : 2) + (providerId == preferredProvider ? 0 : 1);
+        final keyOrder = matchedKey == null ? -1 : key.compareTo(matchedKey);
+        if (rank < matchedRank ||
+            (rank == matchedRank &&
+                (keyOrder < 0 ||
+                    (keyOrder == 0 &&
+                        providerId.compareTo(matchedProvider!) < 0)))) {
+          matched = value;
+          matchedRank = rank;
+          matchedKey = key;
+          matchedProvider = providerId;
+        }
       }
     }
-    return matchedKey == null ? null : models[matchedKey];
+    return matched;
   }
 
-  /// 完整的 models.dev api.json → 瘦身目录；只保留有映射的服务商。
+  /// 完整的 models.dev api.json → 瘦身目录；保留所有服务商的有效模型上限。
   /// 生成脚本与运行期刷新共用，避免两套精简逻辑。
   static ModelCatalog slimFromModelsDevJson(
     Map<String, dynamic> apiJson, {
     DateTime? fetchedAt,
   }) {
-    final wanted = presetToModelsDev.values.toSet();
     final providers = <String, Map<String, ModelCatalogEntry>>{};
-    for (final providerId in wanted) {
-      final raw = apiJson[providerId];
+    for (final MapEntry(key: providerId, value: raw) in apiJson.entries) {
       if (raw is! Map) continue;
       final models = raw['models'];
       if (models is! Map) continue;

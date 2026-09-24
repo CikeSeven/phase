@@ -21,7 +21,7 @@ void main() {
     await db.customStatement(
       "INSERT INTO preserve_fixture VALUES ('must stay')",
     );
-    await db.customStatement('PRAGMA user_version = 8');
+    await db.customStatement('PRAGMA user_version = 7');
     await db.close();
     db = openAppDatabase(path: path, hexKey: key, background: false);
     await expectLater(
@@ -39,7 +39,7 @@ void main() {
       );
       expect(
         connection.select('PRAGMA user_version').single['user_version'],
-        8,
+        7,
       );
     } finally {
       connection.close();

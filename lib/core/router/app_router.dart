@@ -1,5 +1,4 @@
 import '../../features/memory/memories_page.dart';
-import '../../features/chat/context/conversation_context_page.dart';
 import '../../features/workspace/workspaces_page.dart';
 import '../../features/workspace/workspace_files_page.dart';
 
@@ -40,16 +39,6 @@ GoRouter appRouter(Ref ref) {
   return GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(
-        path: '/conversations/:id/context',
-        pageBuilder: (context, state) => materialPage(
-          state,
-          ConversationContextPage(
-            conversationId: state.pathParameters['id']!,
-            runId: state.uri.queryParameters['run'],
-          ),
-        ),
-      ),
       GoRoute(
         path: '/tasks',
         pageBuilder: (context, state) =>

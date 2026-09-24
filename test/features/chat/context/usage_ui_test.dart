@@ -2,22 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/theme/app_theme.dart';
-import 'package:phase/data/models/api_protocol.dart';
-import 'package:phase/data/models/chat_message.dart';
-import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/model_request_record.dart';
-import 'package:phase/data/models/model_catalog.dart';
-import 'package:phase/data/models/provider_profile.dart';
+import 'package:phase/data/models/chat_message.dart';
+import 'package:phase/data/models/message_part.dart';
+import 'package:phase/features/chat/message_bubble.dart';
+import 'package:phase/core/widgets/app_sheet.dart';
 import 'package:phase/data/models/token_usage.dart';
 import 'package:phase/data/repositories/model_request_repository.dart';
-import 'package:phase/data/repositories/plan_repository.dart';
-import 'package:phase/features/chat/chat_controller.dart';
-import 'package:phase/features/chat/context/context_builder.dart';
-import 'package:phase/features/chat/context/context_meter.dart';
-import 'package:phase/features/chat/context/context_preview.dart';
-import 'package:phase/features/chat/context/conversation_context_page.dart';
 import 'package:phase/features/chat/usage/usage_panel.dart';
-import 'package:phase/providers/request_plan.dart';
 
 ModelRequestRecord record(
   String id, {
@@ -45,174 +37,152 @@ void main() {
     expect(cacheRateLabel(null), '不适用');
   });
 
+  testWidgets('消息用量直接打开底部面板，所属运行与返回保持有效', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        conversationRequestsProvider('c').overrideWith(
+          (ref) => Stream.value([
+            record(
+              'one',
+              usage: const TokenUsage(promptTokens: 100, cacheReadTokens: 80),
+            ),
+          ]),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          theme: AppTheme.light(),
+          home: Scaffold(
+            body: ListView(
+              children: [
+                MessageBubble(
+                  message: ChatMessage(
+                    id: 'reply',
+                    conversationId: 'c',
+                    runId: 'run',
+                    role: ChatRole.assistant,
+                    parts: const [TextPart(text: '回答正文')],
+                    createdAt: DateTime(2026),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('消息操作'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('用量'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppSheet), findsOneWidget);
+    expect(find.byType(UsagePanel), findsOneWidget);
+    expect(tester.widget<UsagePanel>(find.byType(UsagePanel)).runId, 'run');
+    expect(find.text('所属运行'), findsOneWidget);
+    expect(find.textContaining('已报告用量 · 1 次实际请求'), findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(AppSheet), findsNothing);
+    expect(find.text('回答正文', findRichText: true), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   for (final size in [
     const Size(320, 640),
     const Size(360, 640),
     const Size(740, 360),
   ]) {
     for (final scale in [1.0, 2.0]) {
-      testWidgets(
-        '上下文/用量 ${size.width}×${size.height} ${scale}x 可滚动、未知真实且无溢出',
-        (tester) async {
-          tester.view.devicePixelRatio = 1;
-          tester.view.physicalSize = size;
-          addTearDown(tester.view.reset);
-          final windowSource = switch (size.width) {
-            320 => ContextWindowSource.catalog,
-            360 => ContextWindowSource.user,
-            _ => ContextWindowSource.localDefault,
-          };
-          final plan = await planRequest(
-            ProviderProfile(
-              id: 'p',
-              name: 'fixture',
-              protocol: ApiProtocol.openaiCompletions,
-              baseUrl: 'https://fixture.test',
-              createdAt: DateTime(2026),
-            ),
-            ChatRequest(
-              modelId: 'm',
-              maxOutputTokens: windowSource == ContextWindowSource.user
-                  ? 8192
-                  : null,
-              messages: [
-                ResolvedMessage(
-                  role: ChatRole.user,
-                  sourceMessageId: 'u',
-                  parts: [ResolvedText('当前任务')],
-                ),
-              ],
-            ),
-          );
-          final measurement = await const ContextMeter().measure(
-            conversationId: 'c',
-            plan: plan,
-            generation: 'original',
-            requests: [],
-            windowSource: windowSource,
-            contextWindow: windowSource == ContextWindowSource.catalog
-                ? 200000
-                : windowSource == ContextWindowSource.user
-                ? 65536
-                : null,
-            catalogMaxOutputTokens: windowSource == ContextWindowSource.catalog
-                ? 64000
-                : null,
-          );
-          final container = ProviderContainer(
-            overrides: [
-              contextPreviewProvider('c').overrideWith(
-                (ref) async => ContextBuild(
-                  plan.request.messages,
-                  measurement.estimatedInputTokens,
-                  ContextBudget(
-                    contextWindow: measurement.windowTokens,
-                    maxOutputTokens: measurement.outputReserveTokens,
+      testWidgets('用量 ${size.width}×${size.height} ${scale}x 可滚动、未知真实且无溢出', (
+        tester,
+      ) async {
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = size;
+        addTearDown(tester.view.reset);
+        final container = ProviderContainer(
+          overrides: [
+            conversationRequestsProvider('c').overrideWith(
+              (ref) => Stream.value([
+                record(
+                  'one',
+                  usage: const TokenUsage(
+                    promptTokens: 100,
+                    cacheReadTokens: 80,
+                    outputTokens: 10,
+                    totalTokens: 110,
                   ),
-                  measurement: measurement,
+                ),
+                record('two'),
+                record(
+                  'inherited',
+                  usage: const TokenUsage(promptTokens: 9999),
+                  inherited: true,
+                ),
+              ]),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: AppTheme.light(),
+              builder: (context, child) => MediaQuery(
+                data: MediaQuery.of(context)
+                    .copyWith(textScaler: TextScaler.linear(scale)),
+                child: child!,
+              ),
+              home: Scaffold(
+                body: ListView(
+                  children: const [UsagePanel(conversationId: 'c')],
                 ),
               ),
-              contextSummariesProvider('c')
-                  .overrideWith((ref) => Stream.value([])),
-              conversationPlansProvider('c')
-                  .overrideWith((ref) => Stream.value([])),
-              conversationRequestsProvider('c').overrideWith(
-                (ref) => Stream.value([
-                  record(
-                    'one',
-                    usage: const TokenUsage(
-                      promptTokens: 100,
-                      cacheReadTokens: 80,
-                      outputTokens: 10,
-                      totalTokens: 110,
-                    ),
-                  ),
-                  record('two'),
-                  record(
-                    'inherited',
-                    usage: const TokenUsage(promptTokens: 9999),
-                    inherited: true,
-                  ),
-                ]),
-              ),
-            ],
-          );
-          addTearDown(container.dispose);
-          container.read(activeConversationProvider.notifier).open('c');
-          await tester.pumpWidget(
-            UncontrolledProviderScope(
-              container: container,
-              child: MaterialApp(
-                theme: AppTheme.light(),
-                builder: (context, child) => MediaQuery(
-                  data: MediaQuery.of(context)
-                      .copyWith(textScaler: TextScaler.linear(scale)),
-                  child: child!,
-                ),
-                home: const ConversationContextPage(conversationId: 'c'),
-              ),
             ),
-          );
-          await tester.pumpAndSettle();
-          expect(find.textContaining('下一请求预计输入 ≈'), findsOneWidget);
-          expect(
-            find.textContaining(switch (windowSource) {
-              ContextWindowSource.catalog => 'models.dev 目录窗口',
-              ContextWindowSource.user => '用户配置窗口',
-              ContextWindowSource.localDefault => '本地默认窗口',
-            }),
-            findsOneWidget,
-          );
-          expect(
-            find.textContaining(switch (windowSource) {
-              ContextWindowSource.catalog => '（models.dev 目录上限）',
-              ContextWindowSource.user => '（协议实际参数）',
-              ContextWindowSource.localDefault => '（本地预留，服务端上限未知）',
-            }),
-            findsOneWidget,
-          );
-          await tester.scrollUntilVisible(
-            find.textContaining('不含未发送草稿'),
-            160,
-            scrollable: find.byType(Scrollable).first,
-          );
-          expect(find.textContaining('不含未发送草稿'), findsOneWidget);
-          await tester.scrollUntilVisible(
-            find.text('整个会话'),
-            160,
-            scrollable: find.byType(Scrollable).first,
-          );
-          await Scrollable.ensureVisible(
-            tester.element(find.text('整个会话')),
-            alignment: .4,
-          );
-          await tester.pumpAndSettle();
-          await tester.tap(find.text('整个会话').hitTestable());
-          await tester.pumpAndSettle();
-          expect(
-            tester
-                .widget<ChoiceChip>(
-                  find.ancestor(
-                    of: find.text('整个会话'),
-                    matching: find.byType(ChoiceChip),
-                  ),
-                )
-                .selected,
-            isTrue,
-          );
-          expect(find.textContaining('已报告用量 · 2 次实际请求'), findsOneWidget);
-          expect(find.text('输入总量：100 · 1 次请求未提供'), findsOneWidget);
-          expect(find.text('已报告请求命中率：80.0% · 覆盖 1/2 次'), findsOneWidget);
-          await tester.scrollUntilVisible(
-            find.textContaining('不计本会话消耗'),
-            180,
-            scrollable: find.byType(Scrollable).first,
-          );
-          expect(find.textContaining('不计本会话消耗'), findsOneWidget);
-          expect(tester.takeException(), isNull);
-          await tester.pumpWidget(const SizedBox.shrink());
-        },
-      );
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.scrollUntilVisible(
+          find.text('整个会话'),
+          160,
+          scrollable: find.byType(Scrollable).first,
+        );
+        await Scrollable.ensureVisible(
+          tester.element(find.text('整个会话')),
+          alignment: .4,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('整个会话').hitTestable());
+        await tester.pumpAndSettle();
+        expect(
+          tester
+              .widget<ChoiceChip>(
+                find.ancestor(
+                  of: find.text('整个会话'),
+                  matching: find.byType(ChoiceChip),
+                ),
+              )
+              .selected,
+          isTrue,
+        );
+        expect(find.textContaining('已报告用量 · 2 次实际请求'), findsOneWidget);
+        expect(find.text('输入总量：100 · 1 次请求未提供'), findsOneWidget);
+        expect(find.text('已报告请求命中率：80.0% · 覆盖 1/2 次'), findsOneWidget);
+        await tester.scrollUntilVisible(
+          find.textContaining('不计本会话消耗'),
+          180,
+          scrollable: find.byType(Scrollable).first,
+        );
+        expect(find.textContaining('不计本会话消耗'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+        await tester.pumpWidget(const SizedBox.shrink());
+      });
     }
   }
 }

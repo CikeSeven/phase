@@ -227,6 +227,11 @@ void main() {
       await tester.tap(find.text('把今天的想法整理成计划'));
       await _settleDatabase(tester);
       await _save(tester, '$mode-chat-message');
+      await tester.tap(find.byKey(const ValueKey('chat-context-usage')));
+      await _settleDatabase(tester);
+      await _save(tester, '$mode-context-popover');
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
       final transcriptRect = tester.getRect(find.byType(ChatTranscript));
       await tester.dragFrom(
         Offset(transcriptRect.left + 8, transcriptRect.center.dy),

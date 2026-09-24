@@ -35,7 +35,7 @@ Future<void> main() async {
     }
     // key 排序保证 diff 稳定。
     final sorted = <String, dynamic>{
-      'v': 1,
+      ...catalog.toJson(),
       'providers': {
         for (final providerId in catalog.providers.keys.toList()..sort())
           providerId: {

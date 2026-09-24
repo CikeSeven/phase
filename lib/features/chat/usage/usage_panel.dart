@@ -5,15 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
+import '../../../core/widgets/app_sheet.dart';
 import '../../../data/models/model_request_record.dart';
 import '../../../data/models/token_usage.dart';
 import '../../../data/repositories/model_request_repository.dart';
-
-String formatTokenCount(int value) => value >= 1000000
-    ? '${(value / 1000000).toStringAsFixed(1)}M'
-    : value >= 1000
-    ? '${(value / 1000).toStringAsFixed(1)}k'
-    : '$value';
 
 String cacheRateLabel(double? rate) => rate == null
     ? '不适用'
@@ -43,6 +38,24 @@ String requestStatusLabel(ModelRequestStatus status) => switch (status) {
   ModelRequestStatus.cancelled => '已停止',
   ModelRequestStatus.interrupted => '已中断',
 };
+
+Future<void> showUsageSheet(
+  BuildContext context, {
+  required String conversationId,
+  required String runId,
+}) => showModalBottomSheet<void>(
+  context: context,
+  isScrollControlled: true,
+  useSafeArea: true,
+  backgroundColor: Colors.transparent,
+  builder: (context) => AppSheet(
+    title: '用量',
+    child: ListView(
+      padding: const EdgeInsets.all(16),
+      children: [UsagePanel(conversationId: conversationId, runId: runId)],
+    ),
+  ),
+);
 
 class UsagePanel extends ConsumerStatefulWidget {
   const UsagePanel({required this.conversationId, this.runId, super.key});

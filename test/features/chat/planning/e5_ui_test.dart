@@ -8,7 +8,7 @@ import 'package:phase/data/models/agent_plan.dart';
 import 'package:phase/data/repositories/plan_repository.dart';
 import 'package:phase/data/repositories/memory_repository.dart';
 import 'package:phase/features/chat/chat_input_bar.dart';
-import 'package:phase/features/chat/context/conversation_context_page.dart';
+import 'package:phase/features/chat/tool_call_card.dart';
 import 'package:phase/features/memory/memories_page.dart';
 import 'package:phase/features/tools/tool.dart';
 
@@ -69,6 +69,7 @@ void main() {
     testWidgets('计划/记忆表单可滚动取消保存 $size $scale $dark', (tester) async {
       late ToolLoopHarness h;
       late String planId;
+      late String toolCallId;
       await tester.runAsync(() async {
         h = await ToolLoopHarness.create(registry: ToolRegistry([]));
         await h.controller().setPermissionMode(PermissionMode.plan);
@@ -80,6 +81,7 @@ void main() {
           ),
         );
         await h.controller().send('请先规划');
+        toolCallId = (await h.recordsByCall())['p']!.id;
         planId = (await PlanRepository(
           h.database,
         ).watch(h.conversationId()!).first).single.id;
@@ -90,7 +92,17 @@ void main() {
       await pumpPage(
         tester,
         h,
-        ConversationContextPage(conversationId: h.conversationId()!),
+        Scaffold(
+          body: ListView(
+            padding: const EdgeInsets.all(16),
+            children: [
+              ToolCallCard(
+                conversationId: h.conversationId()!,
+                toolCallId: toolCallId,
+              ),
+            ],
+          ),
+        ),
         scale,
         dark,
       );

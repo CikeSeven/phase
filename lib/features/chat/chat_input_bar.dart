@@ -9,7 +9,6 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/models/attachment.dart';
-import '../../../data/models/model_catalog.dart';
 import 'attachment_chips.dart';
 import 'attachment_picker.dart';
 import 'attachment_source_sheet.dart';
@@ -17,8 +16,7 @@ import 'chat_controller.dart';
 import 'chat_input_surface.dart';
 import 'chat_send_button.dart';
 import 'model_selection.dart';
-import 'context/context_preview.dart';
-import 'usage/usage_panel.dart';
+import 'context/context_usage_indicator.dart';
 
 /// 文本与动作分层的输入栏；由页面 Scaffold 处理键盘位移。
 class ChatInputBar extends ConsumerStatefulWidget {
@@ -87,9 +85,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     final conversationId = ref.watch(
       activeConversationProvider.select((s) => s.conversationId),
     );
-    final preview = conversationId == null
-        ? null
-        : ref.watch(contextPreviewProvider(conversationId));
     final theme = Theme.of(context);
     final needsConfiguration =
         selection.hasError || (!selection.isLoading && selection.value == null);
@@ -117,47 +112,45 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         ),
       ),
     );
-    final actions = Row(
-      children: [
-        IconButton(
-          key: const ValueKey('chat-attach'),
-          tooltip: '附件',
-          onPressed: _submitting ? null : _showAttachmentSheet,
-          icon: const Icon(Symbols.attach_file),
-        ),
-        if (!needsConfiguration)
-          Expanded(child: PermissionModeMenu(submitting: _submitting)),
-        if (needsConfiguration)
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton.icon(
-                onPressed: () => context.push('/settings/providers'),
-                style: TextButton.styleFrom(
-                  foregroundColor: theme.colorScheme.onSurface,
-                ),
-                icon: Icon(
-                  selection.hasError ? Symbols.error : Symbols.tune,
-                  size: 18,
-                ),
-                label: Text(
-                  selection.hasError ? '检查配置' : '配置模型',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+    final attachment = IconButton(
+      key: const ValueKey('chat-attach'),
+      tooltip: '附件',
+      onPressed: _submitting ? null : _showAttachmentSheet,
+      icon: const Icon(Symbols.attach_file),
+    );
+    final mode = needsConfiguration
+        ? Align(
+            alignment: Alignment.centerLeft,
+            child: TextButton.icon(
+              onPressed: () => context.push('/settings/providers'),
+              style: TextButton.styleFrom(
+                foregroundColor: theme.colorScheme.onSurface,
+              ),
+              icon: Icon(
+                selection.hasError ? Symbols.error : Symbols.tune,
+                size: 18,
+              ),
+              label: Text(
+                selection.hasError ? '检查配置' : '配置模型',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ),
-        const SizedBox(width: AppSpacing.s),
-        ChatSendButton(
-          isGenerating: isGenerating,
-          onPressed: isGenerating
-              ? () => ref.read(chatControllerProvider.notifier).stop()
-              : _canSend && !_submitting && modeReady
-              ? _send
-              : null,
-        ),
-      ],
+          )
+        : PermissionModeMenu(submitting: _submitting);
+    final usage = conversationId == null
+        ? null
+        : ContextUsageIndicator(
+            key: ValueKey(conversationId),
+            conversationId: conversationId,
+          );
+    final send = ChatSendButton(
+      isGenerating: isGenerating,
+      onPressed: isGenerating
+          ? () => ref.read(chatControllerProvider.notifier).stop()
+          : _canSend && !_submitting && modeReady
+          ? _send
+          : null,
     );
 
     return SafeArea(
@@ -174,6 +167,33 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           child: LayoutBuilder(
             builder: (context, constraints) {
               final scaler = MediaQuery.textScalerOf(context);
+              // 大字窄屏将模式和圆环移到单独一行，不挤压发送与附件触区。
+              final stacked =
+                  usage != null &&
+                  constraints.maxWidth <
+                      scaler.scale(14) * 4 + scaler.scale(40) + 160;
+              final actions = stacked
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Row(children: [attachment, const Spacer(), send]),
+                        Row(
+                          children: [
+                            Expanded(child: mode),
+                            usage,
+                          ],
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        attachment,
+                        Expanded(child: mode),
+                        ?usage,
+                        const SizedBox(width: AppSpacing.s),
+                        send,
+                      ],
+                    );
               final actionHeight = needsConfiguration
                   ? (scaler.scale(14) * 1.25 + AppSpacing.xl).clamp(
                       AppControlStyle.mediumHeight,
@@ -181,8 +201,13 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                     )
                   : AppControlStyle.mediumHeight;
               final minimumHeight =
-                  scaler.scale(16) * 1.5 + AppSpacing.xl + actionHeight;
+                  scaler.scale(16) * 1.5 +
+                  AppSpacing.xl +
+                  actionHeight +
+                  (stacked ? scaler.scale(40) + AppSpacing.s : 0);
               return SingleChildScrollView(
+                // 极短可用高度时优先保留底部操作，输入内容仍可向上滚动。
+                reverse: true,
                 primary: false,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
@@ -206,41 +231,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                           }),
                         ),
                       Flexible(child: field),
-                      if (conversationId != null)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton(
-                            key: const ValueKey('chat-context-usage'),
-                            style: TextButton.styleFrom(
-                              foregroundColor:
-                                  theme.colorScheme.onSurfaceVariant,
-                              minimumSize: const Size(48, 48),
-                            ),
-                            onPressed: () => context.push(
-                              '/conversations/$conversationId/context',
-                            ),
-                            child: preview!.when(
-                              skipLoadingOnReload: false,
-                              skipLoadingOnRefresh: false,
-                              loading: () => const Text('上下文 · 待估算'),
-                              error: (_, _) => const Text('上下文 · 暂不可用'),
-                              data: (build) => build?.measurement == null
-                                  ? const Text('上下文 · 待估算')
-                                  : Semantics(
-                                      excludeSemantics: true,
-                                      label:
-                                          '上下文预计输入 ${build!.estimatedTokens} token，${switch (build.measurement!.windowSource) {
-                                            ContextWindowSource.user => '用户配置',
-                                            ContextWindowSource.catalog => 'models.dev 目录',
-                                            ContextWindowSource.localDefault => '本地默认',
-                                          }}窗口 ${build.measurement!.windowTokens} token',
-                                      child: Text(
-                                        '上下文 ≈${formatTokenCount(build.estimatedTokens)} / ${formatTokenCount(build.measurement!.windowTokens)}',
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ),
                       actions,
                     ],
                   ),

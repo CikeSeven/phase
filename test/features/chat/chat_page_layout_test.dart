@@ -89,6 +89,8 @@ class _MemoryRequests implements ModelRequestRepository {
   @override
   Future<List<ModelRequestRecord>> list(String id) async => [];
   @override
+  Stream<List<ModelRequestRecord>> watch(String id) => Stream.value([]);
+  @override
   Future<void> interruptPending({
     String? runId,
     String errorCode = 'interrupted',
@@ -1013,6 +1015,74 @@ void main() {
         expect(tester.takeException(), isNull);
       });
     }
+  }
+
+  for (final (size, scale, keyboard) in [
+    (const Size(320, 720), 1.0, 260.0),
+    (const Size(360, 780), 1.3, 260.0),
+    (const Size(320, 720), 2.0, 260.0),
+    (const Size(780, 360), 2.0, 100.0),
+  ]) {
+    testWidgets('已建会话圆环在输入下方模式右侧，弹层返回保留草稿 $size $scale', (tester) async {
+      final repository = _MemoryConversations()..seed(2);
+      final h = await pumpChat(
+        tester,
+        repository: repository,
+        size: size,
+        scale: scale,
+      );
+      final usage = find.byKey(const ValueKey('chat-context-usage'));
+      expect(usage, findsNothing);
+      h.container.read(activeConversationProvider.notifier).open('seed-0');
+      await tester.pumpAndSettle();
+      await enterDraft(tester, '保留上下文面板前的草稿');
+      tester.view.viewInsets = FakeViewPadding(bottom: keyboard);
+      await tester.pumpAndSettle();
+      final modeRect = tester.getRect(
+        find.byKey(const ValueKey('chat-agent-mode')),
+      );
+      final usageRect = tester.getRect(usage);
+      expect(usageRect.left, greaterThanOrEqualTo(modeRect.right));
+      expect(usageRect.center.dy, closeTo(modeRect.center.dy, 1));
+      expect(
+        usageRect.top,
+        greaterThanOrEqualTo(tester.getBottomLeft(find.byType(TextField)).dy),
+      );
+      expect(usageRect.size.shortestSide, greaterThanOrEqualTo(48));
+      expect(usageRect.bottom, lessThanOrEqualTo(size.height - keyboard));
+      expect(find.byTooltip('计划与上下文'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await tester.tap(usage);
+      await tester.pumpAndSettle();
+      final popup = find.byKey(const ValueKey('context-usage-popover'));
+      expect(popup, findsOneWidget);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+        isTrue,
+      );
+      expect(tester.getBottomLeft(popup).dy, lessThan(usageRect.top));
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(popup, findsNothing);
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).focusNode!.hasFocus,
+        isTrue,
+      );
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        '保留上下文面板前的草稿',
+      );
+      expect(
+        h.container.read(activeConversationProvider).conversationId,
+        'seed-0',
+      );
+      await tester.tap(usage);
+      await tester.pumpAndSettle();
+      h.container.read(activeConversationProvider.notifier).open('seed-1');
+      await tester.pumpAndSettle();
+      expect(popup, findsNothing);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets('横屏与键盘下空态可滚动，选择助手是真实入口', (tester) async {

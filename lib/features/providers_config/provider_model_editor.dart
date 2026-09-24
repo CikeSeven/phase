@@ -26,7 +26,7 @@ class ProviderModelEditor extends StatefulWidget {
     super.key,
   });
 
-  /// 当前表单的 presetId，决定查 models.dev 目录的哪个服务商。
+  /// 同名模型并列时的目录偏好，不限制按模型名匹配的范围。
   final String presetId;
   final List<ProfileModel> models;
 
@@ -84,7 +84,6 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                 decoration: InputDecoration(
                   labelText: '搜索模型',
                   hintText: '模型 ID',
-                  helperText: '勾选的模型才会出现在聊天模型列表',
                   prefixIcon: const Icon(Symbols.search),
                   suffixIcon: query.isEmpty
                       ? null
@@ -397,11 +396,8 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
                   },
                   decoration: InputDecoration(
                     labelText: '上下文窗口',
-                    hintText: catalogWindow != null
-                        ? 'models.dev $catalogWindow'
-                        : '本地默认 ${ModelCatalog.localDefaultWindow}',
-                    helperText: '本地预算，非 API 用量。留空：models.dev 目录 → 128000；手填优先。',
-                    helperMaxLines: 6,
+                    hintText:
+                        '${catalogWindow ?? ModelCatalog.localDefaultWindow}',
                     errorText: _budgetError,
                     errorMaxLines: 3,
                   ),
@@ -426,9 +422,6 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
                     labelText: '温度',
                     hintText: '默认',
                     isDense: true,
-                    helperText: '0–2，留空由服务端决定',
-                    helperStyle: TextStyle(fontSize: 11),
-                    helperMaxLines: 3,
                   ),
                   style: theme.textTheme.bodySmall,
                 ),
@@ -447,13 +440,9 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
                   },
                   decoration: InputDecoration(
                     labelText: '输出上限',
-                    hintText: catalogOutput != null
-                        ? 'models.dev $catalogOutput'
-                        : '本地默认 ${ModelCatalog.localDefaultOutputReserve}',
+                    hintText:
+                        '${catalogOutput ?? ModelCatalog.localDefaultOutputReserve}',
                     isDense: true,
-                    helperText: '留空不覆盖协议默认；本地预留：协议实参 → models.dev → 4096',
-                    helperStyle: TextStyle(fontSize: 11),
-                    helperMaxLines: 5,
                   ),
                   style: theme.textTheme.bodySmall,
                 ),

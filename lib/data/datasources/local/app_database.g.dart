@@ -19389,7 +19389,7 @@ final class AppDatabaseProvider
     : super(
         from: null,
         argument: null,
-        retry: null,
+        retry: _databaseRetry,
         name: r'appDatabaseProvider',
         isAutoDispose: false,
         dependencies: null,
@@ -19411,4 +19411,4 @@ final class AppDatabaseProvider
   }
 }
 
-String _$appDatabaseHash() => r'427a129eee5d6174b200a1bf0f586ede649c65bd';
+String _$appDatabaseHash() => r'c16f03295bac7f80eef515b57f05fafeb3b75f12';

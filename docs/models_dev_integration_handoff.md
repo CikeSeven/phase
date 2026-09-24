@@ -6,7 +6,7 @@
 
 - 窗口：用户手填 > models.dev 目录 > 本地默认 **128000**。
 - 输出预留：适配器实际参数 > 目录输出上限 > 本地 **4096**；**目录值绝不写入聊天请求参数**。
-- `presetId` 仅映射目录服务商，不猜测协议。模型精确 ID 优先，再按命名空间末段互配；并列按 key 排序，不跨服务商搜索，custom / ollama 不借其他服务商数据。
+- 按模型 ID 跨服务商匹配，custom / ollama 同样生效，不猜测协议。精确 ID 优先于命名空间末段；同级优先已选预设，再按模型 ID、服务商 ID 稳定排序。精简时保留所有服务商的有效模型上限；版本 2 目录不复用旧白名单缓存与 ETag。
 - 窗口、来源和候选目录输出上限随 `RunConfiguration` 固定。恢复和运行后续轮次不重解析；目录刷新仅影响空闲预览与新运行。
 - 内置 JSON 快照 + 应用私有文件缓存；用户手动刷新，支持 ETag / 304，无自动联网、无新增依赖、无数据库 schema 变更。
 - 编辑器显示目录/默认提示，按解析后预算校验；不会把目录值预填或回写为用户配置。
@@ -26,7 +26,7 @@
 | 范围 | 入口 |
 | --- | --- |
 | 精简、匹配、优先级 | `lib/data/models/model_catalog.dart` / `test/data/models/model_catalog_test.dart` |
-| 资产生成 | `tool/generate_models_catalog.dart` → `assets/models_catalog.json`（本次生成 22 个服务商、1296 个有效模型，63262 字节） |
+| 资产生成 | `tool/generate_models_catalog.dart` → `assets/models_catalog.json`（按模型名匹配版本生成 223 个服务商、8047 个有效模型，381090 字节） |
 | 文件缓存与冷启动 | `lib/data/datasources/local/model_catalog_cache.dart` / 同名测试 |
 | ETag、响应校验、取消 | `lib/data/datasources/remote/models_dev_client.dart` / 同名测试 |
 | 刷新、编辑器 | `lib/features/providers_config/` / `test/features/providers_config/` |
@@ -51,3 +51,5 @@ git diff --check
 2026-09-24 上述命令已执行：快照生成和 Riverpod 生成成功；格式检查 445 个 Dart 文件、0 改动；`flutter analyze` 无问题；全量 `flutter test` **1273 项通过、4 项按既有条件跳过**（未启用 `CAPTURE_UI` 的截图预览用例）；`git diff --check` 通过。
 
 未执行设备安装或清数据；真机目录联网/断网、视觉/读屏、预测返回与 Profile 性能仍需单独验收。自动化中的协议请求验证不等于真实模型网关或摘要质量验收。
+
+2026-09-24 后续按用户要求改为跨服务商按模型 ID 匹配，重建全量内置目录并移除模型参数区的解释文案。此变更未新增或更新测试用例，也未重跑测试套件；上面的测试结果仅对应先前的集成审查。

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
@@ -16,6 +15,7 @@ import 'chat_code_block.dart';
 import 'message_actions_sheet.dart';
 import 'thinking_panel.dart';
 import 'tool_call_card.dart';
+import 'usage/usage_panel.dart';
 
 /// 用户消息保留右侧色面，AI 正文使用完整的阅读宽度。
 class MessageBubble extends StatelessWidget {
@@ -370,8 +370,10 @@ class MessageBubble extends StatelessWidget {
       case MessageAction.regenerate:
         await onRegenerate?.call();
       case MessageAction.usage:
-        await context.push(
-          '/conversations/${message.conversationId}/context?run=${Uri.encodeComponent(message.runId!)}',
+        await showUsageSheet(
+          context,
+          conversationId: message.conversationId,
+          runId: message.runId!,
         );
       case null:
         break;

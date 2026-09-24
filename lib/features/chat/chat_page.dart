@@ -219,14 +219,6 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               ],
             ),
             actions: [
-              if (conversationId != null)
-                IconButton(
-                  tooltip: '计划与上下文',
-                  icon: const Icon(Symbols.account_tree),
-                  onPressed: () =>
-                      context.push('/conversations/$conversationId/context'),
-                ),
-
               if (workspaceId != null)
                 IconButton(
                   tooltip: '会话工作区',
