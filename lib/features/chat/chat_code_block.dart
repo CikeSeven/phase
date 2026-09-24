@@ -1,11 +1,15 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:re_highlight/re_highlight.dart';
 
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/brand_colors.dart';
 import 'chat_code_highlighter.dart';
 import 'chat_markdown_scroll_view.dart';
 
@@ -28,6 +32,9 @@ class ChatCodeBlock extends StatefulWidget {
 class _ChatCodeBlockState extends State<ChatCodeBlock> {
   HighlightResult? _highlight;
   TextSpan? _span;
+  Timer? _copyFeedbackTimer;
+  bool _copying = false;
+  bool _copied = false;
 
   @override
   void initState() {
@@ -38,6 +45,10 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
   @override
   void didUpdateWidget(ChatCodeBlock oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.code != widget.code) {
+      _copyFeedbackTimer?.cancel();
+      _copied = false;
+    }
     if (oldWidget.code != widget.code ||
         oldWidget.language != widget.language ||
         oldWidget.closed != widget.closed) {
@@ -49,6 +60,12 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     _span = null;
+  }
+
+  @override
+  void dispose() {
+    _copyFeedbackTimer?.cancel();
+    super.dispose();
   }
 
   void _parseCode() {
@@ -63,6 +80,13 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final reduced = AppMotion.reduce(context);
+    final copyIcon = Icon(
+      _copied ? Symbols.check : Symbols.content_copy,
+      key: ValueKey(_copied),
+      size: 20,
+      color: _copied ? context.brandColors.teal : colors.onSurfaceVariant,
+    );
     final codeStyle = TextStyle(
       fontFamily: kGptMarkdownMonoFontFamily,
       package: kGptMarkdownFontPackage,
@@ -106,10 +130,26 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
                           ),
                         ),
                       ),
-                      IconButton(
-                        tooltip: '复制代码',
-                        onPressed: () => _copy(context),
-                        icon: const Icon(Symbols.content_copy, size: 20),
+                      Semantics(
+                        liveRegion: _copied,
+                        child: IconButton(
+                          tooltip: _copied ? '代码已复制' : '复制代码',
+                          onPressed: _copy,
+                          icon: ExcludeSemantics(
+                            child: SizedBox.square(
+                              dimension: 20,
+                              child: reduced
+                                  ? copyIcon
+                                  : AnimatedSwitcher(
+                                      duration: AppMotion.effects,
+                                      switchInCurve: Curves.easeOutCubic,
+                                      switchOutCurve: Curves.easeInCubic,
+                                      transitionBuilder: _copyIconTransition,
+                                      child: copyIcon,
+                                    ),
+                            ),
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -131,17 +171,39 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
     );
   }
 
-  Future<void> _copy(BuildContext context) async {
-    String feedback;
+  static Widget _copyIconTransition(
+    Widget child,
+    Animation<double> animation,
+  ) => FadeTransition(
+    opacity: animation,
+    child: ScaleTransition(
+      scale: animation.drive(Tween<double>(begin: 0.8, end: 1)),
+      child: child,
+    ),
+  );
+
+  Future<void> _copy() async {
+    if (_copying) return;
+    _copying = true;
+    final code = widget.code;
     try {
-      await Clipboard.setData(ClipboardData(text: widget.code));
-      feedback = '代码已复制';
+      await Clipboard.setData(ClipboardData(text: code));
+      if (!mounted || widget.code != code) return;
+      _copyFeedbackTimer?.cancel();
+      setState(() => _copied = true);
+      _copyFeedbackTimer = Timer(const Duration(seconds: 2), () {
+        if (!mounted) return;
+        setState(() => _copied = false);
+      });
     } on PlatformException {
-      feedback = '复制失败，请重试';
+      if (!mounted || widget.code != code) return;
+      _copyFeedbackTimer?.cancel();
+      setState(() => _copied = false);
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('复制失败，请重试')));
+    } finally {
+      _copying = false;
     }
-    if (!context.mounted) return;
-    ScaffoldMessenger.maybeOf(context)
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(feedback)));
   }
 }

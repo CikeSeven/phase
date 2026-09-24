@@ -21,7 +21,6 @@ import 'package:re_highlight/languages/xml.dart';
 import 'package:re_highlight/languages/yaml.dart';
 import 'package:re_highlight/re_highlight.dart';
 
-import '../../../core/theme/brand_colors.dart';
 import '../../../core/utils/logger.dart';
 
 abstract final class ChatCodeHighlighter {
@@ -71,21 +70,46 @@ abstract final class ChatCodeHighlighter {
     TextStyle style,
   ) {
     if (result == null) return TextSpan(text: code, style: style);
-    final colors = Theme.of(context).colorScheme;
-    final brand = context.brandColors;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final dark = theme.brightness == Brightness.dark;
+    // 语法色独立于柔和的品牌色面，在代码卡片底色上保持对比与色相区分。
     final keyword = TextStyle(
-      color: colors.primary,
+      color: dark ? const Color(0xFFC792EA) : const Color(0xFF8A269D),
       fontWeight: FontWeight.w600,
     );
-    final string = TextStyle(color: brand.teal);
-    final number = TextStyle(color: brand.gold);
-    final type = TextStyle(color: brand.lavender);
+    final string = TextStyle(
+      color: dark ? const Color(0xFF8FDBA2) : const Color(0xFF19713B),
+    );
+    final number = TextStyle(
+      color: dark ? const Color(0xFFFFB86B) : const Color(0xFFAC4B16),
+    );
+    final type = TextStyle(
+      color: dark ? const Color(0xFFF4D17C) : const Color(0xFF875600),
+    );
+    final title = TextStyle(
+      color: dark ? const Color(0xFF82AAFF) : const Color(0xFF145BBD),
+      fontWeight: FontWeight.w600,
+    );
+    final property = TextStyle(
+      color: dark ? const Color(0xFF79DCE8) : const Color(0xFF086D83),
+    );
+    final comment = TextStyle(
+      color: dark ? const Color(0xFF91A4BE) : const Color(0xFF586B84),
+      fontStyle: FontStyle.italic,
+    );
     try {
       final renderer = TextSpanRenderer(style, {
         'keyword': keyword,
         'selector-tag': keyword,
+        'selector-id': title,
+        'selector-class': title,
+        'selector-attr': property,
+        'selector-pseudo': keyword,
         'tag': keyword,
+        'name': keyword,
         'meta': keyword,
+        'doctag': keyword,
         'string': string,
         'regexp': string,
         'addition': string,
@@ -94,13 +118,21 @@ abstract final class ChatCodeHighlighter {
         'symbol': number,
         'type': type,
         'built_in': type,
-        'title': type,
+        'title': title,
         'title.class': type,
-        'title.function': type,
-        'attr': type,
-        'attribute': type,
-        'comment': TextStyle(color: colors.onSurfaceVariant),
-        'quote': TextStyle(color: colors.onSurfaceVariant),
+        'title.class.inherited': type,
+        'title.function': title,
+        'title.function.invoke': title,
+        'attr': property,
+        'attribute': property,
+        'property': property,
+        'variable': property,
+        'variable.language': keyword,
+        'variable.constant': number,
+        'operator': keyword,
+        'punctuation': TextStyle(color: colors.onSurfaceVariant),
+        'comment': comment,
+        'quote': comment,
         'deletion': TextStyle(color: colors.error),
         'strong': const TextStyle(fontWeight: FontWeight.w700),
         'emphasis': const TextStyle(fontStyle: FontStyle.italic),
