@@ -9,6 +9,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../features/assistants/assistant_edit_page.dart';
 import '../../features/assistants/assistants_page.dart';
 import '../../features/chat/chat_page.dart';
+import '../../features/chat/html_preview_page.dart';
 import '../../features/providers_config/provider_edit_page.dart';
 import '../../features/providers_config/providers_page.dart';
 import '../../features/settings/settings_page.dart';
@@ -54,6 +55,15 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/',
         pageBuilder: (context, state) => materialPage(state, const ChatPage()),
+      ),
+      GoRoute(
+        path: '/html-preview',
+        pageBuilder: (context, state) => materialPage(
+          state,
+          HtmlPreviewPage(
+            code: state.extra is String ? state.extra as String : null,
+          ),
+        ),
       ),
       GoRoute(
         path: '/settings',

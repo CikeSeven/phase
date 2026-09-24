@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:re_highlight/re_highlight.dart';
@@ -35,6 +36,7 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
   Timer? _copyFeedbackTimer;
   bool _copying = false;
   bool _copied = false;
+  bool _previewOpen = false;
 
   @override
   void initState() {
@@ -130,6 +132,16 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
                           ),
                         ),
                       ),
+                      if (widget.language.trim().toLowerCase() == 'html')
+                        IconButton(
+                          tooltip: '预览 HTML',
+                          onPressed: _previewOpen ? null : _preview,
+                          icon: Icon(
+                            Symbols.visibility,
+                            size: 20,
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
                       Semantics(
                         liveRegion: _copied,
                         child: IconButton(
@@ -181,6 +193,21 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
       child: child,
     ),
   );
+
+  Future<void> _preview() async {
+    if (_previewOpen) return;
+    setState(() => _previewOpen = true);
+    try {
+      await context.push<void>('/html-preview', extra: widget.code);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.maybeOf(context)
+        ?..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('无法打开 HTML 预览，请重试')));
+    } finally {
+      if (mounted) setState(() => _previewOpen = false);
+    }
+  }
 
   Future<void> _copy() async {
     if (_copying) return;
