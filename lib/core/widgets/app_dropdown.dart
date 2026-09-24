@@ -7,6 +7,7 @@ import '../theme/app_control_style.dart';
 import '../theme/app_motion.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
+import 'app_menu_anchor.dart';
 
 class AppDropdown<T extends Object> extends StatefulWidget {
   const AppDropdown({
@@ -54,7 +55,7 @@ class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
 
   void _opened() {
     final route = ModalRoute.of(context);
-    if (route == null) return;
+    if (route == null || _history != null) return;
     late final LocalHistoryEntry entry;
     entry = LocalHistoryEntry(
       impliesAppBarDismissal: false,
@@ -92,13 +93,10 @@ class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
       MediaQuery.sizeOf(context).width - AppSpacing.l,
     );
     return LayoutBuilder(
-      builder: (context, constraints) => MenuAnchor(
+      builder: (context, constraints) => AppMenuAnchor(
         controller: _menu,
         childFocusNode: _focus,
-        animated: !reduced,
         onAnimationStatusChanged: (status) => _animationStatus = status,
-        consumeOutsideTap: true,
-        crossAxisUnconstrained: false,
         onOpen: _opened,
         onClose: _closed,
         alignmentOffset: const Offset(0, AppSpacing.xs),
@@ -118,7 +116,7 @@ class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
           for (final entry in widget.options.entries)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-              child: MenuItemButton(
+              child: AppMenuItemButton(
                 onPressed: !_enabled
                     ? null
                     : () {

@@ -8,6 +8,7 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_menu_anchor.dart';
 import '../../../data/models/permission_mode.dart';
 import 'chat_controller.dart';
 
@@ -29,7 +30,7 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
 
   void _opened() {
     final route = ModalRoute.of(context);
-    if (route == null) return;
+    if (route == null || _history != null) return;
     late final LocalHistoryEntry entry;
     entry = LocalHistoryEntry(
       impliesAppBarDismissal: false,
@@ -65,7 +66,6 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
   }
 
   Future<void> _select(PermissionMode mode, String? conversationId) async {
-    _menu.close();
     final state = ref.read(chatControllerProvider);
     if (widget.submitting ||
         state.isGenerating ||
@@ -108,15 +108,12 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
     final media = MediaQuery.of(context);
     final width = math.min(304.0 * 2 / 3, media.size.width - AppSpacing.xl);
     final label = permissions.hasError ? '重试权限模式' : mode?.label ?? '读取权限模式…';
-    return MenuAnchor(
+    return AppMenuAnchor(
       controller: _menu,
       childFocusNode: _focus,
-      animated: !reduced,
       onAnimationStatusChanged: (value) => _animation = value,
       onOpen: _opened,
       onClose: _closed,
-      consumeOutsideTap: true,
-      crossAxisUnconstrained: false,
       alignmentOffset: Offset(-width / 2, AppSpacing.xs),
       style: MenuStyle(
         alignment: AlignmentDirectional.bottomCenter,
@@ -142,7 +139,7 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
         for (final option in PermissionMode.values)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-            child: MenuItemButton(
+            child: AppMenuItemButton(
               key: ValueKey('permission-mode-${option.name}'),
               onPressed: enabled
                   ? () => _select(option, active.conversationId)

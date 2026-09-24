@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
@@ -12,6 +11,7 @@ import '../../../core/theme/frosted_surface.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
+import '../../../core/widgets/app_menu_anchor.dart';
 import '../../../data/models/conversation.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import 'chat_controller.dart';
@@ -410,15 +410,13 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                   ],
                 ),
               ),
-              MenuAnchor(
+              AppMenuAnchor(
                 controller: _menuController,
                 childFocusNode: _menuFocus,
-                animated: !AppMotion.reduce(context),
                 onAnimationStatusChanged: (status) =>
                     _menuAnimationStatus = status,
                 onOpen: _menuOpened,
                 onClose: _menuClosed,
-                consumeOutsideTap: true,
                 alignmentOffset: Offset(-menuWidth, AppSpacing.xs),
                 style: MenuStyle(
                   alignment: AlignmentDirectional.bottomEnd,
@@ -428,31 +426,31 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                   ),
                 ),
                 menuChildren: [
-                  MenuItemButton(
+                  AppMenuItemButton(
                     leadingIcon: const Icon(Symbols.edit),
                     onPressed: () => _rename(context, ref),
                     child: const Text('重命名'),
                   ),
-                  MenuItemButton(
+                  AppMenuItemButton(
                     key: ValueKey('duplicate-conversation-${conversation.id}'),
                     leadingIcon: const Icon(Symbols.content_copy),
                     onPressed: () => _duplicate(context, ref, conversation.id),
                     child: const Text('复制会话'),
                   ),
-                  MenuItemButton(
+                  AppMenuItemButton(
                     key: ValueKey('export-conversation-${conversation.id}'),
                     leadingIcon: const Icon(Symbols.download),
                     onPressed: () => _export(context, ref),
                     child: const Text('导出会话'),
                   ),
-                  MenuItemButton(
+                  AppMenuItemButton(
                     key: ValueKey('tool-records-${conversation.id}'),
                     leadingIcon: const Icon(Symbols.history),
                     onPressed: () =>
                         context.push('/conversations/${conversation.id}/tools'),
                     child: const Text('执行记录'),
                   ),
-                  MenuItemButton(
+                  AppMenuItemButton(
                     leadingIcon: const Icon(Symbols.push_pin),
                     onPressed: () => _runGuarded(context, () async {
                       final repository = await ref.read(
@@ -465,7 +463,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                     }),
                     child: Text(conversation.pinned ? '取消置顶' : '置顶'),
                   ),
-                  MenuItemButton(
+                  AppMenuItemButton(
                     style: MenuItemButton.styleFrom(
                       foregroundColor: colors.error,
                       iconColor: colors.error,

@@ -3,6 +3,10 @@ import 'package:flutter/material.dart';
 /// Expressive 快速空间弹簧用于形状；颜色使用无回弹的短过渡。
 abstract final class AppMotion {
   static const effects = Duration(milliseconds: 200);
+  static const menuOpen = Duration(milliseconds: 180);
+  static const menuClose = Duration(milliseconds: 120);
+  static const menuCurve = Cubic(0.2, 0.8, 0.2, 1);
+  static const menuReverseCurve = Curves.easeOutCubic;
 
   static final shapeSpring = SpringDescription.withDampingRatio(
     mass: 1,
