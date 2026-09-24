@@ -8,7 +8,7 @@ import '../theme/app_motion.dart';
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 
-class AppDropdown<T extends Enum> extends StatefulWidget {
+class AppDropdown<T extends Object> extends StatefulWidget {
   const AppDropdown({
     required this.label,
     required this.value,
@@ -30,7 +30,7 @@ class AppDropdown<T extends Enum> extends StatefulWidget {
   State<AppDropdown<T>> createState() => _AppDropdownState<T>();
 }
 
-class _AppDropdownState<T extends Enum> extends State<AppDropdown<T>> {
+class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
   final _menu = MenuController();
   final _focus = FocusNode();
   LocalHistoryEntry? _history;

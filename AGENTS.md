@@ -59,16 +59,17 @@
 
 ## 6. 工程命令与 Android
 
-Dart 变更检查；仅依赖变化时运行 `flutter pub get`，生成输入变化时运行 `dart run build_runner build`：
+Dart 变更默认检查；仅依赖变化时运行 `flutter pub get`，生成输入变化时运行 `dart run build_runner build`：
 
 ```bash
 dart format --output=none --set-exit-if-changed lib test
 flutter analyze
-flutter test
 git diff --check
 ```
 
-Android 设备桥接定义位于 `pigeons/execution_api.dart`，Linux 原始进程桥接位于 `pigeons/process_api.dart`；新增进程 API 时同步扩展 `pigeons/` 与生成脚本。定义修改后执行 `bash tool/generate_execution_bridge.sh`（Pigeon 生成、Dart 格式化、Kotlin 行尾空白归一化），随定义维护 Dart/Kotlin 生成物。原生执行代码变更另运行 `cd android && ./gradlew :app:testDebugUnitTest`；JVM 测试不替代真机服务、权限、Activity 与线程验收。
+仅在用户明确要求运行 Flutter 测试时执行 `flutter test`，测试编写与执行遵循第 8 节。
+
+Android 设备桥接定义位于 `pigeons/execution_api.dart`，Linux 原始进程桥接位于 `pigeons/process_api.dart`；新增进程 API 时同步扩展 `pigeons/` 与生成脚本。定义修改后执行 `bash tool/generate_execution_bridge.sh`（Pigeon 生成、Dart 格式化、Kotlin 行尾空白归一化），随定义维护 Dart/Kotlin 生成物。原生执行代码变更且用户明确要求运行测试时，另执行 `cd android && ./gradlew :app:testDebugUnitTest`；JVM 测试不替代真机服务、权限、Activity 与线程验收。
 
 真机 UI/性能验收使用 Profile；先用 `adb devices -l` 确认授权设备，将 `DEVICE` 设为其 ID：
 
@@ -91,6 +92,7 @@ adb -s "$DEVICE" shell am start -W -n app.xiangyue.phase/.MainActivity
 
 ## 8. 测试与交付
 
+- 除非用户明确要求，否则不新增或修改测试代码，也不运行测试。本文件及 DESIGN 中的测试要求仅在用户要求测试时适用，不作为默认开发步骤。
 - 使用现有 `test/` 体系，优先回归用户的真实操作和边界，而非平凡 getter；测试用内存数据库、假凭据、可控网络，不读取手机配置或调用付费 API。
 - 协议修复用脱敏原始 SSE 经真实适配器到显示/落库验证，参考 `test/ui/reasoning_response_flow_test.dart`；发送与停止参考 `test/ui/chat_flow_test.dart`，不能用假流证明空闲连接即时取消。
 - 配置测试覆盖保存、模型管理、免 Key、失败与取消；数据测试覆盖初版模型读写、关系和事务，不建设历史开发格式的升级用例。

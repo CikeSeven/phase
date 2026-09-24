@@ -4,6 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/widgets/app_dialog.dart';
+import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
@@ -252,18 +253,13 @@ class _MemoryEditorState extends ConsumerState<MemoryEditor> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (widget.entry == null) ...[
-              DropdownButtonFormField<String>(
-                initialValue: _assistantId ?? '',
-                isExpanded: true,
-                decoration: const InputDecoration(labelText: '所属范围'),
-                items: [
-                  const DropdownMenuItem(value: '', child: Text('全局')),
-                  for (final a in assistants.value ?? [])
-                    DropdownMenuItem(
-                      value: a.id,
-                      child: Text(a.name, overflow: TextOverflow.ellipsis),
-                    ),
-                ],
+              AppDropdown<String>(
+                label: '所属范围',
+                value: _assistantId ?? '',
+                options: {
+                  '': '全局',
+                  for (final a in assistants.value ?? []) a.id: a.name,
+                },
                 onChanged: _saving
                     ? null
                     : (id) =>
