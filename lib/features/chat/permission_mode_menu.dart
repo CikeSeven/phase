@@ -163,7 +163,7 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
       menuChildren: [
         for (final option in PermissionMode.values)
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+            padding: const EdgeInsets.all(AppSpacing.xs),
             child: AppMenuItemButton(
               key: ValueKey('permission-mode-${option.name}'),
               onPressed: enabled
