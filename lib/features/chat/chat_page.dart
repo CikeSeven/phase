@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,6 +41,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   /// 顶栏默认高度；两行紧凑排布的最小行高。
   static const _defaultToolbarHeight = 64.0;
   static const _compactRowHeight = 24.0;
+  static const _drawerOpenTouchSlop = 36.0;
 
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerOpen = false;
@@ -73,6 +75,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final selection = ref.watch(modelSelectionProvider);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final contentGestureSettings = MediaQuery.gestureSettingsOf(context);
     final scaler = MediaQuery.textScalerOf(context);
     final titleStyle = theme.textTheme.titleMedium;
     final modelStyle = theme.textTheme.labelMedium;
@@ -115,220 +118,270 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           drawerEnableOpenDragGesture: true,
           drawerEdgeDragWidth: MediaQuery.sizeOf(context).width,
           onDrawerChanged: _onDrawerChanged,
-          appBar: AppTopBar(
-            toolbarHeight: toolbarHeight,
-            // 模型名用满标题槽：两侧留白收窄，长 id 在真实边界截断。
-            titleSpacing: 0,
-            automaticallyImplyLeading: false,
-            leading: IconButton(
-              tooltip: '打开会话列表',
-              onPressed: _openDrawer,
-              icon: const Icon(Symbols.menu),
-            ),
-            title: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 助手名一行：点击切换助手。
-                Tooltip(
-                  message: '切换助手',
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: InkWell(
-                      key: const ValueKey('chat-assistant-picker'),
-                      borderRadius: AppRadius.smallAll,
-                      onTap: () => showAssistantPickerSheet(context),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          minHeight: _compactRowHeight,
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                assistantName,
-                                key: const ValueKey('chat-assistant-name'),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: titleStyle,
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.xs),
-                            Icon(
-                              Symbols.expand_more,
-                              size: 18,
-                              color: colors.primary,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+          appBar: PreferredSize(
+            preferredSize: Size.fromHeight(toolbarHeight),
+            child: _ChatContentGestureSettings(
+              settings: contentGestureSettings,
+              child: AppTopBar(
+                toolbarHeight: toolbarHeight,
+                // 模型名用满标题槽：两侧留白收窄，长 id 在真实边界截断。
+                titleSpacing: 0,
+                automaticallyImplyLeading: false,
+                leading: IconButton(
+                  tooltip: '打开会话列表',
+                  onPressed: _openDrawer,
+                  icon: const Icon(Symbols.menu),
                 ),
-                // 模型一行：点击选择模型。
-                Tooltip(
-                  message: '选择模型',
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: InkWell(
-                      key: const ValueKey('chat-model-picker'),
-                      borderRadius: AppRadius.smallAll,
-                      onTap: () => showModelPickerSheet(context),
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(
-                          minHeight: _compactRowHeight,
-                        ),
-                        child: Row(
-                          children: [
-                            Flexible(
-                              child: Text(
-                                modelLabel,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: modelStyle?.copyWith(
-                                  color: selection.hasError
-                                      ? colors.error
-                                      : colors.primary,
-                                ),
-                              ),
-                            ),
-                            // 推理开启时跟在模型名右侧，关闭或不支持不显示。
-                            if (current?.supportsReasoning == true &&
-                                current!.effort != ReasoningEffort.off) ...[
-                              const SizedBox(width: AppSpacing.xs),
-                              Text(
-                                current.effort.label,
-                                key: const ValueKey('chat-reasoning-effort'),
-                                maxLines: 1,
-                                style: modelStyle?.copyWith(
-                                  color: colors.onSurfaceVariant,
-                                ),
-                              ),
-                            ],
-                            const SizedBox(width: AppSpacing.xs),
-                            Icon(
-                              Symbols.expand_more,
-                              size: 20,
-                              color: colors.primary,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              if (workspaceId != null)
-                IconButton(
-                  tooltip: '会话工作区',
-                  icon: const Icon(Symbols.folder_open),
-                  onPressed: () =>
-                      context.push('/settings/workspaces/$workspaceId'),
-                ),
-              IconButton(
-                tooltip: '新会话',
-                onPressed: () => ref
-                    .read(chatControllerProvider.notifier)
-                    .startNewConversation(),
-                icon: const Icon(Symbols.edit_square),
-              ),
-            ],
-          ),
-          drawer: ConversationDrawer(
-            width: math.min(MediaQuery.sizeOf(context).width * 0.88, 400),
-          ),
-          body: SafeArea(
-            top: false,
-            bottom: false,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                // Scaffold 把包含系统安全区的实际顶栏高度注入 body 的 top padding。
-                final appBarExtent = MediaQuery.paddingOf(context).top;
-                final topPadding = appBarExtent + _runBannerExtent;
-                final availableHeight = math.max(
-                  0.0,
-                  constraints.maxHeight - topPadding,
-                );
-                final composerHeight = math.min(
-                  availableHeight,
-                  math.max(
-                    scaler.scale(16) * 1.5 +
-                        96 +
-                        MediaQuery.paddingOf(context).bottom,
-                    availableHeight * 0.5,
-                  ),
-                );
-                return MediaQuery.removePadding(
-                  context: context,
-                  removeTop: true,
-                  // 留白在滚动内容内，而非视口外；消息能经过顶栏和输入栏的磨砂底。
-                  child: Stack(
-                    children: [
-                      Positioned.fill(
-                        child: conversationId == null
-                            ? ChatEmptyState(
-                                topPadding: topPadding,
-                                bottomPadding: _composerExtent,
-                              )
-                            : _ConversationMessages(
-                                key: ValueKey(conversationId),
-                                conversationId: conversationId,
-                                topPadding: topPadding,
-                                bottomPadding: _composerExtent,
-                              ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        top: appBarExtent,
-                        child: Material(
-                          color: colors.surface,
-                          child: _ReportSize(
-                            onChanged: (height) {
-                              if (mounted && _runBannerExtent != height) {
-                                setState(() => _runBannerExtent = height);
-                              }
-                            },
-                            child: const ChatRunBanner(),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: 0,
-                        right: 0,
-                        bottom: 0,
-                        child: Center(
+                title: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // 助手名一行：点击切换助手。
+                    Tooltip(
+                      message: '切换助手',
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: InkWell(
+                          key: const ValueKey('chat-assistant-picker'),
+                          borderRadius: AppRadius.smallAll,
+                          onTap: () => showAssistantPickerSheet(context),
                           child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              maxWidth: 840,
-                              maxHeight: composerHeight,
+                            constraints: const BoxConstraints(
+                              minHeight: _compactRowHeight,
                             ),
-                            child: _ReportSize(
-                              onChanged: (height) {
-                                if (mounted && _composerExtent != height) {
-                                  setState(() => _composerExtent = height);
-                                }
-                              },
-                              child: const ChatInputBar(),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    assistantName,
+                                    key: const ValueKey('chat-assistant-name'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: titleStyle,
+                                  ),
+                                ),
+                                const SizedBox(width: AppSpacing.xs),
+                                Icon(
+                                  Symbols.expand_more,
+                                  size: 18,
+                                  color: colors.primary,
+                                ),
+                              ],
                             ),
                           ),
                         ),
                       ),
-                    ],
+                    ),
+                    // 模型一行：点击选择模型。
+                    Tooltip(
+                      message: '选择模型',
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: InkWell(
+                          key: const ValueKey('chat-model-picker'),
+                          borderRadius: AppRadius.smallAll,
+                          onTap: () => showModelPickerSheet(context),
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              minHeight: _compactRowHeight,
+                            ),
+                            child: Row(
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    modelLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: modelStyle?.copyWith(
+                                      color: selection.hasError
+                                          ? colors.error
+                                          : colors.primary,
+                                    ),
+                                  ),
+                                ),
+                                // 推理开启时跟在模型名右侧，关闭或不支持不显示。
+                                if (current?.supportsReasoning == true &&
+                                    current!.effort != ReasoningEffort.off) ...[
+                                  const SizedBox(width: AppSpacing.xs),
+                                  Text(
+                                    current.effort.label,
+                                    key: const ValueKey(
+                                      'chat-reasoning-effort',
+                                    ),
+                                    maxLines: 1,
+                                    style: modelStyle?.copyWith(
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(width: AppSpacing.xs),
+                                Icon(
+                                  Symbols.expand_more,
+                                  size: 20,
+                                  color: colors.primary,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                actions: [
+                  if (workspaceId != null)
+                    IconButton(
+                      tooltip: '会话工作区',
+                      icon: const Icon(Symbols.folder_open),
+                      onPressed: () =>
+                          context.push('/settings/workspaces/$workspaceId'),
+                    ),
+                  IconButton(
+                    tooltip: '新会话',
+                    onPressed: () => ref
+                        .read(chatControllerProvider.notifier)
+                        .startNewConversation(),
+                    icon: const Icon(Symbols.edit_square),
                   ),
-                );
-              },
+                ],
+              ),
+            ),
+          ),
+          drawer: _ChatContentGestureSettings(
+            settings: contentGestureSettings,
+            child: ConversationDrawer(
+              width: math.min(MediaQuery.sizeOf(context).width * 0.88, 400),
+            ),
+          ),
+          body: _ChatContentGestureSettings(
+            settings: contentGestureSettings,
+            child: ChatHorizontalDragRegion(
+              child: SafeArea(
+                top: false,
+                bottom: false,
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    // Scaffold 把包含系统安全区的实际顶栏高度注入 body 的 top padding。
+                    final appBarExtent = MediaQuery.paddingOf(context).top;
+                    final topPadding = appBarExtent + _runBannerExtent;
+                    final availableHeight = math.max(
+                      0.0,
+                      constraints.maxHeight - topPadding,
+                    );
+                    final composerHeight = math.min(
+                      availableHeight,
+                      math.max(
+                        scaler.scale(16) * 1.5 +
+                            96 +
+                            MediaQuery.paddingOf(context).bottom,
+                        availableHeight * 0.5,
+                      ),
+                    );
+                    return MediaQuery.removePadding(
+                      context: context,
+                      removeTop: true,
+                      // 留白在滚动内容内，而非视口外；消息能经过顶栏和输入栏的磨砂底。
+                      child: Stack(
+                        children: [
+                          Positioned.fill(
+                            child: conversationId == null
+                                ? ChatEmptyState(
+                                    topPadding: topPadding,
+                                    bottomPadding: _composerExtent,
+                                  )
+                                : _ConversationMessages(
+                                    key: ValueKey(conversationId),
+                                    conversationId: conversationId,
+                                    topPadding: topPadding,
+                                    bottomPadding: _composerExtent,
+                                  ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: appBarExtent,
+                            child: Material(
+                              color: colors.surface,
+                              child: _ReportSize(
+                                onChanged: (height) {
+                                  if (mounted && _runBannerExtent != height) {
+                                    setState(() => _runBannerExtent = height);
+                                  }
+                                },
+                                child: const ChatRunBanner(),
+                              ),
+                            ),
+                          ),
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  maxWidth: 840,
+                                  maxHeight: composerHeight,
+                                ),
+                                child: _ReportSize(
+                                  onChanged: (height) {
+                                    if (mounted && _composerExtent != height) {
+                                      setState(() => _composerExtent = height);
+                                    }
+                                  },
+                                  child: const ChatInputBar(),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ),
             ),
           ),
         ),
       ),
     );
-    return ChatHorizontalDragPriority(child: page);
+    // 只提高侧栏打开手势的门槛；正文、输入和侧栏内容恢复系统阈值，
+    // 让纵向滚动先获得手势，侧栏一旦开始拖动仍由框架连续跟手。
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        gestureSettings: _drawerOpen
+            ? contentGestureSettings
+            : DeviceGestureSettings(
+                touchSlop: math.max(
+                  _drawerOpenTouchSlop,
+                  (contentGestureSettings.touchSlop ?? kTouchSlop) * 2,
+                ),
+              ),
+      ),
+      child: ChatHorizontalDragPriority(
+        guardDrawerOpening: !_drawerOpen,
+        child: page,
+      ),
+    );
   }
+}
+
+/// 只还原手势参数，保留 Scaffold 为顶栏、正文和侧栏调整后的安全区。
+class _ChatContentGestureSettings extends StatelessWidget {
+  const _ChatContentGestureSettings({
+    required this.settings,
+    required this.child,
+  });
+
+  final DeviceGestureSettings settings;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => MediaQuery(
+    data: MediaQuery.of(context).copyWith(gestureSettings: settings),
+    child: child,
+  );
 }
 
 class _ConversationMessages extends ConsumerWidget {
