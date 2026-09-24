@@ -44,6 +44,7 @@ dependencies:
   flutter_secure_storage: ^11.0.0
   json_annotation: ^4.12.0
   gpt_markdown: ^1.2.1
+  re_highlight: ^0.0.3
   material_symbols_icons: ^4.2960.0
   material_loading_indicator: ^1.0.0
   # 0.0.x 复用 Flutter Material；1.x 需要独立 material_ui 主题体系。

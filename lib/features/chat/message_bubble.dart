@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
-import 'package:gpt_markdown/gpt_markdown.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
@@ -11,7 +10,7 @@ import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/message_part.dart';
 import 'attachment_chips.dart';
-import 'chat_code_block.dart';
+import 'chat_markdown.dart';
 import 'message_actions_sheet.dart';
 import 'thinking_panel.dart';
 import 'tool_call_card.dart';
@@ -277,26 +276,13 @@ class MessageBubble extends StatelessWidget {
                           // 顺序就是用户实际看到的顺序（design 第二部分 §6.2）。
                           for (final (index, segment) in segments.indexed)
                             switch (segment) {
-                              _TextSegment(:final text) => GptMarkdown(
-                                text,
+                              _TextSegment(:final text) => ChatMarkdown(
+                                text: text,
                                 key: index == 0
                                     ? const ValueKey('message-markdown')
                                     : null,
-                                style: textStyle,
-                                // gpt_markdown 的增量模式会缓存已稳定的
-                                // Markdown 前缀，只重建仍可能变化的尾部。
-                                // 速度设高，避免把协议流人为变成打字机效果。
-                                animation: streaming
-                                    ? GptMarkdownAnimation.fade
-                                    : GptMarkdownAnimation.none,
-                                charactersPerSecond: 1200,
-                                isStreaming: streaming,
-                                codeBuilder:
-                                    (context, language, code, closed) =>
-                                        ChatCodeBlock(
-                                          language: language,
-                                          code: code,
-                                        ),
+                                textColor: textColor,
+                                streaming: streaming,
                               ),
                               _ThinkingSegment(
                                 :final reasoning,
