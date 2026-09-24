@@ -38,7 +38,6 @@ class ChatMarkdownTable extends StatelessWidget {
           borderRadius: AppRadius.controlAll,
           clipBehavior: Clip.antiAlias,
           child: ChatMarkdownScrollView(
-            padding: const EdgeInsets.only(bottom: AppSpacing.s),
             child: Table(
               textDirection: config.textDirection,
               // 横向约束无上限，使用自然列宽而不是挤窄或截断单元格。

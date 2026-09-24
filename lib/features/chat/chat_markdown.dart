@@ -80,6 +80,18 @@ class _ChatMarkdownState extends State<ChatMarkdown> {
       autoAddDividerLineAfterH1: false,
       linkColor: emphasis,
       linkHoverColor: emphasis,
+      // 当前库的行内代码读取主题顶层字段，而非 styleSheet.inlineCode。
+      inlineCode: InlineCodeStyle(
+        fontSizeFactor: 15 / 16,
+        color: emphasis,
+        backgroundColor: colors.primary.withValues(
+          alpha: theme.brightness == Brightness.dark ? 0.12 : 0.08,
+        ),
+        borderWidth: 0,
+        borderColor: Colors.transparent,
+        borderRadius: const Radius.circular(AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+      ),
       styleSheet: GptMarkdownStyleSheet(
         heading: const HeadingStyle(
           padding: EdgeInsets.only(top: AppSpacing.l, bottom: AppSpacing.s),
@@ -90,15 +102,6 @@ class _ChatMarkdownState extends State<ChatMarkdown> {
           hoverColor: emphasis,
           decoration: TextDecoration.underline,
           fontWeight: FontWeight.w500,
-        ),
-        inlineCode: InlineCodeStyle(
-          fontSizeFactor: 15 / 16,
-          color: emphasis,
-          backgroundColor: colors.surfaceContainerHigh,
-          borderWidth: 0,
-          borderColor: Colors.transparent,
-          borderRadius: const Radius.circular(AppSpacing.xs),
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
         ),
         blockQuote: BlockQuoteStyle(
           barWidth: 3,

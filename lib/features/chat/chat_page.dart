@@ -20,6 +20,7 @@ import '../../../data/models/reasoning_effort.dart';
 import '../assistants/assistant_picker_sheet.dart';
 import 'chat_controller.dart';
 import 'chat_empty_state.dart';
+import 'chat_horizontal_drag_priority.dart';
 import 'chat_input_bar.dart';
 import 'chat_run_banner.dart';
 import 'chat_transcript.dart';
@@ -95,7 +96,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ?.name ??
         '相月';
 
-    return PopScope<void>(
+    final page = PopScope<void>(
       canPop: !_drawerOpen,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop || !_drawerOpen) return;
@@ -326,6 +327,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         ),
       ),
     );
+    return ChatHorizontalDragPriority(child: page);
   }
 }
 
