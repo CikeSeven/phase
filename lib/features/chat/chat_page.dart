@@ -43,6 +43,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerOpen = false;
   double _composerExtent = 0;
+  double _runBannerExtent = 0;
 
   void _openDrawer() {
     _scaffoldKey.currentState?.openDrawer();
@@ -109,6 +110,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         child: Scaffold(
           key: _scaffoldKey,
           backgroundColor: colors.surface.withValues(alpha: 0),
+          extendBodyBehindAppBar: true,
           drawerEnableOpenDragGesture: true,
           drawerEdgeDragWidth: MediaQuery.sizeOf(context).width,
           onDrawerChanged: _onDrawerChanged,
@@ -241,61 +243,84 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           body: SafeArea(
             top: false,
             bottom: false,
-            child: Column(
-              children: [
-                const ChatRunBanner(),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final composerHeight = math.min(
-                        constraints.maxHeight,
-                        math.max(
-                          scaler.scale(16) * 1.5 +
-                              96 +
-                              MediaQuery.paddingOf(context).bottom,
-                          constraints.maxHeight * 0.5,
-                        ),
-                      );
-                      // 消息区占满全高，输入栏悬浮其上；内容按实测输入栏高度留白，
-                      // 可以滚到磨砂底后面透出。
-                      return Stack(
-                        children: [
-                          Positioned.fill(
-                            child: conversationId == null
-                                ? ChatEmptyState(bottomPadding: _composerExtent)
-                                : _ConversationMessages(
-                                    key: ValueKey(conversationId),
-                                    conversationId: conversationId,
-                                    bottomPadding: _composerExtent,
-                                  ),
-                          ),
-                          Positioned(
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: 840,
-                                  maxHeight: composerHeight,
-                                ),
-                                child: _ReportSize(
-                                  onChanged: (height) {
-                                    if (mounted && _composerExtent != height) {
-                                      setState(() => _composerExtent = height);
-                                    }
-                                  },
-                                  child: const ChatInputBar(),
-                                ),
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Scaffold 把包含系统安全区的实际顶栏高度注入 body 的 top padding。
+                final appBarExtent = MediaQuery.paddingOf(context).top;
+                final topPadding = appBarExtent + _runBannerExtent;
+                final availableHeight = math.max(
+                  0.0,
+                  constraints.maxHeight - topPadding,
+                );
+                final composerHeight = math.min(
+                  availableHeight,
+                  math.max(
+                    scaler.scale(16) * 1.5 +
+                        96 +
+                        MediaQuery.paddingOf(context).bottom,
+                    availableHeight * 0.5,
+                  ),
+                );
+                return MediaQuery.removePadding(
+                  context: context,
+                  removeTop: true,
+                  // 留白在滚动内容内，而非视口外；消息能经过顶栏和输入栏的磨砂底。
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: conversationId == null
+                            ? ChatEmptyState(
+                                topPadding: topPadding,
+                                bottomPadding: _composerExtent,
+                              )
+                            : _ConversationMessages(
+                                key: ValueKey(conversationId),
+                                conversationId: conversationId,
+                                topPadding: topPadding,
+                                bottomPadding: _composerExtent,
                               ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        top: appBarExtent,
+                        child: Material(
+                          color: colors.surface,
+                          child: _ReportSize(
+                            onChanged: (height) {
+                              if (mounted && _runBannerExtent != height) {
+                                setState(() => _runBannerExtent = height);
+                              }
+                            },
+                            child: const ChatRunBanner(),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              maxWidth: 840,
+                              maxHeight: composerHeight,
+                            ),
+                            child: _ReportSize(
+                              onChanged: (height) {
+                                if (mounted && _composerExtent != height) {
+                                  setState(() => _composerExtent = height);
+                                }
+                              },
+                              child: const ChatInputBar(),
                             ),
                           ),
-                        ],
-                      );
-                    },
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
+                );
+              },
             ),
           ),
         ),
@@ -307,11 +332,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 class _ConversationMessages extends ConsumerWidget {
   const _ConversationMessages({
     required this.conversationId,
+    required this.topPadding,
     required this.bottomPadding,
     super.key,
   });
 
   final String conversationId;
+  final double topPadding;
   final double bottomPadding;
 
   /// 重新生成最后一条回答；失败按统一文案提示，不改动已有回答。
@@ -334,7 +361,10 @@ class _ConversationMessages extends ConsumerWidget {
             ? const <ChatMessage>[]
             : visibleMessages(value, state);
         if (messages.isEmpty) {
-          return ChatEmptyState(bottomPadding: bottomPadding);
+          return ChatEmptyState(
+            topPadding: topPadding,
+            bottomPadding: bottomPadding,
+          );
         }
         return ChatTranscript(
           key: ValueKey(conversationId),
@@ -345,26 +375,34 @@ class _ConversationMessages extends ConsumerWidget {
           onRegenerate: state.savingPermissionMode
               ? null
               : () => _regenerate(context, ref),
+          topPadding: topPadding,
           bottomPadding: bottomPadding,
         );
       },
-      loading: () =>
-          const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取会话')),
-      error: (error, _) => AppEmptyState(
-        icon: Symbols.error,
-        title: '暂时无法读取消息',
-        message: error is Failure ? error.userMessage : '加载消息失败，请重试',
-        action: FilledButton.tonal(
-          onPressed: () =>
-              ref.invalidate(conversationThreadProvider(conversationId)),
-          child: const Text('重试'),
+      loading: () => Padding(
+        padding: EdgeInsets.only(top: topPadding),
+        child: const Center(
+          child: AppLoadingIndicator(semanticsLabel: '正在读取会话'),
+        ),
+      ),
+      error: (error, _) => Padding(
+        padding: EdgeInsets.only(top: topPadding),
+        child: AppEmptyState(
+          icon: Symbols.error,
+          title: '暂时无法读取消息',
+          message: error is Failure ? error.userMessage : '加载消息失败，请重试',
+          action: FilledButton.tonal(
+            onPressed: () =>
+                ref.invalidate(conversationThreadProvider(conversationId)),
+            child: const Text('重试'),
+          ),
         ),
       ),
     );
   }
 }
 
-/// 把子节点高度变化回传给父级的轻量代理，用于悬浮输入栏的实测高度。
+/// 把运行提示和输入栏的实测高度回传，供滚动内容预留避让空间。
 class _ReportSize extends SingleChildRenderObjectWidget {
   const _ReportSize({required this.onChanged, required super.child});
 

@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/content_expansion_notification.dart';
@@ -99,7 +100,13 @@ class _ToolCardState extends State<ToolCard>
     final record = widget.record;
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final statusColor = ToolPresentation.statusColor(context, record.status);
+    final brand = context.brandColors;
+    // 有色底面上的中性状态用辅助文字色，避免 outline 对比度不足。
+    final statusColor = switch (record.status) {
+      ToolCallStatus.rejected ||
+      ToolCallStatus.cancelled => colors.onSurfaceVariant,
+      _ => ToolPresentation.statusColor(context, record.status),
+    };
     final inFlight = ToolPresentation.isInFlight(record.status);
     if (_expanded && !identical(record, _displayRecord)) {
       _display = ToolCallDisplay.fromRecord(record);
@@ -140,7 +147,7 @@ class _ToolCardState extends State<ToolCard>
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       child: Material(
         key: ValueKey('tool-card-${record.id}'),
-        color: colors.surfaceContainerLow.withValues(alpha: 0.55),
+        color: brand.tealContainer,
         borderRadius: AppRadius.mediumAll,
         clipBehavior: Clip.antiAlias,
         child: Column(
@@ -169,7 +176,9 @@ class _ToolCardState extends State<ToolCard>
                         children: [
                           Text(
                             ToolCallDisplay.title(record),
-                            style: theme.textTheme.labelLarge,
+                            style: theme.textTheme.labelLarge?.copyWith(
+                              color: brand.onTealContainer,
+                            ),
                           ),
                           if (detail != null &&
                               !(record.toolName == 'shell' && _expanded)) ...[
@@ -193,7 +202,7 @@ class _ToolCardState extends State<ToolCard>
                           Icon(
                             ToolPresentation.icon(record.toolName),
                             size: 18,
-                            color: colors.onSurfaceVariant,
+                            color: brand.onTealContainer,
                           ),
                           const SizedBox(width: AppSpacing.s),
                           Expanded(
@@ -219,7 +228,7 @@ class _ToolCardState extends State<ToolCard>
                                 ? Symbols.expand_less_rounded
                                 : Symbols.expand_more_rounded,
                             size: 18,
-                            color: colors.onSurfaceVariant,
+                            color: brand.onTealContainer,
                           ),
                         ],
                       );

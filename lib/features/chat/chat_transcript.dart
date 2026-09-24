@@ -34,6 +34,7 @@ class ChatTranscript extends StatefulWidget {
     this.attachments = const {},
     this.onRegenerate,
     this.isGenerating = false,
+    this.topPadding = 0,
     this.bottomPadding = 0,
   });
 
@@ -47,6 +48,9 @@ class ChatTranscript extends StatefulWidget {
   final Future<void> Function()? onRegenerate;
 
   final bool isGenerating;
+
+  /// 顶栏与固定运行提示的高度；留白随消息滚动，视口延伸至顶栏后方。
+  final double topPadding;
 
   /// 预留给悬浮输入栏的高度，末条消息可滚出遮挡区。
   final double bottomPadding;
@@ -260,7 +264,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                       key: ValueKey('transcript-${widget.conversationId}'),
                       controller: _scrollController,
                       padding: EdgeInsets.only(
-                        top: AppSpacing.m,
+                        top: AppSpacing.m + widget.topPadding,
                         bottom: AppSpacing.m + widget.bottomPadding,
                       ),
                       itemCount: widget.messages.length,

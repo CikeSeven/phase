@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
-import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
@@ -55,6 +54,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
 
   final _headerKey = GlobalKey();
   final _innerController = ScrollController();
+  final _clock = ValueNotifier(DateTime.now());
   bool _expanded = false;
   bool _userToggled = false;
 
@@ -69,17 +69,13 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // initState 里不能读 MediaQuery，计时器在这里按依赖启停。
+    // TickerMode 决定页面是否活跃，依赖变化后恢复时按真实时间补齐。
     _syncTicker();
   }
 
   @override
   void didUpdateWidget(covariant ThinkingPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.streaming && !widget.streaming) {
-      _ticker?.cancel();
-      _ticker = null;
-    }
     // 流式增量时跟随到最新思考内容底部。
     if (_expanded &&
         widget.streaming &&
@@ -98,6 +94,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   @override
   void dispose() {
     _ticker?.cancel();
+    _clock.dispose();
     _innerController.dispose();
     super.dispose();
   }
@@ -133,22 +130,21 @@ class _ThinkingPanelState extends State<ThinkingPanel>
     outer.jumpTo(target);
   }
 
-  /// 流式期间每秒刷新计时；disableAnimations 下保持静止（也避免
-  /// pumpAndSettle 类等待永不稳定）。
+  /// 计时是实时状态，不随减少动画暂停；100ms 刷新只通知标题，不重建正文。
   void _syncTicker() {
     final running =
         widget.streaming &&
         widget.startedAt != null &&
-        !AppMotion.reduce(context) &&
         TickerMode.valuesOf(context).enabled;
-    if (running && _ticker == null) {
-      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) setState(() {});
-      });
-    } else if (!running && _ticker != null) {
+    if (!running) {
       _ticker?.cancel();
       _ticker = null;
+      return;
     }
+    _clock.value = DateTime.now();
+    _ticker ??= Timer.periodic(const Duration(milliseconds: 100), (_) {
+      if (mounted) _clock.value = DateTime.now();
+    });
   }
 
   void _toggle() {
@@ -164,13 +160,12 @@ class _ThinkingPanelState extends State<ThinkingPanel>
     }
   }
 
-  String get _headerLabel {
+  String _headerLabel(DateTime now) {
     if (widget.streaming) {
       final started = widget.startedAt;
       if (started == null) return '思考中…';
       final elapsed =
-          (widget.duration ?? Duration.zero) +
-          DateTime.now().difference(started);
+          (widget.duration ?? Duration.zero) + now.difference(started);
       return '思考中… ${_formatDuration(elapsed)}';
     }
     final duration = widget.duration;
@@ -178,11 +173,10 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   }
 
   static String _formatDuration(Duration duration) {
-    if (duration.inMilliseconds < 100) return '少于 0.1 秒';
-    if (duration.inSeconds < 10) {
-      return '${(duration.inMilliseconds / 1000).toStringAsFixed(1)} 秒';
-    }
-    return '${duration.inSeconds} 秒';
+    final seconds = duration.isNegative
+        ? 0.0
+        : duration.inMilliseconds / Duration.millisecondsPerSecond;
+    return '${seconds.toStringAsFixed(1)} 秒';
   }
 
   @override
@@ -190,10 +184,9 @@ class _ThinkingPanelState extends State<ThinkingPanel>
     super.build(context);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final brand = context.brandColors;
     return Material(
-      color: context.brandColors.lavender.withValues(
-        alpha: theme.brightness == Brightness.dark ? 0.06 : 0.045,
-      ),
+      color: brand.lavenderContainer,
       borderRadius: AppRadius.mediumAll,
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -209,22 +202,23 @@ class _ThinkingPanelState extends State<ThinkingPanel>
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.xs,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
                   child: Row(
                     children: [
                       Icon(
                         Symbols.cognition_rounded,
                         size: 18,
-                        color: colors.onSurfaceVariant,
+                        color: brand.onLavenderContainer,
                       ),
                       const SizedBox(width: AppSpacing.s),
                       Expanded(
-                        child: Text(
-                          _headerLabel,
-                          style: theme.textTheme.labelMedium?.copyWith(
-                            color: colors.onSurfaceVariant,
+                        child: ValueListenableBuilder<DateTime>(
+                          valueListenable: _clock,
+                          builder: (context, now, _) => Text(
+                            _headerLabel(now),
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: brand.onLavenderContainer,
+                            ),
                           ),
                         ),
                       ),
@@ -234,7 +228,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                             ? Symbols.expand_less_rounded
                             : Symbols.expand_more_rounded,
                         size: 18,
-                        color: colors.onSurfaceVariant,
+                        color: brand.onLavenderContainer,
                       ),
                     ],
                   ),

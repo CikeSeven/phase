@@ -28,9 +28,9 @@ class FrostedSurface extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
-    final media = MediaQuery.maybeOf(context);
+    // 辅助服务读取控件也会开启无障碍导航，不等于用户要求减少动态效果。
     final reducedEffects =
-        media?.disableAnimations == true || media?.accessibleNavigation == true;
+        MediaQuery.maybeOf(context)?.disableAnimations == true;
     final tint =
         color ??
         (dark ? colors.surfaceContainerLow : colors.surfaceContainerLowest)

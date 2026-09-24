@@ -39,6 +39,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     final colors = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
     final clear = colors.surface.withValues(alpha: 0);
+    final highlight = dark ? colors.onSurface : colors.surfaceContainerLowest;
     return AppBar(
       title: title,
       leading: leading ?? _impliedLeading(context),
@@ -64,14 +65,24 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
               (dark
                       ? colors.surfaceContainerLow
                       : colors.surfaceContainerLowest)
-                  .withValues(alpha: dark ? 0.64 : 0.50),
-          blur: 20,
+                  .withValues(alpha: dark ? 0.42 : 0.28),
+          blur: 24,
           child: DecoratedBox(
             decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: const [0, 0.5, 1],
+                colors: [
+                  highlight.withValues(alpha: dark ? 0.025 : 0.08),
+                  highlight.withValues(alpha: dark ? 0.005 : 0.015),
+                  colors.primary.withValues(alpha: dark ? 0.025 : 0.015),
+                ],
+              ),
               border: showDivider
                   ? Border(
                       bottom: BorderSide(
-                        color: colors.outlineVariant.withValues(alpha: 0.24),
+                        color: colors.outlineVariant.withValues(alpha: 0.16),
                       ),
                     )
                   : null,
