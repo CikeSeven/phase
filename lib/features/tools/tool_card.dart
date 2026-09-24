@@ -142,7 +142,7 @@ class _ToolCardState extends State<ToolCard>
     );
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
       child: Material(
         key: ValueKey('tool-card-${record.id}'),
         color: brand.lavenderContainer,

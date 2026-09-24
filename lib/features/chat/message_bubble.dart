@@ -295,8 +295,8 @@ class MessageBubble extends StatelessWidget {
                                   key: ValueKey(
                                     'thinking-${message.id}-${thinkingOrdinal++}',
                                   ),
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: AppSpacing.xs,
+                                  padding: const EdgeInsets.only(
+                                    bottom: AppSpacing.xs,
                                   ),
                                   child: ThinkingPanel(
                                     reasoning: reasoning,
