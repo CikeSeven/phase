@@ -15,7 +15,7 @@ import 'package:phase/data/datasources/local/secure_key_storage.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/models/model_selection.dart';
-import 'package:phase/data/models/tool_policy.dart';
+import 'package:phase/data/models/memory_entry.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/skill_repository.dart';
 import 'package:phase/features/assistants/assistant_edit_page.dart';
@@ -279,8 +279,8 @@ void main() {
     await closeHost(tester, host.container);
   });
 
-  Future<void> changeWritePolicy(WidgetTester tester, String label) async {
-    final field = find.byKey(const ValueKey('tool-policy-write_file'));
+  Future<void> changeMemoryScope(WidgetTester tester, String label) async {
+    final field = find.byType(AppDropdown<MemoryScope>);
     await tester.scrollUntilVisible(
       field,
       160,
@@ -298,17 +298,18 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('工具策略编辑取消不保存，确认后保存且重新打开一致', (tester) async {
+  testWidgets('助手记忆范围编辑取消不保存，确认后保存且重新打开一致', (tester) async {
     final assistant = await seedAssistant();
     final host = await pumpHost(tester);
     await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
     await tester.pumpAndSettle();
-    await changeWritePolicy(tester, '禁止使用');
+    expect(find.byKey(const ValueKey('tool-policy-write_file')), findsNothing);
+    expect(find.text('历史详情读取'), findsNothing);
+    expect(find.text('记忆写入'), findsNothing);
+    await changeMemoryScope(tester, '仅此助手');
     expect(
-      (await AssistantRepository(db).getById(assistant.id))!
-          .toolPolicy
-          .policies['write_file'],
-      ToolPolicy.ask,
+      (await AssistantRepository(db).getById(assistant.id))!.memoryScope,
+      MemoryScope.disabled,
     );
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -316,40 +317,41 @@ void main() {
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<AppDropdown<ToolPolicy>>(
-            find.byKey(const ValueKey('tool-policy-write_file')),
+          .widget<AppDropdown<MemoryScope>>(
+            find.byType(AppDropdown<MemoryScope>),
           )
           .value,
-      ToolPolicy.ask,
+      MemoryScope.disabled,
     );
-    await changeWritePolicy(tester, '禁止使用');
+    expect(find.byKey(const ValueKey('tool-policy-write_file')), findsNothing);
+    expect(find.text('历史详情读取'), findsNothing);
+    expect(find.text('记忆写入'), findsNothing);
+    await changeMemoryScope(tester, '仅此助手');
     await tester.tap(find.byKey(const ValueKey('save-assistant')));
     await tester.pumpAndSettle();
     expect(
-      (await AssistantRepository(db).getById(assistant.id))!
-          .toolPolicy
-          .policies['write_file'],
-      ToolPolicy.deny,
+      (await AssistantRepository(db).getById(assistant.id))!.memoryScope,
+      MemoryScope.assistant,
     );
     await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
     await tester.pumpAndSettle();
     expect(
       tester
-          .widget<AppDropdown<ToolPolicy>>(
-            find.byKey(const ValueKey('tool-policy-write_file')),
+          .widget<AppDropdown<MemoryScope>>(
+            find.byType(AppDropdown<MemoryScope>),
           )
           .value,
-      ToolPolicy.deny,
+      MemoryScope.assistant,
     );
     await closeHost(tester, host.container);
   });
 
-  testWidgets('工具策略保存失败保留草稿，修复存储后可重试', (tester) async {
+  testWidgets('助手记忆范围保存失败保留草稿，修复存储后可重试', (tester) async {
     final assistant = await seedAssistant();
     final host = await pumpHost(tester);
     await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
     await tester.pumpAndSettle();
-    await changeWritePolicy(tester, '直接执行');
+    await changeMemoryScope(tester, '此助手与全局');
     await db.customStatement(
       "CREATE TRIGGER reject_policy BEFORE UPDATE ON assistants BEGIN SELECT RAISE(ABORT, 'test failure'); END",
     );
@@ -358,36 +360,35 @@ void main() {
     expect(find.byType(AssistantEditPage), findsOneWidget);
     expect(
       tester
-          .widget<AppDropdown<ToolPolicy>>(
-            find.byKey(const ValueKey('tool-policy-write_file')),
+          .widget<AppDropdown<MemoryScope>>(
+            find.byType(AppDropdown<MemoryScope>),
           )
           .value,
-      ToolPolicy.allow,
+      MemoryScope.assistantAndGlobal,
     );
     expect(
-      (await AssistantRepository(db).getById(assistant.id))!
-          .toolPolicy
-          .policies['write_file'],
-      ToolPolicy.ask,
+      (await AssistantRepository(db).getById(assistant.id))!.memoryScope,
+      MemoryScope.disabled,
     );
     await db.customStatement('DROP TRIGGER reject_policy');
     await tester.tap(find.byKey(const ValueKey('save-assistant')));
     await tester.pumpAndSettle();
     expect(
-      (await AssistantRepository(db).getById(assistant.id))!
-          .toolPolicy
-          .policies['write_file'],
-      ToolPolicy.allow,
+      (await AssistantRepository(db).getById(assistant.id))!.memoryScope,
+      MemoryScope.assistantAndGlobal,
     );
     await closeHost(tester, host.container);
   });
 
-  testWidgets('320dp 两倍字号工具策略可滚动选择，保存仍可达', (tester) async {
+  testWidgets('320dp 两倍字号助手范围可滚动选择，保存仍可达', (tester) async {
     final assistant = await seedAssistant();
     final host = await pumpHost(tester, size: const Size(320, 760), scale: 2);
     await tester.tap(find.byKey(ValueKey('assistant-${assistant.id}')));
     await tester.pumpAndSettle();
-    await changeWritePolicy(tester, '禁止使用');
+    expect(find.byKey(const ValueKey('tool-policy-write_file')), findsNothing);
+    expect(find.text('历史详情读取'), findsNothing);
+    expect(find.text('记忆写入'), findsNothing);
+    await changeMemoryScope(tester, '仅此助手');
     expect(tester.takeException(), isNull);
     expect(
       find.byKey(const ValueKey('save-assistant')).hitTestable(),

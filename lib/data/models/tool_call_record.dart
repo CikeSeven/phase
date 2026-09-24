@@ -72,7 +72,7 @@ class ToolCallRecord {
   final String? target;
   final ExecutionChannel channel;
 
-  /// 工具定义声明的默认策略；助手的工具策略可覆盖。
+  /// 工具的基础模式策略；实际授权见所属运行的模式与策略快照。
   final ToolPolicy defaultPolicy;
 
   final ToolCallStatus status;

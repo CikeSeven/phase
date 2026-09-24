@@ -1,5 +1,5 @@
 import 'context_policy.dart';
-import 'agent_plan.dart';
+import 'permission_mode.dart';
 import 'memory_entry.dart';
 import 'model_catalog.dart';
 import 'workspace.dart';
@@ -73,7 +73,8 @@ class RunConfiguration {
     this.mcpServers = const [],
     this.skills = const [],
     this.workspace,
-    this.mode = AgentMode.execute,
+    this.mode = PermissionMode.basic,
+    this.planExecutionMode = PermissionMode.basic,
     this.contextWindow,
     this.contextWindowSource,
     this.catalogMaxOutputTokens,
@@ -90,7 +91,10 @@ class RunConfiguration {
     this.executionScope = const ExecutionScope(),
   });
 
-  final AgentMode mode;
+  final PermissionMode mode;
+
+  /// 计划来源运行固定的返回档位，批准后不读取其他会话或后来的选择。
+  final PermissionMode planExecutionMode;
   final int? contextWindow;
 
   /// 窗口来源（ContextWindowSource.name）：user/catalog/localDefault；
@@ -119,7 +123,7 @@ class RunConfiguration {
   final List<SkillSnapshot> skills;
   final WorkspaceSnapshot? workspace;
 
-  /// 工具级策略覆盖；未列出的工具按定义的默认策略。
+  /// 由会话模式解析的实际策略快照，不接受助手级覆盖。
   final Map<String, ToolPolicy> toolPolicies;
   final bool supportsReasoning;
   final bool supportsImages;
@@ -129,6 +133,7 @@ class RunConfiguration {
 
   Map<String, dynamic> toJson() => {
     'mode': mode.name,
+    'planExecutionMode': planExecutionMode.name,
     'contextWindow': contextWindow,
     'contextWindowSource': contextWindowSource,
     'catalogMaxOutputTokens': catalogMaxOutputTokens,
@@ -158,7 +163,10 @@ class RunConfiguration {
   factory RunConfiguration.fromJson(
     Map<String, dynamic> json,
   ) => RunConfiguration(
-    mode: AgentMode.values.byName(json['mode'] as String? ?? 'execute'),
+    mode: PermissionMode.values.byName(json['mode'] as String? ?? 'basic'),
+    planExecutionMode: PermissionMode.values.byName(
+      json['planExecutionMode'] as String? ?? 'basic',
+    ),
     contextWindow: json['contextWindow'] as int?,
     contextWindowSource: json['contextWindowSource'] as String?,
     catalogMaxOutputTokens: json['catalogMaxOutputTokens'] as int?,

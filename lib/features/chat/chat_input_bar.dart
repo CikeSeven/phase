@@ -1,4 +1,4 @@
-import '../../../data/models/agent_plan.dart';
+import 'permission_mode_menu.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -77,6 +77,12 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       _pendingText = null;
       if (_attachments.isNotEmpty) setState(() => _attachments = const []);
     });
+    final savingMode = ref.watch(
+      chatControllerProvider.select((s) => s.savingPermissionMode),
+    );
+    final permissions = ref.watch(conversationPermissionsProvider);
+    final modeReady =
+        !permissions.isLoading && !permissions.hasError && !savingMode;
     final selection = ref.watch(modelSelectionProvider);
     final conversationId = ref.watch(
       activeConversationProvider.select((s) => s.conversationId),
@@ -120,31 +126,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           icon: const Icon(Symbols.attach_file),
         ),
         if (!needsConfiguration)
-          Expanded(
-            child: TextButton(
-              key: const ValueKey('chat-agent-mode'),
-              onPressed: isGenerating || _submitting
-                  ? null
-                  : () {
-                      final controller = ref.read(
-                        chatControllerProvider.notifier,
-                      );
-                      controller.setMode(
-                        ref.read(chatControllerProvider).mode == AgentMode.plan
-                            ? AgentMode.execute
-                            : AgentMode.plan,
-                      );
-                    },
-              child: Text(
-                ref.watch(chatControllerProvider.select((s) => s.mode)) ==
-                        AgentMode.plan
-                    ? '计划模式'
-                    : '执行模式',
-                maxLines: 2,
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
+          Expanded(child: PermissionModeMenu(submitting: _submitting)),
         if (needsConfiguration)
           Expanded(
             child: Align(
@@ -171,7 +153,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           isGenerating: isGenerating,
           onPressed: isGenerating
               ? () => ref.read(chatControllerProvider.notifier).stop()
-              : _canSend && !_submitting
+              : _canSend && !_submitting && modeReady
               ? _send
               : null,
         ),

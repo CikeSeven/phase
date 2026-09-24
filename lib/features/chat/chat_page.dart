@@ -350,7 +350,9 @@ class _ConversationMessages extends ConsumerWidget {
           messages: messages,
           attachments: state.attachments,
           isGenerating: state.isGenerating,
-          onRegenerate: () => _regenerate(context, ref),
+          onRegenerate: state.savingPermissionMode
+              ? null
+              : () => _regenerate(context, ref),
           bottomPadding: bottomPadding,
         );
       },

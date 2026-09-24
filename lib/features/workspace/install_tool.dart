@@ -10,7 +10,7 @@ import 'dependency_profiles.dart';
 import 'process_driver.dart';
 
 /// 模型侧的托管依赖安装：与设置页共用同一白名单与互斥，
-/// 一次装齐全部依赖组；按设计约束作为独立工具调用并默认询问用户。
+/// 一次装齐全部依赖组；保留独立工具调用，与 shell 共用命令权限类别。
 class InstallTool extends Tool {
   const InstallTool({
     this.workspace,
@@ -24,6 +24,8 @@ class InstallTool extends Tool {
   final DependencyInstaller? installer;
   @override
   String get name => 'install_packages';
+  @override
+  String get policyKey => commandExecutionPolicyKey;
   @override
   String get description =>
       '在 Ubuntu 环境一次安装完整开发依赖并记录版本：python3、pip、venv、'

@@ -1,3 +1,4 @@
+import 'package:phase/data/models/permission_mode.dart';
 import 'package:phase/features/workspace/process_driver.dart';
 import 'package:phase/data/repositories/workspace_repository.dart';
 
@@ -20,7 +21,6 @@ import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/model_catalog.dart';
 import 'package:phase/data/models/attachment.dart';
-import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/datasources/local/artifact_storage.dart';
 import 'package:phase/data/models/api_protocol.dart';
@@ -237,6 +237,8 @@ class ToolLoopHarness {
     ModelCatalog Function()? readCatalog,
     AiProvider Function(ProviderProfile profile, String apiKey)? factory,
     Future<void> Function(Attachment attachment)? saveArtifact,
+    Future<void> Function()? beforePermissionSave,
+    ChatController Function()? controllerFactory,
     ApiProtocol protocol = ApiProtocol.openaiCompletions,
     ModelRetryPolicy retryPolicy = const ModelRetryPolicy(
       baseDelay: Duration.zero,
@@ -265,22 +267,11 @@ class ToolLoopHarness {
       defaultModel: 'model-a',
     );
 
-    if (registry != null) {
-      final assistants = AssistantRepository(database);
-      final assistant = await assistants.ensureDefault();
-      await assistants.save(
-        assistant.copyWith(
-          toolPolicy: ToolPolicyConfig(
-            policies: {
-              for (final tool in registry.tools)
-                tool.policyKey: tool.defaultPolicy,
-            },
-          ),
-        ),
-      );
-    }
+    await AssistantRepository(database).ensureDefault();
     final container = ProviderContainer(
       overrides: [
+        if (controllerFactory != null)
+          chatControllerProvider.overrideWith(controllerFactory),
         if (processes != null)
           processDriverProvider.overrideWith((ref) => processes),
         workspaceRepositoryProvider.overrideWith(
@@ -310,6 +301,15 @@ class ToolLoopHarness {
         attachmentStorageProvider.overrideWith(
           (ref) => AttachmentStorage(Directory(p.join(tempDir.path, 'files'))),
         ),
+        if (beforePermissionSave != null)
+          conversationRepositoryProvider.overrideWith(
+            (ref) async => _GatedConversations(
+              database,
+              workspaces: await ref.watch(workspaceRepositoryProvider.future),
+              attachments: await ref.watch(attachmentStorageProvider.future),
+              beforeSave: beforePermissionSave,
+            ),
+          ),
         // 控制器测试只使用确定的目录，不依赖 asset/platform channel。
         modelCatalogProvider.overrideWith(
           (ref) async => readCatalog?.call() ?? catalog,
@@ -433,5 +433,22 @@ class ToolLoopHarness {
       met = await condition();
     }
     expect(met, isTrue, reason: '等待条件超时');
+  }
+}
+
+class _GatedConversations extends ConversationRepository {
+  _GatedConversations(
+    super.db, {
+    required super.workspaces,
+    required super.attachments,
+    required this.beforeSave,
+  });
+
+  final Future<void> Function() beforeSave;
+
+  @override
+  Future<void> setPermissionMode(String id, PermissionMode mode) async {
+    await beforeSave();
+    await super.setPermissionMode(id, mode);
   }
 }

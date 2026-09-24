@@ -3,23 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
-import '../../../data/models/tool_policy.dart';
 import '../../../data/repositories/skill_repository.dart';
 
 class AssistantSkillsSection extends ConsumerWidget {
   const AssistantSkillsSection({
     super.key,
     required this.ids,
-    required this.policy,
     required this.onChanged,
-    required this.onPolicyChanged,
   });
   final Set<String> ids;
-  final ToolPolicy policy;
   final ValueChanged<Set<String>>? onChanged;
-  final ValueChanged<ToolPolicy>? onPolicyChanged;
   @override
   Widget build(BuildContext context, WidgetRef ref) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
@@ -60,19 +54,6 @@ class AssistantSkillsSection extends ConsumerWidget {
               ],
             ),
           ),
-      if (ids.isNotEmpty) ...[
-        const SizedBox(height: AppSpacing.s),
-        AppDropdown<ToolPolicy>(
-          value: policy,
-          label: '读取指导与资源',
-          options: const {
-            ToolPolicy.ask: '每次询问',
-            ToolPolicy.allow: '直接允许',
-            ToolPolicy.deny: '禁止读取',
-          },
-          onChanged: onPolicyChanged,
-        ),
-      ],
       TextButton(
         onPressed: onChanged == null
             ? null

@@ -8,7 +8,6 @@ import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/mcp_server_profile.dart';
 import 'package:phase/data/models/tool_call_record.dart';
-import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/workspace.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
@@ -445,12 +444,7 @@ void main() {
     );
     final assistant = await assistants.ensureDefault();
     await assistants.save(
-      assistant.copyWith(
-        toolPolicy: assistant.toolPolicy.withPolicy(
-          tools.single.name,
-          ToolPolicy.ask,
-        ),
-      ),
+      assistant.copyWith(mcpToolNames: {tools.single.name}),
     );
     h.provider.turns.add(
       toolTurn(
@@ -466,7 +460,7 @@ void main() {
       return ToolDecision.approved;
     };
     await h.controller().send('回显月相');
-    expect(confirmed, 1);
+    expect(confirmed, 0);
     final record = (await h.recordsByCall()).values.single;
     expect(record.status, ToolCallStatus.succeeded);
     expect(record.source?.originalName, 'echo');

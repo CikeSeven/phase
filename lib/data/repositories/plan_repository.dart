@@ -11,6 +11,7 @@ import '../../core/error/failure.dart';
 import '../../core/utils/id.dart';
 import '../datasources/local/app_database.dart';
 import '../models/agent_plan.dart';
+import '../models/permission_mode.dart';
 import '../models/agent_run.dart';
 import 'row_mappers.dart';
 
@@ -73,7 +74,8 @@ class PlanRepository {
         throw const OperationFailure('计划来源调用不匹配');
       }
       final config = agentRunFromRow(run).configuration;
-      if (config.mode != AgentMode.plan || run.status != RunStatus.running) {
+      if (config.mode != PermissionMode.plan ||
+          run.status != RunStatus.running) {
         throw const OperationFailure('只有正在进行的计划运行可以提交计划');
       }
       final previous =
@@ -142,11 +144,19 @@ class PlanRepository {
       await _checkIdle(plan.conversationId);
       if (plan.status != PlanStatus.draft ||
           run.conversationId != plan.conversationId ||
-          run.configuration.mode != AgentMode.execute ||
+          run.configuration.mode == PermissionMode.plan ||
           run.configuration.planId != plan.id ||
           run.configuration.planRevision != plan.revision ||
           run.configuration.approvedPlan != plan.text) {
         throw const OperationFailure('计划状态已变化，请重新打开当前修订');
+      }
+      final source = await (db.select(
+        db.agentRuns,
+      )..where((t) => t.id.equals(plan.sourceRunId))).getSingle();
+      final sourceConfig = agentRunFromRow(source).configuration;
+      if (sourceConfig.mode != PermissionMode.plan ||
+          sourceConfig.planExecutionMode != run.configuration.mode) {
+        throw const OperationFailure('计划来源执行档位已变化，请重新规划');
       }
       final conversation = await (db.select(
         db.conversations,
@@ -177,7 +187,7 @@ class PlanRepository {
                 parts: [
                   TextPart(
                     text:
-                        '批准并执行计划（${plan.id}，修订 ${plan.revision}）。具体工具仍按权限确认。\n${plan.text}',
+                        '批准并执行计划（${plan.id}，修订 ${plan.revision}）。使用${run.configuration.mode.label}执行。\n${plan.text}',
                   ),
                 ],
                 createdAt: run.createdAt,
@@ -189,6 +199,8 @@ class PlanRepository {
       )..where((t) => t.id.equals(run.conversationId))).write(
         ConversationsCompanion(
           currentMessageId: Value(run.inputMessageId),
+          permissionMode: Value(run.configuration.mode),
+          lastExecutionMode: Value(run.configuration.mode),
           updatedAt: Value(run.createdAt),
         ),
       );

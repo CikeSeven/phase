@@ -1,3 +1,5 @@
+import '../../../data/models/permission_mode.dart';
+import '../tools/tool_permission_policy.dart';
 import 'context/history_resolver.dart';
 import 'context/context_configuration.dart';
 import 'context/compaction_coordinator.dart';
@@ -95,7 +97,7 @@ class ChatState {
     this.runningConversationId,
     this.streamingMessageId,
     this.retry,
-    this.mode = AgentMode.execute,
+    this.savingPermissionMode = false,
     this.contextBuild,
     this.contextConversationId,
     this.summarizing = false,
@@ -111,7 +113,7 @@ class ChatState {
   final String? runningConversationId;
   final String? streamingMessageId;
   final ModelRetryState? retry;
-  final AgentMode mode;
+  final bool savingPermissionMode;
   final ContextBuild? contextBuild;
   final String? contextConversationId;
   final bool summarizing;
@@ -126,14 +128,14 @@ class ChatState {
     bool clearRun = false,
     ModelRetryState? retry,
     bool clearRetry = false,
-    AgentMode? mode,
+    bool? savingPermissionMode,
     ContextBuild? contextBuild,
     String? contextConversationId,
     bool? summarizing,
     bool clearContext = false,
   }) {
     return ChatState(
-      mode: mode ?? this.mode,
+      savingPermissionMode: savingPermissionMode ?? this.savingPermissionMode,
       contextBuild: clearContext ? null : contextBuild ?? this.contextBuild,
       contextConversationId: clearContext
           ? null
@@ -244,8 +246,32 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     return const ChatState();
   }
 
-  void setMode(AgentMode mode) {
-    if (!_busy && !state.isGenerating) state = state.copyWith(mode: mode);
+  Future<void> setPermissionMode(PermissionMode mode) async {
+    if (_busy || state.isGenerating || state.savingPermissionMode) {
+      throw const OperationFailure('请先结束当前操作再切换权限模式');
+    }
+    final active = ref.read(activeConversationProvider);
+    if (active.conversationId == null) {
+      ref.read(activeConversationProvider.notifier).draftPermissionMode(mode);
+      return;
+    }
+    state = state.copyWith(savingPermissionMode: true);
+    try {
+      final repository = await ref.read(conversationRepositoryProvider.future);
+      await repository.setPermissionMode(active.conversationId!, mode);
+      // 只刷新被写入的会话；迟到完成不能回写另一个页面的草稿。
+      if (ref.mounted) {
+        ref.invalidate(conversationThreadProvider(active.conversationId!));
+      }
+    } finally {
+      if (ref.mounted) state = state.copyWith(savingPermissionMode: false);
+    }
+  }
+
+  void _checkPermissionSave() {
+    if (state.savingPermissionMode) {
+      throw const OperationFailure('权限模式正在保存，请稍后重试');
+    }
   }
 
   void startNewConversation() {
@@ -280,11 +306,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       return;
     }
     final repository = await ref.read(conversationRepositoryProvider.future);
-    final thread = await repository.getThread(conversationId);
-    if (thread == null) return;
-    await repository.updateConversation(
-      thread.conversation.copyWith(assistantId: assistantId),
-    );
+    await repository.setAssistant(conversationId, assistantId);
     ref.invalidate(modelSelectionProvider);
   }
 
@@ -293,7 +315,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required String name,
     String systemPrompt = '',
     model.ModelSelection? defaultModelSelection,
-    ToolPolicyConfig toolPolicy = defaultToolPolicyConfig,
+    Set<String> mcpToolNames = const {},
     Set<String> skillIds = const {},
     MemoryScope memoryScope = MemoryScope.disabled,
   }) {
@@ -304,7 +326,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         name: name.trim(),
         systemPrompt: systemPrompt.trim(),
         defaultModelSelection: defaultModelSelection,
-        toolPolicy: toolPolicy,
+        mcpToolNames: mcpToolNames,
         skillIds: skillIds,
         memoryScope: memoryScope,
         createdAt: DateTime.now(),
@@ -323,7 +345,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required String systemPrompt,
     model.ModelSelection? defaultModelSelection,
     bool clearDefaultModel = false,
-    ToolPolicyConfig? toolPolicy,
+    Set<String>? mcpToolNames,
     Set<String>? skillIds,
     MemoryScope? memoryScope,
   }) {
@@ -340,7 +362,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         defaultModelSelection: clearDefaultModel
             ? null
             : (defaultModelSelection ?? existing.defaultModelSelection),
-        toolPolicy: toolPolicy ?? existing.toolPolicy,
+        mcpToolNames: mcpToolNames ?? existing.mcpToolNames,
         skillIds: skillIds ?? existing.skillIds,
         memoryScope: memoryScope ?? existing.memoryScope,
         createdAt: existing.createdAt,
@@ -383,6 +405,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     String text, {
     List<Attachment> attachments = const [],
   }) async {
+    _checkPermissionSave();
     if (_busy) return;
     _busy = true;
     try {
@@ -409,20 +432,30 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       throw const UnknownFailure('尚未选择服务商与模型');
     }
 
-    if (state.mode == AgentMode.plan && !selection.supportsTools) {
-      throw const OperationFailure('计划模式需要支持工具调用的模型');
-    }
-
     final repository = await ref.read(conversationRepositoryProvider.future);
 
     // 助手列表可能还在首次加载：先把列表与会话线程等就绪，
     // 否则本次请求会丢掉系统提示词与助手默认模型。
     final assistant = await awaitAssistantContext(ref);
     if (revision != _viewRevision) throw const OperationFailure('会话已切换，请重新发送');
-    var conversationId = ref.read(activeConversationProvider).conversationId;
+    final active = ref.read(activeConversationProvider);
+    var conversationId = active.conversationId;
     _checkRecoveredConversation(conversationId);
+    final existing = conversationId == null
+        ? null
+        : await repository.getThread(conversationId);
+    if (conversationId != null && existing == null) {
+      throw const OperationFailure('会话已不存在');
+    }
+    final permissions =
+        existing?.conversation.permissions ?? active.draftPermissions;
+    if (revision != _viewRevision) throw const OperationFailure('会话已切换，请重新发送');
+    if (permissions.mode == PermissionMode.plan && !selection.supportsTools) {
+      throw const OperationFailure('计划模式需要支持工具调用的模型');
+    }
     if (conversationId == null) {
       final conversation = await repository.createConversation(
+        permissions: permissions,
         assistantId: assistant?.id,
         modelSelectionOverride: ref
             .read(activeConversationProvider)
@@ -484,7 +517,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       inputMessageId: userMessage.id,
       selection: selection,
       assistant: assistant,
-      mode: state.mode,
+      mode: permissions.mode,
+      planExecutionMode: permissions.lastExecutionMode,
     );
   }
 
@@ -493,6 +527,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 新建一条回答挂在同一条用户消息下，旧回答保留在消息树里不覆盖；
   /// 有工具执行历史时不自动重做动作（S3 起生效）。
   Future<void> regenerate() async {
+    _checkPermissionSave();
     if (_busy) return;
     _busy = true;
     try {
@@ -505,6 +540,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
   Future<void> _regenerate() async {
     if (state.isGenerating) return;
+    final revision = _viewRevision;
     final conversationId = ref.read(activeConversationProvider).conversationId;
     if (conversationId == null) return;
     _checkRecoveredConversation(conversationId);
@@ -512,6 +548,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final repository = await ref.read(conversationRepositoryProvider.future);
     final thread = await repository.getThread(conversationId);
     if (thread == null || thread.branch.isEmpty) return;
+    final permissions = thread.conversation.permissions;
 
     // 找到最近一条用户消息：它就是本轮要重新回答的输入。
     final index = thread.branch.lastIndexWhere(
@@ -525,6 +562,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       throw const UnknownFailure('尚未选择服务商与模型');
     }
     final assistant = await awaitAssistantContext(ref);
+
+    if (revision != _viewRevision) throw const OperationFailure('会话已切换，请重新生成');
 
     // 只重做最后的模型回答；已有动作与结果留在新分支的上下文中。
     // 即使停止时缺少结果消息，也保留调用，由上下文装配补齐实际错误。
@@ -544,7 +583,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       inputMessageId: userMessage.id,
       selection: selection,
       assistant: assistant,
-      mode: state.mode,
+      mode: permissions.mode,
+      planExecutionMode: permissions.lastExecutionMode,
     );
   }
 
@@ -563,7 +603,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   bool get isCancelled => _cancellation?.isCancelled ?? false;
 
   Future<List<Tool>> _agentTools({
-    required AgentMode mode,
+    required PermissionMode mode,
     required String? assistantId,
     required MemoryScope scope,
     required String inputMessageId,
@@ -572,11 +612,11 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       await ref.read(conversationRepositoryProvider.future),
       await ref.read(toolCallRepositoryProvider.future),
     ),
-    if (mode == AgentMode.plan)
+    if (mode == PermissionMode.plan)
       SubmitPlanTool(await ref.read(planRepositoryProvider.future)),
     if (scope != MemoryScope.disabled)
       for (final write in [false, true])
-        if (mode != AgentMode.plan || !write)
+        if (mode != PermissionMode.plan || !write)
           MemoryTool(
             repository: await ref.read(memoryRepositoryProvider.future),
             assistants: await ref.read(assistantRepositoryProvider.future),
@@ -588,6 +628,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   ];
 
   Future<void> approvePlan(AgentPlan plan) async {
+    _checkPermissionSave();
     if (_busy || state.isGenerating) throw const OperationFailure('请先结束当前任务');
     _busy = true;
     try {
@@ -602,6 +643,14 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       final assistant = await awaitAssistantContext(ref);
       if (selection == null) throw const OperationFailure('尚未选择模型');
       if (revision != _viewRevision) throw const OperationFailure('会话已切换');
+      final source = await (await ref.read(agentRunRepositoryProvider.future))
+          .getById(plan.sourceRunId);
+      if (source == null ||
+          source.configuration.mode != PermissionMode.plan ||
+          source.configuration.planExecutionMode == PermissionMode.plan) {
+        throw const OperationFailure('计划来源执行档位无效，请重新规划');
+      }
+      if (revision != _viewRevision) throw const OperationFailure('会话已切换');
       await _startRun(
         repository: await ref.read(conversationRepositoryProvider.future),
         conversationId: plan.conversationId,
@@ -609,6 +658,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         selection: selection,
         assistant: assistant,
         approvedPlan: plan,
+        mode: source.configuration.planExecutionMode,
+        planExecutionMode: source.configuration.planExecutionMode,
       );
     } finally {
       _busy = false;
@@ -625,9 +676,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final selection = await ref.read(modelSelectionProvider.future);
     if (thread?.currentMessageId == null || selection == null) return null;
     final assistant = await awaitAssistantContext(ref);
-    final mode = state.mode;
+    final mode = thread!.conversation.permissions.mode;
     final workspaces = await ref.read(workspaceRepositoryProvider.future);
-    final workspaceId = thread!.conversation.workspaceId;
+    final workspaceId = thread.conversation.workspaceId;
     final workspace = workspaceId == null
         ? null
         : await workspaces.snapshot(workspaceId);
@@ -665,13 +716,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       ?skillTool,
       if (skillTool != null &&
           workspace?.linuxAvailable == true &&
-          mode != AgentMode.plan)
+          mode != PermissionMode.plan)
         PrepareSkillTool(skillTool, workspace!, WorkspaceFiles(workspaces)),
     ]);
     final enabled = selection.supportsTools
         ? {
-            ...?assistant?.toolPolicy.enabledTools,
-            ...extra.map((t) => t.name),
+            ...registry.tools.map((t) => t.name),
+            ...?assistant?.mcpToolNames,
             if (skillTool != null) 'read_skill',
             if (skillTool != null && workspace?.linuxAvailable == true)
               'prepare_skill',
@@ -682,14 +733,14 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           (_environmentTools.contains(name) &&
               workspace?.linuxAvailable != true) ||
           (name == 'capture_screen' && !selection.supportsImages) ||
-          (mode == AgentMode.plan &&
+          (mode == PermissionMode.plan &&
               (registry.byName(name) == null ||
                   !allowedInPlan(registry.byName(name)!))),
     );
-    final policies =
-        assistant?.toolPolicy.overrides ?? const <String, ToolPolicy>{};
+    final policies = policiesForMode(mode, registry.tools);
     final tools = registry.definitionsFor(enabled, policies);
-    if (mode != AgentMode.plan && enabled.any((n) => n.startsWith('mcp_'))) {
+    if (mode != PermissionMode.plan &&
+        enabled.any((n) => n.startsWith('mcp_'))) {
       for (final entry in await (await ref.read(
         mcpServerRepositoryProvider.future,
       )).list()) {
@@ -729,6 +780,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       ),
       systemPrompt: assistant?.systemPrompt ?? '',
       mode: mode,
+      planExecutionMode: thread.conversation.permissions.lastExecutionMode,
       contextWindow: limits.contextWindow,
       contextWindowSource: limits.source.name,
       catalogMaxOutputTokens: limits.catalogMaxOutputTokens,
@@ -785,6 +837,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   }
 
   Future<String> compactContext(String conversationId) async {
+    _checkPermissionSave();
     if (_busy || state.isGenerating) throw const OperationFailure('请先结束当前任务');
     _busy = true;
     final cancellation = RunCancellation();
@@ -828,8 +881,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             cancellation: cancellation,
             protectedIds: prepared.protectedIds,
             canReadHistory: prepared.canReadHistory,
-            canReadHistoryNow: () =>
-                _historyAllowed(prepared.request.tools, prepared.assistantId),
+            canReadHistoryNow: () => _historyAllowed(prepared.request.tools),
             reloadMessages: prepared.reloadMessages,
             contextWindow: prepared.configuration.contextWindow,
             windowSource: prepared.configuration.resolvedWindowSource,
@@ -867,7 +919,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required String inputMessageId,
     required ChatModelSelection selection,
     required Assistant? assistant,
-    AgentMode mode = AgentMode.execute,
+    required PermissionMode mode,
+    required PermissionMode planExecutionMode,
     AgentPlan? approvedPlan,
   }) async {
     final runs = await ref.read(agentRunRepositoryProvider.future);
@@ -885,7 +938,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     );
     if (!ref.mounted) throw const CancelledFailure('创建运行前已退出');
 
-    if (mode == AgentMode.plan && !selection.supportsTools) {
+    if (mode == PermissionMode.plan && !selection.supportsTools) {
       throw const OperationFailure('计划模式需要支持工具调用的模型');
     }
     final extraTools = selection.supportsTools
@@ -902,13 +955,14 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     ]);
     final enabled = selection.supportsTools
         ? {
-            ...?assistant?.toolPolicy.enabledTools,
-            ...extraTools.map((t) => t.name),
+            ...baseRegistry.tools.map((t) => t.name),
+            ...?assistant?.mcpToolNames,
           }
         : <String>{};
     // 仅助手选择了 MCP 时访问目录；普通聊天没有扩展连接前置。
     final mcpEntries =
-        mode != AgentMode.plan && enabled.any((name) => name.startsWith('mcp_'))
+        mode != PermissionMode.plan &&
+            enabled.any((name) => name.startsWith('mcp_'))
         ? await (await ref.read(mcpServerRepositoryProvider.future)).list()
         : const [];
     final skillLease =
@@ -948,10 +1002,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             );
       final snapshots = <ToolSnapshot>[
         if (skillTool != null) skillTool.snapshot,
-        if (prepareSkill != null && mode != AgentMode.plan)
+        if (prepareSkill != null && mode != PermissionMode.plan)
           prepareSkill.snapshot,
         for (final tool in baseRegistry.tools)
-          if ((mode != AgentMode.plan || allowedInPlan(tool)) &&
+          if ((mode != PermissionMode.plan || allowedInPlan(tool)) &&
               enabled.contains(tool.name) &&
               (!_environmentTools.contains(tool.name) ||
                   workspace?.linuxAvailable == true))
@@ -970,6 +1024,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         inputMessageId: inputMessageId,
         configuration: RunConfiguration(
           mode: mode,
+          planExecutionMode: planExecutionMode,
           contextWindow: limits.contextWindow,
           contextWindowSource: limits.source.name,
           catalogMaxOutputTokens: limits.catalogMaxOutputTokens,
@@ -1012,7 +1067,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                 snapshot.name,
           },
           toolPolicies: selection.supportsTools
-              ? assistant?.toolPolicy.overrides ?? const {}
+              ? {
+                  ...policiesForMode(mode, [
+                    ...baseRegistry.tools,
+                    ?skillTool,
+                    ?prepareSkill,
+                  ]),
+                  for (final snapshot in snapshots)
+                    if (snapshot.source.kind == ToolSourceKind.mcp)
+                      snapshot.name: ToolPolicy.allow,
+                }
               : const {},
           supportsReasoning: selection.supportsReasoning,
           supportsImages: selection.supportsImages,
@@ -1141,33 +1205,24 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         );
       },
       currentPolicy: (tool) async {
-        if (run.configuration.mode == AgentMode.plan && !allowedInPlan(tool)) {
+        if (run.configuration.mode == PermissionMode.plan &&
+            !allowedInPlan(tool)) {
           return ToolPolicy.deny;
         }
-        if (tool is ReadHistoryTool) {
-          final assistant = run.assistantId == null
-              ? null
-              : await (await ref.read(assistantRepositoryProvider.future))
-                    .getById(run.assistantId!);
-          return assistant?.toolPolicy.overrides['read_history'] ??
-              ToolPolicy.allow;
+        if (tool is MemoryTool &&
+            await tool.currentPolicy() == ToolPolicy.deny) {
+          return ToolPolicy.deny;
         }
-        if (tool is MemoryTool) return tool.currentPolicy();
-        if (tool is ReadSkillTool) return tool.currentPolicy();
-        if (tool is PrepareSkillTool) return tool.currentPolicy();
-        if (tool is ShellTool) {
-          final assistant = run.assistantId == null
-              ? null
-              : await (await ref.read(assistantRepositoryProvider.future))
-                    .getById(run.assistantId!);
-          return assistant?.toolPolicy.overrides['shell'] ?? ToolPolicy.deny;
+        if (tool is ReadSkillTool &&
+            await tool.currentPolicy() == ToolPolicy.deny) {
+          return ToolPolicy.deny;
+        }
+        if (tool is PrepareSkillTool &&
+            await tool.currentPolicy() == ToolPolicy.deny) {
+          return ToolPolicy.deny;
         }
         if (tool.source.kind != ToolSourceKind.mcp) {
-          return registry.policyFor(
-            tool,
-            run.configuration.enabledTools,
-            run.configuration.toolPolicies,
-          );
+          return policyForMode(run.configuration.mode, tool);
         }
         await mcp!.checkAvailable(tool.snapshot);
         return mcp.currentPolicy(tool.snapshot);
@@ -1232,7 +1287,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _runAttachments = await _attachmentIndex(run.conversationId, const []);
       state = state.copyWith(
         isGenerating: true,
-        mode: run.configuration.mode,
         clearContext: true,
         clearStreaming: true,
         runningConversationId: run.conversationId,
@@ -1414,7 +1468,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _turnTailId = thread.currentMessageId;
     final records = await _recordsFor(thread.branch);
     _submittedPlan =
-        run.configuration.mode == AgentMode.plan &&
+        run.configuration.mode == PermissionMode.plan &&
         records.values.any(
           (record) =>
               record.runId == run.id &&
@@ -1766,7 +1820,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       },
     );
     final record = executed.record;
-    if (run.configuration.mode == AgentMode.plan &&
+    if (run.configuration.mode == PermissionMode.plan &&
         record.toolName == 'submit_plan' &&
         record.status == ToolCallStatus.succeeded) {
       _submittedPlan = true;
@@ -2150,7 +2204,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                 ?.sourceMessageId,
           },
           canReadHistory: tools.any((t) => t.name == 'read_history'),
-          canReadHistoryNow: () => _historyAllowed(tools, run.assistantId),
+          canReadHistoryNow: () => _historyAllowed(tools),
           reloadMessages: () async {
             final thread = await _repository!.getThread(run.conversationId);
             return thread == null
@@ -2174,16 +2228,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     return context;
   }
 
-  Future<bool> _historyAllowed(
-    List<ToolDefinition> tools,
-    String? assistantId,
-  ) async {
-    if (!tools.any((t) => t.name == 'read_history')) return false;
-    if (assistantId == null) return true;
-    final assistant = await (await ref.read(assistantRepositoryProvider.future))
-        .getById(assistantId);
-    return assistant != null &&
-        assistant.toolPolicy.overrides['read_history'] != ToolPolicy.deny;
+  Future<bool> _historyAllowed(List<ToolDefinition> tools) async {
+    return tools.any((t) => t.name == 'read_history');
   }
 
   /// 订阅一次请求的事件流，直到结束、出错或被停止。
@@ -2249,7 +2295,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     }
   }
 
-  /// 本次运行下发的工具定义：助手策略与模型工具能力都满足才下发。
+  /// 本次运行下发的工具定义：固定模式、启用范围与模型工具能力共同限制。
   List<ToolDefinition> _toolDefinitions() {
     final selection = _selection;
     final run = _run;
@@ -2258,7 +2304,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     if (!selection.supportsTools) return const [];
     return registry.definitionsFor({
       for (final name in run.configuration.enabledTools)
-        if (run.configuration.mode != AgentMode.plan ||
+        if (run.configuration.mode != PermissionMode.plan ||
             (registry.byName(name) != null &&
                 allowedInPlan(registry.byName(name)!)))
           name,
@@ -2921,6 +2967,7 @@ class ActiveConversationState {
     this.conversationId,
     this.draftAssistantId,
     this.draftModelSelection,
+    this.draftPermissions = const PermissionSelection(),
   });
 
   /// 当前打开的会话；null 表示新会话（尚未落库）。
@@ -2931,6 +2978,7 @@ class ActiveConversationState {
 
   /// 新会话确认的模型选择；建会话时保存到 modelSelectionOverride。
   final model.ModelSelection? draftModelSelection;
+  final PermissionSelection draftPermissions;
 }
 
 @Riverpod(keepAlive: true)
@@ -2960,6 +3008,18 @@ class ActiveConversation extends _$ActiveConversation {
       conversationId: state.conversationId,
       draftAssistantId: assistantId,
       draftModelSelection: state.draftModelSelection,
+      draftPermissions: state.draftPermissions,
+    );
+  }
+
+  void draftPermissionMode(PermissionMode mode) {
+    if (state.conversationId != null) {
+      throw StateError('Not a draft conversation');
+    }
+    state = ActiveConversationState(
+      draftAssistantId: state.draftAssistantId,
+      draftModelSelection: state.draftModelSelection,
+      draftPermissions: state.draftPermissions.select(mode),
     );
   }
 
@@ -2968,6 +3028,19 @@ class ActiveConversation extends _$ActiveConversation {
       conversationId: state.conversationId,
       draftAssistantId: state.draftAssistantId,
       draftModelSelection: selection,
+      draftPermissions: state.draftPermissions,
     );
   }
+}
+
+/// UI 的单一模式来源；已有会话加载失败时不能伪装为基础档。
+@Riverpod(dependencies: [ActiveConversation, conversationThread])
+AsyncValue<PermissionSelection> conversationPermissions(Ref ref) {
+  final active = ref.watch(activeConversationProvider);
+  final id = active.conversationId;
+  if (id == null) return AsyncData(active.draftPermissions);
+  return ref.watch(conversationThreadProvider(id)).whenData((thread) {
+    if (thread == null) throw const OperationFailure('会话已不存在');
+    return thread.conversation.permissions;
+  });
 }

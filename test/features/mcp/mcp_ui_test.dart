@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phase/core/theme/app_theme.dart';
-import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/models/mcp_server_profile.dart';
-import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/repositories/mcp_server_repository.dart';
 import 'package:phase/features/mcp/assistant_mcp_section.dart';
 import 'package:phase/features/mcp/mcp_edit_page.dart';
@@ -84,7 +82,7 @@ void main() {
     });
   }
 
-  testWidgets('第三方工具默认关闭，启用默认询问，编辑草稿不提前保存', (tester) async {
+  testWidgets('第三方工具默认关闭，编辑启用草稿不出现执行策略', (tester) async {
     late ToolLoopHarness h;
     await tester.runAsync(() async {
       h = await ToolLoopHarness.create();
@@ -96,7 +94,7 @@ void main() {
     final profile = await repository.save(fixture.profile());
     final tool = mcpToolSnapshot(profile, fixture.tool());
     await repository.saveCatalog(profile, [tool], '2025-06-18');
-    var policy = const ToolPolicyConfig();
+    var names = <String>{};
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: h.container,
@@ -106,8 +104,8 @@ void main() {
             body: StatefulBuilder(
               builder: (context, setState) => SingleChildScrollView(
                 child: AssistantMcpSection(
-                  policy: policy,
-                  onChanged: (value) => setState(() => policy = value),
+                  names: names,
+                  onChanged: (value) => setState(() => names = value),
                 ),
               ),
             ),
@@ -126,7 +124,8 @@ void main() {
     );
     await tester.tap(find.byKey(ValueKey('mcp-enable-${tool.name}')));
     await tester.pumpAndSettle();
-    expect(policy.policies[tool.name], ToolPolicy.ask);
+    expect(names, {tool.name});
+    expect(find.text('执行策略'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

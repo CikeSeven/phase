@@ -1,11 +1,11 @@
+import 'package:phase/data/models/permission_mode.dart';
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/profile_model.dart';
-import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/workspace.dart';
-import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/workspace_repository.dart';
 
 import '../tools/tool_loop_harness.dart';
@@ -95,18 +95,7 @@ void main() {
           ),
         );
         if (supportsTools) {
-          final assistants = await h.container.read(
-            assistantRepositoryProvider.future,
-          );
-          final assistant = await assistants.ensureDefault();
-          await assistants.save(
-            assistant.copyWith(
-              toolPolicy: assistant.toolPolicy.withPolicy(
-                'shell',
-                ToolPolicy.deny,
-              ),
-            ),
-          );
+          await h.controller().setPermissionMode(PermissionMode.plan);
         }
         h.provider.turns.add(textTurn('done'));
         await h.controller().send('hello');

@@ -23,11 +23,13 @@ part 'context_preview.g.dart';
     currentAssistant,
     ActiveConversation,
     conversationThread,
+    conversationPermissions,
     modelCatalog,
   ],
 )
 Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
   final active = ref.watch(activeConversationProvider);
+  ref.watch(conversationPermissionsProvider);
   if (active.conversationId != conversationId) return null;
   final running = ref.watch(
     chatControllerProvider.select(
@@ -36,7 +38,6 @@ Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
         s.runningConversationId,
         s.contextBuild,
         s.contextConversationId,
-        s.mode,
       ),
     ),
   );
@@ -61,8 +62,7 @@ Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
   if (assistant?.skillIds.isNotEmpty ?? false) {
     ref.watch(skillInstallationsProvider);
   }
-  if (assistant?.toolPolicy.enabledTools.any((t) => t.startsWith('mcp_')) ??
-      false) {
+  if (assistant?.mcpToolNames.isNotEmpty ?? false) {
     ref.watch(mcpServersProvider);
   }
   final prepared = await ref

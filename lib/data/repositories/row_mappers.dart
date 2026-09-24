@@ -1,4 +1,5 @@
 import '../models/memory_entry.dart';
+import '../models/permission_mode.dart';
 import 'model_request_repository.dart';
 
 import 'dart:convert';
@@ -32,6 +33,10 @@ Conversation conversationFromRow(ConversationRow row) => Conversation(
   currentMessageId: row.currentMessageId,
   modelSelectionOverride: _decodeSelection(row.selectionJson),
   pinned: row.pinned,
+  permissions: PermissionSelection(
+    mode: row.permissionMode,
+    lastExecutionMode: row.lastExecutionMode,
+  ),
   createdAt: row.createdAt,
   updatedAt: row.updatedAt,
 );
@@ -57,7 +62,7 @@ Assistant assistantFromRow(AssistantRow row) => Assistant(
   name: row.name,
   systemPrompt: row.systemPrompt,
   defaultModelSelection: _decodeSelection(row.defaultSelectionJson),
-  toolPolicy: ToolPolicyConfig.decode(row.toolPolicyJson),
+  mcpToolNames: _decodeStringList(row.mcpToolNamesJson).toSet(),
   memoryScope: MemoryScope.values.byName(row.memoryScope),
   skillIds: (jsonDecode(row.skillIdsJson) as List).cast<String>().toSet(),
   createdAt: row.createdAt,
@@ -185,6 +190,8 @@ ConversationsCompanion conversationCompanion(Conversation conversation) =>
         _encodeSelection(conversation.modelSelectionOverride),
       ),
       pinned: Value(conversation.pinned),
+      permissionMode: Value(conversation.permissions.mode),
+      lastExecutionMode: Value(conversation.permissions.lastExecutionMode),
       createdAt: Value(conversation.createdAt),
       updatedAt: Value(conversation.updatedAt),
     );
@@ -210,7 +217,7 @@ AssistantsCompanion assistantCompanion(Assistant assistant) =>
       defaultSelectionJson: Value(
         _encodeSelection(assistant.defaultModelSelection),
       ),
-      toolPolicyJson: Value(assistant.toolPolicy.encode()),
+      mcpToolNamesJson: Value(jsonEncode(assistant.mcpToolNames.toList())),
       memoryScope: Value(assistant.memoryScope.name),
       skillIdsJson: Value(jsonEncode(assistant.skillIds.toList())),
       createdAt: Value(assistant.createdAt),

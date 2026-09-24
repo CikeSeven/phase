@@ -1,3 +1,5 @@
+import 'package:phase/features/chat/chat_controller.dart';
+import 'package:phase/data/models/permission_mode.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -69,7 +71,7 @@ void main() {
       late String planId;
       await tester.runAsync(() async {
         h = await ToolLoopHarness.create(registry: ToolRegistry([]));
-        h.controller().setMode(AgentMode.plan);
+        await h.controller().setPermissionMode(PermissionMode.plan);
         h.provider.turns.add(
           toolTurn(
             callId: 'p',
@@ -220,7 +222,16 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('chat-agent-mode')));
       await tester.pumpAndSettle();
       expect(find.text('计划模式'), findsOneWidget);
-      expect(h.state().mode, AgentMode.plan);
+      expect(
+        h.container.read(conversationPermissionsProvider).value!.mode,
+        PermissionMode.basic,
+      );
+      await tester.tap(find.byKey(const ValueKey('permission-mode-plan')));
+      await tester.pumpAndSettle();
+      expect(
+        h.container.read(conversationPermissionsProvider).value!.mode,
+        PermissionMode.plan,
+      );
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });

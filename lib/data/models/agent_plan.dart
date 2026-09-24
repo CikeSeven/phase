@@ -1,5 +1,3 @@
-enum AgentMode { execute, plan }
-
 enum PlanStatus { draft, approved, cancelled }
 
 /// 每次编辑创建新修订；批准仅属于这一修订。

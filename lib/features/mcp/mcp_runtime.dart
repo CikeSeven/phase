@@ -2,6 +2,7 @@ import '../../../core/error/failure.dart';
 import '../../../data/models/agent_run.dart';
 import '../../../data/models/mcp_server_profile.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/permission_mode.dart';
 import '../../../data/models/tool_source.dart';
 import '../../../data/repositories/assistant_repository.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
@@ -111,14 +112,18 @@ class McpRunRuntime {
 
   Future<ToolPolicy> currentPolicy(ToolSnapshot snapshot) async {
     final id = run.assistantId;
-    if (id == null) return ToolPolicy.deny;
+    if (id == null || run.configuration.mode == PermissionMode.plan) {
+      return ToolPolicy.deny;
+    }
     try {
       final assistant = await assistants.getById(id);
-      return assistant?.toolPolicy.policies[snapshot.name] ?? ToolPolicy.deny;
+      return assistant?.mcpToolNames.contains(snapshot.name) == true
+          ? ToolPolicy.allow
+          : ToolPolicy.deny;
     } on StorageFailure {
       rethrow;
     } on Object catch (error) {
-      throw StorageFailure('读取助手工具权限失败', cause: error);
+      throw StorageFailure('读取助手扩展范围失败', cause: error);
     }
   }
 

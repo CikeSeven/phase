@@ -1,3 +1,4 @@
+import 'package:phase/data/models/permission_mode.dart';
 import 'package:drift/drift.dart' show Value;
 import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/models/tool_source.dart';
@@ -44,7 +45,7 @@ void main() {
     final h = await ToolLoopHarness.create(
       registry: ToolRegistry([shell, spoof, const SystemInfoTool()]),
     );
-    h.controller().setMode(AgentMode.plan);
+    await h.controller().setPermissionMode(PermissionMode.plan);
     h.provider.turns.addAll([
       multiToolTurn([
         (callId: 'shell', toolName: 'shell', arguments: '{}'),
@@ -71,7 +72,7 @@ void main() {
     expect(records['shell']!.status, ToolCallStatus.rejected);
     expect(records['spoof']!.status, ToolCallStatus.rejected);
     final run = await h.latestRun();
-    expect(run.configuration.mode, AgentMode.plan);
+    expect(run.configuration.mode, PermissionMode.plan);
     expect(run.status, RunStatus.completed);
     expect(run.modelAttemptCount, 2);
     final plan = await PlanRepository(h.database)
@@ -84,7 +85,7 @@ void main() {
   test('修订后旧批准失败，新批准原子创建运行并读取最新权限，动作仍询问', () async {
     final action = RecordingTool(name: 'write_file', policy: ToolPolicy.ask);
     final h = await ToolLoopHarness.create(registry: ToolRegistry([action]));
-    h.controller().setMode(AgentMode.plan);
+    await h.controller().setPermissionMode(PermissionMode.plan);
     h.provider.turns.add(
       toolTurn(
         callId: 'p',
@@ -121,7 +122,7 @@ void main() {
     expect(asks, 1);
     expect(action.executions, hasLength(1));
     final run = await h.latestRun();
-    expect(run.configuration.mode, AgentMode.execute);
+    expect(run.configuration.mode, PermissionMode.basic);
     expect(run.configuration.planId, latest.id);
     expect(run.configuration.planRevision, 2);
     expect(run.configuration.systemPrompt, '最新配置');
@@ -151,7 +152,7 @@ void main() {
 
   test('重启前已保存计划与工具结果，恢复只收尾，不再请求模型或提交修订', () async {
     final h = await ToolLoopHarness.create(registry: ToolRegistry([]));
-    h.controller().setMode(AgentMode.plan);
+    await h.controller().setPermissionMode(PermissionMode.plan);
     h.provider.turns.add(
       toolTurn(
         callId: 'plan',
@@ -187,7 +188,7 @@ void main() {
 
   test('来源分支变化不能批准；无效结构不产生计划卡；复制独立归属', () async {
     final h = await ToolLoopHarness.create(registry: ToolRegistry([]));
-    h.controller().setMode(AgentMode.plan);
+    await h.controller().setPermissionMode(PermissionMode.plan);
     h.provider.turns.addAll([
       toolTurn(
         callId: 'bad',

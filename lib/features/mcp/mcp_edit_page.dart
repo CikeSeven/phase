@@ -15,7 +15,6 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/mcp_server_profile.dart';
-import '../../../data/models/tool_policy.dart';
 import '../chat/chat_controller.dart';
 import '../tools/tool.dart';
 import 'mcp_controller.dart';
@@ -598,7 +597,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                           subtitle: Text(
                             assistants.when(
                               data: (items) =>
-                                  '已向 ${items.where((a) => (a.toolPolicy.policies[tool.name] ?? ToolPolicy.deny) != ToolPolicy.deny).length} 个助手开放',
+                                  '已向 ${items.where((a) => a.mcpToolNames.contains(tool.name)).length} 个助手开放',
                               loading: () => '正在读取助手范围…',
                               error: (_, _) => '助手范围读取失败',
                             ),

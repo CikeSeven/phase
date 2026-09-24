@@ -1,8 +1,10 @@
+import 'package:phase/data/models/permission_mode.dart';
+import 'package:phase/features/tools/tool_permission_policy.dart';
+
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/application_access_policy.dart';
-import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/models/execution_scope.dart';
 import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/models/tool_call_record.dart';
@@ -99,70 +101,26 @@ void main() {
     );
   });
 
-  test('应用操作只有一个策略事实来源，不能用单工具覆盖绕过禁止', () {
+  test('模式统一控制应用操作；应用列表独立归入只读', () {
     final driver = FakeChannelDriver();
     addTearDown(driver.dispose);
     final registry = buildBuiltInRegistry(
       httpFetch: (_) => throw StateError('unused'),
       platform: () => driver,
     );
-    final appTools = registry.tools
-        .where((tool) => tool.policyKey == applicationOperationsPolicyKey)
-        .toList();
-    expect(
-      appTools.map((tool) => tool.name).toSet(),
-      applicationOperationTools,
+    final apps = registry.tools.where(
+      (tool) => tool.policyKey == applicationOperationsPolicyKey,
     );
-    const config = ToolPolicyConfig(
-      policies: {applicationOperationsPolicyKey: ToolPolicy.allow},
-    );
-    expect(config.enabledTools, {
-      'wait_for_user',
-      'shell',
-      'install_packages',
-      ...applicationOperationTools,
-    });
-    expect(
-      registry
-          .definitionsFor(config.enabledTools, config.overrides)
-          .map((tool) => tool.name)
-          .toSet(),
-      {
-        'wait_for_user',
-        'shell',
-        'install_packages',
-        ...applicationOperationTools,
-      },
-    );
-    for (final tool in appTools) {
-      expect(
-        registry.policyFor(tool, config.enabledTools, {
-          applicationOperationsPolicyKey: ToolPolicy.deny,
-          tool.name: ToolPolicy.allow,
-        }),
-        ToolPolicy.deny,
-      );
-      if (tool.name == 'capture_screen') {
-        expect(tool.inputSchema['properties'], isEmpty);
-        expect(tool.inputSchema['required'], isEmpty);
-      } else if (tool.name != 'list_apps') {
-        expect(tool.inputSchema['required'], contains('packageName'));
-      }
+    expect(apps.map((t) => t.name).toSet(), applicationOperationTools);
+    for (final tool in apps) {
+      expect(policyForMode(PermissionMode.plan, tool), ToolPolicy.deny);
+      expect(policyForMode(PermissionMode.basic, tool), ToolPolicy.ask);
+      expect(policyForMode(PermissionMode.fullAccess, tool), ToolPolicy.allow);
     }
-    expect(const ToolPolicyConfig(policies: {}).enabledTools, {
-      'wait_for_user',
-      'shell',
-      'install_packages',
-    });
-    expect(
-      const ToolPolicyConfig(policies: {'shell': ToolPolicy.deny}).enabledTools,
-      {'wait_for_user', 'install_packages'},
-    );
-    expect(
-      const ToolPolicyConfig(policies: {'click_node': ToolPolicy.allow})
-          .enabledTools,
-      {'wait_for_user', 'shell', 'install_packages'},
-    );
+    final list = registry.byName('list_apps')!;
+    for (final mode in PermissionMode.values) {
+      expect(policyForMode(mode, list), ToolPolicy.allow);
+    }
   });
 
   test('获取应用列表经统一策略与真实工具落库，黑名单包名不会泄漏进模型提示词', () async {

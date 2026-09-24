@@ -400,7 +400,9 @@ class ApplicationTool extends Tool {
       ? ExecutionChannel.app
       : ExecutionChannel.accessibility;
   @override
-  String get policyKey => applicationOperationsPolicyKey;
+  String get policyKey => action == ExecutionAction.listApps
+      ? name
+      : applicationOperationsPolicyKey;
   @override
   bool usesPlatform(Map<String, dynamic> arguments) => true;
   @override
@@ -432,7 +434,8 @@ class ApplicationTool extends Tool {
       ? const {'applications'}
       : const {'applications', 'accessibility'};
   @override
-  ToolPolicy get defaultPolicy => ToolPolicy.ask;
+  ToolPolicy get defaultPolicy =>
+      action == ExecutionAction.listApps ? ToolPolicy.allow : ToolPolicy.ask;
   @override
   Map<String, dynamic> get inputSchema => {
     'type': 'object',

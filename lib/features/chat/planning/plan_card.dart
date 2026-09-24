@@ -42,7 +42,9 @@ class _PlanCardState extends ConsumerState<PlanCard> {
   Widget build(BuildContext context) {
     final p = widget.plan;
     final generating = ref.watch(
-      chatControllerProvider.select((s) => s.isGenerating),
+      chatControllerProvider.select(
+        (s) => s.isGenerating || s.savingPermissionMode,
+      ),
     );
     final disabled = generating || _busy;
     return AppCard(
@@ -64,7 +66,7 @@ class _PlanCardState extends ConsumerState<PlanCard> {
               padding: const EdgeInsets.only(bottom: 8),
               child: SelectableText('${i + 1}. $step'),
             ),
-          const Text('批准仅针对当前修订，具体工具仍需按权限确认。'),
+          const Text('批准当前修订后恢复规划前的权限档位，按该模式执行。'),
           if (_error != null)
             Text(
               _error!,

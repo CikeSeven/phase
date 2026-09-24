@@ -25,6 +25,8 @@ class ShellTool extends Tool {
   @override
   String get name => 'shell';
   @override
+  String get policyKey => commandExecutionPolicyKey;
+  @override
   String get description =>
       '在 Ubuntu 工作区执行非交互 shell 命令，返回 stdout/stderr、退出码与产物。'
       '每次调用的环境变量与 cd 不保留。环境为最小安装：安装软件用 '

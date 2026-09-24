@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/data/models/agent_run.dart';
-import 'package:phase/data/models/assistant.dart';
-import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/workspace.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
@@ -33,11 +31,7 @@ void main() {
       assistantRepositoryProvider.future,
     );
     final assistant = await assistants.ensureDefault();
-    await assistants.save(
-      assistant.copyWith(
-        toolPolicy: const ToolPolicyConfig(policies: {'shell': ToolPolicy.ask}),
-      ),
-    );
+    await assistants.save(assistant.copyWith());
     final chats = await h.container.read(conversationRepositoryProvider.future);
     final chat = await chats.createConversation(assistantId: assistant.id);
     final workspace = (await repository.get(chat.workspaceId!))!;

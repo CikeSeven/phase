@@ -101,7 +101,7 @@ void main() {
       expect(jsonEncode(payloads[1]), contains('读取文档中的实际内容'));
       expect(jsonEncode(payloads[1]), contains(skill.snapshot.revision));
       expect(jsonEncode(payloads[2]), contains('初七上弦'));
-      expect(confirmations, ['read_skill', 'write_file']);
+      expect(confirmations, ['write_file']);
       final records = await (await h.toolCalls()).getByRun(
         (await h.latestRun()).id,
       );

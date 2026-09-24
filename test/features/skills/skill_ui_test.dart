@@ -10,7 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/widgets/app_loading_indicator.dart';
-import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/skill_repository.dart';
 import 'package:phase/features/assistants/assistant_edit_page.dart';
@@ -337,11 +336,7 @@ void main() {
         save ? {skillId} : isEmpty,
       );
     }
-    final saved = (await assistants.getById(assistant.id))!;
-    expect(
-      saved.toolPolicy.policies['read_skill'] ?? ToolPolicy.ask,
-      ToolPolicy.ask,
-    );
+    expect(find.text('读取指导与资源'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     await _pumpIo(tester);

@@ -13,7 +13,6 @@ import 'package:phase/data/models/context_summary.dart';
 import 'package:phase/data/models/model_request_record.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/token_usage.dart';
-import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/agent_context_repository.dart';
 import 'package:phase/data/repositories/model_request_repository.dart';
@@ -54,7 +53,7 @@ class LongTaskProvider implements AiProvider {
 }
 
 void main() {
-  test('摘要期间收紧历史读取许可不激活候选，恢复原文窗口', () async {
+  test('摘要期间编辑助手不改变会话历史读取许可', () async {
     final h = await longConversation();
     final stream = StreamController<ChatChunk>();
     h.provider.turns.add(stream.stream);
@@ -62,37 +61,20 @@ void main() {
     await h.waitUntil(() => h.provider.requests.length == 3);
     final assistants = AssistantRepository(h.database);
     final assistant = (await assistants.getAssistants()).single;
-    await assistants.save(
-      assistant.copyWith(
-        toolPolicy: assistant.toolPolicy.withPolicy(
-          'read_history',
-          ToolPolicy.deny,
-        ),
-      ),
-    );
+    await assistants.save(assistant.copyWith(systemPrompt: '修改助手提示词'));
     for (final event in await textTurn('新摘要').toList()) {
       stream.add(event);
     }
     final notice = await compacting.timeout(const Duration(seconds: 2));
     await stream.close();
-    expect(notice, contains('权限已收紧'));
+    expect(notice, contains('已采用摘要'));
     expect(
       (await AgentContextRepository(h.database).list(h.conversationId()!))
           .single
           .adoption,
-      SummaryAdoption.stale,
+      SummaryAdoption.applied,
     );
-    expect(
-      h
-          .state()
-          .contextBuild!
-          .messages
-          .expand((m) => m.parts)
-          .whereType<ResolvedText>()
-          .map((p) => p.text)
-          .join(),
-      contains('old ' * 100),
-    );
+    expect(h.state().contextBuild!.summaryId, isNotNull);
   });
 
   test('生成完成但无收益不采用，摘要用量仍计入会话', () async {

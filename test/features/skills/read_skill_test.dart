@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/data/datasources/local/artifact_storage.dart';
-import 'package:phase/data/models/tool_policy.dart';
-import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/features/skills/read_skill_tool.dart';
 import 'package:phase/features/tools/tool.dart';
@@ -102,7 +100,7 @@ void main() {
     );
   });
 
-  test('Skill 范围独立于读取工具权限，新增许可不扩大旧快照', () async {
+  test('Skill 启用范围独立于会话模式，新增选择不扩大旧快照', () async {
     final first = await fixture.install(
       files: {'scripts/run.sh': utf8.encode('echo ready')},
     );
@@ -112,9 +110,6 @@ void main() {
     final assistants = AssistantRepository(fixture.database);
     var assistant = (await assistants.ensureDefault()).copyWith(
       skillIds: {first.id},
-      toolPolicy: const ToolPolicyConfig(
-        policies: {'read_skill': ToolPolicy.allow},
-      ),
     );
     await assistants.save(assistant);
     final tool = ReadSkillTool(

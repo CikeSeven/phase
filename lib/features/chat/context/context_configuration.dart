@@ -1,4 +1,4 @@
-import '../../../data/models/agent_plan.dart';
+import '../../../data/models/permission_mode.dart';
 import '../../../data/models/agent_run.dart';
 import '../../../data/models/chat_request.dart';
 import '../../../data/models/provider_profile.dart';
@@ -14,7 +14,7 @@ String contextSystemPrompt(RunConfiguration config) =>
     '${skillDiscoveryPrompt(config.skills, linuxAvailable: config.workspace?.linuxAvailable == true)}'
     '${workspacePrompt(config.workspace)}'
     '${executionScopePrompt(config.executionScope, toolExecution: config.enabledTools.isNotEmpty, applicationOperations: config.enabledTools.any(applicationOperationTools.contains))}'
-    '${config.mode == AgentMode.plan ? planModePrompt : ''}';
+    '${config.mode == PermissionMode.plan ? planModePrompt : ''}';
 
 /// 手动整理/空闲测量的独立配置，不伪造 AgentRun。
 class PreparedContext {
@@ -52,7 +52,7 @@ class SnapshotToolDefinition implements ToolDefinition {
   @override
   Set<String> get requiredCapabilities => const {};
   @override
-  ToolPolicy get defaultPolicy => ToolPolicy.ask;
+  ToolPolicy get defaultPolicy => ToolPolicy.allow;
   @override
   String describeAction(Map<String, dynamic> arguments) => name;
 }

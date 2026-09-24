@@ -144,7 +144,7 @@ abstract class Tool {
   /// 执行需要的通道能力（文件、网络、系统信息等）。
   Set<String> get requiredCapabilities;
 
-  /// 未配置助手策略时使用的默认策略。
+  /// 基础模式的宿主默认策略；最终授权统一由会话模式决定。
   ToolPolicy get defaultPolicy;
 
   /// 确认页展示给用户的一句话动作摘要。
@@ -313,7 +313,7 @@ class ToolRegistry {
     ];
   }
 
-  /// 工具策略：助手显式覆盖优先，其次「是否在助手工具范围里」，最后工具默认。
+  /// 先校验运行工具范围，再应用由模式生成的策略快照。
   ToolPolicy policyFor(
     Tool tool,
     Set<String> enabledTools,

@@ -4,13 +4,8 @@ import 'package:phase/core/error/failure.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/widgets/app_list_tile.dart';
 import 'package:phase/data/models/application_access_policy.dart';
-import 'package:phase/data/models/assistant.dart';
-import 'package:phase/data/models/tool_policy.dart';
-import 'package:phase/features/assistants/assistant_tool_policy_section.dart';
 import 'package:phase/features/execution/application_policy_sheet.dart';
-import 'package:phase/features/tools/tool_registry.dart';
 
-import '../../support/fake_channel_driver.dart';
 import 'application_access_test.dart' show app;
 
 void main() {
@@ -348,63 +343,6 @@ void main() {
     expect(result, isNull);
     expect(initial.whitelist, isEmpty);
     expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('助手中应用操作只显示一个策略开关并控制全部应用工具', (tester) async {
-    final driver = FakeChannelDriver();
-    addTearDown(driver.dispose);
-    final registry = buildBuiltInRegistry(
-      httpFetch: (_) => throw StateError('unused'),
-      platform: () => driver,
-    );
-    var policy = const ToolPolicyConfig(
-      policies: {applicationOperationsPolicyKey: ToolPolicy.ask},
-    );
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: AppTheme.light(),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: StatefulBuilder(
-              builder: (context, update) => AssistantToolPolicySection(
-                tools: registry.tools.toList(),
-                policy: policy,
-                onChanged: (value) => update(() => policy = value),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    final group = find.byKey(const ValueKey('tool-policy-app_operations'));
-    expect(group, findsOneWidget);
-    for (final name in applicationOperationTools) {
-      expect(find.byKey(ValueKey('tool-policy-$name')), findsNothing);
-    }
-    await tester.ensureVisible(group);
-    await tester.pumpAndSettle();
-    await tester.tap(group);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('直接执行').last);
-    await tester.pumpAndSettle();
-    expect(policy.overrides, {
-      'wait_for_user': ToolPolicy.allow,
-      'shell': ToolPolicy.ask,
-      'install_packages': ToolPolicy.ask,
-      applicationOperationsPolicyKey: ToolPolicy.allow,
-    });
-    expect(
-      registry
-          .definitionsFor(policy.enabledTools, policy.overrides)
-          .map((tool) => tool.name)
-          .toSet(),
-      {
-        'wait_for_user',
-        'shell',
-        'install_packages',
-        ...applicationOperationTools,
-      },
-    );
   });
 
   testWidgets('Expressive 菜单筛选排序真实应用列表，不重载或丢失名单草稿', (tester) async {

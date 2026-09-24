@@ -1,8 +1,9 @@
+import 'package:phase/data/models/permission_mode.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:phase/data/models/agent_plan.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/memory_entry.dart';
 import 'package:phase/data/models/tool_call_record.dart';
@@ -17,7 +18,7 @@ import '../../tools/tool_loop_harness.dart';
 
 void main() {
   for (final protocol in ApiProtocol.values) {
-    test('${protocol.name} 真实适配器计划提交 → 批准新运行 → 确认记忆写入 → 检索回填', () async {
+    test('${protocol.name} 真实适配器计划提交 → 批准新运行 → 基础档直接记忆写入 → 检索回填', () async {
       final gateway = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       addTearDown(() => gateway.close(force: true));
       final payloads = <Map<String, dynamic>>[];
@@ -76,7 +77,7 @@ void main() {
           memoryScope: MemoryScope.assistant,
         ),
       );
-      h.controller().setMode(AgentMode.plan);
+      await h.controller().setPermissionMode(PermissionMode.plan);
       await h.controller().send('规划如何记录我的偏好');
       expect(payloads, hasLength(1));
       expect(jsonEncode(payloads.first), isNot(contains('write_memory')));
@@ -90,7 +91,7 @@ void main() {
       };
       await h.controller().approvePlan(p);
       expect(payloads, hasLength(4));
-      expect(confirmations, 1);
+      expect(confirmations, 0);
       expect(jsonEncode(payloads[1]), contains('批准并执行计划'));
       expect(jsonEncode(payloads[3]), contains('喜欢月相记录'));
       expect(

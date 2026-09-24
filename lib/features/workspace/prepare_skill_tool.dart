@@ -35,10 +35,7 @@ class PrepareSkillTool extends Tool {
   @override
   String describeAction(Map<String, dynamic> arguments) =>
       '将 Skill ${arguments['skillId']} 的固定版本复制到工作区「${workspace.name}」';
-  Future<ToolPolicy> currentPolicy() async =>
-      await reader.currentPolicy() == ToolPolicy.deny
-      ? ToolPolicy.deny
-      : ToolPolicy.ask;
+  Future<ToolPolicy> currentPolicy() => reader.currentPolicy();
   @override
   Future<ToolOutcome> execute(
     Map<String, dynamic> arguments,
@@ -60,11 +57,7 @@ class PrepareSkillTool extends Tool {
         workspace,
         skill,
         cancellation,
-        checkPermission: () => reader.checkAccess(
-          skill,
-          cancellation,
-          confirmed: context.confirmed,
-        ),
+        checkPermission: () => reader.checkAccess(skill, cancellation),
       );
       return ToolOutcome.success(
         jsonEncode({

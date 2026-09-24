@@ -1,4 +1,3 @@
-import '../tools/tool_presentation.dart';
 import '../../../data/models/memory_entry.dart';
 import '../../../core/widgets/app_dropdown.dart';
 
@@ -19,10 +18,8 @@ import '../../../data/models/model_selection.dart';
 import '../../../data/repositories/assistant_repository.dart';
 import '../chat/chat_controller.dart';
 import 'assistant_model_sheet.dart';
-import 'assistant_tool_policy_section.dart';
 import '../mcp/assistant_mcp_section.dart';
 import '../skills/assistant_skills_section.dart';
-import '../../../data/models/tool_policy.dart';
 
 /// 助手新增 / 编辑：名称、系统提示词、默认模型与工具范围。
 class AssistantEditPage extends ConsumerStatefulWidget {
@@ -41,7 +38,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
   final _promptController = TextEditingController();
 
   ModelSelection? _defaultModel;
-  ToolPolicyConfig _toolPolicy = defaultToolPolicyConfig;
+  Set<String> _mcpToolNames = {};
   Set<String> _skillIds = {};
   MemoryScope _memoryScope = MemoryScope.disabled;
   bool _clearDefaultModel = false;
@@ -91,7 +88,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
         _nameController.text = assistant.name;
         _promptController.text = assistant.systemPrompt;
         _defaultModel = assistant.defaultModelSelection;
-        _toolPolicy = assistant.toolPolicy;
+        _mcpToolNames = {...assistant.mcpToolNames};
         _skillIds = {...assistant.skillIds};
         _memoryScope = assistant.memoryScope;
         _loading = false;
@@ -129,7 +126,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           name: _nameController.text,
           systemPrompt: _promptController.text,
           defaultModelSelection: _defaultModel,
-          toolPolicy: _toolPolicy,
+          mcpToolNames: _mcpToolNames,
           skillIds: _skillIds,
           memoryScope: _memoryScope,
         );
@@ -140,7 +137,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           systemPrompt: _promptController.text,
           defaultModelSelection: _defaultModel,
           clearDefaultModel: _clearDefaultModel,
-          toolPolicy: _toolPolicy,
+          mcpToolNames: _mcpToolNames,
           skillIds: _skillIds,
           memoryScope: _memoryScope,
         );
@@ -300,14 +297,6 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                           }),
                   ),
                   const SizedBox(height: AppSpacing.xl),
-                  AssistantToolPolicySection(
-                    tools: ref.watch(toolRegistryProvider).tools.toList(),
-                    policy: _toolPolicy,
-                    onChanged: _saving
-                        ? null
-                        : (policy) => setState(() => _toolPolicy = policy),
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
                   AppDropdown<MemoryScope>(
                     label: '记忆读取与写入范围',
                     value: _memoryScope,
@@ -319,69 +308,19 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                         ? null
                         : (scope) => setState(() => _memoryScope = scope),
                   ),
-                  const SizedBox(height: AppSpacing.l),
-                  AppDropdown<ToolPolicy>(
-                    label: '历史详情读取',
-                    value:
-                        _toolPolicy.policies['read_history'] ??
-                        ToolPolicy.allow,
-                    options: {
-                      for (final policy in ToolPolicy.values)
-                        policy: ToolPresentation.policyLabel(policy),
-                    },
-                    onChanged: _saving
-                        ? null
-                        : (policy) => setState(
-                            () => _toolPolicy = _toolPolicy.withPolicy(
-                              'read_history',
-                              policy,
-                            ),
-                          ),
-                  ),
-                  const SizedBox(height: AppSpacing.l),
-                  if (_memoryScope != MemoryScope.disabled) ...[
-                    AppDropdown<ToolPolicy>(
-                      label: '记忆写入',
-                      value:
-                          _toolPolicy.policies['write_memory'] ??
-                          ToolPolicy.ask,
-                      options: {
-                        for (final value in ToolPolicy.values)
-                          value: ToolPresentation.policyLabel(value),
-                      },
-                      onChanged: _saving
-                          ? null
-                          : (policy) => setState(
-                              () => _toolPolicy = _toolPolicy.withPolicy(
-                                'write_memory',
-                                policy,
-                              ),
-                            ),
-                    ),
-                    const SizedBox(height: AppSpacing.l),
-                  ],
+                  const SizedBox(height: AppSpacing.xl),
                   AssistantSkillsSection(
                     ids: _skillIds,
-                    policy:
-                        _toolPolicy.policies['read_skill'] ?? ToolPolicy.ask,
                     onChanged: _saving
                         ? null
                         : (ids) => setState(() => _skillIds = ids),
-                    onPolicyChanged: _saving
-                        ? null
-                        : (policy) => setState(
-                            () => _toolPolicy = _toolPolicy.withPolicy(
-                              'read_skill',
-                              policy,
-                            ),
-                          ),
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   AssistantMcpSection(
-                    policy: _toolPolicy,
+                    names: _mcpToolNames,
                     onChanged: _saving
                         ? null
-                        : (policy) => setState(() => _toolPolicy = policy),
+                        : (names) => setState(() => _mcpToolNames = names),
                   ),
                 ],
               ),

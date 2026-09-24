@@ -100,7 +100,7 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
           ),
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text('在助手编辑中选择读取范围。模型写入默认询问，普通结果和摘要不自动存为记忆。'),
+            child: Text('在助手编辑中选择记忆范围。写入按会话权限模式执行，普通结果和摘要不自动存为记忆。'),
           ),
           if (_error != null)
             Padding(

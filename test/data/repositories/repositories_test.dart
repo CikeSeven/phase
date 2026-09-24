@@ -578,34 +578,23 @@ void main() {
     expect((await assistants.getAssistants()).single.id, defaultAssistantId);
   });
 
-  test('工具策略：deny 的工具不开放，ask 用默认策略', () async {
-    final assistant = await assistants.save(
+  test('助手仅保存 MCP 启用集合，不绑定执行策略', () async {
+    await assistants.save(
       Assistant(
         id: 'as1',
-        name: '执行助手',
+        name: '扩展助手',
         systemPrompt: '',
-        toolPolicy: const ToolPolicyConfig(
-          policies: {
-            'write_file': ToolPolicy.ask,
-            applicationOperationsPolicyKey: ToolPolicy.allow,
-            'shell': ToolPolicy.deny,
-          },
-        ),
+        mcpToolNames: const {'mcp_server_read', 'mcp_server_write'},
         createdAt: DateTime.now(),
       ),
     );
-    expect(assistant.toolPolicy.enabledTools, {
-      'wait_for_user',
-      'write_file',
-      'install_packages',
-      ...applicationOperationTools,
-    });
-    expect(assistant.toolPolicy.overrides, {
-      'wait_for_user': ToolPolicy.allow,
-      'write_file': ToolPolicy.ask,
-      applicationOperationsPolicyKey: ToolPolicy.allow,
-      'shell': ToolPolicy.deny,
-      'install_packages': ToolPolicy.ask,
+    final restored = (await assistants.getById('as1'))!;
+    expect(restored.mcpToolNames, {'mcp_server_read', 'mcp_server_write'});
+    await assistants.save(
+      restored.copyWith(mcpToolNames: {'mcp_server_write'}),
+    );
+    expect((await assistants.getById('as1'))!.mcpToolNames, {
+      'mcp_server_write',
     });
   });
 

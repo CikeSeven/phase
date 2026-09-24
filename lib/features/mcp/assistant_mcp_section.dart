@@ -3,21 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
-import '../../../data/models/assistant.dart';
-import '../../../data/models/tool_policy.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
 
-/// 只编辑助手草稿；新增工具默认关闭，启用时默认询问。
+/// 只编辑助手的扩展启用草稿；执行策略由会话模式决定。
 class AssistantMcpSection extends ConsumerWidget {
   const AssistantMcpSection({
     super.key,
-    required this.policy,
+    required this.names,
     required this.onChanged,
   });
-  final ToolPolicyConfig policy;
-  final ValueChanged<ToolPolicyConfig>? onChanged;
+  final Set<String> names;
+  final ValueChanged<Set<String>>? onChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Column(
@@ -55,33 +52,15 @@ class AssistantMcpSection extends ConsumerWidget {
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
-                      value:
-                          (policy.policies[tool.name] ?? ToolPolicy.deny) !=
-                          ToolPolicy.deny,
+                      value: names.contains(tool.name),
                       onChanged: onChanged == null || entry.profile.deleting
                           ? null
-                          : (enabled) => onChanged!(
-                              policy.withPolicy(
-                                tool.name,
-                                enabled ? ToolPolicy.ask : ToolPolicy.deny,
-                              ),
-                            ),
+                          : (enabled) => onChanged!({
+                              for (final name in names)
+                                if (enabled || name != tool.name) name,
+                              if (enabled) tool.name,
+                            }),
                     ),
-                    if ((policy.policies[tool.name] ?? ToolPolicy.deny) !=
-                        ToolPolicy.deny)
-                      AppDropdown<ToolPolicy>(
-                        value: policy.policies[tool.name]!,
-                        label: '执行策略',
-                        options: const {
-                          ToolPolicy.ask: '每次询问',
-                          ToolPolicy.allow: '直接允许',
-                        },
-                        onChanged: onChanged == null
-                            ? null
-                            : (value) => onChanged!(
-                                policy.withPolicy(tool.name, value),
-                              ),
-                      ),
                   ],
                 ],
               ],

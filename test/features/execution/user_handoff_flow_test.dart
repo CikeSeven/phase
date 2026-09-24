@@ -1,5 +1,4 @@
-import 'package:phase/data/repositories/assistant_repository.dart';
-import 'package:phase/data/models/tool_policy.dart';
+import 'package:phase/data/models/permission_mode.dart';
 import 'package:phase/features/tools/tool_call_display.dart';
 
 import 'dart:async';
@@ -19,20 +18,9 @@ import '../tools/tool_loop_harness.dart';
 import '../tools/run_recovery_fixture.dart';
 
 void main() {
-  test('显式禁止等待工具不会启服务；无效提示的失败记录也能安全显示', () async {
+  test('计划模式禁止等待工具不会启服务；无效提示的失败记录也能安全显示', () async {
     final h = await ToolLoopHarness.create();
-    final assistants = await h.container.read(
-      assistantRepositoryProvider.future,
-    );
-    final assistant = await assistants.ensureDefault();
-    await assistants.save(
-      assistant.copyWith(
-        toolPolicy: assistant.toolPolicy.withPolicy(
-          'wait_for_user',
-          ToolPolicy.deny,
-        ),
-      ),
-    );
+    await h.controller().setPermissionMode(PermissionMode.plan);
     h.provider.turns.addAll([
       toolTurn(
         callId: 'denied',

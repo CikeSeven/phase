@@ -77,7 +77,7 @@ class ReadSkillTool extends Tool {
   @override
   Set<String> get requiredCapabilities => const {};
   @override
-  ToolPolicy get defaultPolicy => ToolPolicy.ask;
+  ToolPolicy get defaultPolicy => ToolPolicy.allow;
   @override
   String describeAction(Map<String, dynamic> arguments) {
     final id = arguments['skillId'];
@@ -90,7 +90,9 @@ class ReadSkillTool extends Tool {
     if (id == null) return ToolPolicy.deny;
     final assistant = await _assistant();
     if (assistant == null) return ToolPolicy.deny;
-    return assistant.toolPolicy.policies[name] ?? ToolPolicy.ask;
+    return skills.any((skill) => assistant.skillIds.contains(skill.id))
+        ? ToolPolicy.allow
+        : ToolPolicy.deny;
   }
 
   Future<Assistant?> _assistant() async {
@@ -107,9 +109,8 @@ class ReadSkillTool extends Tool {
 
   Future<void> checkAccess(
     SkillSnapshot skill,
-    RunCancellation cancellation, {
-    required bool confirmed,
-  }) async {
+    RunCancellation cancellation,
+  ) async {
     cancellation.throwIfCancelled();
     final installation = await repository.get(skill.id);
     if (installation == null ||
@@ -120,10 +121,6 @@ class ReadSkillTool extends Tool {
     final assistant = await _assistant();
     if (assistant == null || !assistant.skillIds.contains(skill.id)) {
       throw const SkillFailure('skillDenied', '此 Skill 已移出助手的使用范围');
-    }
-    final policy = assistant.toolPolicy.policies[name] ?? ToolPolicy.ask;
-    if (policy == ToolPolicy.deny || (policy == ToolPolicy.ask && !confirmed)) {
-      throw const SkillFailure('policyChanged', 'Skill 读取权限已收紧，本次未返回资源内容');
     }
     cancellation.throwIfCancelled();
   }
@@ -141,7 +138,7 @@ class ReadSkillTool extends Tool {
       if (skill == null) {
         throw const SkillFailure('skillDenied', '此 Skill 不在本次运行的启用范围内');
       }
-      await checkAccess(skill, cancellation, confirmed: context.confirmed);
+      await checkAccess(skill, cancellation);
       final path = skillRelativePath(
         arguments['relativePath'] as String? ?? 'SKILL.md',
       );
@@ -153,7 +150,7 @@ class ReadSkillTool extends Tool {
         cancellation: cancellation,
         linuxAvailable: linuxAvailable,
       );
-      await checkAccess(skill, cancellation, confirmed: context.confirmed);
+      await checkAccess(skill, cancellation);
       return ToolOutcome.success(jsonEncode(result));
     } on SkillFailure catch (error) {
       return ToolOutcome.failure(error.userMessage, errorCode: error.code);

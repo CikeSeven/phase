@@ -12,6 +12,7 @@ import '../datasources/local/attachment_storage.dart';
 import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
+import '../models/permission_mode.dart';
 import '../models/message_part.dart';
 import '../models/model_selection.dart';
 import '../models/tool_call_record.dart';
@@ -84,6 +85,7 @@ class ConversationRepository {
 
   Future<Conversation> createConversation({
     String title = '新会话',
+    PermissionSelection permissions = const PermissionSelection(),
     String? assistantId,
     ModelSelection? modelSelectionOverride,
   }) async {
@@ -93,6 +95,7 @@ class ConversationRepository {
       final conversation = Conversation(
         id: generateId(),
         title: title,
+        permissions: permissions,
         workspaceId: workspace.id,
         assistantId: assistantId,
         modelSelectionOverride: modelSelectionOverride,
@@ -120,6 +123,30 @@ class ConversationRepository {
       );
     });
   }
+
+  Future<void> setPermissionMode(String id, PermissionMode mode) =>
+      _guard('保存权限模式失败', () async {
+        final changed =
+            await (_db.update(
+              _db.conversations,
+            )..where((t) => t.id.equals(id))).write(
+              ConversationsCompanion(
+                permissionMode: Value(mode),
+                lastExecutionMode: mode == PermissionMode.plan
+                    ? const Value.absent()
+                    : Value(mode),
+              ),
+            );
+        if (changed == 0) throw const OperationFailure('会话已不存在');
+      });
+
+  Future<void> setAssistant(String id, String assistantId) =>
+      _guard('保存会话助手失败', () async {
+        final changed =
+            await (_db.update(_db.conversations)..where((t) => t.id.equals(id)))
+                .write(ConversationsCompanion(assistantId: Value(assistantId)));
+        if (changed == 0) throw const OperationFailure('会话已不存在');
+      });
 
   Future<void> setModelSelection(String id, ModelSelection selection) {
     return _guard('保存会话模型失败', () async {
@@ -227,6 +254,7 @@ class ConversationRepository {
         id: generateId(),
         title: '${source.conversation.title}（副本）',
         assistantId: source.conversation.assistantId,
+        permissions: source.conversation.permissions,
         workspaceId: generateId(),
         modelSelectionOverride: source.conversation.modelSelectionOverride,
         createdAt: now,

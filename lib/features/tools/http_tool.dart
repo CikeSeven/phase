@@ -54,7 +54,7 @@ class HttpRequestTool extends Tool {
   Set<String> get requiredCapabilities => const {'network'};
 
   @override
-  ToolPolicy get defaultPolicy => ToolPolicy.ask;
+  ToolPolicy get defaultPolicy => ToolPolicy.allow;
 
   @override
   String describeAction(Map<String, dynamic> arguments) {

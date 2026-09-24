@@ -1,3 +1,5 @@
+import 'package:phase/data/models/chat_chunk.dart';
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -128,12 +130,7 @@ void main() {
         );
         final assistant = await assistants.ensureDefault();
         await assistants.save(
-          assistant.copyWith(
-            toolPolicy: assistant.toolPolicy.withPolicy(
-              model.toolName,
-              ToolPolicy.ask,
-            ),
-          ),
+          assistant.copyWith(mcpToolNames: {model.toolName}),
         );
         var confirmed = 0;
         h.onConfirmation = (request) async {
@@ -141,7 +138,7 @@ void main() {
           return ToolDecision.approved;
         };
         await h.controller().send('读取样本文档');
-        expect(confirmed, 1);
+        expect(confirmed, 0);
         expect(transport.calls, 1);
         expect(model.payloads, hasLength(2));
         expect(jsonEncode(model.payloads.last), contains('月相记录'));
@@ -168,7 +165,7 @@ void main() {
   }
 
   for (final change in ['disable', 'revoke', 'definition', 'allowLater']) {
-    test('等待确认时 $change 不能扩大旧运行或执行已失效定义', () async {
+    test('模型输出期间 $change 不能扩大旧运行或执行已失效定义', () async {
       final transport = McpMemoryTransport();
       final connections = McpConnections(
         createClient: (profile, bearer, headers) => McpHttpClient(
@@ -194,17 +191,14 @@ void main() {
       );
       final assistant = await assistants.ensureDefault();
       await assistants.save(
-        assistant.copyWith(
-          toolPolicy: assistant.toolPolicy.withPolicy(name, ToolPolicy.ask),
-        ),
+        assistant.copyWith(mcpToolNames: change == 'allowLater' ? {} : {name}),
       );
-      h.provider.turns.addAll([
-        toolTurn(callId: 'sample', toolName: name, arguments: '{}'),
-        textTurn('已处理'),
-      ]);
       var confirmations = 0;
       h.onConfirmation = (_) async {
         confirmations++;
+        return ToolDecision.approved;
+      };
+      Stream<ChatChunk> changedTurn() async* {
         switch (change) {
           case 'disable':
             await repository.save(saved.copyWith(enabled: false));
@@ -213,32 +207,25 @@ void main() {
           case 'definition':
             transport.description = '定义发生了变化';
           case 'allowLater':
-            await assistants.save(
-              assistant.copyWith(
-                toolPolicy: assistant.toolPolicy.withPolicy(
-                  name,
-                  ToolPolicy.allow,
-                ),
-              ),
-            );
+            await assistants.save(assistant.copyWith(mcpToolNames: {name}));
         }
-        return ToolDecision.approved;
-      };
+        yield* toolTurn(callId: 'sample', toolName: name, arguments: '{}');
+      }
+
+      h.provider.turns.addAll([changedTurn(), textTurn('已处理')]);
       await h.controller().send('读取');
-      expect(confirmations, 1);
+      expect(confirmations, 0);
       final record = (await h.recordsByCall()).values.single;
-      expect(transport.calls, change == 'allowLater' ? 1 : 0);
+      expect(transport.calls, 0);
       expect(
         record.status,
-        change == 'allowLater'
-            ? ToolCallStatus.succeeded
-            : change == 'definition'
+        change == 'definition'
             ? ToolCallStatus.failed
             : ToolCallStatus.rejected,
       );
       expect(
         (await h.latestRun()).configuration.toolPolicies[name],
-        ToolPolicy.ask,
+        change == 'allowLater' ? isNull : ToolPolicy.allow,
       );
     });
   }
@@ -271,11 +258,7 @@ void main() {
       assistantRepositoryProvider.future,
     );
     final assistant = await assistants.ensureDefault();
-    await assistants.save(
-      assistant.copyWith(
-        toolPolicy: assistant.toolPolicy.withPolicy(name, ToolPolicy.ask),
-      ),
-    );
+    await assistants.save(assistant.copyWith(mcpToolNames: {name}));
     h.onConfirmation = (_) async => ToolDecision.approved;
     h.provider.turns.add(
       toolTurn(callId: 'sample', toolName: name, arguments: '{}'),

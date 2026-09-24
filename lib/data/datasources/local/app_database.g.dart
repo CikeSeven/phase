@@ -1300,17 +1300,17 @@ class $AssistantsTable extends Assistants
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
-  static const VerificationMeta _toolPolicyJsonMeta = const VerificationMeta(
-    'toolPolicyJson',
+  static const VerificationMeta _mcpToolNamesJsonMeta = const VerificationMeta(
+    'mcpToolNamesJson',
   );
   @override
-  late final GeneratedColumn<String> toolPolicyJson = GeneratedColumn<String>(
-    'tool_policy_json',
+  late final GeneratedColumn<String> mcpToolNamesJson = GeneratedColumn<String>(
+    'mcp_tool_names_json',
     aliasedName,
     false,
     type: DriftSqlType.string,
     requiredDuringInsert: false,
-    defaultValue: const Constant('{}'),
+    defaultValue: const Constant('[]'),
   );
   static const VerificationMeta _memoryScopeMeta = const VerificationMeta(
     'memoryScope',
@@ -1353,7 +1353,7 @@ class $AssistantsTable extends Assistants
     name,
     systemPrompt,
     defaultSelectionJson,
-    toolPolicyJson,
+    mcpToolNamesJson,
     memoryScope,
     skillIdsJson,
     createdAt,
@@ -1401,12 +1401,12 @@ class $AssistantsTable extends Assistants
         ),
       );
     }
-    if (data.containsKey('tool_policy_json')) {
+    if (data.containsKey('mcp_tool_names_json')) {
       context.handle(
-        _toolPolicyJsonMeta,
-        toolPolicyJson.isAcceptableOrUnknown(
-          data['tool_policy_json']!,
-          _toolPolicyJsonMeta,
+        _mcpToolNamesJsonMeta,
+        mcpToolNamesJson.isAcceptableOrUnknown(
+          data['mcp_tool_names_json']!,
+          _mcpToolNamesJsonMeta,
         ),
       );
     }
@@ -1461,9 +1461,9 @@ class $AssistantsTable extends Assistants
         DriftSqlType.string,
         data['${effectivePrefix}default_selection_json'],
       ),
-      toolPolicyJson: attachedDatabase.typeMapping.read(
+      mcpToolNamesJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}tool_policy_json'],
+        data['${effectivePrefix}mcp_tool_names_json'],
       )!,
       memoryScope: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -1494,8 +1494,8 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
   /// ModelSelection 的 JSON；未设置默认模型时为 null。
   final String? defaultSelectionJson;
 
-  /// 工具名 → 策略 的 JSON 对象。
-  final String toolPolicyJson;
+  /// 助手选择的 MCP 工具名集合，不包含执行策略。
+  final String mcpToolNamesJson;
   final String memoryScope;
   final String skillIdsJson;
   final DateTime createdAt;
@@ -1504,7 +1504,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     required this.name,
     required this.systemPrompt,
     this.defaultSelectionJson,
-    required this.toolPolicyJson,
+    required this.mcpToolNamesJson,
     required this.memoryScope,
     required this.skillIdsJson,
     required this.createdAt,
@@ -1518,7 +1518,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     if (!nullToAbsent || defaultSelectionJson != null) {
       map['default_selection_json'] = Variable<String>(defaultSelectionJson);
     }
-    map['tool_policy_json'] = Variable<String>(toolPolicyJson);
+    map['mcp_tool_names_json'] = Variable<String>(mcpToolNamesJson);
     map['memory_scope'] = Variable<String>(memoryScope);
     map['skill_ids_json'] = Variable<String>(skillIdsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -1533,7 +1533,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       defaultSelectionJson: defaultSelectionJson == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultSelectionJson),
-      toolPolicyJson: Value(toolPolicyJson),
+      mcpToolNamesJson: Value(mcpToolNamesJson),
       memoryScope: Value(memoryScope),
       skillIdsJson: Value(skillIdsJson),
       createdAt: Value(createdAt),
@@ -1552,7 +1552,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       defaultSelectionJson: serializer.fromJson<String?>(
         json['defaultSelectionJson'],
       ),
-      toolPolicyJson: serializer.fromJson<String>(json['toolPolicyJson']),
+      mcpToolNamesJson: serializer.fromJson<String>(json['mcpToolNamesJson']),
       memoryScope: serializer.fromJson<String>(json['memoryScope']),
       skillIdsJson: serializer.fromJson<String>(json['skillIdsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -1566,7 +1566,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       'name': serializer.toJson<String>(name),
       'systemPrompt': serializer.toJson<String>(systemPrompt),
       'defaultSelectionJson': serializer.toJson<String?>(defaultSelectionJson),
-      'toolPolicyJson': serializer.toJson<String>(toolPolicyJson),
+      'mcpToolNamesJson': serializer.toJson<String>(mcpToolNamesJson),
       'memoryScope': serializer.toJson<String>(memoryScope),
       'skillIdsJson': serializer.toJson<String>(skillIdsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -1578,7 +1578,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     String? name,
     String? systemPrompt,
     Value<String?> defaultSelectionJson = const Value.absent(),
-    String? toolPolicyJson,
+    String? mcpToolNamesJson,
     String? memoryScope,
     String? skillIdsJson,
     DateTime? createdAt,
@@ -1589,7 +1589,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     defaultSelectionJson: defaultSelectionJson.present
         ? defaultSelectionJson.value
         : this.defaultSelectionJson,
-    toolPolicyJson: toolPolicyJson ?? this.toolPolicyJson,
+    mcpToolNamesJson: mcpToolNamesJson ?? this.mcpToolNamesJson,
     memoryScope: memoryScope ?? this.memoryScope,
     skillIdsJson: skillIdsJson ?? this.skillIdsJson,
     createdAt: createdAt ?? this.createdAt,
@@ -1604,9 +1604,9 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       defaultSelectionJson: data.defaultSelectionJson.present
           ? data.defaultSelectionJson.value
           : this.defaultSelectionJson,
-      toolPolicyJson: data.toolPolicyJson.present
-          ? data.toolPolicyJson.value
-          : this.toolPolicyJson,
+      mcpToolNamesJson: data.mcpToolNamesJson.present
+          ? data.mcpToolNamesJson.value
+          : this.mcpToolNamesJson,
       memoryScope: data.memoryScope.present
           ? data.memoryScope.value
           : this.memoryScope,
@@ -1624,7 +1624,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
           ..write('name: $name, ')
           ..write('systemPrompt: $systemPrompt, ')
           ..write('defaultSelectionJson: $defaultSelectionJson, ')
-          ..write('toolPolicyJson: $toolPolicyJson, ')
+          ..write('mcpToolNamesJson: $mcpToolNamesJson, ')
           ..write('memoryScope: $memoryScope, ')
           ..write('skillIdsJson: $skillIdsJson, ')
           ..write('createdAt: $createdAt')
@@ -1638,7 +1638,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     name,
     systemPrompt,
     defaultSelectionJson,
-    toolPolicyJson,
+    mcpToolNamesJson,
     memoryScope,
     skillIdsJson,
     createdAt,
@@ -1651,7 +1651,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
           other.name == this.name &&
           other.systemPrompt == this.systemPrompt &&
           other.defaultSelectionJson == this.defaultSelectionJson &&
-          other.toolPolicyJson == this.toolPolicyJson &&
+          other.mcpToolNamesJson == this.mcpToolNamesJson &&
           other.memoryScope == this.memoryScope &&
           other.skillIdsJson == this.skillIdsJson &&
           other.createdAt == this.createdAt);
@@ -1662,7 +1662,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
   final Value<String> name;
   final Value<String> systemPrompt;
   final Value<String?> defaultSelectionJson;
-  final Value<String> toolPolicyJson;
+  final Value<String> mcpToolNamesJson;
   final Value<String> memoryScope;
   final Value<String> skillIdsJson;
   final Value<DateTime> createdAt;
@@ -1672,7 +1672,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     this.name = const Value.absent(),
     this.systemPrompt = const Value.absent(),
     this.defaultSelectionJson = const Value.absent(),
-    this.toolPolicyJson = const Value.absent(),
+    this.mcpToolNamesJson = const Value.absent(),
     this.memoryScope = const Value.absent(),
     this.skillIdsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1683,7 +1683,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     required String name,
     this.systemPrompt = const Value.absent(),
     this.defaultSelectionJson = const Value.absent(),
-    this.toolPolicyJson = const Value.absent(),
+    this.mcpToolNamesJson = const Value.absent(),
     this.memoryScope = const Value.absent(),
     this.skillIdsJson = const Value.absent(),
     required DateTime createdAt,
@@ -1696,7 +1696,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     Expression<String>? name,
     Expression<String>? systemPrompt,
     Expression<String>? defaultSelectionJson,
-    Expression<String>? toolPolicyJson,
+    Expression<String>? mcpToolNamesJson,
     Expression<String>? memoryScope,
     Expression<String>? skillIdsJson,
     Expression<DateTime>? createdAt,
@@ -1708,7 +1708,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
       if (systemPrompt != null) 'system_prompt': systemPrompt,
       if (defaultSelectionJson != null)
         'default_selection_json': defaultSelectionJson,
-      if (toolPolicyJson != null) 'tool_policy_json': toolPolicyJson,
+      if (mcpToolNamesJson != null) 'mcp_tool_names_json': mcpToolNamesJson,
       if (memoryScope != null) 'memory_scope': memoryScope,
       if (skillIdsJson != null) 'skill_ids_json': skillIdsJson,
       if (createdAt != null) 'created_at': createdAt,
@@ -1721,7 +1721,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     Value<String>? name,
     Value<String>? systemPrompt,
     Value<String?>? defaultSelectionJson,
-    Value<String>? toolPolicyJson,
+    Value<String>? mcpToolNamesJson,
     Value<String>? memoryScope,
     Value<String>? skillIdsJson,
     Value<DateTime>? createdAt,
@@ -1732,7 +1732,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
       name: name ?? this.name,
       systemPrompt: systemPrompt ?? this.systemPrompt,
       defaultSelectionJson: defaultSelectionJson ?? this.defaultSelectionJson,
-      toolPolicyJson: toolPolicyJson ?? this.toolPolicyJson,
+      mcpToolNamesJson: mcpToolNamesJson ?? this.mcpToolNamesJson,
       memoryScope: memoryScope ?? this.memoryScope,
       skillIdsJson: skillIdsJson ?? this.skillIdsJson,
       createdAt: createdAt ?? this.createdAt,
@@ -1757,8 +1757,8 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
         defaultSelectionJson.value,
       );
     }
-    if (toolPolicyJson.present) {
-      map['tool_policy_json'] = Variable<String>(toolPolicyJson.value);
+    if (mcpToolNamesJson.present) {
+      map['mcp_tool_names_json'] = Variable<String>(mcpToolNamesJson.value);
     }
     if (memoryScope.present) {
       map['memory_scope'] = Variable<String>(memoryScope.value);
@@ -1782,7 +1782,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
           ..write('name: $name, ')
           ..write('systemPrompt: $systemPrompt, ')
           ..write('defaultSelectionJson: $defaultSelectionJson, ')
-          ..write('toolPolicyJson: $toolPolicyJson, ')
+          ..write('mcpToolNamesJson: $mcpToolNamesJson, ')
           ..write('memoryScope: $memoryScope, ')
           ..write('skillIdsJson: $skillIdsJson, ')
           ..write('createdAt: $createdAt, ')
@@ -2237,6 +2237,29 @@ class $ConversationsTable extends Conversations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  @override
+  late final GeneratedColumnWithTypeConverter<PermissionMode, String>
+  permissionMode = GeneratedColumn<String>(
+    'permission_mode',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: Constant(PermissionMode.basic.name),
+  ).withConverter<PermissionMode>($ConversationsTable.$converterpermissionMode);
+  @override
+  late final GeneratedColumnWithTypeConverter<PermissionMode, String>
+  lastExecutionMode =
+      GeneratedColumn<String>(
+        'last_execution_mode',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: Constant(PermissionMode.basic.name),
+      ).withConverter<PermissionMode>(
+        $ConversationsTable.$converterlastExecutionMode,
+      );
   static const VerificationMeta _pinnedMeta = const VerificationMeta('pinned');
   @override
   late final GeneratedColumn<bool> pinned = GeneratedColumn<bool>(
@@ -2280,6 +2303,8 @@ class $ConversationsTable extends Conversations
     title,
     currentMessageId,
     selectionJson,
+    permissionMode,
+    lastExecutionMode,
     pinned,
     createdAt,
     updatedAt,
@@ -2400,6 +2425,19 @@ class $ConversationsTable extends Conversations
         DriftSqlType.string,
         data['${effectivePrefix}selection_json'],
       ),
+      permissionMode: $ConversationsTable.$converterpermissionMode.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}permission_mode'],
+        )!,
+      ),
+      lastExecutionMode: $ConversationsTable.$converterlastExecutionMode
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.string,
+              data['${effectivePrefix}last_execution_mode'],
+            )!,
+          ),
       pinned: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}pinned'],
@@ -2419,6 +2457,15 @@ class $ConversationsTable extends Conversations
   $ConversationsTable createAlias(String alias) {
     return $ConversationsTable(attachedDatabase, alias);
   }
+
+  static JsonTypeConverter2<PermissionMode, String, String>
+  $converterpermissionMode = const EnumNameConverter<PermissionMode>(
+    PermissionMode.values,
+  );
+  static JsonTypeConverter2<PermissionMode, String, String>
+  $converterlastExecutionMode = const EnumNameConverter<PermissionMode>(
+    PermissionMode.values,
+  );
 }
 
 class ConversationRow extends DataClass implements Insertable<ConversationRow> {
@@ -2432,6 +2479,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   /// ModelSelection 的 JSON；为空时用助手默认值。
   final String? selectionJson;
+  final PermissionMode permissionMode;
+  final PermissionMode lastExecutionMode;
   final bool pinned;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -2442,6 +2491,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     required this.title,
     this.currentMessageId,
     this.selectionJson,
+    required this.permissionMode,
+    required this.lastExecutionMode,
     required this.pinned,
     required this.createdAt,
     required this.updatedAt,
@@ -2462,6 +2513,18 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     }
     if (!nullToAbsent || selectionJson != null) {
       map['selection_json'] = Variable<String>(selectionJson);
+    }
+    {
+      map['permission_mode'] = Variable<String>(
+        $ConversationsTable.$converterpermissionMode.toSql(permissionMode),
+      );
+    }
+    {
+      map['last_execution_mode'] = Variable<String>(
+        $ConversationsTable.$converterlastExecutionMode.toSql(
+          lastExecutionMode,
+        ),
+      );
     }
     map['pinned'] = Variable<bool>(pinned);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -2485,6 +2548,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       selectionJson: selectionJson == null && nullToAbsent
           ? const Value.absent()
           : Value(selectionJson),
+      permissionMode: Value(permissionMode),
+      lastExecutionMode: Value(lastExecutionMode),
       pinned: Value(pinned),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
@@ -2503,6 +2568,11 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       title: serializer.fromJson<String>(json['title']),
       currentMessageId: serializer.fromJson<String?>(json['currentMessageId']),
       selectionJson: serializer.fromJson<String?>(json['selectionJson']),
+      permissionMode: $ConversationsTable.$converterpermissionMode.fromJson(
+        serializer.fromJson<String>(json['permissionMode']),
+      ),
+      lastExecutionMode: $ConversationsTable.$converterlastExecutionMode
+          .fromJson(serializer.fromJson<String>(json['lastExecutionMode'])),
       pinned: serializer.fromJson<bool>(json['pinned']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
@@ -2518,6 +2588,14 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       'title': serializer.toJson<String>(title),
       'currentMessageId': serializer.toJson<String?>(currentMessageId),
       'selectionJson': serializer.toJson<String?>(selectionJson),
+      'permissionMode': serializer.toJson<String>(
+        $ConversationsTable.$converterpermissionMode.toJson(permissionMode),
+      ),
+      'lastExecutionMode': serializer.toJson<String>(
+        $ConversationsTable.$converterlastExecutionMode.toJson(
+          lastExecutionMode,
+        ),
+      ),
       'pinned': serializer.toJson<bool>(pinned),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
@@ -2531,6 +2609,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     String? title,
     Value<String?> currentMessageId = const Value.absent(),
     Value<String?> selectionJson = const Value.absent(),
+    PermissionMode? permissionMode,
+    PermissionMode? lastExecutionMode,
     bool? pinned,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -2545,6 +2625,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     selectionJson: selectionJson.present
         ? selectionJson.value
         : this.selectionJson,
+    permissionMode: permissionMode ?? this.permissionMode,
+    lastExecutionMode: lastExecutionMode ?? this.lastExecutionMode,
     pinned: pinned ?? this.pinned,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
@@ -2565,6 +2647,12 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
       selectionJson: data.selectionJson.present
           ? data.selectionJson.value
           : this.selectionJson,
+      permissionMode: data.permissionMode.present
+          ? data.permissionMode.value
+          : this.permissionMode,
+      lastExecutionMode: data.lastExecutionMode.present
+          ? data.lastExecutionMode.value
+          : this.lastExecutionMode,
       pinned: data.pinned.present ? data.pinned.value : this.pinned,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
@@ -2580,6 +2668,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
           ..write('title: $title, ')
           ..write('currentMessageId: $currentMessageId, ')
           ..write('selectionJson: $selectionJson, ')
+          ..write('permissionMode: $permissionMode, ')
+          ..write('lastExecutionMode: $lastExecutionMode, ')
           ..write('pinned: $pinned, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
@@ -2595,6 +2685,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     title,
     currentMessageId,
     selectionJson,
+    permissionMode,
+    lastExecutionMode,
     pinned,
     createdAt,
     updatedAt,
@@ -2609,6 +2701,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
           other.title == this.title &&
           other.currentMessageId == this.currentMessageId &&
           other.selectionJson == this.selectionJson &&
+          other.permissionMode == this.permissionMode &&
+          other.lastExecutionMode == this.lastExecutionMode &&
           other.pinned == this.pinned &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
@@ -2621,6 +2715,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   final Value<String> title;
   final Value<String?> currentMessageId;
   final Value<String?> selectionJson;
+  final Value<PermissionMode> permissionMode;
+  final Value<PermissionMode> lastExecutionMode;
   final Value<bool> pinned;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
@@ -2632,6 +2728,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     this.title = const Value.absent(),
     this.currentMessageId = const Value.absent(),
     this.selectionJson = const Value.absent(),
+    this.permissionMode = const Value.absent(),
+    this.lastExecutionMode = const Value.absent(),
     this.pinned = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
@@ -2644,6 +2742,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     required String title,
     this.currentMessageId = const Value.absent(),
     this.selectionJson = const Value.absent(),
+    this.permissionMode = const Value.absent(),
+    this.lastExecutionMode = const Value.absent(),
     this.pinned = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -2659,6 +2759,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Expression<String>? title,
     Expression<String>? currentMessageId,
     Expression<String>? selectionJson,
+    Expression<String>? permissionMode,
+    Expression<String>? lastExecutionMode,
     Expression<bool>? pinned,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
@@ -2671,6 +2773,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
       if (title != null) 'title': title,
       if (currentMessageId != null) 'current_message_id': currentMessageId,
       if (selectionJson != null) 'selection_json': selectionJson,
+      if (permissionMode != null) 'permission_mode': permissionMode,
+      if (lastExecutionMode != null) 'last_execution_mode': lastExecutionMode,
       if (pinned != null) 'pinned': pinned,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
@@ -2685,6 +2789,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Value<String>? title,
     Value<String?>? currentMessageId,
     Value<String?>? selectionJson,
+    Value<PermissionMode>? permissionMode,
+    Value<PermissionMode>? lastExecutionMode,
     Value<bool>? pinned,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
@@ -2697,6 +2803,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
       title: title ?? this.title,
       currentMessageId: currentMessageId ?? this.currentMessageId,
       selectionJson: selectionJson ?? this.selectionJson,
+      permissionMode: permissionMode ?? this.permissionMode,
+      lastExecutionMode: lastExecutionMode ?? this.lastExecutionMode,
       pinned: pinned ?? this.pinned,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -2725,6 +2833,20 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     if (selectionJson.present) {
       map['selection_json'] = Variable<String>(selectionJson.value);
     }
+    if (permissionMode.present) {
+      map['permission_mode'] = Variable<String>(
+        $ConversationsTable.$converterpermissionMode.toSql(
+          permissionMode.value,
+        ),
+      );
+    }
+    if (lastExecutionMode.present) {
+      map['last_execution_mode'] = Variable<String>(
+        $ConversationsTable.$converterlastExecutionMode.toSql(
+          lastExecutionMode.value,
+        ),
+      );
+    }
     if (pinned.present) {
       map['pinned'] = Variable<bool>(pinned.value);
     }
@@ -2749,6 +2871,8 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
           ..write('title: $title, ')
           ..write('currentMessageId: $currentMessageId, ')
           ..write('selectionJson: $selectionJson, ')
+          ..write('permissionMode: $permissionMode, ')
+          ..write('lastExecutionMode: $lastExecutionMode, ')
           ..write('pinned: $pinned, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
@@ -12188,7 +12312,7 @@ typedef $$AssistantsTableCreateCompanionBuilder = AssistantsCompanion Function({
   required String name,
   Value<String> systemPrompt,
   Value<String?> defaultSelectionJson,
-  Value<String> toolPolicyJson,
+  Value<String> mcpToolNamesJson,
   Value<String> memoryScope,
   Value<String> skillIdsJson,
   required DateTime createdAt,
@@ -12199,7 +12323,7 @@ typedef $$AssistantsTableUpdateCompanionBuilder = AssistantsCompanion Function({
   Value<String> name,
   Value<String> systemPrompt,
   Value<String?> defaultSelectionJson,
-  Value<String> toolPolicyJson,
+  Value<String> mcpToolNamesJson,
   Value<String> memoryScope,
   Value<String> skillIdsJson,
   Value<DateTime> createdAt,
@@ -12235,8 +12359,8 @@ class $$AssistantsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get toolPolicyJson => $composableBuilder(
-    column: $table.toolPolicyJson,
+  ColumnFilters<String> get mcpToolNamesJson => $composableBuilder(
+    column: $table.mcpToolNamesJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12285,8 +12409,8 @@ class $$AssistantsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get toolPolicyJson => $composableBuilder(
-    column: $table.toolPolicyJson,
+  ColumnOrderings<String> get mcpToolNamesJson => $composableBuilder(
+    column: $table.mcpToolNamesJson,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -12331,8 +12455,8 @@ class $$AssistantsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get toolPolicyJson => $composableBuilder(
-    column: $table.toolPolicyJson,
+  GeneratedColumn<String> get mcpToolNamesJson => $composableBuilder(
+    column: $table.mcpToolNamesJson,
     builder: (column) => column,
   );
 
@@ -12385,7 +12509,7 @@ class $$AssistantsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> systemPrompt = const Value.absent(),
                 Value<String?> defaultSelectionJson = const Value.absent(),
-                Value<String> toolPolicyJson = const Value.absent(),
+                Value<String> mcpToolNamesJson = const Value.absent(),
                 Value<String> memoryScope = const Value.absent(),
                 Value<String> skillIdsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -12395,7 +12519,7 @@ class $$AssistantsTableTableManager
                 name: name,
                 systemPrompt: systemPrompt,
                 defaultSelectionJson: defaultSelectionJson,
-                toolPolicyJson: toolPolicyJson,
+                mcpToolNamesJson: mcpToolNamesJson,
                 memoryScope: memoryScope,
                 skillIdsJson: skillIdsJson,
                 createdAt: createdAt,
@@ -12407,7 +12531,7 @@ class $$AssistantsTableTableManager
                 required String name,
                 Value<String> systemPrompt = const Value.absent(),
                 Value<String?> defaultSelectionJson = const Value.absent(),
-                Value<String> toolPolicyJson = const Value.absent(),
+                Value<String> mcpToolNamesJson = const Value.absent(),
                 Value<String> memoryScope = const Value.absent(),
                 Value<String> skillIdsJson = const Value.absent(),
                 required DateTime createdAt,
@@ -12417,7 +12541,7 @@ class $$AssistantsTableTableManager
                 name: name,
                 systemPrompt: systemPrompt,
                 defaultSelectionJson: defaultSelectionJson,
-                toolPolicyJson: toolPolicyJson,
+                mcpToolNamesJson: mcpToolNamesJson,
                 memoryScope: memoryScope,
                 skillIdsJson: skillIdsJson,
                 createdAt: createdAt,
@@ -12866,6 +12990,8 @@ typedef $$ConversationsTableCreateCompanionBuilder =
       required String title,
       Value<String?> currentMessageId,
       Value<String?> selectionJson,
+      Value<PermissionMode> permissionMode,
+      Value<PermissionMode> lastExecutionMode,
       Value<bool> pinned,
       required DateTime createdAt,
       required DateTime updatedAt,
@@ -12879,6 +13005,8 @@ typedef $$ConversationsTableUpdateCompanionBuilder =
       Value<String> title,
       Value<String?> currentMessageId,
       Value<String?> selectionJson,
+      Value<PermissionMode> permissionMode,
+      Value<PermissionMode> lastExecutionMode,
       Value<bool> pinned,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
@@ -13072,6 +13200,18 @@ class $$ConversationsTableFilterComposer
   ColumnFilters<String> get selectionJson => $composableBuilder(
     column: $table.selectionJson,
     builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<PermissionMode, PermissionMode, String>
+  get permissionMode => $composableBuilder(
+    column: $table.permissionMode,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<PermissionMode, PermissionMode, String>
+  get lastExecutionMode => $composableBuilder(
+    column: $table.lastExecutionMode,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
   ColumnFilters<bool> get pinned => $composableBuilder(
@@ -13322,6 +13462,16 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get permissionMode => $composableBuilder(
+    column: $table.permissionMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get lastExecutionMode => $composableBuilder(
+    column: $table.lastExecutionMode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get pinned => $composableBuilder(
     column: $table.pinned,
     builder: (column) => ColumnOrderings(column),
@@ -13388,6 +13538,18 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<String> get selectionJson => $composableBuilder(
     column: $table.selectionJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumnWithTypeConverter<PermissionMode, String> get permissionMode =>
+      $composableBuilder(
+        column: $table.permissionMode,
+        builder: (column) => column,
+      );
+
+  GeneratedColumnWithTypeConverter<PermissionMode, String>
+  get lastExecutionMode => $composableBuilder(
+    column: $table.lastExecutionMode,
     builder: (column) => column,
   );
 
@@ -13642,6 +13804,8 @@ class $$ConversationsTableTableManager
                 Value<String> title = const Value.absent(),
                 Value<String?> currentMessageId = const Value.absent(),
                 Value<String?> selectionJson = const Value.absent(),
+                Value<PermissionMode> permissionMode = const Value.absent(),
+                Value<PermissionMode> lastExecutionMode = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
@@ -13653,6 +13817,8 @@ class $$ConversationsTableTableManager
                 title: title,
                 currentMessageId: currentMessageId,
                 selectionJson: selectionJson,
+                permissionMode: permissionMode,
+                lastExecutionMode: lastExecutionMode,
                 pinned: pinned,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
@@ -13666,6 +13832,8 @@ class $$ConversationsTableTableManager
                 required String title,
                 Value<String?> currentMessageId = const Value.absent(),
                 Value<String?> selectionJson = const Value.absent(),
+                Value<PermissionMode> permissionMode = const Value.absent(),
+                Value<PermissionMode> lastExecutionMode = const Value.absent(),
                 Value<bool> pinned = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
@@ -13677,6 +13845,8 @@ class $$ConversationsTableTableManager
                 title: title,
                 currentMessageId: currentMessageId,
                 selectionJson: selectionJson,
+                permissionMode: permissionMode,
+                lastExecutionMode: lastExecutionMode,
                 pinned: pinned,
                 createdAt: createdAt,
                 updatedAt: updatedAt,

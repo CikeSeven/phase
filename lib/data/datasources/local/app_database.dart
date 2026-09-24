@@ -13,6 +13,7 @@ import '../../models/agent_run.dart';
 import '../../models/chat_message.dart';
 import '../../models/tool_call_record.dart';
 import '../../models/tool_policy.dart';
+import '../../models/permission_mode.dart';
 import 'database_key.dart';
 import 'key_store.dart';
 
@@ -75,8 +76,8 @@ class Assistants extends Table {
   /// ModelSelection 的 JSON；未设置默认模型时为 null。
   TextColumn get defaultSelectionJson => text().nullable()();
 
-  /// 工具名 → 策略 的 JSON 对象。
-  TextColumn get toolPolicyJson => text().withDefault(const Constant('{}'))();
+  /// 助手选择的 MCP 工具名集合，不包含执行策略。
+  TextColumn get mcpToolNamesJson => text().withDefault(const Constant('[]'))();
   TextColumn get memoryScope =>
       text().withDefault(const Constant('disabled'))();
   TextColumn get skillIdsJson => text().withDefault(const Constant('[]'))();
@@ -103,6 +104,12 @@ class Conversations extends Table {
 
   /// ModelSelection 的 JSON；为空时用助手默认值。
   TextColumn get selectionJson => text().nullable()();
+  TextColumn get permissionMode => textEnum<PermissionMode>().withDefault(
+    Constant(PermissionMode.basic.name),
+  )();
+  TextColumn get lastExecutionMode => textEnum<PermissionMode>().withDefault(
+    Constant(PermissionMode.basic.name),
+  )();
   BoolColumn get pinned => boolean().withDefault(const Constant(false))();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
@@ -399,51 +406,15 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合。
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    // 用户本次要求覆盖安装：只支持已安装 E5 的 7 → 8，不补历史链。
+    // 本次只更新初版契约；未授权旧设备数据转换，不补开发期升级链。
     onUpgrade: (migrator, from, to) async {
-      if (from != 7 || to != 8) {
-        throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
-      }
-      // 重建父表期间禁止级联；事务内核对全部引用，失败整体回滚。
-      await customStatement('PRAGMA foreign_keys = OFF');
-      try {
-        await transaction(() async {
-          await migrator.createTable(modelRequests);
-          await migrator.createTable(usageArchives);
-          for (final source in const {
-            'messages': 'message',
-            'agent_runs': 'run',
-            'context_summaries': 'summary',
-          }.entries) {
-            await customStatement(
-              'INSERT INTO usage_archives (conversation_id, source_kind, source_id, report_json) '
-              'SELECT conversation_id, ?, id, usage_json FROM ${source.key} WHERE usage_json IS NOT NULL',
-              [source.value],
-            );
-          }
-          await migrator.alterTable(TableMigration(messages));
-          await migrator.alterTable(TableMigration(agentRuns));
-          await migrator.alterTable(
-            TableMigration(
-              contextSummaries,
-              newColumns: [contextSummaries.checkpointJson],
-            ),
-          );
-          if ((await customSelect(
-            'PRAGMA foreign_key_check',
-          ).get()).isNotEmpty) {
-            throw const OperationFailure('升级引用检查失败，已保留原数据');
-          }
-        });
-      } finally {
-        await customStatement('PRAGMA foreign_keys = ON');
-      }
+      throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
     },
     beforeOpen: _prepareDatabase,
   );

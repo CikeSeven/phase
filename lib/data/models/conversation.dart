@@ -1,4 +1,5 @@
 import 'model_selection.dart';
+import 'permission_mode.dart';
 
 /// 一个会话（聊天线程）。
 ///
@@ -15,6 +16,7 @@ class Conversation {
     this.currentMessageId,
     this.modelSelectionOverride,
     this.pinned = false,
+    this.permissions = const PermissionSelection(),
   });
 
   final String id;
@@ -31,6 +33,7 @@ class Conversation {
   final ModelSelection? modelSelectionOverride;
 
   final bool pinned;
+  final PermissionSelection permissions;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -40,6 +43,7 @@ class Conversation {
     String? currentMessageId,
     ModelSelection? modelSelectionOverride,
     bool? pinned,
+    PermissionSelection? permissions,
     DateTime? updatedAt,
   }) {
     return Conversation(
@@ -51,6 +55,7 @@ class Conversation {
       modelSelectionOverride:
           modelSelectionOverride ?? this.modelSelectionOverride,
       pinned: pinned ?? this.pinned,
+      permissions: permissions ?? this.permissions,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
     );

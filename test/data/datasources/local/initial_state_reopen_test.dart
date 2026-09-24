@@ -1,4 +1,4 @@
-import 'package:phase/data/models/agent_plan.dart';
+import 'package:phase/data/models/permission_mode.dart';
 import 'package:phase/data/models/memory_entry.dart';
 import 'package:phase/data/repositories/memory_repository.dart';
 
@@ -103,10 +103,7 @@ void main() {
         profileId: profile.id,
         modelId: 'fixture-model',
       ),
-      toolPolicy: (await assistants.ensureDefault()).toolPolicy.withPolicy(
-        tool.name,
-        ToolPolicy.ask,
-      ),
+      mcpToolNames: {tool.name},
     );
     await assistants.save(assistant);
     final conversations = ConversationRepository(
@@ -114,7 +111,11 @@ void main() {
       workspaces: WorkspaceRepository(db, directory),
     );
     final conversation = await conversations.createConversation(
-      title: '升级前样本',
+      title: '初版重开样本',
+      permissions: const PermissionSelection(
+        mode: PermissionMode.plan,
+        lastExecutionMode: PermissionMode.fullAccess,
+      ),
       assistantId: assistant.id,
     );
     await conversations.appendMessage(
@@ -254,9 +255,19 @@ void main() {
       expect(restored.memoryScope, MemoryScope.disabled);
       expect(
         (await AgentRunRepository(db).getById('run'))!.configuration.mode,
-        AgentMode.execute,
+        PermissionMode.basic,
       );
-      expect(restored.toolPolicy.policies[tool.name], ToolPolicy.ask);
+      expect(restored.mcpToolNames, {tool.name});
+      expect(
+        (await ConversationRepository(
+          db,
+          workspaces: WorkspaceRepository(db, directory),
+        ).getThread(conversation.id))!.conversation.permissions,
+        const PermissionSelection(
+          mode: PermissionMode.plan,
+          lastExecutionMode: PermissionMode.fullAccess,
+        ),
+      );
       expect(
         (await AgentRunRepository(db).getById('run'))!
             .configuration

@@ -1,3 +1,6 @@
+import 'package:phase/data/models/chat_chunk.dart';
+import 'package:phase/data/models/permission_mode.dart';
+
 import 'dart:convert';
 
 import 'package:phase/data/models/chat_request.dart';
@@ -78,8 +81,8 @@ void main() {
     expect((await repository.watch().first).any((e) => e.id == a.id), isFalse);
   });
 
-  for (final decision in [ToolDecision.approved, ToolDecision.rejected]) {
-    test('显式写入默认 ask：${decision.name}，来源与下一轮检索完整', () async {
+  for (final mode in PermissionMode.values) {
+    test('记忆写入服从 ${mode.name}，来源与下一轮检索完整', () async {
       final h = await ToolLoopHarness.create(registry: ToolRegistry([]));
       final assistants = await h.container.read(
         assistantRepositoryProvider.future,
@@ -88,6 +91,7 @@ void main() {
       await assistants.save(
         assistant.copyWith(memoryScope: MemoryScope.assistant),
       );
+      await h.controller().setPermissionMode(mode);
       h.provider.turns.addAll([
         toolTurn(
           callId: 'write',
@@ -104,12 +108,12 @@ void main() {
       var asks = 0;
       h.onConfirmation = (_) async {
         asks++;
-        return decision;
+        return ToolDecision.approved;
       };
       await h.controller().send('记住我喜欢茶');
-      expect(asks, 1);
+      expect(asks, 0);
       final entries = await MemoryRepository(h.database).watch().first;
-      if (decision == ToolDecision.approved) {
+      if (mode != PermissionMode.plan) {
         expect(entries, hasLength(1));
         final run = await h.latestRun();
         expect(entries.single.sourceRunId, run.id);
@@ -163,7 +167,7 @@ void main() {
     expect(replay.content, contains('第二条末尾'));
   });
 
-  test('确认期间收紧作用域立即阻止全局写入，不因模型请求扩大范围', () async {
+  test('模型输出期间收紧作用域立即阻止全局写入，不因模型请求扩大范围', () async {
     final h = await ToolLoopHarness.create(registry: ToolRegistry([]));
     final assistants = await h.container.read(
       assistantRepositoryProvider.future,
@@ -172,20 +176,18 @@ void main() {
     await assistants.save(
       assistant.copyWith(memoryScope: MemoryScope.assistantAndGlobal),
     );
-    h.provider.turns.addAll([
-      toolTurn(
-        callId: 'write',
-        toolName: 'write_memory',
-        arguments: '{"content":"全局偏好","scope":"global"}',
-      ),
-      textTurn('权限不足'),
-    ]);
-    h.onConfirmation = (_) async {
+    Stream<ChatChunk> narrowedScope() async* {
       await assistants.save(
         assistant.copyWith(memoryScope: MemoryScope.assistant),
       );
-      return ToolDecision.approved;
-    };
+      yield* toolTurn(
+        callId: 'write',
+        toolName: 'write_memory',
+        arguments: '{"content":"全局偏好","scope":"global"}',
+      );
+    }
+
+    h.provider.turns.addAll([narrowedScope(), textTurn('范围不足')]);
     await h.controller().send('保存记忆');
     expect(await MemoryRepository(h.database).watch().first, isEmpty);
     expect((await h.recordsByCall())['write']!.status, ToolCallStatus.failed);

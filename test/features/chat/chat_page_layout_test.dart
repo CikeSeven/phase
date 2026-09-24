@@ -1,3 +1,5 @@
+import 'package:phase/data/models/permission_mode.dart';
+
 import 'dart:async';
 import 'dart:io';
 
@@ -303,6 +305,7 @@ class _MemoryConversations implements ConversationRepository {
   @override
   Future<Conversation> createConversation({
     String title = '新会话',
+    PermissionSelection permissions = const PermissionSelection(),
     String? assistantId,
     model.ModelSelection? modelSelectionOverride,
   }) async {
@@ -312,6 +315,7 @@ class _MemoryConversations implements ConversationRepository {
     final conversation = Conversation(
       id: 'created-$createCalls',
       title: title,
+      permissions: permissions,
       assistantId: assistantId,
       modelSelectionOverride: modelSelectionOverride,
       createdAt: DateTime(2026, 9, 9),
@@ -326,6 +330,22 @@ class _MemoryConversations implements ConversationRepository {
   Future<void> updateConversation(Conversation conversation) async {
     final index = items.indexWhere((item) => item.id == conversation.id);
     if (index >= 0) items[index] = conversation;
+    _notify();
+  }
+
+  @override
+  Future<void> setPermissionMode(String id, PermissionMode mode) async {
+    final index = items.indexWhere((item) => item.id == id);
+    items[index] = items[index].copyWith(
+      permissions: items[index].permissions.select(mode),
+    );
+    _notify();
+  }
+
+  @override
+  Future<void> setAssistant(String id, String assistantId) async {
+    final index = items.indexWhere((item) => item.id == id);
+    items[index] = items[index].copyWith(assistantId: assistantId);
     _notify();
   }
 

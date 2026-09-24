@@ -1,14 +1,13 @@
+import 'package:phase/data/models/permission_mode.dart';
+
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
-import 'package:phase/data/models/assistant.dart';
 import 'package:phase/data/models/chat_request.dart';
 import 'package:phase/data/models/message_part.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/tool_call_record.dart';
-import 'package:phase/data/models/tool_policy.dart';
-import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/features/tools/tool.dart';
 
 import 'tool_loop_harness.dart';
@@ -106,24 +105,19 @@ void main() {
     );
   });
 
-  test('空工具范围和显式 deny 不下发定义，收到调用也不执行', () async {
+  test('计划模式不下发未知工具，收到调用也不执行', () async {
     final echo = RecordingTool(name: 'echo');
     final h = await ToolLoopHarness.create(registry: ToolRegistry([echo]));
-    final assistants = AssistantRepository(h.database);
-    final assistant = (await assistants.getAssistants()).single;
-    await assistants.save(
-      assistant.copyWith(
-        toolPolicy: const ToolPolicyConfig(
-          policies: {'read_history': ToolPolicy.deny},
-        ),
-      ),
-    );
+    await h.controller().setPermissionMode(PermissionMode.plan);
     h.provider.turns.addAll([
       toolTurn(callId: 'call', toolName: 'echo', arguments: '{}'),
       textTurn('denied'),
     ]);
     await h.controller().send('try');
-    expect(h.provider.requests.first.tools, isEmpty);
+    expect(
+      h.provider.requests.first.tools.map((t) => t.name),
+      isNot(contains('echo')),
+    );
     expect(echo.executions, isEmpty);
     expect((await h.recordsByCall())['call']!.status, ToolCallStatus.rejected);
     expect(

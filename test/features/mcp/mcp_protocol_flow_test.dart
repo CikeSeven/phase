@@ -6,7 +6,6 @@ import 'package:phase/data/models/agent_run.dart';
 import 'package:phase/data/models/api_protocol.dart';
 import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/tool_call_record.dart';
-import 'package:phase/data/models/tool_policy.dart';
 import 'package:phase/data/models/tool_source.dart';
 import 'package:phase/data/repositories/assistant_repository.dart';
 import 'package:phase/data/repositories/mcp_server_repository.dart';
@@ -85,14 +84,7 @@ void main() {
           assistantRepositoryProvider.future,
         );
         final assistant = await assistants.ensureDefault();
-        await assistants.save(
-          assistant.copyWith(
-            toolPolicy: assistant.toolPolicy.withPolicy(
-              toolName,
-              ToolPolicy.ask,
-            ),
-          ),
-        );
+        await assistants.save(assistant.copyWith(mcpToolNames: {toolName}));
         var confirmations = 0;
         h.onConfirmation = (request) async {
           confirmations++;
@@ -104,7 +96,7 @@ void main() {
             .controller()
             .send('读取样本文档')
             .timeout(const Duration(seconds: 15));
-        expect(confirmations, 1);
+        expect(confirmations, 0);
         expect(mcp.calls, 1);
         expect(payloads, hasLength(2));
         expect(jsonEncode(payloads.first), contains(toolName));
@@ -166,11 +158,7 @@ void main() {
         assistantRepositoryProvider.future,
       );
       final assistant = await assistants.ensureDefault();
-      await assistants.save(
-        assistant.copyWith(
-          toolPolicy: assistant.toolPolicy.withPolicy(name, ToolPolicy.ask),
-        ),
-      );
+      await assistants.save(assistant.copyWith(mcpToolNames: {name}));
       h.onConfirmation = (_) async => ToolDecision.approved;
       h.provider.turns.add(
         toolTurn(callId: 'sample', toolName: name, arguments: '{}'),
