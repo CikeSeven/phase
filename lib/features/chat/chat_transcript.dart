@@ -1,11 +1,14 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
 
+import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/content_expansion_notification.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
+import 'chat_return_to_bottom_button.dart';
 import 'message_bubble.dart';
 
 /// 一条消息的气泡缓存项：记录生成它时的输入，用于判断能否复用。
@@ -71,6 +74,9 @@ class _ChatTranscriptState extends State<ChatTranscript> {
   bool _reconcileScheduled = false;
   bool _programmaticScroll = false;
   bool _showReturnToBottom = false;
+  bool _scrollingTowardLatest = false;
+  bool _returningToBottom = false;
+  int _returnScrollRevision = 0;
 
   /// 本次手势开始时的滚动位置与「是否被拖离尾部」，用于判断松手后
   /// 该不该恢复底部跟随（停在底部上方的回看不应该被拉回去）。
@@ -85,13 +91,27 @@ class _ChatTranscriptState extends State<ChatTranscript> {
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_returningToBottom && AppMotion.reduce(context)) {
+      _cancelReturnToBottom(stopScroll: true);
+      _followTail = true;
+      _scheduleReconcile();
+    }
+  }
+
+  @override
   void didUpdateWidget(covariant ChatTranscript oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.conversationId != widget.conversationId) {
+      _cancelReturnToBottom();
       _readingAnchor = null;
       _followTail = true;
       _userScrolling = false;
       _showReturnToBottom = false;
+      _scrollingTowardLatest = false;
+      _dragStartPixels = null;
+      _draggedAway = false;
     }
     _scheduleReconcile();
   }
@@ -152,7 +172,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       if (!mounted || !_scrollController.hasClients) return;
       final position = _scrollController.position;
       if (!position.hasContentDimensions) return;
-      if (!_userScrolling) {
+      if (!_userScrolling && !_returningToBottom) {
         var target = _followTail ? position.maxScrollExtent : position.pixels;
         final anchor = _readingAnchor;
         _readingAnchor = null;
@@ -176,7 +196,10 @@ class _ChatTranscriptState extends State<ChatTranscript> {
         }
       }
       final showButton =
-          !_followTail && position.extentAfter > _returnButtonThreshold;
+          !_followTail &&
+          !_returningToBottom &&
+          _scrollingTowardLatest &&
+          position.extentAfter > _returnButtonThreshold;
       if (showButton != _showReturnToBottom) {
         setState(() => _showReturnToBottom = showButton);
       }
@@ -184,8 +207,10 @@ class _ChatTranscriptState extends State<ChatTranscript> {
   }
 
   bool _onContentExpansion(ContentExpansionNotification notification) {
+    _cancelReturnToBottom(stopScroll: true);
     _followTail = false;
     _userScrolling = false;
+    _scrollingTowardLatest = false;
     final box = notification.anchor.findRenderObject();
     _readingAnchor = box is RenderBox && box.attached && box.hasSize
         ? (context: notification.anchor, y: box.localToGlobal(Offset.zero).dy)
@@ -196,6 +221,17 @@ class _ChatTranscriptState extends State<ChatTranscript> {
 
   bool _onScroll(ScrollNotification notification) {
     if (notification.depth != 0 || _programmaticScroll) return false;
+    if (_returningToBottom) {
+      final userInput =
+          notification is ScrollStartNotification &&
+              notification.dragDetails != null ||
+          notification is ScrollUpdateNotification &&
+              notification.dragDetails != null ||
+          notification is UserScrollNotification &&
+              notification.direction != ScrollDirection.idle;
+      if (!userInput) return false;
+      _cancelReturnToBottom();
+    }
     if (notification is ScrollStartNotification) {
       _readingAnchor = null;
       _userScrolling = true;
@@ -208,6 +244,15 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       _readingAnchor = null;
       _userScrolling = true;
       _followTail = false;
+      // 正向列表的 reverse 是 offset 增大，即向最新消息滚动。
+      _scrollingTowardLatest =
+          notification.direction == ScrollDirection.reverse;
+    } else if (notification is ScrollUpdateNotification &&
+        _userScrolling &&
+        !notification.metrics.outOfRange) {
+      final delta = notification.scrollDelta ?? 0;
+      // 同时覆盖内层思考/工具滚到边界后移交给外层的滚动。
+      if (delta.abs() > 0.5) _scrollingTowardLatest = delta > 0;
     } else if (notification is ScrollEndNotification && _userScrolling) {
       _userScrolling = false;
       final metrics = notification.metrics;
@@ -219,23 +264,85 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       // 只有停在底部（且整段手势没往上拖）才恢复跟随；停在底部上方的
       // 一小段距离同样算"用户在回看"，不把视图拉回去。
       _followTail = !_draggedAway && metrics.extentAfter <= _bottomThreshold;
+      if (_followTail) _scrollingTowardLatest = false;
       _dragStartPixels = null;
     }
     _scheduleReconcile();
     return false;
   }
 
-  void _returnToBottom() {
+  void _cancelReturnToBottom({bool stopScroll = false}) {
+    if (!_returningToBottom) return;
+    _returnScrollRevision++;
+    _returningToBottom = false;
+    _followTail = false;
+    if (stopScroll && _scrollController.hasClients) {
+      _programmaticScroll = true;
+      _scrollController.jumpTo(_scrollController.position.pixels);
+      _programmaticScroll = false;
+    }
+  }
+
+  bool _ownsReturnScroll(int revision, ScrollPosition position) =>
+      mounted &&
+      _returningToBottom &&
+      revision == _returnScrollRevision &&
+      _scrollController.hasClients &&
+      identical(position, _scrollController.position);
+
+  Future<void> _returnToBottom() async {
+    if (_returningToBottom || !_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (!position.hasContentDimensions) return;
     _readingAnchor = null;
-    _followTail = true;
     _userScrolling = false;
-    _scheduleReconcile();
+    _scrollingTowardLatest = false;
+    _dragStartPixels = null;
+    _draggedAway = false;
     setState(() => _showReturnToBottom = false);
+    if (AppMotion.reduce(context)) {
+      _followTail = true;
+      _scheduleReconcile();
+      return;
+    }
+
+    _followTail = false;
+    _returningToBottom = true;
+    final revision = ++_returnScrollRevision;
+    var firstLeg = true;
+    try {
+      while (_ownsReturnScroll(revision, position)) {
+        final distance = position.extentAfter;
+        if (distance <= 1) {
+          _followTail = true;
+          break;
+        }
+        final screens = distance / math.max(1, position.viewportDimension);
+        final milliseconds = firstLeg
+            ? (420 + math.sqrt(screens) * 110).round().clamp(420, 820)
+            : (screens * 160).round().clamp(100, 260);
+        await position.animateTo(
+          position.maxScrollExtent,
+          duration: Duration(milliseconds: milliseconds),
+          curve: firstLeg
+              ? Curves.easeInOutCubicEmphasized
+              : Curves.easeOutCubic,
+        );
+        if (!_ownsReturnScroll(revision, position)) return;
+        // 等待惰性消息布局更新实际尾端，剩余距离继续缓停，而不是最后跳一下。
+        await WidgetsBinding.instance.endOfFrame;
+        firstLeg = false;
+      }
+    } finally {
+      if (mounted && revision == _returnScrollRevision) {
+        _returningToBottom = false;
+        _scheduleReconcile();
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final indices = {
       for (var index = 0; index < widget.messages.length; index++)
         ValueKey(widget.messages[index].id): index,
@@ -260,40 +367,34 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                   onNotification: _onScroll,
                   child: NotificationListener<ContentExpansionNotification>(
                     onNotification: _onContentExpansion,
-                    child: ListView.builder(
-                      key: ValueKey('transcript-${widget.conversationId}'),
-                      controller: _scrollController,
-                      padding: EdgeInsets.only(
-                        top: AppSpacing.m + widget.topPadding,
-                        bottom: AppSpacing.m + widget.bottomPadding,
+                    child: Listener(
+                      // 手指按下即撤销续滚，避免 animateTo 完成后再次抢走手势。
+                      onPointerDown: (_) => _cancelReturnToBottom(),
+                      child: ListView.builder(
+                        key: ValueKey('transcript-${widget.conversationId}'),
+                        controller: _scrollController,
+                        padding: EdgeInsets.only(
+                          top: AppSpacing.m + widget.topPadding,
+                          bottom: AppSpacing.m + widget.bottomPadding,
+                        ),
+                        itemCount: widget.messages.length,
+                        findChildIndexCallback: (key) => indices[key],
+                        itemBuilder: (context, index) => _bubble(index),
                       ),
-                      itemCount: widget.messages.length,
-                      findChildIndexCallback: (key) => indices[key],
-                      itemBuilder: (context, index) => _bubble(index),
                     ),
                   ),
                 ),
               ),
             ),
-            if (_showReturnToBottom)
-              Positioned(
-                right: AppSpacing.l,
-                bottom: AppSpacing.m + widget.bottomPadding,
-                child: IconButton.filledTonal(
-                  key: const ValueKey('chat-scroll-to-bottom'),
-                  tooltip: '回到底部',
-                  onPressed: _returnToBottom,
-                  icon: const Icon(Symbols.arrow_downward),
-                  style: IconButton.styleFrom(
-                    fixedSize: const Size.square(48),
-                    backgroundColor: colors.surfaceContainerHigh,
-                    foregroundColor: colors.onSurface,
-                    side: BorderSide(
-                      color: colors.outlineVariant.withValues(alpha: 0.56),
-                    ),
-                  ),
-                ),
+            Positioned(
+              right: AppSpacing.l,
+              bottom: AppSpacing.m + widget.bottomPadding,
+              child: ChatReturnToBottomButton(
+                key: ValueKey('return-to-bottom-${widget.conversationId}'),
+                visible: _showReturnToBottom,
+                onPressed: _returnToBottom,
               ),
+            ),
           ],
         ),
       ),
