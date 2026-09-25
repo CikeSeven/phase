@@ -109,6 +109,43 @@ class ExternalCommandEvent {
   bool terminationAcknowledged;
 }
 
+enum WorkspaceFileOperation {
+  stat,
+  list,
+  readPage,
+  ensure,
+  importPath,
+  exportPath,
+  deleteRoot,
+}
+
+class WorkspaceFileRequest {
+  WorkspaceFileRequest({
+    required this.ownerId,
+    required this.callId,
+    required this.workspaceId,
+    required this.revision,
+    required this.uid,
+    required this.operation,
+    required this.path,
+    this.offset = 0,
+    this.limit = 2000,
+    this.localPath,
+    this.expectedDigest,
+  });
+  String ownerId;
+  String callId;
+  String workspaceId;
+  String revision;
+  int uid;
+  WorkspaceFileOperation operation;
+  String path;
+  int offset;
+  int limit;
+  String? localPath;
+  String? expectedDigest;
+}
+
 @HostApi()
 abstract class CommandChannelHostApi {
   @async
@@ -122,6 +159,8 @@ abstract class CommandChannelHostApi {
   void setEnabled(List<String> channels);
   @async
   void start(ExternalCommandSpec spec);
+  @async
+  void workspaceFile(WorkspaceFileRequest request);
   @async
   void transfer(ChannelTransferSpec spec);
   @async

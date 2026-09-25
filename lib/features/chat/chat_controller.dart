@@ -1,3 +1,6 @@
+import '../workspace/workspace_controller.dart';
+import '../../../data/models/workspace.dart';
+import '../workspace/workspace_transfer_tool.dart';
 import '../../../data/models/command_channel.dart';
 import '../commands/command_channel_driver.dart';
 import '../commands/command_channels_controller.dart';
@@ -170,6 +173,7 @@ class ChatState {
     ActiveConversation,
     settingsStorage,
     modelCatalog,
+    DefaultPrimaryEnvironment,
   ],
 )
 class ChatController extends _$ChatController implements AgentLoopHost {
@@ -250,6 +254,33 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     return const ChatState();
   }
 
+  ExecutionChannel _toolChannel(String name, Map<String, dynamic> arguments) {
+    if (_run?.configuration.workspace?.primaryEnvironment ==
+            PrimaryEnvironment.termux &&
+        {
+          'read_file',
+          'list_files',
+          'write_file',
+          'edit_file',
+          'prepare_skill',
+          'workspace_transfer',
+        }.contains(name) &&
+        !(arguments['path'] is String &&
+            (arguments['path'] as String).startsWith('content://')) &&
+        !arguments.containsKey('directory') &&
+        !(arguments['path'] is String &&
+            (arguments['path'] as String).startsWith('attachment:'))) {
+      return ExecutionChannel.termux;
+    }
+    return _registry?.byName(name)?.channel ?? ExecutionChannel.app;
+  }
+
+  bool _workspaceToolAvailable(String name, WorkspaceSnapshot? workspace) =>
+      name == 'install_packages'
+      ? workspace?.primaryEnvironment == PrimaryEnvironment.ubuntu &&
+            workspace?.linuxAvailable == true
+      : workspace?.executable == true;
+
   Future<void> setPermissionMode(PermissionMode mode) async {
     if (_busy || state.isGenerating || state.savingPermissionMode) {
       throw const OperationFailure('请先结束当前操作再切换权限模式');
@@ -274,7 +305,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
   void _checkPermissionSave() {
     if (state.savingPermissionMode) {
-      throw const OperationFailure('权限模式正在保存，请稍后重试');
+      throw const OperationFailure('会话设置正在保存，请稍后重试');
     }
   }
 
@@ -458,8 +489,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       throw const OperationFailure('计划模式需要支持工具调用的模型');
     }
     if (conversationId == null) {
+      final primaryEnvironment = await ref
+          .read(defaultPrimaryEnvironmentProvider.notifier)
+          .forNewConversation();
+      if (revision != _viewRevision) {
+        throw const OperationFailure('会话已切换，请重新发送');
+      }
       final conversation = await repository.createConversation(
         permissions: permissions,
+        primaryEnvironment: primaryEnvironment,
         assistantId: assistant?.id,
         modelSelectionOverride: ref
             .read(activeConversationProvider)
@@ -655,6 +693,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         throw const OperationFailure('计划来源执行档位无效，请重新规划');
       }
       if (revision != _viewRevision) throw const OperationFailure('会话已切换');
+      final plannedThread = await (await ref.read(
+        conversationRepositoryProvider.future,
+      )).getThread(plan.conversationId);
+      if (plannedThread?.conversation.primaryEnvironment !=
+          source.configuration.workspace?.primaryEnvironment) {
+        throw const OperationFailure('会话环境与计划记录不一致，请重新规划');
+      }
       await _startRun(
         repository: await ref.read(conversationRepositoryProvider.future),
         conversationId: plan.conversationId,
@@ -712,7 +757,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             repository: await ref.read(skillRepositoryProvider.future),
             assistants: await ref.read(assistantRepositoryProvider.future),
             assistantId: assistant?.id,
-            linuxAvailable: workspace?.linuxAvailable == true,
+            linuxAvailable: workspace?.executable == true,
           );
     final commandChannels =
         selection.supportsTools && mode != PermissionMode.plan
@@ -721,7 +766,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final registry = ToolRegistry([
       ...extra,
       for (final channel in commandChannels) ...[
-        ExternalShellTool(channel, ref.read(commandChannelDriverProvider)),
+        if (channel.channel == ExecutionChannel.shizuku)
+          ExternalShellTool(channel, ref.read(commandChannelDriverProvider)),
         if (workspace != null)
           ChannelTransferTool(
             channel,
@@ -730,10 +776,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             workspaces,
           ),
       ],
-      ...ref.read(toolRegistryProvider).tools,
+      for (final tool in ref.read(toolRegistryProvider).tools)
+        if (tool is ShellTool) ShellTool(workspace: workspace) else tool,
+      if (workspace?.termux != null && mode != PermissionMode.plan)
+        WorkspaceTransferTool(workspace!, WorkspaceFiles(workspaces)),
       ?skillTool,
       if (skillTool != null &&
-          workspace?.linuxAvailable == true &&
+          workspace?.executable == true &&
           mode != PermissionMode.plan)
         PrepareSkillTool(skillTool, workspace!, WorkspaceFiles(workspaces)),
     ]);
@@ -742,14 +791,14 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             ...registry.tools.map((t) => t.name),
             ...?assistant?.mcpToolNames,
             if (skillTool != null) 'read_skill',
-            if (skillTool != null && workspace?.linuxAvailable == true)
+            if (skillTool != null && workspace?.executable == true)
               'prepare_skill',
           }
         : <String>{};
     enabled.removeWhere(
       (name) =>
           (_environmentTools.contains(name) &&
-              workspace?.linuxAvailable != true) ||
+              !_workspaceToolAvailable(name, workspace)) ||
           (name == 'capture_screen' && !selection.supportsImages) ||
           (mode == PermissionMode.plan &&
               (registry.byName(name) == null ||
@@ -1011,10 +1060,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               repository: await ref.read(skillRepositoryProvider.future),
               assistants: await ref.read(assistantRepositoryProvider.future),
               assistantId: assistant?.id,
-              linuxAvailable: workspace?.linuxAvailable == true,
+              linuxAvailable: workspace?.executable == true,
             );
-      final prepareSkill =
-          skillTool == null || workspace?.linuxAvailable != true
+      final prepareSkill = skillTool == null || workspace?.executable != true
           ? null
           : PrepareSkillTool(
               skillTool,
@@ -1024,8 +1072,14 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               ),
             );
       final channelTools = <Tool>[
+        if (workspace?.termux != null && mode != PermissionMode.plan)
+          WorkspaceTransferTool(
+            workspace!,
+            WorkspaceFiles(await ref.read(workspaceRepositoryProvider.future)),
+          ),
         for (final channel in commandChannels) ...[
-          ExternalShellTool(channel, ref.read(commandChannelDriverProvider)),
+          if (channel.channel == ExecutionChannel.shizuku)
+            ExternalShellTool(channel, ref.read(commandChannelDriverProvider)),
           if (workspace != null)
             ChannelTransferTool(
               channel,
@@ -1044,8 +1098,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           if ((mode != PermissionMode.plan || allowedInPlan(tool)) &&
               enabled.contains(tool.name) &&
               (!_environmentTools.contains(tool.name) ||
-                  workspace?.linuxAvailable == true))
-            tool.snapshot,
+                  _workspaceToolAvailable(tool.name, workspace)))
+            tool is ShellTool
+                ? ShellTool(workspace: workspace).snapshot
+                : tool.snapshot,
         for (final entry in mcpEntries)
           if (entry.profile.enabled && !entry.profile.deleting)
             for (final tool in entry.tools)
@@ -1174,7 +1230,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             repository: await ref.read(skillRepositoryProvider.future),
             assistants: await ref.read(assistantRepositoryProvider.future),
             assistantId: run.assistantId,
-            linuxAvailable: run.configuration.workspace?.linuxAvailable == true,
+            linuxAvailable: run.configuration.workspace?.executable == true,
           );
     final binding = run.configuration.workspace;
     final workspaceRepository = binding == null
@@ -1183,7 +1239,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final workspaceFiles = workspaceRepository == null
         ? null
         : WorkspaceFiles(workspaceRepository);
-    final commandDriver = run.configuration.commandChannels.isEmpty
+    final commandDriver =
+        run.configuration.commandChannels.isEmpty && binding?.termux == null
         ? null
         : ref.read(commandChannelDriverProvider);
     if (commandDriver != null) {
@@ -1191,8 +1248,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         ref.read(settingsStorageProvider).readCommandChannels().channels,
       );
     }
-    final processDriver =
-        binding?.linuxAvailable != true && commandDriver == null
+    final processDriver = binding?.executable != true && commandDriver == null
         ? null
         : ref.read(processDriverProvider);
     final agentTools = selection.supportsTools
@@ -1206,11 +1262,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final registry = ToolRegistry([
       ...agentTools,
       for (final channel in run.configuration.commandChannels) ...[
-        ExternalShellTool(channel, commandDriver!),
+        if (channel.channel == ExecutionChannel.shizuku)
+          ExternalShellTool(channel, commandDriver!),
         if (binding != null)
           ChannelTransferTool(
             channel,
-            commandDriver,
+            commandDriver!,
             binding,
             workspaceRepository!,
           ),
@@ -1218,19 +1275,24 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       for (final tool in base.tools)
         if (!_environmentTools.contains(tool.name))
           if (tool is WaitForUserTool) WaitForUserTool(_waitForUser) else tool,
-      if (binding?.linuxAvailable == true)
+      if (binding?.executable == true)
         ShellTool(
           workspace: binding,
           driver: processDriver,
           files: workspaceFiles,
+          commandDriver: commandDriver,
         ),
-      if (binding?.linuxAvailable == true)
+      if (binding?.primaryEnvironment == PrimaryEnvironment.ubuntu &&
+          binding?.linuxAvailable == true)
         InstallTool(
           workspace: binding,
           repository: workspaceRepository,
           driver: processDriver,
         ),
-      if (binding?.linuxAvailable == true && skillTool != null)
+      if (binding?.termux != null &&
+          run.configuration.mode != PermissionMode.plan)
+        WorkspaceTransferTool(binding!, WorkspaceFiles(workspaceRepository!)),
+      if (binding?.executable == true && skillTool != null)
         PrepareSkillTool(skillTool, binding!, workspaceFiles!),
       ...?mcp?.tools(),
       ?skillTool,
@@ -1787,8 +1849,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           target: _registry!
               .byName(call.toolName)
               ?.describeAction(call.arguments),
-          channel:
-              _registry!.byName(call.toolName)?.channel ?? ExecutionChannel.app,
+          channel: _toolChannel(call.toolName, call.arguments),
           defaultPolicy:
               _registry!.byName(call.toolName)?.defaultPolicy ??
               ToolPolicy.deny,
@@ -1854,8 +1915,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final repository = _repository!;
 
     if (call.recordId == null) throw const OperationFailure('调用尚未持久化，不能执行');
-    final channel =
-        _registry!.byName(call.toolName)?.channel ?? ExecutionChannel.app;
+    final channel = _toolChannel(call.toolName, call.arguments);
     final executed = await _executor!.execute(
       ToolExecutionRequest(
         runId: run.id,
@@ -1866,6 +1926,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         conversationId: run.conversationId,
         attachments: await _storage!.attachments(run.conversationId),
         workspaceDirectory: run.configuration.workspace?.rootPath ?? '',
+        fileAccess: run.configuration.workspace == null
+            ? null
+            : (await ref.read(workspaceRepositoryProvider.future))
+                  .files(run.configuration.workspace!, ownerId: run.id),
         storage: _storage!,
         enabledTools: run.configuration.enabledTools,
         toolPolicies: run.configuration.toolPolicies,

@@ -10,6 +10,7 @@ import '../../../data/models/provider_profile.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_source.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/workspace.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import '../../tools/tool.dart';
@@ -37,6 +38,7 @@ class HistoryResolver {
     required String currentModelId,
   }) async {
     final records = await historyRecords(repository, messages);
+    final sourceRuns = <String, AgentRun?>{};
     final visualImageRecords = <String>{};
     String? visualImageTurn;
     for (final part
@@ -65,6 +67,31 @@ class HistoryResolver {
         final record = records[part.toolCallId];
         final callId = record?.providerCallId;
         if (record == null || callId == null) continue;
+        var environmentPrefix = '';
+        final path = record.arguments['path'];
+        if (record.source?.kind != ToolSourceKind.mcp &&
+            const {
+              'read_file',
+              'list_files',
+              'write_file',
+              'edit_file',
+              'prepare_skill',
+            }.contains(record.toolName) &&
+            !(path is String &&
+                (path.startsWith('content://') ||
+                    path.startsWith('attachment:'))) &&
+            !record.arguments.containsKey('directory')) {
+          if (!sourceRuns.containsKey(record.runId)) {
+            sourceRuns[record.runId] = await runs.getById(record.runId);
+          }
+          final environment = sourceRuns[record.runId]
+              ?.configuration
+              .workspace
+              ?.primaryEnvironment;
+          if (environment != null) {
+            environmentPrefix = '[本次调用工作区：${environment.label}]\n';
+          }
+        }
         results[part.toolCallId] = ResolvedToolResult(
           recordId: record.id,
           status: record.status.name,
@@ -82,12 +109,14 @@ class HistoryResolver {
                     if (attachments[id]?.isImage == true) attachments[id]!,
                 ]
               : const [],
-          content: truncateToolResult(
-            message.text.isNotEmpty
-                ? message.text
-                : (record.result ?? toolStatusText(record.status)),
-            limit: toolResultLimit(record),
-          ),
+          content:
+              environmentPrefix +
+              truncateToolResult(
+                message.text.isNotEmpty
+                    ? message.text
+                    : (record.result ?? toolStatusText(record.status)),
+                limit: toolResultLimit(record),
+              ),
           artifactIds: record.artifacts,
           isError: record.status != ToolCallStatus.succeeded,
         );
@@ -95,7 +124,6 @@ class HistoryResolver {
     }
 
     final resolved = <ResolvedMessage>[];
-    final sourceRuns = <String, AgentRun?>{};
     for (final message in messages) {
       // 被中断（停止生成）或出错收场的那一轮：已经产出的正文、已经执行的调用与
       // 结果照常进上下文——用户看到的和模型知道的要对得上，否则模型不知道文件

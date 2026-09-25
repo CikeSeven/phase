@@ -113,6 +113,16 @@ int _deepHash(Object? value) {
 
 enum CommandEventKind { stdout, stderr, progress, exited }
 
+enum WorkspaceFileOperation {
+  stat,
+  list,
+  readPage,
+  ensure,
+  importPath,
+  exportPath,
+  deleteRoot,
+}
+
 class CommandChannelStatus {
   CommandChannelStatus({
     required this.channel,
@@ -500,6 +510,112 @@ class ExternalCommandEvent {
   }
 }
 
+class WorkspaceFileRequest {
+  WorkspaceFileRequest({
+    required this.ownerId,
+    required this.callId,
+    required this.workspaceId,
+    required this.revision,
+    required this.uid,
+    required this.operation,
+    required this.path,
+    this.offset = 0,
+    this.limit = 2000,
+    this.localPath,
+    this.expectedDigest,
+  });
+
+  String ownerId;
+
+  String callId;
+
+  String workspaceId;
+
+  String revision;
+
+  int uid;
+
+  WorkspaceFileOperation operation;
+
+  String path;
+
+  int offset;
+
+  int limit;
+
+  String? localPath;
+
+  String? expectedDigest;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      ownerId,
+      callId,
+      workspaceId,
+      revision,
+      uid,
+      operation,
+      path,
+      offset,
+      limit,
+      localPath,
+      expectedDigest,
+    ];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static WorkspaceFileRequest decode(Object result) {
+    result as List<Object?>;
+    return WorkspaceFileRequest(
+      ownerId: result[0]! as String,
+      callId: result[1]! as String,
+      workspaceId: result[2]! as String,
+      revision: result[3]! as String,
+      uid: result[4]! as int,
+      operation: result[5]! as WorkspaceFileOperation,
+      path: result[6]! as String,
+      offset: result[7]! as int,
+      limit: result[8]! as int,
+      localPath: result[9] as String?,
+      expectedDigest: result[10] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! WorkspaceFileRequest || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(ownerId, other.ownerId) &&
+        _deepEquals(callId, other.callId) &&
+        _deepEquals(workspaceId, other.workspaceId) &&
+        _deepEquals(revision, other.revision) &&
+        _deepEquals(uid, other.uid) &&
+        _deepEquals(operation, other.operation) &&
+        _deepEquals(path, other.path) &&
+        _deepEquals(offset, other.offset) &&
+        _deepEquals(limit, other.limit) &&
+        _deepEquals(localPath, other.localPath) &&
+        _deepEquals(expectedDigest, other.expectedDigest);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'WorkspaceFileRequest(ownerId: $ownerId, callId: $callId, workspaceId: $workspaceId, revision: $revision, uid: $uid, operation: $operation, path: $path, offset: $offset, limit: $limit, localPath: $localPath, expectedDigest: $expectedDigest)';
+  }
+}
+
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
   @override
@@ -510,17 +626,23 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is CommandEventKind) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    } else if (value is CommandChannelStatus) {
+    } else if (value is WorkspaceFileOperation) {
       buffer.putUint8(130);
-      writeValue(buffer, value.encode());
-    } else if (value is ExternalCommandSpec) {
+      writeValue(buffer, value.index);
+    } else if (value is CommandChannelStatus) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    } else if (value is ChannelTransferSpec) {
+    } else if (value is ExternalCommandSpec) {
       buffer.putUint8(132);
       writeValue(buffer, value.encode());
-    } else if (value is ExternalCommandEvent) {
+    } else if (value is ChannelTransferSpec) {
       buffer.putUint8(133);
+      writeValue(buffer, value.encode());
+    } else if (value is ExternalCommandEvent) {
+      buffer.putUint8(134);
+      writeValue(buffer, value.encode());
+    } else if (value is WorkspaceFileRequest) {
+      buffer.putUint8(135);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -534,13 +656,18 @@ class _PigeonCodec extends StandardMessageCodec {
         final value = readValue(buffer) as int?;
         return value == null ? null : CommandEventKind.values[value];
       case 130:
-        return CommandChannelStatus.decode(readValue(buffer)!);
+        final value = readValue(buffer) as int?;
+        return value == null ? null : WorkspaceFileOperation.values[value];
       case 131:
-        return ExternalCommandSpec.decode(readValue(buffer)!);
+        return CommandChannelStatus.decode(readValue(buffer)!);
       case 132:
-        return ChannelTransferSpec.decode(readValue(buffer)!);
+        return ExternalCommandSpec.decode(readValue(buffer)!);
       case 133:
+        return ChannelTransferSpec.decode(readValue(buffer)!);
+      case 134:
         return ExternalCommandEvent.decode(readValue(buffer)!);
+      case 135:
+        return WorkspaceFileRequest.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -674,6 +801,26 @@ class CommandChannelHostApi {
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
       <Object?>[spec],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<void> workspaceFile(WorkspaceFileRequest request) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.workspaceFile$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[request],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 

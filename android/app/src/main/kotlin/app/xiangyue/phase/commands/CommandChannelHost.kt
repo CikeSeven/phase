@@ -176,6 +176,64 @@ class CommandChannelHost(
             }
         }
     }
+    private val workspaceLock = Mutex()
+    override suspend fun workspaceFile(request: WorkspaceFileRequest) {
+        validate(request.ownerId, request.callId, "termux", request.revision, request.uid)
+        require(idPattern.matches(request.workspaceId))
+        require(request.path.isNotBlank() && !request.path.startsWith('/') &&
+            request.path.split('/').none { it == ".." } && '\u0000' !in request.path && '\\' !in request.path)
+        require(request.offset >= 0 && request.limit in 1..2000)
+        val base = "${TermuxTransport.HOME}/.phase/workspaces"
+        val root = "$base/${request.workspaceId}"
+        val relative = request.path.split('/').filter { it.isNotEmpty() && it != "." }.joinToString("/")
+        val workspacePath = if (relative.isEmpty()) root else "$root/$relative"
+        fun args(operation: String, path: String = request.path) = listOf(
+            "workspace", base, request.workspaceId, operation, path,
+            request.offset.toString(), request.limit.toString(), request.callId, request.expectedDigest ?: "")
+        register(request.ownerId, request.callId, "termux") { op ->
+            workspaceLock.withLock {
+                op.check()
+                suspend fun run(operation: String): Bundle {
+                    // Direct exec of the fixed helper under the same cancellable supervisor.
+                    return termuxCommand(ExternalCommandSpec(request.ownerId, request.callId,
+                        "termux", request.revision, request.uid, "", TermuxTransport.HOME, 128 * 1024), op, args(operation))
+                }
+                when (request.operation) {
+                    WorkspaceFileOperation.STAT -> run("stat")
+                    WorkspaceFileOperation.LIST -> run("list")
+                    WorkspaceFileOperation.READ_PAGE -> run("page")
+                    WorkspaceFileOperation.ENSURE -> run("ensure")
+                    WorkspaceFileOperation.DELETE_ROOT -> { require(request.path == "."); run("deleteRoot") }
+                    WorkspaceFileOperation.IMPORT_PATH, WorkspaceFileOperation.EXPORT_PATH -> {
+                        val local = File(requireNotNull(request.localPath)).canonicalFile
+                        val staging = File(context.noBackupFilesDir, "linux/staging").canonicalPath + "/"
+                        require(local.path.startsWith(staging))
+                        val sending = request.operation == WorkspaceFileOperation.IMPORT_PATH
+                        val isFile = sending && local.isFile
+                        if (sending) termux.call(args(if (isFile) "stage" else "ensure", "."))
+                        op.check()
+                        val remote = if (isFile) "$base/.staging/${request.workspaceId}/${request.callId}" else workspacePath
+                        val spec = ChannelTransferSpec(request.ownerId, request.callId, "termux",
+                            request.revision, request.uid, local.parent!!, local.name, remote,
+                            sending, 64L * 1024 * 1024, 256L * 1024 * 1024, 1000)
+                        try {
+                            val report = termuxTransfer(spec, local, op)
+                            op.check()
+                            if (isFile) run("commit") else {
+                                op.emit(CommandEventKind.STDOUT, "{\"version\":1,\"ok\":true}".toByteArray())
+                                report.apply { putInt("exitCode", 0) }
+                            }
+                        } finally {
+                            if (isFile) withContext(NonCancellable) {
+                                runCatching { withTimeout(5000) { termux.call(args("discard", ".")) } }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     override suspend fun start(spec: ExternalCommandSpec) {
         validate(spec.ownerId, spec.callId, spec.channel, spec.revision, spec.uid)
         require(spec.command.toByteArray().size <= 120 * 1024 && '\u0000' !in spec.command && spec.cwd.startsWith('/') && '\u0000' !in spec.cwd && spec.outputLimitBytes in 1..(64L * 1024 * 1024))
@@ -217,15 +275,17 @@ class CommandChannelHost(
             a.await(); b.await(); final
         } finally { monitor.cancel(); runCatching { stdout[1].close() }; runCatching { stderr[1].close() }; op.close() }
     }
-    private suspend fun termuxCommand(spec: ExternalCommandSpec, op: Operation): Bundle {
+    private suspend fun termuxCommand(spec: ExternalCommandSpec, op: Operation, workspaceArgs: List<String>? = null): Bundle {
         val token = TermuxResults.token()
         val identity = listOf(TermuxTransport.JOBS, op.call, token)
         var started: TermuxRequest? = null
         var settled = false
         op.stopAction = { termux.call(listOf("cancel") + identity) }
         try {
-            termux.call(listOf("prepare") + identity + listOf(spec.cwd, "${TermuxTransport.PREFIX}/bin/bash", TermuxTransport.HOME,
-                "${TermuxTransport.PREFIX}/bin:/system/bin", spec.outputLimitBytes.toString(), (SystemClock.elapsedRealtime() + 30000).toString()), spec.command)
+            termux.call(listOf(if (workspaceArgs == null) "prepare" else "prepare_workspace") + identity +
+                listOf(spec.cwd, if (workspaceArgs == null) "${TermuxTransport.PREFIX}/bin/bash" else termux.executable,
+                    TermuxTransport.HOME, "${TermuxTransport.PREFIX}/bin:/system/bin", spec.outputLimitBytes.toString(),
+                    (SystemClock.elapsedRealtime() + 30000).toString()) + (workspaceArgs ?: emptyList()), spec.command)
             if (op.cancelled) { settled = true; return Bundle().apply { putBoolean("cancelled", true); putBoolean("terminationAcknowledged", true) } }
             op.check()
             started = withContext(Dispatchers.Main) { termux.dispatch(termux.executable, listOf("run") + identity) }
@@ -259,7 +319,7 @@ class CommandChannelHost(
                     val launch = started.result.await()
                     check(launch.error == -1 && launch.exitCode == 0) { "termuxLaunchFailed" }
                 }
-                delay(if (out.isNotEmpty() || err.isNotEmpty()) 10 else 1000)
+                delay(if (out.isNotEmpty() || err.isNotEmpty()) 10 else if (workspaceArgs != null) 25 else 1000)
             }
         } finally {
             if (!settled) runCatching { withTimeout(5000) { op.stopAction() } }
@@ -271,7 +331,8 @@ class CommandChannelHost(
         validate(spec.ownerId, spec.callId, spec.channel, spec.revision, spec.uid)
         val root = File(spec.localRoot).canonicalFile
         val allowed = File(context.noBackupFilesDir, "linux/workspaces").canonicalPath + "/"
-        require(root.path.startsWith(allowed) && root.isDirectory && spec.path.isNotBlank() && !spec.path.startsWith('/') && spec.path.split('/').none { it == ".." } && '\u0000' !in spec.path && '\\' !in spec.path)
+        val staging = File(context.noBackupFilesDir, "linux/staging").canonicalPath + "/workspace-"
+        require((root.path.startsWith(allowed) || root.path.startsWith(staging)) && root.isDirectory && spec.path.isNotBlank() && !spec.path.startsWith('/') && spec.path.split('/').none { it == ".." } && '\u0000' !in spec.path && '\\' !in spec.path)
         val local = File(root, spec.path.split('/').filter { it.isNotEmpty() && it != "." }.joinToString("/"))
         require(local.canonicalPath == root.path || local.canonicalPath.startsWith(root.path + "/"))
         require(spec.remotePath.startsWith('/') && '\u0000' !in spec.remotePath && spec.fileLimitBytes in 1..(64L*1024*1024) && spec.totalLimitBytes in 1..(256L*1024*1024) && spec.entryLimit in 1..1000)

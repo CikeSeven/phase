@@ -224,9 +224,14 @@ class ChannelTransferTool extends SystemChannelTool {
     final toChannel = arguments['direction'] == 'to_channel';
     var local = arguments['path'] as String;
     final files = WorkspaceFiles(repository);
+    final access = repository.files(workspace, ownerId: context.runId);
+    Directory? temporary;
+    var localRoot = workspace.rootPath;
+    var transferPath = local;
     CommandOperation? operation;
     ExternalCommandEvent? exit;
     final artifacts = <String>[];
+    var completedPaths = <String>[];
     String? error;
     try {
       cancellation.throwIfCancelled();
@@ -249,10 +254,33 @@ class ChannelTransferTool extends SystemChannelTool {
           ),
           attachment,
           cancellation,
+          binding: workspace,
+          ownerId: context.runId,
         );
-        local = guest.substring('/workspace/'.length);
+        local = guest.substring('${workspace.executionRoot}/'.length);
       }
-      await workspacePath(workspace.rootPath, local, mustExist: toChannel);
+      transferPath = local;
+      if (workspace.primaryEnvironment == PrimaryEnvironment.termux) {
+        temporary = await access.temporary();
+        localRoot = temporary.path;
+        transferPath = 'payload';
+        if (toChannel) {
+          await access.exportPath(
+            local,
+            p.join(localRoot, transferPath),
+            cancellation,
+          );
+        }
+      } else {
+        await workspacePath(workspace.rootPath, local, mustExist: toChannel);
+      }
+      if (toChannel &&
+          channel == ExecutionChannel.termux &&
+          (arguments['remotePath'] as String).startsWith(
+            '${binding.home}/.phase/workspaces/${workspace.id}/',
+          )) {
+        await repository.markTermux(workspace.id, binding.uid);
+      }
       cancellation.throwIfCancelled();
       operation = await driver.transfer(
         ChannelTransferSpec(
@@ -261,8 +289,8 @@ class ChannelTransferTool extends SystemChannelTool {
           channel: channel.name,
           revision: binding.revision,
           uid: binding.uid,
-          localRoot: workspace.rootPath,
-          path: local,
+          localRoot: localRoot,
+          path: transferPath,
           remotePath: arguments['remotePath'] as String,
           toChannel: toChannel,
           fileLimitBytes: WorkspaceFiles.maxCopyBytes,
@@ -273,12 +301,32 @@ class ChannelTransferTool extends SystemChannelTool {
             onProgress?.call('已传输 ${(bytes / 1048576).toStringAsFixed(1)} MiB'),
       );
       exit = await operation.wait(cancellation);
-      // Actual imported files survive cancellation and are recorded as independent artifacts.
-      if (!toChannel) {
-        for (final relative in exit.completedPaths) {
+      if (toChannel || temporary == null) completedPaths = exit.completedPaths;
+      if (!toChannel &&
+          temporary != null &&
+          exit.error == null &&
+          !cancellation.isCancelled) {
+        try {
+          await access.importPath(
+            local,
+            p.join(localRoot, transferPath),
+            cancellation,
+          );
+          completedPaths = exit.completedPaths;
+        } on WorkspaceFailure catch (failure) {
+          completedPaths = failure.completedPaths;
+          error = failure.userMessage;
+        }
+      }
+      // Only completed destination files are recorded; staging is not a delivered artifact.
+      if (!toChannel &&
+          (temporary == null ||
+              (exit.error == null && !cancellation.isCancelled))) {
+        for (final relative in completedPaths) {
           final path = relative.isEmpty ? local : p.posix.join(local, relative);
-          final absolute = await workspacePath(workspace.rootPath, path);
-          if (await FileSystemEntity.isDirectory(absolute)) continue;
+          if ((await access.stat(path, RunCancellation())).type != 'file') {
+            continue;
+          }
           await repository.recordCopy(workspace.id, path, {
             'kind': 'commandChannel',
             'channel': channel.name,
@@ -287,7 +335,7 @@ class ChannelTransferTool extends SystemChannelTool {
                 : p.posix.join(arguments['remotePath'] as String, relative),
             'runId': context.runId,
             'toolCallId': context.toolCallId,
-          });
+          }, environment: workspace.primaryEnvironment);
           final artifact = await files.artifact(
             workspace,
             path,
@@ -300,7 +348,19 @@ class ChannelTransferTool extends SystemChannelTool {
     } on StorageFailure {
       rethrow;
     } on ToolCancelled {
-      return const ToolOutcome.cancelled('文件传输启动前已停止');
+      return ToolOutcome(
+        ok: false,
+        cancelled: true,
+        errorCode: 'cancelled',
+        artifacts: artifacts,
+        content: jsonEncode({
+          'channel': channel.name,
+          'path': local,
+          'completedPaths': completedPaths,
+          'cancelled': true,
+          'knownEffects': '文件传输已停止，已提交的文件保留',
+        }),
+      );
     } on Failure catch (failure) {
       error = failure.userMessage;
     } on FileSystemException {
@@ -309,6 +369,7 @@ class ChannelTransferTool extends SystemChannelTool {
       if (operation != null && exit == null) {
         await driver.cancel(context.runId, context.toolCallId);
       }
+      if (temporary != null) await temporary.delete(recursive: true);
     }
     final cancelled = cancellation.isCancelled || exit?.cancelled == true;
     final ok =
@@ -331,7 +392,7 @@ class ChannelTransferTool extends SystemChannelTool {
         'path': local,
         'remotePath': arguments['remotePath'],
         'transferredBytes': exit?.transferredBytes ?? 0,
-        'completedPaths': exit?.completedPaths ?? [],
+        'completedPaths': completedPaths,
         'artifactIds': artifacts,
         'cancelled': cancelled,
         'terminationAcknowledged': exit?.terminationAcknowledged ?? false,

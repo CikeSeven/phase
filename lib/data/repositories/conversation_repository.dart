@@ -1,3 +1,5 @@
+import '../models/workspace.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -85,6 +87,7 @@ class ConversationRepository {
 
   Future<Conversation> createConversation({
     String title = '新会话',
+    PrimaryEnvironment primaryEnvironment = PrimaryEnvironment.ubuntu,
     PermissionSelection permissions = const PermissionSelection(),
     String? assistantId,
     ModelSelection? modelSelectionOverride,
@@ -96,6 +99,7 @@ class ConversationRepository {
         id: generateId(),
         title: title,
         permissions: permissions,
+        primaryEnvironment: primaryEnvironment,
         workspaceId: workspace.id,
         assistantId: assistantId,
         modelSelectionOverride: modelSelectionOverride,
@@ -119,7 +123,8 @@ class ConversationRepository {
       await (_db.update(
         _db.conversations,
       )..where((t) => t.id.equals(conversation.id))).write(
-        conversationCompanion(conversation.copyWith(updatedAt: DateTime.now())),
+        conversationCompanion(conversation.copyWith(updatedAt: DateTime.now()))
+            .copyWith(primaryEnvironment: const Value.absent()),
       );
     });
   }
@@ -255,6 +260,7 @@ class ConversationRepository {
         title: '${source.conversation.title}（副本）',
         assistantId: source.conversation.assistantId,
         permissions: source.conversation.permissions,
+        primaryEnvironment: source.conversation.primaryEnvironment,
         workspaceId: generateId(),
         modelSelectionOverride: source.conversation.modelSelectionOverride,
         createdAt: now,
@@ -466,16 +472,31 @@ class ConversationRepository {
                 .insert(attachmentCompanion(attachment));
           }
         });
-      } catch (_) {
-        await workspaces.delete(workspace.id);
-        await attachments?.deletePaths([
-          for (final attachment in copiedAttachments) ...[
-            attachment.localPath,
-            if (attachment.extractedTextPath != null)
-              attachment.extractedTextPath!,
-          ],
-        ]);
-        rethrow;
+      } catch (error, stack) {
+        try {
+          await workspaces.delete(
+            workspace.id,
+            deleteOwner: () async {
+              await attachments?.deletePaths([
+                for (final attachment in copiedAttachments) ...[
+                  attachment.localPath,
+                  ?attachment.extractedTextPath,
+                ],
+              ]);
+            },
+          );
+        } on Failure catch (cleanup) {
+          // A remote workspace must retain a reachable owner when cleanup fails.
+          await _db
+              .into(_db.conversations)
+              .insertOnConflictUpdate(
+                conversationCompanion(
+                  copy.copyWith(title: '${copy.title}（复制未完成）'),
+                ),
+              );
+          throw OperationFailure('${cleanup.userMessage}；未完成副本已保留，请重试删除');
+        }
+        Error.throwWithStackTrace(error, stack);
       }
       return copy;
     });

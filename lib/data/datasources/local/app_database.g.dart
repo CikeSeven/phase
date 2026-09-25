@@ -1798,6 +1798,17 @@ class $WorkspacesTable extends Workspaces
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $WorkspacesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _termuxUidMeta = const VerificationMeta(
+    'termuxUid',
+  );
+  @override
+  late final GeneratedColumn<int> termuxUid = GeneratedColumn<int>(
+    'termux_uid',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -1859,6 +1870,7 @@ class $WorkspacesTable extends Workspaces
   );
   @override
   List<GeneratedColumn> get $columns => [
+    termuxUid,
     id,
     name,
     environmentId,
@@ -1877,6 +1889,12 @@ class $WorkspacesTable extends Workspaces
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('termux_uid')) {
+      context.handle(
+        _termuxUidMeta,
+        termuxUid.isAcceptableOrUnknown(data['termux_uid']!, _termuxUidMeta),
+      );
+    }
     if (data.containsKey('id')) {
       context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
     } else if (isInserting) {
@@ -1924,6 +1942,10 @@ class $WorkspacesTable extends Workspaces
   WorkspaceRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return WorkspaceRow(
+      termuxUid: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}termux_uid'],
+      ),
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -1954,12 +1976,14 @@ class $WorkspacesTable extends Workspaces
 }
 
 class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
+  final int? termuxUid;
   final String id;
   final String name;
   final String environmentId;
   final bool deleting;
   final DateTime createdAt;
   const WorkspaceRow({
+    this.termuxUid,
     required this.id,
     required this.name,
     required this.environmentId,
@@ -1969,6 +1993,9 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (!nullToAbsent || termuxUid != null) {
+      map['termux_uid'] = Variable<int>(termuxUid);
+    }
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['environment_id'] = Variable<String>(environmentId);
@@ -1979,6 +2006,9 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
 
   WorkspacesCompanion toCompanion(bool nullToAbsent) {
     return WorkspacesCompanion(
+      termuxUid: termuxUid == null && nullToAbsent
+          ? const Value.absent()
+          : Value(termuxUid),
       id: Value(id),
       name: Value(name),
       environmentId: Value(environmentId),
@@ -1993,6 +2023,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return WorkspaceRow(
+      termuxUid: serializer.fromJson<int?>(json['termuxUid']),
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       environmentId: serializer.fromJson<String>(json['environmentId']),
@@ -2004,6 +2035,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'termuxUid': serializer.toJson<int?>(termuxUid),
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'environmentId': serializer.toJson<String>(environmentId),
@@ -2013,12 +2045,14 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   }
 
   WorkspaceRow copyWith({
+    Value<int?> termuxUid = const Value.absent(),
     String? id,
     String? name,
     String? environmentId,
     bool? deleting,
     DateTime? createdAt,
   }) => WorkspaceRow(
+    termuxUid: termuxUid.present ? termuxUid.value : this.termuxUid,
     id: id ?? this.id,
     name: name ?? this.name,
     environmentId: environmentId ?? this.environmentId,
@@ -2027,6 +2061,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   );
   WorkspaceRow copyWithCompanion(WorkspacesCompanion data) {
     return WorkspaceRow(
+      termuxUid: data.termuxUid.present ? data.termuxUid.value : this.termuxUid,
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
       environmentId: data.environmentId.present
@@ -2040,6 +2075,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   @override
   String toString() {
     return (StringBuffer('WorkspaceRow(')
+          ..write('termuxUid: $termuxUid, ')
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('environmentId: $environmentId, ')
@@ -2050,11 +2086,13 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, environmentId, deleting, createdAt);
+  int get hashCode =>
+      Object.hash(termuxUid, id, name, environmentId, deleting, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is WorkspaceRow &&
+          other.termuxUid == this.termuxUid &&
           other.id == this.id &&
           other.name == this.name &&
           other.environmentId == this.environmentId &&
@@ -2063,6 +2101,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
 }
 
 class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
+  final Value<int?> termuxUid;
   final Value<String> id;
   final Value<String> name;
   final Value<String> environmentId;
@@ -2070,6 +2109,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const WorkspacesCompanion({
+    this.termuxUid = const Value.absent(),
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.environmentId = const Value.absent(),
@@ -2078,6 +2118,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
     this.rowid = const Value.absent(),
   });
   WorkspacesCompanion.insert({
+    this.termuxUid = const Value.absent(),
     required String id,
     required String name,
     required String environmentId,
@@ -2089,6 +2130,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
        environmentId = Value(environmentId),
        createdAt = Value(createdAt);
   static Insertable<WorkspaceRow> custom({
+    Expression<int>? termuxUid,
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? environmentId,
@@ -2097,6 +2139,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (termuxUid != null) 'termux_uid': termuxUid,
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (environmentId != null) 'environment_id': environmentId,
@@ -2107,6 +2150,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
   }
 
   WorkspacesCompanion copyWith({
+    Value<int?>? termuxUid,
     Value<String>? id,
     Value<String>? name,
     Value<String>? environmentId,
@@ -2115,6 +2159,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
     Value<int>? rowid,
   }) {
     return WorkspacesCompanion(
+      termuxUid: termuxUid ?? this.termuxUid,
       id: id ?? this.id,
       name: name ?? this.name,
       environmentId: environmentId ?? this.environmentId,
@@ -2127,6 +2172,9 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (termuxUid.present) {
+      map['termux_uid'] = Variable<int>(termuxUid.value);
+    }
     if (id.present) {
       map['id'] = Variable<String>(id.value);
     }
@@ -2151,6 +2199,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
   @override
   String toString() {
     return (StringBuffer('WorkspacesCompanion(')
+          ..write('termuxUid: $termuxUid, ')
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('environmentId: $environmentId, ')
@@ -2168,6 +2217,19 @@ class $ConversationsTable extends Conversations
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $ConversationsTable(this.attachedDatabase, [this._alias]);
+  @override
+  late final GeneratedColumnWithTypeConverter<PrimaryEnvironment, String>
+  primaryEnvironment =
+      GeneratedColumn<String>(
+        'primary_environment',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('ubuntu'),
+      ).withConverter<PrimaryEnvironment>(
+        $ConversationsTable.$converterprimaryEnvironment,
+      );
   static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
     'workspaceId',
   );
@@ -2297,6 +2359,7 @@ class $ConversationsTable extends Conversations
   );
   @override
   List<GeneratedColumn> get $columns => [
+    primaryEnvironment,
     workspaceId,
     id,
     assistantId,
@@ -2401,6 +2464,13 @@ class $ConversationsTable extends Conversations
   ConversationRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ConversationRow(
+      primaryEnvironment: $ConversationsTable.$converterprimaryEnvironment
+          .fromSql(
+            attachedDatabase.typeMapping.read(
+              DriftSqlType.string,
+              data['${effectivePrefix}primary_environment'],
+            )!,
+          ),
       workspaceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}workspace_id'],
@@ -2458,6 +2528,10 @@ class $ConversationsTable extends Conversations
     return $ConversationsTable(attachedDatabase, alias);
   }
 
+  static JsonTypeConverter2<PrimaryEnvironment, String, String>
+  $converterprimaryEnvironment = const EnumNameConverter<PrimaryEnvironment>(
+    PrimaryEnvironment.values,
+  );
   static JsonTypeConverter2<PermissionMode, String, String>
   $converterpermissionMode = const EnumNameConverter<PermissionMode>(
     PermissionMode.values,
@@ -2469,6 +2543,7 @@ class $ConversationsTable extends Conversations
 }
 
 class ConversationRow extends DataClass implements Insertable<ConversationRow> {
+  final PrimaryEnvironment primaryEnvironment;
   final String? workspaceId;
   final String id;
 
@@ -2485,6 +2560,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   final DateTime createdAt;
   final DateTime updatedAt;
   const ConversationRow({
+    required this.primaryEnvironment,
     this.workspaceId,
     required this.id,
     this.assistantId,
@@ -2500,6 +2576,13 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    {
+      map['primary_environment'] = Variable<String>(
+        $ConversationsTable.$converterprimaryEnvironment.toSql(
+          primaryEnvironment,
+        ),
+      );
+    }
     if (!nullToAbsent || workspaceId != null) {
       map['workspace_id'] = Variable<String>(workspaceId);
     }
@@ -2534,6 +2617,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   ConversationsCompanion toCompanion(bool nullToAbsent) {
     return ConversationsCompanion(
+      primaryEnvironment: Value(primaryEnvironment),
       workspaceId: workspaceId == null && nullToAbsent
           ? const Value.absent()
           : Value(workspaceId),
@@ -2562,6 +2646,8 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return ConversationRow(
+      primaryEnvironment: $ConversationsTable.$converterprimaryEnvironment
+          .fromJson(serializer.fromJson<String>(json['primaryEnvironment'])),
       workspaceId: serializer.fromJson<String?>(json['workspaceId']),
       id: serializer.fromJson<String>(json['id']),
       assistantId: serializer.fromJson<String?>(json['assistantId']),
@@ -2582,6 +2668,11 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'primaryEnvironment': serializer.toJson<String>(
+        $ConversationsTable.$converterprimaryEnvironment.toJson(
+          primaryEnvironment,
+        ),
+      ),
       'workspaceId': serializer.toJson<String?>(workspaceId),
       'id': serializer.toJson<String>(id),
       'assistantId': serializer.toJson<String?>(assistantId),
@@ -2603,6 +2694,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   }
 
   ConversationRow copyWith({
+    PrimaryEnvironment? primaryEnvironment,
     Value<String?> workspaceId = const Value.absent(),
     String? id,
     Value<String?> assistantId = const Value.absent(),
@@ -2615,6 +2707,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ConversationRow(
+    primaryEnvironment: primaryEnvironment ?? this.primaryEnvironment,
     workspaceId: workspaceId.present ? workspaceId.value : this.workspaceId,
     id: id ?? this.id,
     assistantId: assistantId.present ? assistantId.value : this.assistantId,
@@ -2633,6 +2726,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   );
   ConversationRow copyWithCompanion(ConversationsCompanion data) {
     return ConversationRow(
+      primaryEnvironment: data.primaryEnvironment.present
+          ? data.primaryEnvironment.value
+          : this.primaryEnvironment,
       workspaceId: data.workspaceId.present
           ? data.workspaceId.value
           : this.workspaceId,
@@ -2662,6 +2758,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   @override
   String toString() {
     return (StringBuffer('ConversationRow(')
+          ..write('primaryEnvironment: $primaryEnvironment, ')
           ..write('workspaceId: $workspaceId, ')
           ..write('id: $id, ')
           ..write('assistantId: $assistantId, ')
@@ -2679,6 +2776,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   @override
   int get hashCode => Object.hash(
+    primaryEnvironment,
     workspaceId,
     id,
     assistantId,
@@ -2695,6 +2793,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ConversationRow &&
+          other.primaryEnvironment == this.primaryEnvironment &&
           other.workspaceId == this.workspaceId &&
           other.id == this.id &&
           other.assistantId == this.assistantId &&
@@ -2709,6 +2808,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 }
 
 class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
+  final Value<PrimaryEnvironment> primaryEnvironment;
   final Value<String?> workspaceId;
   final Value<String> id;
   final Value<String?> assistantId;
@@ -2722,6 +2822,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const ConversationsCompanion({
+    this.primaryEnvironment = const Value.absent(),
     this.workspaceId = const Value.absent(),
     this.id = const Value.absent(),
     this.assistantId = const Value.absent(),
@@ -2736,6 +2837,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
+    this.primaryEnvironment = const Value.absent(),
     this.workspaceId = const Value.absent(),
     required String id,
     this.assistantId = const Value.absent(),
@@ -2753,6 +2855,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
        createdAt = Value(createdAt),
        updatedAt = Value(updatedAt);
   static Insertable<ConversationRow> custom({
+    Expression<String>? primaryEnvironment,
     Expression<String>? workspaceId,
     Expression<String>? id,
     Expression<String>? assistantId,
@@ -2767,6 +2870,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (primaryEnvironment != null) 'primary_environment': primaryEnvironment,
       if (workspaceId != null) 'workspace_id': workspaceId,
       if (id != null) 'id': id,
       if (assistantId != null) 'assistant_id': assistantId,
@@ -2783,6 +2887,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   }
 
   ConversationsCompanion copyWith({
+    Value<PrimaryEnvironment>? primaryEnvironment,
     Value<String?>? workspaceId,
     Value<String>? id,
     Value<String?>? assistantId,
@@ -2797,6 +2902,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
+      primaryEnvironment: primaryEnvironment ?? this.primaryEnvironment,
       workspaceId: workspaceId ?? this.workspaceId,
       id: id ?? this.id,
       assistantId: assistantId ?? this.assistantId,
@@ -2815,6 +2921,13 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (primaryEnvironment.present) {
+      map['primary_environment'] = Variable<String>(
+        $ConversationsTable.$converterprimaryEnvironment.toSql(
+          primaryEnvironment.value,
+        ),
+      );
+    }
     if (workspaceId.present) {
       map['workspace_id'] = Variable<String>(workspaceId.value);
     }
@@ -2865,6 +2978,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   @override
   String toString() {
     return (StringBuffer('ConversationsCompanion(')
+          ..write('primaryEnvironment: $primaryEnvironment, ')
           ..write('workspaceId: $workspaceId, ')
           ..write('id: $id, ')
           ..write('assistantId: $assistantId, ')
@@ -7478,6 +7592,19 @@ class $WorkspaceCopiesTable extends WorkspaceCopies
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $WorkspaceCopiesTable(this.attachedDatabase, [this._alias]);
+  @override
+  late final GeneratedColumnWithTypeConverter<PrimaryEnvironment, String>
+  environment =
+      GeneratedColumn<String>(
+        'environment',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('ubuntu'),
+      ).withConverter<PrimaryEnvironment>(
+        $WorkspaceCopiesTable.$converterenvironment,
+      );
   static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
     'workspaceId',
   );
@@ -7515,7 +7642,12 @@ class $WorkspaceCopiesTable extends WorkspaceCopies
     requiredDuringInsert: true,
   );
   @override
-  List<GeneratedColumn> get $columns => [workspaceId, relativePath, sourceJson];
+  List<GeneratedColumn> get $columns => [
+    environment,
+    workspaceId,
+    relativePath,
+    sourceJson,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -7562,11 +7694,21 @@ class $WorkspaceCopiesTable extends WorkspaceCopies
   }
 
   @override
-  Set<GeneratedColumn> get $primaryKey => {workspaceId, relativePath};
+  Set<GeneratedColumn> get $primaryKey => {
+    workspaceId,
+    environment,
+    relativePath,
+  };
   @override
   WorkspaceCopyRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return WorkspaceCopyRow(
+      environment: $WorkspaceCopiesTable.$converterenvironment.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}environment'],
+        )!,
+      ),
       workspaceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}workspace_id'],
@@ -7586,14 +7728,21 @@ class $WorkspaceCopiesTable extends WorkspaceCopies
   $WorkspaceCopiesTable createAlias(String alias) {
     return $WorkspaceCopiesTable(attachedDatabase, alias);
   }
+
+  static JsonTypeConverter2<PrimaryEnvironment, String, String>
+  $converterenvironment = const EnumNameConverter<PrimaryEnvironment>(
+    PrimaryEnvironment.values,
+  );
 }
 
 class WorkspaceCopyRow extends DataClass
     implements Insertable<WorkspaceCopyRow> {
+  final PrimaryEnvironment environment;
   final String workspaceId;
   final String relativePath;
   final String sourceJson;
   const WorkspaceCopyRow({
+    required this.environment,
     required this.workspaceId,
     required this.relativePath,
     required this.sourceJson,
@@ -7601,6 +7750,11 @@ class WorkspaceCopyRow extends DataClass
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    {
+      map['environment'] = Variable<String>(
+        $WorkspaceCopiesTable.$converterenvironment.toSql(environment),
+      );
+    }
     map['workspace_id'] = Variable<String>(workspaceId);
     map['relative_path'] = Variable<String>(relativePath);
     map['source_json'] = Variable<String>(sourceJson);
@@ -7609,6 +7763,7 @@ class WorkspaceCopyRow extends DataClass
 
   WorkspaceCopiesCompanion toCompanion(bool nullToAbsent) {
     return WorkspaceCopiesCompanion(
+      environment: Value(environment),
       workspaceId: Value(workspaceId),
       relativePath: Value(relativePath),
       sourceJson: Value(sourceJson),
@@ -7621,6 +7776,9 @@ class WorkspaceCopyRow extends DataClass
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return WorkspaceCopyRow(
+      environment: $WorkspaceCopiesTable.$converterenvironment.fromJson(
+        serializer.fromJson<String>(json['environment']),
+      ),
       workspaceId: serializer.fromJson<String>(json['workspaceId']),
       relativePath: serializer.fromJson<String>(json['relativePath']),
       sourceJson: serializer.fromJson<String>(json['sourceJson']),
@@ -7630,6 +7788,9 @@ class WorkspaceCopyRow extends DataClass
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'environment': serializer.toJson<String>(
+        $WorkspaceCopiesTable.$converterenvironment.toJson(environment),
+      ),
       'workspaceId': serializer.toJson<String>(workspaceId),
       'relativePath': serializer.toJson<String>(relativePath),
       'sourceJson': serializer.toJson<String>(sourceJson),
@@ -7637,16 +7798,21 @@ class WorkspaceCopyRow extends DataClass
   }
 
   WorkspaceCopyRow copyWith({
+    PrimaryEnvironment? environment,
     String? workspaceId,
     String? relativePath,
     String? sourceJson,
   }) => WorkspaceCopyRow(
+    environment: environment ?? this.environment,
     workspaceId: workspaceId ?? this.workspaceId,
     relativePath: relativePath ?? this.relativePath,
     sourceJson: sourceJson ?? this.sourceJson,
   );
   WorkspaceCopyRow copyWithCompanion(WorkspaceCopiesCompanion data) {
     return WorkspaceCopyRow(
+      environment: data.environment.present
+          ? data.environment.value
+          : this.environment,
       workspaceId: data.workspaceId.present
           ? data.workspaceId.value
           : this.workspaceId,
@@ -7662,6 +7828,7 @@ class WorkspaceCopyRow extends DataClass
   @override
   String toString() {
     return (StringBuffer('WorkspaceCopyRow(')
+          ..write('environment: $environment, ')
           ..write('workspaceId: $workspaceId, ')
           ..write('relativePath: $relativePath, ')
           ..write('sourceJson: $sourceJson')
@@ -7670,28 +7837,33 @@ class WorkspaceCopyRow extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(workspaceId, relativePath, sourceJson);
+  int get hashCode =>
+      Object.hash(environment, workspaceId, relativePath, sourceJson);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is WorkspaceCopyRow &&
+          other.environment == this.environment &&
           other.workspaceId == this.workspaceId &&
           other.relativePath == this.relativePath &&
           other.sourceJson == this.sourceJson);
 }
 
 class WorkspaceCopiesCompanion extends UpdateCompanion<WorkspaceCopyRow> {
+  final Value<PrimaryEnvironment> environment;
   final Value<String> workspaceId;
   final Value<String> relativePath;
   final Value<String> sourceJson;
   final Value<int> rowid;
   const WorkspaceCopiesCompanion({
+    this.environment = const Value.absent(),
     this.workspaceId = const Value.absent(),
     this.relativePath = const Value.absent(),
     this.sourceJson = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   WorkspaceCopiesCompanion.insert({
+    this.environment = const Value.absent(),
     required String workspaceId,
     required String relativePath,
     required String sourceJson,
@@ -7700,12 +7872,14 @@ class WorkspaceCopiesCompanion extends UpdateCompanion<WorkspaceCopyRow> {
        relativePath = Value(relativePath),
        sourceJson = Value(sourceJson);
   static Insertable<WorkspaceCopyRow> custom({
+    Expression<String>? environment,
     Expression<String>? workspaceId,
     Expression<String>? relativePath,
     Expression<String>? sourceJson,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (environment != null) 'environment': environment,
       if (workspaceId != null) 'workspace_id': workspaceId,
       if (relativePath != null) 'relative_path': relativePath,
       if (sourceJson != null) 'source_json': sourceJson,
@@ -7714,12 +7888,14 @@ class WorkspaceCopiesCompanion extends UpdateCompanion<WorkspaceCopyRow> {
   }
 
   WorkspaceCopiesCompanion copyWith({
+    Value<PrimaryEnvironment>? environment,
     Value<String>? workspaceId,
     Value<String>? relativePath,
     Value<String>? sourceJson,
     Value<int>? rowid,
   }) {
     return WorkspaceCopiesCompanion(
+      environment: environment ?? this.environment,
       workspaceId: workspaceId ?? this.workspaceId,
       relativePath: relativePath ?? this.relativePath,
       sourceJson: sourceJson ?? this.sourceJson,
@@ -7730,6 +7906,11 @@ class WorkspaceCopiesCompanion extends UpdateCompanion<WorkspaceCopyRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (environment.present) {
+      map['environment'] = Variable<String>(
+        $WorkspaceCopiesTable.$converterenvironment.toSql(environment.value),
+      );
+    }
     if (workspaceId.present) {
       map['workspace_id'] = Variable<String>(workspaceId.value);
     }
@@ -7748,6 +7929,7 @@ class WorkspaceCopiesCompanion extends UpdateCompanion<WorkspaceCopyRow> {
   @override
   String toString() {
     return (StringBuffer('WorkspaceCopiesCompanion(')
+          ..write('environment: $environment, ')
           ..write('workspaceId: $workspaceId, ')
           ..write('relativePath: $relativePath, ')
           ..write('sourceJson: $sourceJson, ')
@@ -12582,6 +12764,7 @@ typedef $$AssistantsTableProcessedTableManager =
       PrefetchHooks Function()
     >;
 typedef $$WorkspacesTableCreateCompanionBuilder = WorkspacesCompanion Function({
+  Value<int?> termuxUid,
   required String id,
   required String name,
   required String environmentId,
@@ -12590,6 +12773,7 @@ typedef $$WorkspacesTableCreateCompanionBuilder = WorkspacesCompanion Function({
   Value<int> rowid,
 });
 typedef $$WorkspacesTableUpdateCompanionBuilder = WorkspacesCompanion Function({
+  Value<int?> termuxUid,
   Value<String> id,
   Value<String> name,
   Value<String> environmentId,
@@ -12650,6 +12834,11 @@ class $$WorkspacesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnFilters<int> get termuxUid => $composableBuilder(
+    column: $table.termuxUid,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get id => $composableBuilder(
     column: $table.id,
     builder: (column) => ColumnFilters(column),
@@ -12735,6 +12924,11 @@ class $$WorkspacesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<int> get termuxUid => $composableBuilder(
+    column: $table.termuxUid,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get id => $composableBuilder(
     column: $table.id,
     builder: (column) => ColumnOrderings(column),
@@ -12770,6 +12964,9 @@ class $$WorkspacesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumn<int> get termuxUid =>
+      $composableBuilder(column: $table.termuxUid, builder: (column) => column);
+
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
@@ -12869,6 +13066,7 @@ class $$WorkspacesTableTableManager
               $$WorkspacesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<int?> termuxUid = const Value.absent(),
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> environmentId = const Value.absent(),
@@ -12876,6 +13074,7 @@ class $$WorkspacesTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WorkspacesCompanion(
+                termuxUid: termuxUid,
                 id: id,
                 name: name,
                 environmentId: environmentId,
@@ -12885,6 +13084,7 @@ class $$WorkspacesTableTableManager
               ),
           createCompanionCallback:
               ({
+                Value<int?> termuxUid = const Value.absent(),
                 required String id,
                 required String name,
                 required String environmentId,
@@ -12892,6 +13092,7 @@ class $$WorkspacesTableTableManager
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => WorkspacesCompanion.insert(
+                termuxUid: termuxUid,
                 id: id,
                 name: name,
                 environmentId: environmentId,
@@ -12984,6 +13185,7 @@ typedef $$WorkspacesTableProcessedTableManager =
     >;
 typedef $$ConversationsTableCreateCompanionBuilder =
     ConversationsCompanion Function({
+      Value<PrimaryEnvironment> primaryEnvironment,
       Value<String?> workspaceId,
       required String id,
       Value<String?> assistantId,
@@ -12999,6 +13201,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
     ConversationsCompanion Function({
+      Value<PrimaryEnvironment> primaryEnvironment,
       Value<String?> workspaceId,
       Value<String> id,
       Value<String?> assistantId,
@@ -13177,6 +13380,12 @@ class $$ConversationsTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnWithTypeConverterFilters<PrimaryEnvironment, PrimaryEnvironment, String>
+  get primaryEnvironment => $composableBuilder(
+    column: $table.primaryEnvironment,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
   ColumnFilters<String> get id => $composableBuilder(
     column: $table.id,
     builder: (column) => ColumnFilters(column),
@@ -13437,6 +13646,11 @@ class $$ConversationsTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<String> get primaryEnvironment => $composableBuilder(
+    column: $table.primaryEnvironment,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get id => $composableBuilder(
     column: $table.id,
     builder: (column) => ColumnOrderings(column),
@@ -13520,6 +13734,12 @@ class $$ConversationsTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumnWithTypeConverter<PrimaryEnvironment, String>
+  get primaryEnvironment => $composableBuilder(
+    column: $table.primaryEnvironment,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get id =>
       $composableBuilder(column: $table.id, builder: (column) => column);
 
@@ -13798,6 +14018,8 @@ class $$ConversationsTableTableManager
               $$ConversationsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<PrimaryEnvironment> primaryEnvironment =
+                    const Value.absent(),
                 Value<String?> workspaceId = const Value.absent(),
                 Value<String> id = const Value.absent(),
                 Value<String?> assistantId = const Value.absent(),
@@ -13811,6 +14033,7 @@ class $$ConversationsTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
+                primaryEnvironment: primaryEnvironment,
                 workspaceId: workspaceId,
                 id: id,
                 assistantId: assistantId,
@@ -13826,6 +14049,8 @@ class $$ConversationsTableTableManager
               ),
           createCompanionCallback:
               ({
+                Value<PrimaryEnvironment> primaryEnvironment =
+                    const Value.absent(),
                 Value<String?> workspaceId = const Value.absent(),
                 required String id,
                 Value<String?> assistantId = const Value.absent(),
@@ -13839,6 +14064,7 @@ class $$ConversationsTableTableManager
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
+                primaryEnvironment: primaryEnvironment,
                 workspaceId: workspaceId,
                 id: id,
                 assistantId: assistantId,
@@ -16870,6 +17096,7 @@ typedef $$RuntimeEnvironmentsTableProcessedTableManager =
     >;
 typedef $$WorkspaceCopiesTableCreateCompanionBuilder =
     WorkspaceCopiesCompanion Function({
+      Value<PrimaryEnvironment> environment,
       required String workspaceId,
       required String relativePath,
       required String sourceJson,
@@ -16877,6 +17104,7 @@ typedef $$WorkspaceCopiesTableCreateCompanionBuilder =
     });
 typedef $$WorkspaceCopiesTableUpdateCompanionBuilder =
     WorkspaceCopiesCompanion Function({
+      Value<PrimaryEnvironment> environment,
       Value<String> workspaceId,
       Value<String> relativePath,
       Value<String> sourceJson,
@@ -16919,6 +17147,12 @@ class $$WorkspaceCopiesTableFilterComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnWithTypeConverterFilters<PrimaryEnvironment, PrimaryEnvironment, String>
+  get environment => $composableBuilder(
+    column: $table.environment,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
   ColumnFilters<String> get relativePath => $composableBuilder(
     column: $table.relativePath,
     builder: (column) => ColumnFilters(column),
@@ -16962,6 +17196,11 @@ class $$WorkspaceCopiesTableOrderingComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  ColumnOrderings<String> get environment => $composableBuilder(
+    column: $table.environment,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get relativePath => $composableBuilder(
     column: $table.relativePath,
     builder: (column) => ColumnOrderings(column),
@@ -17005,6 +17244,12 @@ class $$WorkspaceCopiesTableAnnotationComposer
     super.$addJoinBuilderToRootComposer,
     super.$removeJoinBuilderFromRootComposer,
   });
+  GeneratedColumnWithTypeConverter<PrimaryEnvironment, String>
+  get environment => $composableBuilder(
+    column: $table.environment,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get relativePath => $composableBuilder(
     column: $table.relativePath,
     builder: (column) => column,
@@ -17069,11 +17314,13 @@ class $$WorkspaceCopiesTableTableManager
               $$WorkspaceCopiesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<PrimaryEnvironment> environment = const Value.absent(),
                 Value<String> workspaceId = const Value.absent(),
                 Value<String> relativePath = const Value.absent(),
                 Value<String> sourceJson = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => WorkspaceCopiesCompanion(
+                environment: environment,
                 workspaceId: workspaceId,
                 relativePath: relativePath,
                 sourceJson: sourceJson,
@@ -17081,11 +17328,13 @@ class $$WorkspaceCopiesTableTableManager
               ),
           createCompanionCallback:
               ({
+                Value<PrimaryEnvironment> environment = const Value.absent(),
                 required String workspaceId,
                 required String relativePath,
                 required String sourceJson,
                 Value<int> rowid = const Value.absent(),
               }) => WorkspaceCopiesCompanion.insert(
+                environment: environment,
                 workspaceId: workspaceId,
                 relativePath: relativePath,
                 sourceJson: sourceJson,

@@ -27,6 +27,7 @@ import '../models/tool_source.dart';
 
 Conversation conversationFromRow(ConversationRow row) => Conversation(
   workspaceId: row.workspaceId,
+  primaryEnvironment: row.primaryEnvironment,
   id: row.id,
   title: row.title,
   assistantId: row.assistantId,
@@ -184,6 +185,7 @@ ConversationsCompanion conversationCompanion(Conversation conversation) =>
       id: Value(conversation.id),
       assistantId: Value(conversation.assistantId),
       workspaceId: Value(conversation.workspaceId),
+      primaryEnvironment: Value(conversation.primaryEnvironment),
       title: Value(conversation.title),
       currentMessageId: Value(conversation.currentMessageId),
       selectionJson: Value(

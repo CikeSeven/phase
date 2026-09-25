@@ -43,6 +43,10 @@ String presentToolOutput(ToolCallRecord record, String result) {
             if (decoded['warning'] case final String warning) warning,
           ].join('\n\n');
         }
+      case 'workspace_transfer':
+        return decoded['copied'] == true
+            ? '已复制 ${decoded['path']}'
+            : '${decoded['error'] ?? '复制未完成'}';
       case 'shizuku_transfer':
       case 'termux_transfer':
         return [
@@ -82,9 +86,9 @@ String presentToolOutput(ToolCallRecord record, String result) {
           });
         }
       case 'prepare_skill':
-        if (decoded['guestPath'] case final String path) {
+        if (decoded['executionPath'] case final String path) {
           return _contentWithDetails(path, decoded, const {
-            'guestPath',
+            'executionPath',
             'skillId',
             'revision',
             'instruction',

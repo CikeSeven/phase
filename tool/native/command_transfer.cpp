@@ -400,3 +400,26 @@ string transfer_files(int fd, const string &root, bool sending,
     throw;
   }
 }
+
+std::string file_digest(const std::string &path) {
+  Fd file(open(path.c_str(), O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC));
+  require(file.n >= 0, "fileUnavailable");
+  struct stat info{};
+  require(fstat(file.n, &info) == 0 && S_ISREG(info.st_mode), "unsupportedFile");
+  require(info.st_size <= 64 * 1024 * 1024, "fileTooLarge");
+  Sha256 hash;
+  size_t size = 0;
+  uint8_t bytes[32768];
+  ssize_t n;
+  while ((n = read(file.n, bytes, sizeof(bytes))) > 0) {
+    require(!stopping, "cancelled");
+    size += size_t(n);
+    require(size <= 64 * 1024 * 1024, "fileTooLarge");
+    hash.add(bytes, size_t(n));
+  }
+  require(n == 0, "readFailed");
+  const char *hex = "0123456789abcdef";
+  string result;
+  for (auto b : hash.finish()) { result += hex[b >> 4]; result += hex[b & 15]; }
+  return result;
+}

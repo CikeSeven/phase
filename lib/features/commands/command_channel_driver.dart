@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+import 'dart:convert';
 import 'dart:async';
 
 import 'package:flutter/services.dart';
@@ -77,6 +79,64 @@ class CommandChannelDriver implements CommandChannelFlutterApi {
   );
   Future<void> openSettings(String channel) =>
       _boundary(() => _host.openSettings(channel));
+
+  Future<Map<String, dynamic>> workspaceFile(
+    WorkspaceFileRequest request,
+    RunCancellation cancellation,
+  ) async {
+    final bytes = BytesBuilder(copy: false);
+    cancellation.throwIfCancelled();
+    final operation = await _start(
+      request.ownerId,
+      request.callId,
+      () => _host.workspaceFile(request),
+      (stderr, chunk) async {
+        if (!stderr) {
+          if (bytes.length + chunk.length > 128 * 1024) {
+            throw const CommandChannelFailure('outputLimit', '文件操作响应超过上限');
+          }
+          bytes.add(chunk);
+        }
+      },
+      null,
+    );
+    final result = await operation.wait(cancellation);
+    if (result.cancelled || cancellation.isCancelled) {
+      if (request.operation == WorkspaceFileOperation.importPath &&
+          result.completedPaths.isNotEmpty) {
+        throw WorkspaceFailure(
+          'cancelled',
+          '复制已停止，已提交的文件保留',
+          completedPaths: result.completedPaths,
+          cancelled: true,
+        );
+      }
+      throw const ToolCancelled();
+    }
+    Map<String, dynamic>? body;
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes.takeBytes()));
+      if (decoded is Map<String, dynamic>) body = decoded;
+    } on FormatException {
+      /* A lost reply is not proof that a write did not occur. */
+    }
+    if (result.error != null ||
+        result.exitCode != 0 ||
+        body == null ||
+        body['error'] != null) {
+      final code =
+          result.error ??
+          (body?['error'] is String
+              ? body!['error'] as String
+              : 'fileOperationFailed');
+      throw WorkspaceFailure(
+        code,
+        commandErrorText(code),
+        completedPaths: result.completedPaths,
+      );
+    }
+    return body;
+  }
 
   Future<CommandOperation> start(
     ExternalCommandSpec spec,
@@ -223,6 +283,13 @@ class CommandChannelDriver implements CommandChannelFlutterApi {
 }
 
 String commandErrorText(String code) => switch (code) {
+  'fileChanged' => '文件在编辑期间已改变，请重新读取后编辑',
+  'lineTooLong' => '文件单行超过 16 KiB，请用 shell 提取片段',
+  'offsetOutOfRange' => '起始行超过文件结尾',
+  'invalidPath' => '路径越出工作区或包含不支持的链接',
+  'notText' => '文件不是可读取的 UTF-8 文本',
+  'directoryLimit' => '目录条目超过读取上限',
+  'fileOperationFailed' => '文件操作连接中断，未收到完整结果',
   'filePermissionDenied' => '当前执行身份没有该文件或目录的访问权限',
   'spaceUnavailable' => '目标存储空间不足',
   'readOnlyFileSystem' => '目标文件系统只读',

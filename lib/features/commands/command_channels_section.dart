@@ -44,7 +44,11 @@ class CommandChannelsSection extends ConsumerWidget {
                   children: [
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('启用命令与文件传输'),
+                      title: Text(
+                        channel == ExecutionChannel.termux
+                            ? '允许使用 Termux'
+                            : '启用命令与文件传输',
+                      ),
                       subtitle: Text(
                         state.statuses
                                 .where((s) => s.channel == channel.name)

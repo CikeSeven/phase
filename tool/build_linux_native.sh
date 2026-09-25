@@ -8,7 +8,7 @@ jni_dir="$output/jniLibs/arm64-v8a"
 llvm="$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64/bin"
 cc="$llvm/aarch64-linux-android24-clang"
 # Versioned source archives and local build inputs determine the cache key.
-fingerprint=$(cat tool/build_linux_native.sh tool/native/talloc_replace.h tool/native/process_runner.c tool/native/command_runner.cpp tool/native/command_transfer.cpp tool/native/command_transfer.h tool/native/command_common.h "$ndk_dir/source.properties" | sha256sum | cut -d ' ' -f1)
+fingerprint=$(cat tool/build_linux_native.sh tool/native/talloc_replace.h tool/native/process_runner.c tool/native/command_runner.cpp tool/native/command_transfer.cpp tool/native/command_transfer.h tool/native/command_common.h tool/native/workspace_files.h "$ndk_dir/source.properties" | sha256sum | cut -d ' ' -f1)
 if [[ -f "$output/stamp" && "$(cat "$output/stamp")" == "$fingerprint" && -f "$jni_dir/libphase_proot.so" && -f "$jni_dir/libphase_loader.so" && -f "$jni_dir/libphase_talloc.so" && -f "$jni_dir/libphase_exec.so" && -f "$jni_dir/libphase_command.so" ]]; then exit 0; fi
 mkdir -p "$source_dir" "$jni_dir"
 fetch() {

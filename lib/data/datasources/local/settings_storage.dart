@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import '../../models/execution_scope.dart';
 import '../../models/command_channel.dart';
+import '../../models/workspace.dart';
 import '../../../core/error/failure.dart';
 
 part 'settings_storage.g.dart';
@@ -15,6 +16,29 @@ class SettingsStorage {
   SettingsStorage(this._prefs);
 
   final SharedPreferences _prefs;
+
+  PrimaryEnvironment readPrimaryEnvironment() =>
+      switch (_prefs.getString('primary_environment')) {
+        'termux' => PrimaryEnvironment.termux,
+        _ => PrimaryEnvironment.ubuntu,
+      };
+
+  Future<void> writePrimaryEnvironment(PrimaryEnvironment environment) async {
+    final previous = readPrimaryEnvironment();
+    try {
+      if (!await _prefs.setString('primary_environment', environment.name)) {
+        throw const OperationFailure('主环境保存失败，请重试');
+      }
+    } catch (_) {
+      // shared_preferences 的内存值会先变化，失败时也恢复读取端看到的值。
+      try {
+        await _prefs.setString('primary_environment', previous.name);
+      } catch (_) {
+        /* 保存失败仍按失败返回，不将未落盘选择用于新会话。 */
+      }
+      throw const OperationFailure('主环境保存失败，请重试');
+    }
+  }
 
   ExecutionScope readExecutionScope() {
     final value = _prefs.getString('execution_scope');

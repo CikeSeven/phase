@@ -23,7 +23,9 @@ class ToolPresentation {
     'system_info' => Symbols.schedule,
     'read_file' => Symbols.description,
     'shell' || 'shizuku_shell' || 'termux_shell' => Symbols.terminal,
-    'shizuku_transfer' || 'termux_transfer' => Symbols.sync_alt,
+    'workspace_transfer' ||
+    'shizuku_transfer' ||
+    'termux_transfer' => Symbols.sync_alt,
     'install_packages' => Symbols.download,
     'prepare_skill' => Symbols.folder_copy,
     'read_skill' => Symbols.auto_stories,
@@ -56,6 +58,7 @@ class ToolPresentation {
     'read_file' => '读取文件',
     'read_skill' => '读取 Skill',
     'shell' => '执行命令',
+    'workspace_transfer' => '跨环境复制',
     'shizuku_shell' => 'Shizuku 命令',
     'termux_shell' => 'Termux 命令',
     'shizuku_transfer' => 'Shizuku 文件传输',

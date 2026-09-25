@@ -15,7 +15,8 @@ class PrepareSkillTool extends Tool {
   @override
   String get name => 'prepare_skill';
   @override
-  String get description => '将已启用 Skill 的固定版本资源复制到工作区，返回 guestPath 供 shell 使用。';
+  String get description =>
+      '将已启用 Skill 的固定版本资源复制到工作区，返回 executionPath 供 shell 使用。';
   @override
   Map<String, dynamic> get inputSchema => {
     'type': 'object',
@@ -57,19 +58,27 @@ class PrepareSkillTool extends Tool {
         workspace,
         skill,
         cancellation,
+        ownerId: context.runId,
         checkPermission: () => reader.checkAccess(skill, cancellation),
       );
       return ToolOutcome.success(
         jsonEncode({
           'skillId': skill.id,
           'revision': skill.revision,
-          'guestPath': path,
+          'executionPath': path,
           'executed': false,
           'instruction': '资源是工作副本，脚本需使用 shell 显式调用解释器；缺失依赖不会自动安装',
         }),
       );
     } on StorageFailure {
       rethrow;
+    } on WorkspaceFailure catch (error) {
+      return ToolOutcome(
+        ok: false,
+        cancelled: error.cancelled,
+        content: error.userMessage,
+        errorCode: 'skillCopyFailed',
+      );
     } on Failure catch (error) {
       return ToolOutcome.failure(
         error.userMessage,

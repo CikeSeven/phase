@@ -144,10 +144,19 @@ final class SkillFailure extends Failure {
 
 /// Linux 环境、进程和工作区文件失败；应用记录写入仍使用 StorageFailure。
 final class WorkspaceFailure extends Failure {
-  const WorkspaceFailure(this.code, super.message);
+  const WorkspaceFailure(
+    this.code,
+    super.message, {
+    this.completedPaths = const [],
+    this.cancelled = false,
+  });
   final String code;
+  final List<String> completedPaths;
+  final bool cancelled;
   @override
-  String get userMessage => message;
+  String get userMessage => completedPaths.isEmpty
+      ? message
+      : '$message（已提交 ${completedPaths.length} 项）';
 }
 
 /// 外部命令通道与文件传输错误；不把文件 IO 失败当作业务数据库故障。

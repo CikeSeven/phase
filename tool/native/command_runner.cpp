@@ -181,6 +181,18 @@ static int run_job(const string &job) {
     string command = read_file(job + "/command"), cwd = read_file(job + "/cwd"),
            shell = read_file(job + "/shell"), home = read_file(job + "/home"),
            path = read_file(job + "/path");
+    std::vector<string> helper_args;
+    if (exists(job + "/workspaceArgs")) {
+      string encoded = read_file(job + "/workspaceArgs");
+      size_t start = 0;
+      while (start < encoded.size()) {
+        size_t end = encoded.find('\0', start);
+        require(end != string::npos, "invalidArguments");
+        helper_args.push_back(encoded.substr(start, end - start));
+        start = end + 1;
+      }
+      require(helper_args.size() == 9 && helper_args[0] == "workspace", "invalidArguments");
+    }
     int64_t limit = std::stoll(read_file(job + "/limit"));
     require(limit > 0 && limit <= 64 * 1024 * 1024, "invalidLimit");
     Fd stdout_log(open((job + "/stdout").c_str(),
@@ -214,7 +226,7 @@ static int run_job(const string &job) {
       setenv("PATH", path.c_str(), 1);
       setenv("LANG", "C.UTF-8", 1);
       if (shell.find("com.termux") != string::npos) {
-        string prefix = shell.substr(0, shell.size() - 9);
+        string prefix = "/data/data/com.termux/files/usr";
         setenv("PREFIX", prefix.c_str(), 1);
         setenv("TMPDIR", (prefix + "/tmp").c_str(), 1);
       }
@@ -222,7 +234,12 @@ static int run_job(const string &job) {
         dprintf(2, "Cannot enter working directory: %s\n", strerror(errno));
         _exit(125);
       }
-      if (shell.find("bash") != string::npos)
+      if (!helper_args.empty()) {
+        std::vector<char *> argv{const_cast<char *>(shell.c_str())};
+        for (auto &arg : helper_args) argv.push_back(const_cast<char *>(arg.c_str()));
+        argv.push_back(nullptr);
+        execv(shell.c_str(), argv.data());
+      } else if (shell.find("bash") != string::npos)
         execl(shell.c_str(), shell.c_str(), "--noprofile", "--norc", "-c",
               command.c_str(), (char *)nullptr);
       else
@@ -338,6 +355,8 @@ static int run_job(const string &job) {
   return 0;
 }
 
+#include "workspace_files.h"
+
 int main(int argc, char **v) {
   signal(SIGTERM, stop_signal);
   signal(SIGINT, stop_signal);
@@ -345,6 +364,10 @@ int main(int argc, char **v) {
   try {
     require(argc >= 2, "invalidArguments");
     string op = v[1];
+    if (op == "workspace") {
+      std::cout << workspace_operation(argc, v);
+      return 0;
+    }
     if (op == "probe") {
       require(prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) == 0,
               "subreaperUnavailable");
@@ -381,8 +404,8 @@ int main(int argc, char **v) {
     }
     require(argc >= 5, "invalidArguments");
     auto job = job_path(v);
-    if (op == "prepare") {
-      require(argc == 11, "invalidArguments");
+    if (op == "prepare" || op == "prepare_workspace") {
+      require(argc == (op == "prepare" ? 11 : 20), "invalidArguments");
       directory(v[2]);
       require(mkdir(job.c_str(), 0700) == 0, "alreadyPrepared");
       atomic_file(job + "/token", v[4]);
@@ -401,6 +424,11 @@ int main(int argc, char **v) {
       atomic_file(job + "/path", v[8]);
       atomic_file(job + "/limit", v[9]);
       atomic_file(job + "/lease", v[10]);
+      if (op == "prepare_workspace") {
+        string encoded;
+        for (int i = 11; i < argc; ++i) { encoded += v[i]; encoded += '\0'; }
+        atomic_file(job + "/workspaceArgs", encoded);
+      }
       std::cout << "{\"version\":1,\"state\":\"prepared\"}";
     } else {
       authenticate(job, v[4]);

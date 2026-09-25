@@ -1,3 +1,5 @@
+import '../workspace/workspace_file_access.dart';
+
 import 'dart:async';
 
 import '../../../core/utils/id.dart';
@@ -23,6 +25,7 @@ class ToolExecutionRequest {
     required this.attachments,
     required this.storage,
     this.workspaceDirectory = '',
+    this.fileAccess,
     required this.enabledTools,
     required this.toolPolicies,
     this.providerCallId,
@@ -40,6 +43,7 @@ class ToolExecutionRequest {
   final List<Attachment> attachments;
   final ToolStorage storage;
   final String workspaceDirectory;
+  final WorkspaceFileAccess? fileAccess;
 
   /// 本次运行开放的工具范围与工具级策略（来自助手与该次运行配置）。
   final Set<String> enabledTools;
@@ -299,6 +303,7 @@ class ToolExecutor {
       storage: request.storage,
       attachments: request.attachments,
       workspaceDirectory: request.workspaceDirectory,
+      fileAccess: request.fileAccess,
       confirmed: policy == ToolPolicy.ask,
     );
 

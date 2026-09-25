@@ -1,3 +1,5 @@
+import '../workspace/workspace_file_access.dart';
+
 import 'dart:async';
 
 import '../../../data/models/attachment.dart';
@@ -42,6 +44,7 @@ class ToolContext {
     required this.storage,
     required this.attachments,
     this.workspaceDirectory = '',
+    this.fileAccess,
     this.confirmed = false,
   });
 
@@ -59,6 +62,7 @@ class ToolContext {
 
   /// 当前会话允许读写的应用私有工作区根目录。
   final String workspaceDirectory;
+  final WorkspaceFileAccess? fileAccess;
 
   String get artifactsDirectory => storage.artifactsDirectory(conversationId);
 

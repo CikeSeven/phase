@@ -1,3 +1,6 @@
+import '../../../data/models/workspace.dart';
+import '../../../core/widgets/app_dialog.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -33,7 +36,8 @@ class WorkspaceFilesPage extends ConsumerWidget {
       }
     });
     return AppScaffold(
-      title: path == '.' ? workspace.value?.name ?? '工作区文件' : path,
+      title:
+          '${workspace.value?.primaryEnvironment.label ?? ''} · ${path == '.' ? workspace.value?.name ?? '工作区文件' : path}',
       actions: [
         IconButton(
           tooltip: '刷新',
@@ -73,17 +77,54 @@ class WorkspaceFilesPage extends ConsumerWidget {
                     leading: Icon(
                       directory ? Symbols.folder : Symbols.description,
                     ),
-                    trailing: directory
-                        ? const Icon(Symbols.chevron_right)
-                        : IconButton(
-                            tooltip: '导出文件',
-                            icon: const Icon(Symbols.download),
-                            onPressed: action.isLoading
-                                ? null
-                                : () => ref
-                                      .read(workspaceActionsProvider.notifier)
-                                      .exportFile(id, entry.$1),
+                    trailing: PopupMenuButton<String>(
+                      enabled: !action.isLoading,
+                      itemBuilder: (context) => [
+                        if (!directory)
+                          const PopupMenuItem(
+                            value: 'export',
+                            child: Text('导出文件'),
                           ),
+                        PopupMenuItem(
+                          value: 'copy',
+                          child: Text(
+                            '复制到 ${workspace.value?.primaryEnvironment.other.label ?? '另一环境'}',
+                          ),
+                        ),
+                      ],
+                      onSelected: (value) async {
+                        final actions = ref.read(
+                          workspaceActionsProvider.notifier,
+                        );
+                        if (value == 'export') {
+                          await actions.exportFile(id, entry.$1);
+                          return;
+                        }
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (context) => AppDialog(
+                            title:
+                                '复制到 ${workspace.value?.primaryEnvironment.other.label ?? '另一环境'}？',
+                            content: Text(
+                              '${entry.$1}\n同名文件将覆盖，目录合并，目标额外文件保留。',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('取消'),
+                              ),
+                              FilledButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text('复制'),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          await actions.copyToOther(id, entry.$1);
+                        }
+                      },
+                    ),
                     onTap: action.isLoading
                         ? null
                         : () async {
@@ -92,15 +133,20 @@ class WorkspaceFilesPage extends ConsumerWidget {
                                 '/settings/workspaces/$id?path=${Uri.encodeQueryComponent(entry.$1)}',
                               );
                             } else {
-                              final attachment = await ref
-                                  .read(workspaceActionsProvider.notifier)
-                                  .perform(
-                                    () => ref
-                                        .read(workspaceActionsProvider.notifier)
-                                        .preview(id, entry.$1),
-                                  );
-                              if (attachment != null && context.mounted) {
-                                await showToolArtifact(context, attachment);
+                              final actions = ref.read(
+                                workspaceActionsProvider.notifier,
+                              );
+                              final attachment = await actions.perform(
+                                () => actions.preview(id, entry.$1),
+                              );
+                              if (attachment != null) {
+                                try {
+                                  if (context.mounted) {
+                                    await showToolArtifact(context, attachment);
+                                  }
+                                } finally {
+                                  await actions.releasePreview(attachment);
+                                }
                               }
                             }
                           },

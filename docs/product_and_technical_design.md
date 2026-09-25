@@ -186,6 +186,8 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 ### 4.1 文件
 
+主环境只在环境设置中全局选择 Ubuntu / Termux，默认 Ubuntu；新会话首次发送时绑定保存值，创建后不可切换，修改全局选择不影响已有会话。聊天输入框不提供环境入口。普通文件工具、文件页、shell 和 Skill 工作副本共用固定绑定。两侧文件独立保留，`workspace_transfer(path, direction)` 与文件页显式复制到另一环境的相同相对路径。Termux 使用其 HOME 下会话专属目录，依赖自行管理；Shizuku 独立启用。本地 MCP stdio 仍固定 Ubuntu 服务专属目录，不自动共享会话文件。详细生命周期与未验收范围见 [系统命令专项设计](./system_command_channels_design.md)。
+
 文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径直接基于当前会话独占的工作区根目录，如 `a.txt`、`test/a.txt`；Linux 内部仍挂载为 `/workspace`。附件可用 `attachment:<ID>` 或唯一文件名读取，导入原件只读。目录列表返回工作区相对路径，支持子目录与分页，检查路径和符号链接目标不越界。
 
 - `read_file(path, offset?, limit?)`：UTF-8 文本或文档已抽取文本，行号从 1 开始；按流读取，最多 2000 行或 16 KiB 完整行，返回明确续读位置。超长单行、越过结尾、非文本均返回具体错误，不让 AI 重复请求同一无效页。

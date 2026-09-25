@@ -40,6 +40,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     final replacesEnvironment = environment.value?.rootPath != null;
     final operation = ref.watch(environmentControllerProvider);
     final dependencies = ref.watch(dependencyControllerProvider);
+    final primaryEnvironment = ref.watch(defaultPrimaryEnvironmentProvider);
     final VoidCallback? onInstallEnvironment =
         environment.hasValue &&
             !dependencies.busy &&
@@ -58,7 +59,8 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
         operation.busy ||
         environment.isLoading ||
         dependencies.busy ||
-        commandBusy;
+        commandBusy ||
+        primaryEnvironment.saving;
     // 依赖安装没有可计量的总量，按设计规范使用不定进度。
     final progress =
         !dependencies.busy &&
@@ -67,7 +69,9 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
             (operation.total ?? 0) > 0
         ? (operation.bytes / operation.total!).clamp(0.0, 1.0)
         : null;
-    final progressLabel = commandBusy
+    final progressLabel = primaryEnvironment.saving
+        ? '正在保存主环境'
+        : commandBusy
         ? '正在配置命令通道'
         : dependencies.busy
         ? '正在安装依赖'
@@ -94,6 +98,41 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
+          AppSection(
+            title: '新会话主环境',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                RadioGroup<PrimaryEnvironment>(
+                  groupValue: primaryEnvironment.environment,
+                  onChanged: (value) {
+                    if (value != null && !primaryEnvironment.saving) {
+                      ref
+                          .read(defaultPrimaryEnvironmentProvider.notifier)
+                          .select(value);
+                    }
+                  },
+                  child: Column(
+                    children: [
+                      for (final value in PrimaryEnvironment.values)
+                        RadioListTile<PrimaryEnvironment>(
+                          contentPadding: EdgeInsets.zero,
+                          title: Text(value.label),
+                          value: value,
+                          enabled: !primaryEnvironment.saving,
+                        ),
+                    ],
+                  ),
+                ),
+                if (primaryEnvironment.error != null)
+                  Text(
+                    primaryEnvironment.error!,
+                    style: TextStyle(color: colors.error),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.l),
           Material(
             color: context.brandColors.goldContainer,
             borderRadius: AppRadius.mediumAll,

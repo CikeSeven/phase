@@ -6,3 +6,4 @@ struct TransferLimits {
 };
 std::string transfer_files(int fd, const std::string &root, bool sending,
                            const TransferLimits &limits);
+std::string file_digest(const std::string &path);

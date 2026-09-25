@@ -9,6 +9,72 @@ part of 'workspace_controller.dart';
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
 
+@ProviderFor(DefaultPrimaryEnvironment)
+final defaultPrimaryEnvironmentProvider = DefaultPrimaryEnvironmentProvider._();
+
+final class DefaultPrimaryEnvironmentProvider
+    extends
+        $NotifierProvider<
+          DefaultPrimaryEnvironment,
+          PrimaryEnvironmentSetting
+        > {
+  DefaultPrimaryEnvironmentProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'defaultPrimaryEnvironmentProvider',
+        isAutoDispose: false,
+        dependencies: <ProviderOrFamily>[settingsStorageProvider],
+        $allTransitiveDependencies: <ProviderOrFamily>[
+          DefaultPrimaryEnvironmentProvider.$allTransitiveDependencies0,
+          DefaultPrimaryEnvironmentProvider.$allTransitiveDependencies1,
+        ],
+      );
+
+  static final $allTransitiveDependencies0 = settingsStorageProvider;
+  static final $allTransitiveDependencies1 =
+      SettingsStorageProvider.$allTransitiveDependencies0;
+
+  @override
+  String debugGetCreateSourceHash() => _$defaultPrimaryEnvironmentHash();
+
+  @$internal
+  @override
+  DefaultPrimaryEnvironment create() => DefaultPrimaryEnvironment();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(PrimaryEnvironmentSetting value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<PrimaryEnvironmentSetting>(value),
+    );
+  }
+}
+
+String _$defaultPrimaryEnvironmentHash() =>
+    r'22a132698765f0cbf8263ae10c8720c023dd1c34';
+
+abstract class _$DefaultPrimaryEnvironment
+    extends $Notifier<PrimaryEnvironmentSetting> {
+  PrimaryEnvironmentSetting build();
+  @$mustCallSuper
+  @override
+  WhenComplete runBuild() {
+    final ref =
+        this.ref as $Ref<PrimaryEnvironmentSetting, PrimaryEnvironmentSetting>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<PrimaryEnvironmentSetting, PrimaryEnvironmentSetting>,
+              PrimaryEnvironmentSetting,
+              Object?,
+              Object?
+            >;
+    return element.handleCreate(ref, build);
+  }
+}
+
 @ProviderFor(linuxPlatformInfo)
 final linuxPlatformInfoProvider = LinuxPlatformInfoProvider._();
 

@@ -1,3 +1,6 @@
+import '../../../data/models/workspace.dart';
+import '../workspace/workspace_file_access.dart';
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,7 +8,6 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/error/failure.dart';
 import '../../../data/models/tool_policy.dart';
-import '../workspace/workspace_files.dart';
 import 'file_text.dart';
 import 'tool.dart';
 
@@ -56,8 +58,19 @@ class ReadFileTool extends Tool {
   }) => _fileOperation(() async {
     final path = ToolArguments(arguments, name).string('path');
     cancellation.throwIfCancelled();
-    final file = await _readableFile(path, context);
-    final page = await readFilePage(file, arguments, cancellation);
+    final relative = path.startsWith('attachment:')
+        ? null
+        : _relative(path, context);
+    final access = _access(context);
+    final page =
+        relative != null &&
+            (await access.stat(relative, cancellation)).type == 'file'
+        ? await access.readPage(relative, arguments, cancellation)
+        : await readFilePage(
+            _attachmentFile(path, context),
+            arguments,
+            cancellation,
+          );
     return ToolOutcome.success(page.render());
   });
 }
@@ -159,26 +172,24 @@ class EditFileTool extends Tool {
   }) => _fileOperation(() async {
     final path = ToolArguments(arguments, name).string('path');
     cancellation.throwIfCancelled();
-    final file = await _localFile(path, context);
-    if (await file.length() > maxFileWriteBytes) {
-      throw const FileToolException(
-        'fileTooLarge',
-        '编辑文件上限为 2 MiB，请通过工作区 shell 处理',
-      );
-    }
-    final original = await readEditableText(file);
+    final access = _access(context);
+    final relative = _relative(path, context);
+    final original = await access.readText(relative, cancellation);
     if (original.contains('\u0000')) {
       throw const FileToolException('notText', '不能编辑二进制文件');
     }
     final content = applyFileEdits(original, arguments);
     cancellation.throwIfCancelled();
-    if (await readEditableText(file) != original) {
-      throw const FileToolException('fileChanged', '文件在编辑期间已改变，请重新读取后编辑');
-    }
     if (content == original) {
       return const ToolOutcome.success('替换内容与原文相同，文件未改变');
     }
-    final outcome = await _write(path, content, context, cancellation);
+    final outcome = await _write(
+      path,
+      content,
+      context,
+      cancellation,
+      original: original,
+    );
     return ToolOutcome.success(
       '已替换 ${(arguments['edits'] as List).length} 处文本。${outcome.content}',
       artifacts: outcome.artifacts,
@@ -236,25 +247,11 @@ class ListFilesTool extends Tool {
   }) => _fileOperation(() async {
     final path = arguments['path'] as String? ?? '.';
     cancellation.throwIfCancelled();
-    final location = await _location(path, context, directory: true);
-    final entries = <Map<String, Object?>>[];
-    final directory = Directory(location);
-    if (await directory.exists()) {
-      await for (final entity in directory.list(followLinks: false)) {
-        cancellation.throwIfCancelled();
-        entries.add({
-          'path': p.relative(entity.path, from: context.workspaceDirectory),
-          'type': entity is Directory
-              ? 'directory'
-              : entity is Link
-              ? 'link'
-              : 'file',
-        });
-      }
-    } else {
-      throw const FileToolException('fileNotFound', '目录不存在');
-    }
-    final relative = p.relative(location, from: context.workspaceDirectory);
+    final relative = _relative(path, context, directory: true);
+    final entries = <Map<String, Object?>>[
+      for (final entry in await _access(context).list(relative, cancellation))
+        {'path': entry.path, 'type': entry.type},
+    ];
     if (relative == '.') {
       for (final attachment in context.attachments) {
         if (p.isWithin(
@@ -295,19 +292,33 @@ class ListFilesTool extends Tool {
   });
 }
 
-Future<String> _location(
-  String path,
-  ToolContext context, {
-  bool directory = false,
-}) async {
+WorkspaceFileAccess _access(ToolContext context) {
+  if (context.fileAccess != null) return context.fileAccess!;
   if (context.workspaceDirectory.isEmpty) {
     throw const FileToolException('workspaceUnavailable', '本次运行的会话工作区不可用');
   }
-  final relative = path == '/workspace' || path.startsWith('/workspace/')
+  return LocalWorkspaceFileAccess(
+    WorkspaceSnapshot(
+      id: context.conversationId,
+      name: '会话工作区',
+      rootPath: context.workspaceDirectory,
+      environmentRoot: null,
+      environmentRevision: null,
+    ),
+    Directory(p.join(context.artifactsDirectory, '.workspace-staging')),
+  );
+}
+
+String _relative(String path, ToolContext context, {bool directory = false}) {
+  final ubuntu =
+      context.fileAccess?.binding.primaryEnvironment !=
+      PrimaryEnvironment.termux;
+  final relative =
+      ubuntu && (path == '/workspace' || path.startsWith('/workspace/'))
       ? (path == '/workspace' ? '.' : path.substring(11))
       : path;
   if (relative.startsWith('attachment:')) {
-    throw const FileToolException('readOnlyAttachment', '导入附件只读；请写到新的文件路径');
+    throw const FileToolException('readOnlyAttachment', '附件只读；请写到新的文件路径');
   }
   if (relative.isEmpty ||
       relative.contains('\u0000') ||
@@ -318,24 +329,17 @@ Future<String> _location(
           (p.posix.normalize(relative) == '.' || relative.endsWith('/')))) {
     throw const FileToolException('invalidPath', '路径不合法：请使用工作区内的相对路径');
   }
-  return workspacePath(context.workspaceDirectory, relative, mustExist: false);
+  return p.posix.normalize(relative);
 }
 
-Future<File> _localFile(String path, ToolContext context) async =>
-    File(await _location(path, context));
-
-Future<File> _readableFile(String path, ToolContext context) async {
-  if (!path.startsWith('attachment:')) {
-    final file = await _localFile(path, context);
-    if (await file.exists()) return file;
-  }
+File _attachmentFile(String path, ToolContext context) {
   final matches = path.startsWith('attachment:')
       ? context.attachments.where((a) => a.id == path.substring(11))
       : context.attachments.where((a) => a.name == path || a.id == path);
   if (matches.length > 1) {
     throw const FileToolException(
       'ambiguousPath',
-      '附件名不唯一，请用 list_files 返回的 attachment:<ID>',
+      '附件名不唯一，请使用 attachment:<ID>',
     );
   }
   final attachment = matches.firstOrNull;
@@ -349,20 +353,15 @@ Future<ToolOutcome> _write(
   String path,
   String content,
   ToolContext context,
-  RunCancellation cancellation,
-) async {
-  final bytes = utf8.encode(content);
-  if (bytes.length > maxFileWriteBytes) {
-    throw const FileToolException('contentTooLarge', '单次写入上限为 2 MiB UTF-8 内容');
-  }
-  cancellation.throwIfCancelled();
-  final file = await _localFile(path, context);
-  await file.parent.create(recursive: true);
-  // 创建父目录后再检查链接，避免把写入导向目录之外。
-  await _localFile(path, context);
-  cancellation.throwIfCancelled();
-  await file.writeAsBytes(bytes, flush: true);
-  return ToolOutcome.success('已写入「$path」（${bytes.length} bytes）');
+  RunCancellation cancellation, {
+  String? original,
+}) async {
+  await _access(
+    context,
+  ).write(_relative(path, context), content, cancellation, original: original);
+  return ToolOutcome.success(
+    '已写入「$path」（${utf8.encode(content).length} bytes）',
+  );
 }
 
 Future<ToolOutcome> _fileOperation(
@@ -373,7 +372,14 @@ Future<ToolOutcome> _fileOperation(
   } on FileToolException catch (error) {
     return ToolOutcome.failure(error.message, errorCode: error.code);
   } on WorkspaceFailure catch (error) {
-    return ToolOutcome.failure(error.message, errorCode: error.code);
+    return ToolOutcome(
+      ok: false,
+      cancelled: error.cancelled,
+      content: error.userMessage,
+      errorCode: error.code,
+    );
+  } on CommandChannelFailure catch (error) {
+    return ToolOutcome.failure(error.userMessage, errorCode: error.code);
   } on FileSystemException catch (error) {
     return ToolOutcome.failure(
       '文件操作失败：${error.message}',

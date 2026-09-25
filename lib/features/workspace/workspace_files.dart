@@ -55,29 +55,26 @@ class WorkspaceFiles {
   Future<String> importAttachment(
     Workspace workspace,
     Attachment attachment,
-    RunCancellation cancellation,
-  ) async {
+    RunCancellation cancellation, {
+    WorkspaceSnapshot? binding,
+    String? ownerId,
+  }) async {
+    final snapshot = binding ?? await repository.snapshot(workspace.id);
+    final access = repository.files(snapshot, ownerId: ownerId);
     final relative = 'imports/${attachment.id}/${p.basename(attachment.name)}';
-    final destination = await workspacePath(
-      workspace.rootPath,
-      relative,
-      mustExist: false,
-    );
     try {
-      final source = File(attachment.localPath);
-      if (await source.length() > maxCopyBytes) {
+      if (await File(attachment.localPath).length() > maxCopyBytes) {
         throw const WorkspaceFailure('fileTooLarge', '单次导入文件上限为 64 MiB');
       }
-      await File(destination).parent.create(recursive: true);
-      if (!await File(destination).exists()) {
-        await _copy(source, File(destination), cancellation);
+      if ((await access.stat(relative, cancellation)).type == 'missing') {
+        await access.importPath(relative, attachment.localPath, cancellation);
       }
       await repository.recordCopy(workspace.id, relative, {
         'kind': 'attachment',
         'id': attachment.id,
         'name': attachment.name,
-      });
-      return '/workspace/$relative';
+      }, environment: snapshot.primaryEnvironment);
+      return access.executionPath(relative);
     } on FileSystemException {
       throw WorkspaceFailure('importFailed', '无法复制附件「${attachment.name}」到工作区');
     }
@@ -88,22 +85,21 @@ class WorkspaceFiles {
     SkillSnapshot skill,
     RunCancellation cancellation, {
     required Future<void> Function() checkPermission,
+    String? ownerId,
   }) async {
+    final access = repository.files(workspace, ownerId: ownerId);
+    final temporary = await access.temporary();
+    final staging = Directory(p.join(temporary.path, 'skill'));
     final relative = '.skills/${skill.id}/${skill.revision}-${generateId()}';
-    final path = await workspacePath(
-      workspace.rootPath,
-      relative,
-      mustExist: false,
-    );
-    final destination = Directory(path);
-    final staging = Directory('$path.staging');
     try {
       await checkPermission();
+      await staging.create();
       var total = 0;
       for (final entry in skill.resources.entries) {
         cancellation.throwIfCancelled();
-        final sourcePath = await workspacePath(skill.installedPath, entry.key);
-        final source = File(sourcePath);
+        final source = File(
+          await workspacePath(skill.installedPath, entry.key),
+        );
         if (await source.length() != entry.value.size ||
             entry.value.size > 4 * 1024 * 1024) {
           throw const WorkspaceFailure('skillChanged', 'Skill 固定版本资源大小已改变');
@@ -121,20 +117,21 @@ class WorkspaceFiles {
       }
       await checkPermission();
       cancellation.throwIfCancelled();
-      await staging.rename(destination.path);
+      await access.importPath(relative, staging.path, cancellation);
+      await checkPermission();
       await repository.recordCopy(workspace.id, relative, {
         'kind': 'skill',
         'id': skill.id,
         'revision': skill.revision,
-      });
-      return '/workspace/$relative';
+      }, environment: workspace.primaryEnvironment);
+      return access.executionPath(relative);
     } on FileSystemException {
       throw const WorkspaceFailure(
         'skillCopyFailed',
         'Skill 工作区副本保存失败，请检查可用空间',
       );
     } finally {
-      if (await staging.exists()) await staging.delete(recursive: true);
+      await temporary.delete(recursive: true);
     }
   }
 
@@ -142,23 +139,16 @@ class WorkspaceFiles {
     Workspace workspace, [
     String relative = '.',
   ]) async {
-    final directory = Directory(
-      await workspacePath(workspace.rootPath, relative),
-    );
-    final entries = <(String, int)>[];
-    await for (final entity in directory.list(followLinks: false)) {
-      if (entries.length == 1000) {
-        throw const WorkspaceFailure('directoryLimit', '目录条目超过 1000，请进入子目录查看');
-      }
-      if (entity is Link) continue;
-      final name = p.relative(entity.path, from: workspace.rootPath);
-      entries.add((
-        name,
-        entity is Directory ? -1 : (await entity.stat()).size,
-      ));
+    final access = repository.files(await repository.snapshot(workspace.id));
+    final entries = await access.list(relative, RunCancellation());
+    if (entries.length > 1000) {
+      throw const WorkspaceFailure('directoryLimit', '目录条目超过 1000，请进入子目录查看');
     }
-    entries.sort((a, b) => a.$1.compareTo(b.$1));
-    return entries;
+    return [
+      for (final entry in entries)
+        if (entry.type == 'file' || entry.type == 'directory')
+          (entry.path, entry.type == 'directory' ? -1 : entry.size),
+    ];
   }
 
   Future<Attachment> artifact(
@@ -167,10 +157,8 @@ class WorkspaceFiles {
     ToolContext context,
     RunCancellation cancellation,
   ) async {
-    final source = File(await workspacePath(workspace.rootPath, relative));
-    if (await source.length() > maxCopyBytes) {
-      throw const WorkspaceFailure('artifactLimit', '单个工作区产物上限为 64 MiB');
-    }
+    final access = repository.files(workspace, ownerId: context.runId);
+    final temp = await access.temporary();
     final destination = File(
       p.join(
         context.artifactsDirectory,
@@ -178,8 +166,10 @@ class WorkspaceFiles {
       ),
     );
     try {
+      final staged = p.join(temp.path, 'artifact');
+      await access.exportPath(relative, staged, cancellation);
       await destination.parent.create(recursive: true);
-      await _copy(source, destination, cancellation);
+      await File(staged).copy(destination.path);
       return await context.storage.registerArtifact(
         conversationId: context.conversationId,
         path: destination.path,
@@ -187,83 +177,113 @@ class WorkspaceFiles {
       );
     } on FileSystemException {
       throw WorkspaceFailure('artifactFailed', '无法保存工作区产物「$relative」');
+    } finally {
+      await temp.delete(recursive: true);
     }
   }
 
-  Future<void> _copy(
-    File source,
-    File target,
-    RunCancellation cancellation,
-  ) async {
-    final temp = File('${target.path}.${generateId()}.tmp');
-    final output = await temp.open(mode: FileMode.write);
-    var size = 0;
-    try {
-      await for (final bytes in source.openRead()) {
-        cancellation.throwIfCancelled();
-        size += bytes.length;
-        if (size > maxCopyBytes) {
-          throw const WorkspaceFailure('fileTooLarge', '文件复制超过 64 MiB 上限');
-        }
-        await output.writeFrom(bytes);
-      }
-    } catch (_) {
-      await output.close();
-      if (await temp.exists()) await temp.delete();
-      rethrow;
-    }
-    await output.close();
-    await temp.rename(target.path);
-  }
-
-  Future<Map<String, String>> outputs(WorkspaceSnapshot workspace) async {
+  Future<Map<String, String>> outputs(
+    WorkspaceSnapshot workspace, {
+    String? ownerId,
+    RunCancellation? cancellation,
+  }) async {
+    final access = repository.files(workspace, ownerId: ownerId);
+    final cancel = cancellation ?? RunCancellation();
     final result = <String, String>{};
-    final path = await workspacePath(workspace.rootPath, '.');
     var total = 0;
-    await for (final entity in _outputFiles(
-      Directory(path),
-      workspaceRoot: true,
-    )) {
-      final relative = p.relative(entity.path, from: workspace.rootPath);
-      await workspacePath(workspace.rootPath, relative);
-      total += await entity.length();
-      if (result.length >= 100 || total > maxCopyBytes) {
-        throw const WorkspaceFailure(
-          'artifactLimit',
-          '工作区文件超过自动收集上限（100 个文件 / 64 MiB），未附加文件，原文件保留在工作区',
-        );
+    Future<void> visit(String path) async {
+      for (final entry in await access.list(path, cancel)) {
+        if (path == '.' &&
+            {'imports', '.skills'}.contains(p.basename(entry.path))) {
+          continue;
+        }
+        if (entry.type == 'directory') {
+          await visit(entry.path);
+        } else if (entry.type == 'file') {
+          total += entry.size;
+          if (result.length >= 100 || total > maxCopyBytes) {
+            throw const WorkspaceFailure(
+              'artifactLimit',
+              '工作区文件超过自动收集上限（100 个文件 / 64 MiB），原文件保留在工作区',
+            );
+          }
+          final digest = (await access.stat(
+            entry.path,
+            cancel,
+            withDigest: true,
+          )).digest;
+          if (digest == null || digest.isEmpty) {
+            throw const WorkspaceFailure('fileChanged', '产物在收集期间已改变');
+          }
+          result[entry.path] = digest;
+        }
       }
-      result[relative] = (await sha256.bind(entity.openRead()).first)
-          .toString();
     }
+
+    await visit('.');
     return result;
   }
 
-  Stream<File> _outputFiles(
-    Directory directory, {
-    bool workspaceRoot = false,
-  }) async* {
-    await for (final entity in directory.list(followLinks: false)) {
-      if (entity is File) {
-        yield entity;
-      } else if (entity is Directory) {
-        // 导入附件与 Skill 资源副本不作为命令产物收集。
-        if (workspaceRoot &&
-            {'imports', '.skills'}.contains(p.basename(entity.path))) {
-          continue;
-        }
-        yield* _outputFiles(entity);
+  Future<void> transfer(
+    WorkspaceSnapshot workspace,
+    String path,
+    bool toOther,
+    RunCancellation cancellation, {
+    String? ownerId,
+  }) async {
+    final other = workspace.select(workspace.primaryEnvironment.other);
+    final from = repository.files(
+      toOther ? workspace : other,
+      ownerId: ownerId,
+    );
+    final to = repository.files(toOther ? other : workspace, ownerId: ownerId);
+    final temporary = await from.temporary();
+    try {
+      final staged = p.join(temporary.path, 'transfer');
+      try {
+        await from.exportPath(path, staged, cancellation);
+      } on WorkspaceFailure catch (error) {
+        if (error.cancelled) throw const ToolCancelled();
+        throw WorkspaceFailure(error.code, error.message);
       }
+      try {
+        await to.importPath(path, staged, cancellation);
+      } on WorkspaceFailure catch (error) {
+        final completed = [
+          for (final item in error.completedPaths)
+            item.isEmpty ? path : p.posix.join(path, item),
+        ];
+        for (final item in completed) {
+          await repository.recordCopy(workspace.id, item, {
+            'kind': 'workspace',
+            'environment': from.binding.primaryEnvironment.name,
+            'path': item,
+          }, environment: to.binding.primaryEnvironment);
+        }
+        throw WorkspaceFailure(
+          error.code,
+          error.message,
+          completedPaths: completed,
+          cancelled: error.cancelled,
+        );
+      }
+      await repository.recordCopy(workspace.id, path, {
+        'kind': 'workspace',
+        'environment': from.binding.primaryEnvironment.name,
+        'path': path,
+      }, environment: to.binding.primaryEnvironment);
+    } finally {
+      await temporary.delete(recursive: true);
     }
   }
 }
 
 String workspacePrompt(WorkspaceSnapshot? workspace) {
   if (workspace == null) return '';
-  final files =
-      '\n\n本会话独立工作区：${jsonEncode(workspace.name)}，文件路径相对于根目录，随会话持久保存。';
-  if (!workspace.linuxAvailable) {
-    return '$files Ubuntu 环境未就绪，当前无法执行 shell 命令。';
-  }
-  return '$files Ubuntu ${workspace.environmentRevision}。附件在执行前复制到 imports/<附件ID>/<文件名>。';
+  return '\n\n本会话主环境：${workspace.primaryEnvironment.label}，独立工作区 ${jsonEncode(workspace.name)}。'
+      '文件工具使用相对路径；shell 默认目录 ${workspace.executionRoot}。'
+      'Ubuntu 与 Termux 的会话文件各自保存，workspace_transfer 显式复制，不自动同步。'
+      '${workspace.executable ? '附件在执行前复制到 imports/<附件ID>/<原文件名>。' : '所选命令环境未就绪，不要更换身份重试。'}'
+      '${workspace.primaryEnvironment == PrimaryEnvironment.termux ? 'Termux 依赖由用户管理，缺失解释器需如实报告。' : ''}'
+      '本地 MCP stdio 始终使用 Ubuntu 的服务专属目录，不自动共享本会话文件。';
 }

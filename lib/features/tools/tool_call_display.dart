@@ -54,6 +54,7 @@ class ToolCallDisplay {
         args['prompt'] is String ? args['prompt'] as String : null,
       'shell' || 'shizuku_shell' || 'termux_shell' =>
         args['command'] is String ? '\$ ${args['command']}' : null,
+      'workspace_transfer' => '${args['path']}',
       'shizuku_transfer' ||
       'termux_transfer' => '${args['path']} ↔ ${args['remotePath']}',
       'install_packages' => null,
