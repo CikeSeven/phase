@@ -168,7 +168,6 @@ void main() {
             phase: phase,
             rootPath: '/fixture/rootfs',
             revision: 'old',
-            installedBytes: 12,
             installedDependencies: {
               'python': InstalledDependency(
                 installedAt: DateTime.fromMillisecondsSinceEpoch(1000),

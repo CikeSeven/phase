@@ -368,7 +368,6 @@ class WorkspaceRepository {
           imageDigest: env.imageDigest,
           downloadBytes: env.downloadBytes,
           revision: env.revision,
-          installedBytes: env.installedBytes,
           installedDependencies: env.installedDependencies,
           error: '上次安装已中断，可重试；已有工作区保留',
         ),

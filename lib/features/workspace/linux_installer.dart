@@ -33,7 +33,6 @@ abstract final class UbuntuImage {
   static const sha256Digest =
       'a91d5a93010193712d346d761372b7c9db6dfcf093893161c64ca107f05914f2';
   static const downloadBytes = 29936675;
-  static const fileBytes = 104728695;
   static const codename = 'noble';
   static const traceUrl = 'https://www.cloudflare.com/cdn-cgi/trace';
   static const upstreamAptMirror = 'http://ports.ubuntu.com/ubuntu-ports';
@@ -94,7 +93,6 @@ class LinuxInstaller {
           imageDigest: old?.imageDigest,
           downloadBytes: old?.downloadBytes ?? 0,
           revision: old?.revision,
-          installedBytes: old?.installedBytes ?? 0,
           installedDependencies: old?.installedDependencies ?? const {},
         ),
       );
@@ -156,7 +154,7 @@ class LinuxInstaller {
         throw const WorkspaceFailure('digestMismatch', 'Ubuntu 镜像校验失败，请重新下载');
       }
       await stage(EnvironmentPhase.extracting);
-      final installedBytes = await RootfsArchive().extract(
+      final extractedBytes = await RootfsArchive().extract(
         archive,
         rootfs,
         cancellation,
@@ -249,11 +247,10 @@ class LinuxInstaller {
           downloadBytes: image.downloadBytes,
           rootPath: installed.path,
           revision: image.revision,
-          installedBytes: installedBytes,
         ),
       );
       committed = true;
-      progress(EnvironmentPhase.ready, installedBytes, installedBytes);
+      progress(EnvironmentPhase.ready, extractedBytes, extractedBytes);
       if (old.rootPath != null && old.rootPath != installed.path) {
         await Directory(old.rootPath!).delete(recursive: true);
       }
@@ -276,7 +273,6 @@ class LinuxInstaller {
             imageDigest: old.imageDigest,
             downloadBytes: old.downloadBytes,
             revision: old.revision,
-            installedBytes: old.installedBytes,
             installedDependencies: old.installedDependencies,
             error: message,
           ),
@@ -338,7 +334,6 @@ class LinuxInstaller {
           imageDigest: old.imageDigest,
           downloadBytes: old.downloadBytes,
           revision: old.revision,
-          installedBytes: old.installedBytes,
           installedDependencies: old.installedDependencies,
           error: '环境卸载未完成，可重试',
         ),

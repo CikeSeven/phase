@@ -24,7 +24,7 @@
 
 默认选择 Ubuntu 24.04 的 glibc 用户空间，提高常见 ARM64 Node/Python 原生依赖的适配机会；不承诺任意桌面二进制可运行。Alpine 作为以后有明确体积需求时的独立环境选项，不在第一次实现中同时维护多发行版。
 
-Aether 基础 Alpine 的本地资源测算约为 4.11 MiB 打包前、8.54 MiB 解压文件内容，仅供认识最小环境成本；这不是 Ubuntu、Node/Python 或相月成品 APK 的体积预算。相月环境清单记录真实下载大小、安装大小和依赖增量，UI 只显示实测/清单提供的数字。
+Aether 基础 Alpine 的本地资源测算约为 4.11 MiB 打包前、8.54 MiB 解压文件内容，仅供认识最小环境成本；这不是 Ubuntu、Node/Python 或相月成品 APK 的体积预算。相月环境清单记录镜像下载大小；不持久化或展示基础环境安装大小，安装期间保留实测字节进度。
 
 PRoot 和 loader 随 APK 按 ABI 放入 `jniLibs`，从 `nativeLibraryDir` 启动，rootfs 与用户工作区独立存放。保留当前 compileSdk 37，不以降低 targetSdk 实现执行能力；当前 targetSdk/ABI/设备上的 exec、loader 和取消行为必须通过 E3 验收。
 
@@ -161,7 +161,7 @@ E2 当前实现：上述本地导入、助手范围、版本固定、管理界�
 
 ### 5.1 环境生命周期
 
-`RuntimeEnvironment`：id、发行版/版本、ABI、镜像来源与摘要、状态、安装目录、已安装依赖版本和可测量大小。首批一个 Ubuntu 环境供多个独立工作区使用。
+`RuntimeEnvironment`：id、发行版/版本、ABI、镜像来源与摘要、状态、安装目录、已安装依赖版本和镜像下载大小。首批一个 Ubuntu 环境供多个独立工作区使用。
 
 状态：notInstalled → downloading → verifying → extracting → configuring → checking → ready；配置阶段选择软件源并写入 DNS/来源配置。失败进入 failed，取消进入 cancelled，保留此前可用安装并清理临时目录。只有 shell、文件读写、进程退出码检查都通过才能 ready。
 

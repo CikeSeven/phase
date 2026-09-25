@@ -33,7 +33,6 @@ class RuntimeEnvironment {
     this.phase = EnvironmentPhase.notInstalled,
     this.rootPath,
     this.revision,
-    this.installedBytes = 0,
     this.error,
     this.imageUrl,
     this.imageDigest,
@@ -44,7 +43,6 @@ class RuntimeEnvironment {
   final EnvironmentPhase phase;
   final String? rootPath;
   final String? revision;
-  final int installedBytes;
   final String? error;
   final String? imageUrl;
   final String? imageDigest;
@@ -59,7 +57,6 @@ class RuntimeEnvironment {
     phase: phase,
     rootPath: rootPath,
     revision: revision,
-    installedBytes: installedBytes,
     error: error,
     imageUrl: imageUrl,
     imageDigest: imageDigest,
@@ -75,7 +72,6 @@ class RuntimeEnvironment {
     'phase': phase.name,
     'rootPath': rootPath,
     'revision': revision,
-    'installedBytes': installedBytes,
     'error': error,
     'installedDependencies': {
       for (final entry in installedDependencies.entries)
@@ -91,7 +87,6 @@ class RuntimeEnvironment {
         phase: EnvironmentPhase.values.byName(json['phase'] as String),
         rootPath: json['rootPath'] as String?,
         revision: json['revision'] as String?,
-        installedBytes: json['installedBytes'] as int,
         error: json['error'] as String?,
         installedDependencies: {
           for (final entry
