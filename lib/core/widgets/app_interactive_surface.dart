@@ -17,6 +17,7 @@ class AppInteractiveSurface extends StatefulWidget {
     this.color,
     this.radius = AppRadius.medium,
     this.onLongPress,
+    this.focusNode,
   });
 
   final bool? selected;
@@ -25,6 +26,7 @@ class AppInteractiveSurface extends StatefulWidget {
   final VoidCallback? onTap;
   final Widget child;
   final Color? color;
+  final FocusNode? focusNode;
 
   @override
   State<AppInteractiveSurface> createState() => _AppInteractiveSurfaceState();
@@ -117,6 +119,7 @@ class _AppInteractiveSurfaceState extends State<AppInteractiveSurface>
         button: true,
         enabled: widget.onTap != null,
         child: InkWell(
+          focusNode: widget.focusNode,
           onTap: widget.onTap,
           onLongPress: widget.onTap == null ? null : widget.onLongPress,
           onHighlightChanged: (pressed) {

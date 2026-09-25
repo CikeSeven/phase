@@ -1,27 +1,18 @@
 import 'tool_call_record.dart';
 
-/// 用户的全局开放范围与系统授权分开；运行只保存已经取得的能力快照。
+/// 仅 Shizuku 保留应用内开关；Termux 由系统授权和运行时就绪状态守门。
 class CommandChannelSettings {
-  const CommandChannelSettings({this.shizuku = false, this.termux = false});
+  const CommandChannelSettings({this.shizuku = false});
   final bool shizuku;
-  final bool termux;
   bool enabled(ExecutionChannel channel) => switch (channel) {
     ExecutionChannel.shizuku => shizuku,
-    ExecutionChannel.termux => termux,
+    ExecutionChannel.termux => true,
     _ => false,
   };
-  List<String> get channels => [if (shizuku) 'shizuku', if (termux) 'termux'];
-  CommandChannelSettings select(ExecutionChannel channel, bool enabled) =>
-      CommandChannelSettings(
-        shizuku: channel == ExecutionChannel.shizuku ? enabled : shizuku,
-        termux: channel == ExecutionChannel.termux ? enabled : termux,
-      );
-  Map<String, dynamic> toJson() => {'shizuku': shizuku, 'termux': termux};
+  List<String> get channels => [if (shizuku) 'shizuku', 'termux'];
+  Map<String, dynamic> toJson() => {'shizuku': shizuku};
   factory CommandChannelSettings.fromJson(Map<String, dynamic> json) =>
-      CommandChannelSettings(
-        shizuku: json['shizuku'] == true,
-        termux: json['termux'] == true,
-      );
+      CommandChannelSettings(shizuku: json['shizuku'] == true);
 }
 
 class CommandChannelSnapshot {

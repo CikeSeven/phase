@@ -22,6 +22,8 @@ class CommandChannelsState {
   final List<CommandChannelStatus> statuses;
   final bool busy;
   final String? error;
+
+  bool get termuxAuthorized => hasTermuxCommandPermission(statuses);
 }
 
 @Riverpod(keepAlive: true)
@@ -103,7 +105,7 @@ class CommandChannelsController extends _$CommandChannelsController {
         state = AsyncData(
           CommandChannelsState(
             settings: ref.read(settingsStorageProvider).readCommandChannels(),
-            statuses: current.statuses,
+            statuses: state.value?.statuses ?? current.statuses,
             error: error.userMessage,
           ),
         );
@@ -113,13 +115,33 @@ class CommandChannelsController extends _$CommandChannelsController {
     }
   }
 
-  Future<void> enable(ExecutionChannel channel, bool value) async {
+  Future<void> setShizukuEnabled(bool value) async {
     final current = state.value;
     if (current == null) return;
-    final next = current.settings.select(channel, value);
+    final next = CommandChannelSettings(shizuku: value);
     await _operate(() async {
       final storage = ref.read(settingsStorageProvider);
       final driver = ref.read(commandChannelDriverProvider);
+      if (value) {
+        final statuses = await driver.status();
+        if (!ref.mounted) return;
+        state = AsyncData(
+          CommandChannelsState(
+            settings: current.settings,
+            statuses: statuses,
+            busy: true,
+          ),
+        );
+        if (!hasShizukuCommandPermission(statuses)) {
+          throw OperationFailure(
+            statuses
+                    .where((status) => status.channel == 'shizuku')
+                    .firstOrNull
+                    ?.message ??
+                '无法读取 Shizuku 授权状态',
+          );
+        }
+      }
       await storage.writeCommandChannels(next);
       try {
         await driver.setEnabled(next.channels);
@@ -141,7 +163,7 @@ class CommandChannelsController extends _$CommandChannelsController {
   );
 }
 
-/// Only setup for explicitly enabled channels participates in run creation.
+/// 系统授权与运行时就绪的通道才进入快照；Shizuku 另受应用内开关约束。
 Future<List<CommandChannelSnapshot>> commandSnapshots(Ref ref) async {
   final settings = ref.read(settingsStorageProvider).readCommandChannels();
   if (settings.channels.isEmpty) return const [];

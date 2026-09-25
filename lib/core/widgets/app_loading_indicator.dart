@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:material_loading_indicator/loading_indicator.dart';
 
@@ -40,5 +42,65 @@ class AppLoadingIndicator extends StatelessWidget {
         ),
       ),
     ),
+  );
+}
+
+/// 固定反馈槽位；短操作不闪现图形，慢操作仍显示真实加载状态。
+class AppDelayedLoadingIndicator extends StatefulWidget {
+  const AppDelayedLoadingIndicator({
+    required this.loading,
+    required this.semanticsLabel,
+    super.key,
+    this.placeholder,
+  });
+
+  final bool loading;
+  final String semanticsLabel;
+  final Widget? placeholder;
+
+  @override
+  State<AppDelayedLoadingIndicator> createState() =>
+      _AppDelayedLoadingIndicatorState();
+}
+
+class _AppDelayedLoadingIndicatorState
+    extends State<AppDelayedLoadingIndicator> {
+  Timer? _delay;
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _update();
+  }
+
+  @override
+  void didUpdateWidget(AppDelayedLoadingIndicator oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.loading != widget.loading) _update();
+  }
+
+  void _update() {
+    _delay?.cancel();
+    _visible = false;
+    if (widget.loading) {
+      _delay = Timer(const Duration(milliseconds: 200), () {
+        if (mounted) setState(() => _visible = true);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _delay?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizedBox.square(
+    dimension: 24,
+    child: _visible
+        ? AppLoadingIndicator.small(semanticsLabel: widget.semanticsLabel)
+        : widget.placeholder,
   );
 }

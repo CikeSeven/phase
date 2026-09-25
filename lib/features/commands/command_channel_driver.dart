@@ -12,6 +12,20 @@ import 'command_api.g.dart';
 
 part 'command_channel_driver.g.dart';
 
+/// Shizuku 的 ready 同时要求服务运行、系统授权及受支持的 shell 身份。
+bool hasShizukuCommandPermission(Iterable<CommandChannelStatus> statuses) =>
+    statuses.any(
+      (status) => status.channel == 'shizuku' && status.state == 'ready',
+    );
+
+/// 原生仅在系统命令权限已授予时返回这两个 Termux 状态。
+bool hasTermuxCommandPermission(Iterable<CommandChannelStatus> statuses) =>
+    statuses.any(
+      (status) =>
+          status.channel == 'termux' &&
+          (status.state == 'initializationRequired' || status.state == 'ready'),
+    );
+
 class CommandOperation {
   CommandOperation(
     this.driver,

@@ -7,6 +7,7 @@ import '../../../core/error/failure.dart';
 import '../../../data/datasources/local/settings_storage.dart';
 import '../../../data/models/workspace.dart';
 import '../../../data/repositories/workspace_repository.dart';
+import '../commands/command_channel_driver.dart';
 import '../tools/tool.dart';
 import 'linux_installer.dart';
 import 'process_driver.dart';
@@ -37,9 +38,7 @@ class DefaultPrimaryEnvironment extends _$DefaultPrimaryEnvironment {
     if (state.saving || environment == state.environment) return;
     final previous = state.environment;
     state = PrimaryEnvironmentSetting(previous, saving: true);
-    final pending = ref
-        .read(settingsStorageProvider)
-        .writePrimaryEnvironment(environment);
+    final pending = _save(environment);
     _pending = pending;
     try {
       await pending;
@@ -51,6 +50,19 @@ class DefaultPrimaryEnvironment extends _$DefaultPrimaryEnvironment {
     } finally {
       _pending = null;
     }
+  }
+
+  Future<void> _save(PrimaryEnvironment environment) async {
+    if (environment == PrimaryEnvironment.termux) {
+      final statuses = await ref.read(commandChannelDriverProvider).status();
+      if (!hasTermuxCommandPermission(statuses)) {
+        throw const OperationFailure('请先授权 Termux 命令权限');
+      }
+    }
+    if (!ref.mounted) return;
+    await ref
+        .read(settingsStorageProvider)
+        .writePrimaryEnvironment(environment);
   }
 
   Future<PrimaryEnvironment> forNewConversation() async {

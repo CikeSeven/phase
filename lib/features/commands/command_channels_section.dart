@@ -3,15 +3,84 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/widgets/app_section.dart';
+import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../data/models/tool_call_record.dart';
+import 'command_channel_card.dart';
 import 'command_channels_controller.dart';
 
-class CommandChannelsSection extends ConsumerWidget {
+class CommandChannelsSection extends ConsumerStatefulWidget {
   const CommandChannelsSection({super.key});
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CommandChannelsSection> createState() =>
+      _CommandChannelsSectionState();
+}
+
+class _CommandChannelsSectionState
+    extends ConsumerState<CommandChannelsSection> {
+  ExecutionChannel? _activeChannel;
+
+  Future<void> _operate(
+    ExecutionChannel channel,
+    Future<void> Function() action,
+  ) async {
+    if (_activeChannel != null ||
+        ref.read(commandChannelsControllerProvider).value?.busy == true) {
+      return;
+    }
+    setState(() => _activeChannel = channel);
+    try {
+      await action();
+    } finally {
+      if (mounted) setState(() => _activeChannel = null);
+    }
+  }
+
+  Future<void> _perform(
+    ExecutionChannel channel,
+    CommandChannelAction action,
+  ) async {
+    final status = ref
+        .read(commandChannelsControllerProvider)
+        .value
+        ?.statuses
+        .where((status) => status.channel == channel.name)
+        .firstOrNull;
+    if (!commandChannelActions(channel, status?.state).contains(action)) return;
+    final controller = ref.read(commandChannelsControllerProvider.notifier);
+    await _operate(channel, () async {
+      switch (action) {
+        case CommandChannelAction.open:
+          await controller.open(channel.name);
+        case CommandChannelAction.authorize:
+          await controller.authorize(channel.name);
+        case CommandChannelAction.initialize:
+          await controller.initialize(channel.name);
+        case CommandChannelAction.copySetup:
+          await _copyTermuxSetup();
+        case CommandChannelAction.retry:
+          await controller.refresh();
+      }
+    });
+  }
+
+  Future<void> _copyTermuxSetup() async {
+    var message = '已复制，请在 Termux 中执行';
+    try {
+      await Clipboard.setData(const ClipboardData(text: _termuxSetup));
+    } on PlatformException {
+      message = '复制外部调用设置失败，请重试';
+    } on MissingPluginException {
+      message = '此设备不支持复制外部调用设置';
+    }
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final value = ref.watch(commandChannelsControllerProvider);
     return value.when(
       loading: () => const Center(child: AppLoadingIndicator()),
@@ -27,113 +96,45 @@ class CommandChannelsSection extends ConsumerWidget {
       ),
       data: (state) {
         final controller = ref.read(commandChannelsControllerProvider.notifier);
+        final locked = state.busy || _activeChannel != null;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
+          spacing: AppSpacing.m,
           children: [
             for (final channel in [
               ExecutionChannel.shizuku,
               ExecutionChannel.termux,
-            ]) ...[
-              const SizedBox(height: 16),
-              AppSection(
-                title: channel == ExecutionChannel.shizuku
-                    ? 'Shizuku'
-                    : 'Termux',
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        channel == ExecutionChannel.termux
-                            ? '允许使用 Termux'
-                            : '启用命令与文件传输',
-                      ),
-                      subtitle: Text(
-                        state.statuses
-                                .where((s) => s.channel == channel.name)
-                                .firstOrNull
-                                ?.message ??
-                            '状态不可用',
-                      ),
-                      value: state.settings.enabled(channel),
-                      onChanged: state.busy
-                          ? null
-                          : (value) => controller.enable(channel, value),
-                    ),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      children: [
-                        TextButton(
-                          onPressed: state.busy
-                              ? null
-                              : () => controller.open(channel.name),
-                          child: Text(
-                            state.statuses
-                                        .where((s) => s.channel == channel.name)
-                                        .firstOrNull
-                                        ?.state ==
-                                    'notInstalled'
-                                ? '下载'
-                                : '打开应用',
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: state.busy
-                              ? null
-                              : () => controller.authorize(channel.name),
-                          child: const Text('授权'),
-                        ),
-                        TextButton(
-                          onPressed: state.busy
-                              ? null
-                              : () => controller.initialize(channel.name),
-                          child: Text(
-                            channel == ExecutionChannel.termux ? '初始化' : '连接',
-                          ),
-                        ),
-                        if (channel == ExecutionChannel.termux)
-                          TextButton(
-                            onPressed: state.busy
-                                ? null
-                                : () async {
-                                    await Clipboard.setData(
-                                      const ClipboardData(text: _termuxSetup),
-                                    );
-                                    if (context.mounted) {
-                                      ScaffoldMessenger.of(
-                                        context,
-                                      ).showSnackBar(
-                                        const SnackBar(
-                                          content: Text('已复制，请在 Termux 中执行'),
-                                        ),
-                                      );
-                                    }
-                                  },
-                            child: const Text('复制外部调用设置'),
-                          ),
-                      ],
-                    ),
-                  ],
-                ),
+            ])
+              CommandChannelCard(
+                key: ValueKey(channel),
+                channel: channel,
+                enabled:
+                    channel == ExecutionChannel.shizuku &&
+                    state.settings.shizuku,
+                locked: locked,
+                loading:
+                    _activeChannel == channel ||
+                    state.busy && _activeChannel == null,
+                status: state.statuses
+                    .where((status) => status.channel == channel.name)
+                    .firstOrNull,
+                onEnabled: channel == ExecutionChannel.shizuku
+                    ? (value) => _operate(
+                        channel,
+                        () => controller.setShizukuEnabled(value),
+                      )
+                    : null,
+                onAction: (action) => _perform(channel, action),
               ),
-            ],
             if (state.error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
+              Semantics(
+                liveRegion: true,
                 child: Text(
                   state.error!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  style: Theme.of(context).textTheme.bodyMedium
+                      ?.copyWith(color: Theme.of(context).colorScheme.error),
                 ),
               ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: state.busy ? null : controller.refresh,
-                child: const Text('刷新状态'),
-              ),
-            ),
           ],
         );
       },

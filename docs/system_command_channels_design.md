@@ -1,10 +1,10 @@
 # E6：系统命令与显式文件传输
 
-更新：2026-09-25。主环境仅在环境设置中全局选择，新会话绑定后不可切换；已授权本次 9 → 10 保数据覆盖升级。安装记录与未验收范围见实施计划；未运行测试，不将安装启动视为通道功能验收。
+更新：2026-09-26。主环境仅在环境设置中全局选择，新会话绑定后不可切换；已授权本次 9 → 10 保数据覆盖升级。初始安装记录见实施计划，环境设置交互调整与未验收范围见本文末节；未运行测试，不将安装启动视为通道功能验收。
 
 ## 选择与参考
 
-用户确认：Ubuntu / Termux 在环境设置中全局单选，命令、文件与 Skill 使用会话创建时绑定的环境，已有会话不允许切换；两侧文件独立保留，AI 工具与文件页提供显式复制。Shizuku 独立全局启用；Termux 依赖自行管理。Root、交互 PTY、Termux MCP 双向会话、自动目录同步不在本批。
+用户确认：Ubuntu / Termux 在环境设置中全局单选，命令、文件与 Skill 使用会话创建时绑定的环境，已有会话不允许切换；两侧文件独立保留，AI 工具与文件页提供显式复制。Shizuku 独立全局启用；Termux 取消应用内使用开关，以系统命令授权为选择门槛，依赖自行管理。Root、交互 PTY、Termux MCP 双向会话、自动目录同步不在本批。
 
 参考的本地源码版本：Aether `4723e81`、Operit `b2c76100`、Kelivo `25876c21`、RikkaHub `288a034c`。Aether 的 RUN_COMMAND/私有日志/PendingIntent、UserService 绑定与临时字节传输有直接参考价值，但取消脚本仅处理直接子进程并写固定退出码，不能照搬；Operit 使用旧 Shizuku newProcess/反射，Termux 只有未接线回调；后两者是应用内 PRoot，不是外部 Termux。只借鉴事件归属、启动取消竞争和并行排空等机制，不复制这些仓库代码或引入另一套 Agent。
 
@@ -14,7 +14,7 @@
 - Shizuku 固定 shell UID 2000、`/system/bin/sh -c`、默认 `/`。Termux 使用真实应用 UID、固定 Bash、默认 `HOME/.phase/workspaces/<workspaceId>`；不是 Ubuntu `/workspace`，没有路径级强隔离承诺。
 - 全局默认 Ubuntu，仅影响之后首次发送的新会话；会话创建后主环境不可修改，聊天页无环境入口或草稿。全局保存尚未完成时，新会话创建等待保存结果；运行仍固定身份，批准计划核对来源。未就绪不自动切换、不阻塞普通聊天。
 - `shizuku_transfer` / `termux_transfer` 接收 `path`、`remotePath`、`direction=to_channel|from_channel`。`path` 是会话工作区相对路径，`remotePath` 是对应身份下的绝对路径；导出源还可显式引用 `attachment:<ID>`，经现有附件复制契约落入会话工作区。
-- 全局开关默认关闭，由 SettingsStorage 保存；授权与初始化不自动打开开关。运行 JSON 固定通道集合、UID、runner 摘要和默认目录。新许可不加入旧运行；停用/撤权停止活动调用并阻止后续派发。
+- SettingsStorage 的通道设置仅保存 Shizuku 开关，默认关闭；界面与保存路径均只在原生返回已授权、运行中且 shell 身份受支持时允许开启，禁止用旧状态保存开启值，关闭不要求授权。Termux 不再有第二层应用内许可，不能因旧偏好中的关闭值阻止已授权使用。上方 Termux 选项在系统命令权限未授予或状态尚未取得时禁用，保存前再向原生核对；`initializationRequired` 与 `ready` 都表明系统权限已授予，但实际执行仍要求运行组件就绪和外部调用配置。授权或初始化不自动改变主环境，也不打开 Shizuku 开关。切回 Ubuntu 仅改变新会话默认值，不停用已有 Termux 会话。运行 JSON 固定通道集合、UID、runner 摘要和默认目录，新许可不加入旧运行；Shizuku 停用与系统撤权仍停止对应活动调用并阻止后续派发。
 - 命令与外部传输共用命令策略：计划 deny、基础 ask、全权限 allow。系统许可仍独立检查；准备任务通知不依赖无障碍，真正启动与写入发生在确认之后。
 - 使用 schema 10 初版契约：会话主环境、工作区 Termux 身份及分环境资源来源。仅本次获授权 9 → 10 升级：已有会话绑定 Ubuntu、Termux 身份为空，旧文件来源标记 Ubuntu，保留其他数据与文件；事务校验失败回滚，不扩展历史链。
 
@@ -24,7 +24,7 @@
 
 - `WorkspaceFileRequest` 只接受宿主定义的操作、工作区 ID 和相对路径。runner 直接 exec 类型化文件 helper，不使用模型 shell 文本或 Python/Node；控制与读取共用监督进程、归属、取消和输出限制。大文件走有鉴权的短命字节传输，不能经 Intent 传完整内容。
 - 保持完整行分页（2000 行 / 16 KiB）、2 MiB 编辑与写入、空内容覆盖及原文唯一匹配。编辑在宿主计算替换，提交前比较摘要，再原子替换；不把摘要暴露为 AI 参数。Termux helper 拒绝链接路径；这些检查不隔离同 UID 的任意脚本。
-- 计划档只开放类型化读取和列目录，不隐式创建工作区、初始化 helper、准备 Skill 或安装依赖。首次写入前记录 Termux 目录归属；停用、撤权和身份改变均检查当前状态。
+- 计划档只开放类型化读取和列目录，不隐式创建工作区、初始化 helper、准备 Skill 或安装依赖。首次写入前记录 Termux 目录归属；系统撤权和身份改变均检查当前状态。
 - `workspace_transfer(path, direction=to_other|from_other)` 在两个托管目录的同一相对路径显式复制。文件页提供“复制到另一环境”；同名覆盖、目录合并，保留目标额外文件。失败回填已收到的提交项，不重试不回滚已提交文件。
 - 外部传输的 `path` 同样指当前主环境；Termux 与 Shizuku 之间通过宿主受控暂存转运，不建立镜像。`prepare_skill` 返回 `executionPath`，缺解释器不自动安装。
 - 复制会话复制两侧已创建目录；删除清理两侧托管文件，Termux 不可达时保留删除重试状态。未完成副本清理失败时保留可删除的归属记录。用户导出到任意外部位置的文件不随会话删除。
@@ -57,6 +57,8 @@ Shizuku 使用 PFD 双向字节通道；Termux 使用只监听 `127.0.0.1` 的�
 
 ## 验证边界
 
-初始 E6 的 Profile 构建、覆盖安装及数据保留记录见实施计划第 8 节，不代表本次主环境改动已安装或验收。本次完成 Pigeon/Riverpod/Drift 生成，`flutter analyze --no-pub lib`、native C++ 与 Android Kotlin 编译、`git diff --check` 通过。全量 analyze 另有 3 处测试替身接口未同步（`createConversation`、`setPrimaryEnvironment`、`WorkspaceFiles.outputs`）及 2 项既有引号 lint；默认格式检查仍报告既有 `test/support/schema8_fixture.dart`。按照本次范围未修改或运行测试，未装机。
+初始 E6 的 Profile 构建、覆盖安装及数据保留记录见实施计划第 8 节。主环境初次实现时完成 Pigeon/Riverpod/Drift 生成，`flutter analyze --no-pub lib`、native C++ 与 Android Kotlin 编译、`git diff --check` 通过。全量 analyze 另有 3 处测试替身接口未同步（`createConversation`、`setPrimaryEnvironment`、`WorkspaceFiles.outputs`）及 2 项既有引号 lint；默认格式检查仍报告既有 `test/support/schema8_fixture.dart`。当时未修改或运行测试，未装机；后续环境设置交互的安装记录不代表真实通道功能验收。
+
+2026-09-26 环境设置交互调整：使用 SDK SegmentedButton 与紧凑通道卡片，取消 Termux 独立使用开关，补齐 Termux 选择和 Shizuku 开启的授权复核。已同步生成物，应用代码静态检查、改动格式及 diff 检查、Profile 构建通过，并以 `adb install -r` 覆盖安装后确认启动，未卸载或清数据。全量检查仍有 2 处既有测试替身接口不匹配、2 项引号 lint 和 `schema8_fixture.dart` 格式问题；未修改或运行测试，未完成真机布局、动画和真实授权流程验收。
 
 后续获授权后，先验证两个实际通道的运行门槛，再宣称可用：当前 compileSdk 37/targetSdk 36、ARM64、UserService JNI 可执行性、Termux 发行版/SELinux/私有目录执行、后台 RUN_COMMAND 与回调、租约和真正进程/FD 回收。覆盖启动中取消、双路长输出、非零退出、撤权/宿主死亡/断连、重复迟到回调，以及二进制/空目录/隐藏文件/覆盖冲突/源变化/磁盘满/部分提交。

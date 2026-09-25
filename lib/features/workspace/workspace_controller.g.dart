@@ -53,7 +53,7 @@ final class DefaultPrimaryEnvironmentProvider
 }
 
 String _$defaultPrimaryEnvironmentHash() =>
-    r'22a132698765f0cbf8263ae10c8720c023dd1c34';
+    r'1e2bb23e1b555745e421f38b58632a70c5138720';
 
 abstract class _$DefaultPrimaryEnvironment
     extends $Notifier<PrimaryEnvironmentSetting> {

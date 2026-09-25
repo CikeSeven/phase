@@ -186,7 +186,7 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 ### 4.1 文件
 
-主环境只在环境设置中全局选择 Ubuntu / Termux，默认 Ubuntu；新会话首次发送时绑定保存值，创建后不可切换，修改全局选择不影响已有会话。聊天输入框不提供环境入口。普通文件工具、文件页、shell 和 Skill 工作副本共用固定绑定。两侧文件独立保留，`workspace_transfer(path, direction)` 与文件页显式复制到另一环境的相同相对路径。Termux 使用其 HOME 下会话专属目录，依赖自行管理；Shizuku 独立启用。本地 MCP stdio 仍固定 Ubuntu 服务专属目录，不自动共享会话文件。详细生命周期与未验收范围见 [系统命令专项设计](./system_command_channels_design.md)。
+主环境只在环境设置中全局选择 Ubuntu / Termux，默认 Ubuntu；新会话首次发送时绑定保存值，创建后不可切换，修改全局选择不影响已有会话。聊天输入框不提供环境入口。普通文件工具、文件页、shell 和 Skill 工作副本共用固定绑定。两侧文件独立保留，`workspace_transfer(path, direction)` 与文件页显式复制到另一环境的相同相对路径。Termux 使用其 HOME 下会话专属目录，依赖自行管理，不再设独立使用开关；未获系统命令授权时禁选，保存前再次检查授权，运行仍检查实际就绪状态。Shizuku 保留独立启用开关。本地 MCP stdio 仍固定 Ubuntu 服务专属目录，不自动共享会话文件。详细生命周期与未验收范围见 [系统命令专项设计](./system_command_channels_design.md)。
 
 文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径直接基于当前会话独占的工作区根目录，如 `a.txt`、`test/a.txt`；Linux 内部仍挂载为 `/workspace`。附件可用 `attachment:<ID>` 或唯一文件名读取，导入原件只读。目录列表返回工作区相对路径，支持子目录与分页，检查路径和符号链接目标不越界。
 

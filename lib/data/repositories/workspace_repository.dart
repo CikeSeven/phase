@@ -486,7 +486,6 @@ Future<WorkspaceRepository> workspaceRepository(Ref ref) async {
     Directory(info.rootDirectory),
     loadTermux: () async {
       final settings = ref.read(settingsStorageProvider).readCommandChannels();
-      if (!settings.termux) return null;
       try {
         final driver = ref.read(commandChannelDriverProvider);
         await driver.setEnabled(settings.channels);

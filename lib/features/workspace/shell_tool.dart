@@ -92,7 +92,7 @@ class ShellTool extends Tool {
   ) async {
     if (binding.termux == null || commandDriver == null || files == null) {
       return const ToolOutcome.failure(
-        'Termux 未启用或尚未就绪',
+        'Termux 未授权或尚未就绪',
         errorCode: 'environmentMissing',
       );
     }

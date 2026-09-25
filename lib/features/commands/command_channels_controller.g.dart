@@ -38,7 +38,7 @@ final class CommandChannelsControllerProvider
 }
 
 String _$commandChannelsControllerHash() =>
-    r'546b7d010bde8d8eb87b7858528257da2bfb0ec8';
+    r'3f056fd5aab3f15248026d4ac322f6040dd636d7';
 
 abstract class _$CommandChannelsController
     extends $AsyncNotifier<CommandChannelsState> {
