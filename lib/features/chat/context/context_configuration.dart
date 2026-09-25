@@ -13,6 +13,7 @@ String contextSystemPrompt(RunConfiguration config) =>
     '${config.systemPrompt}'
     '${skillDiscoveryPrompt(config.skills, linuxAvailable: config.workspace?.linuxAvailable == true)}'
     '${workspacePrompt(config.workspace)}'
+    '${config.commandChannels.isEmpty ? '' : '\n外部通道与 Ubuntu 工作区不是同一文件系统。通过对应的 transfer 工具显式传输，不能用通道失败作为更换身份重试已派发动作的理由。\n'}'
     '${executionScopePrompt(config.executionScope, toolExecution: config.enabledTools.isNotEmpty, applicationOperations: config.enabledTools.any(applicationOperationTools.contains))}'
     '${config.mode == PermissionMode.plan ? planModePrompt : ''}';
 

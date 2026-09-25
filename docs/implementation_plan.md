@@ -19,7 +19,8 @@
 | Ubuntu 安装、工作区、进程管道与 shell | 已实现；本机四协议、真机安装和进程桥通过 | 完整 UI/生命周期和性能仍需真机验收 |
 | 本地 MCP stdio、合并依赖安装 | 已实现；本机 Python/Node 固件闭环与真机 stdio 探针通过 | 真实 npx/uvx 服务与依赖安装真机验收仍需独立进行 |
 | 上下文预算/摘要、Plan Mode、长期记忆 | 已实现；本地四协议闭环、真实摘要连接取消与布局自动化通过 | 真机、视觉、性能与真实模型摘要质量待验收 |
-| Shizuku、Termux、插件宿主、子代理等 | 尚未实现 | 按 E 阶段建设，不显示空入口 |
+| Shizuku、Termux 命令与显式递归传输 | E6 代码已接入 | 未运行测试或真机验收，见第 8 节 |
+| 插件宿主、子代理等 | 尚未实现 | 按 E 阶段建设，不显示空入口 |
 
 历史记录最近一批为 2026-09-15：记录了 644 项 Flutter 测试通过、4 项预览跳过、25 项 JVM 测试通过，以及 Profile 构建/覆盖安装。手势探针未完成实际点击验收，用户随后反馈可用；这些记录不代表当前提交已复验，也不代表真实网关或 Profile 帧性能通过。E1 本批检查另见第 3 节。
 
@@ -40,7 +41,7 @@
 | E4 | 本地 MCP stdio、依赖安装与环境界面 | E1 + E3 | 已实现；本机 Python/Node 固件闭环与真机 stdio 探针通过 |
 | E5 | 上下文预算/摘要、Plan Mode、记忆 | E1/E2；不强依赖 Linux | 已实现；本地四协议闭环、取消与布局自动化通过 |
 | E5.1 | 统一 Token/缓存统计、usage 驱动预算、滚动压缩 | E5；不强依赖原生通道 | U1–U4 已接入；本机自动化与外部验收分开记录 |
-| E6 | Shizuku 与 Termux 独立命令通道 | 进程结果/取消契约稳定 | 待实现 |
+| E6 | Shizuku 与 Termux 独立命令通道及递归传输 | 进程结果/取消契约稳定 | 代码已接入；自动化与真机验收未执行 |
 | E7 | 声明式扩展包，再做有实际用例的插件钩子 | E1/E2/E4 | 待实现 |
 | E8 | 单子代理与显式模型分派 | E5、工具归因与取消稳定 | 待实现 |
 | B1–B5 | 分支、备份、文档上传、Key/成本、感知 | 各自前置见第 11 节 | 待实现 |
@@ -252,13 +253,20 @@
 
 ## 8. E6：系统命令通道
 
-设计入口：[扩展设计 §7](./agent_extensions_design.md#extensions-channels)。
+实现契约与调研依据见 [系统命令专项设计](./system_command_channels_design.md)。2026-09-25 用户确认并列通道、全局启用和显式目录递归传输后接入：
 
-- [ ] Shizuku 安装/运行/授权引导 → UserService 单次命令 → 管道输出与退出码 → 撤权/断连/停止。
-- [ ] Termux 安装/权限/allow-external-apps/程序检查 → RUN_COMMAND + 受管理 runner → PendingIntent 与日志结果 → 超时/取消及进程回收。
-- [ ] 运行配置显示并固定通道；原生与 Dart 保留同一调用归属，失败不换身份/环境重试。
+- [x] Shizuku 状态/授权入口、shell UID UserService、PFD 输出、native supervisor 与调用归属。
+- [x] Termux RUN_COMMAND、版本化原生 runner 初始化、严格 PendingIntent 回调、私有日志分块、停止和宿主租约。
+- [x] 运行快照、三档权限和任务通知共用既有宿主；不要求无障碍，不自动更换身份/重发命令。
+- [x] 显式文件/目录传输、限量清单、摘要校验、逐文件提交、部分完成与来源/产物记录；无自动同步或远端删除联动。
+- [ ] 实际 Shizuku/Termux 安装、授权、撤权、输出、子进程/FD 回收、后台和宿主死亡验收。
+- [ ] 递归传输边界、四协议模型闭环、界面/视觉/性能验收。
 
-每条通道单独验收并交付。Termux 双向服务桥只有具体本地服务器需求时再做；E4 的 stdio 不等待 Termux。Root 不混入本批。
+本批没有改动或执行测试；不把编译或安装启动当作上述功能验收。schema 不变，不引入装机升级例外。现有 `flutter analyze --no-pub` 仍报告测试文件中的两项 `prefer_single_quotes`，未修改任务外测试。默认格式检查另发现已有 `test/support/schema8_fixture.dart` 待格式化，未改动；`flutter analyze --no-pub lib` 无问题，native/Kotlin 编译及 Profile APK 构建通过。命令沿用当前不设总时限的契约，连接期限与租约独立。
+
+2026-09-25 用户要求装机后，以 `adb -s 1b8418ca install -r` 覆盖安装 E6 Profile 包：安装 `Success`，启动 `Status: ok`、`LaunchState: WARM`、`TotalTime: 855 ms`，进程存活，未见本进程 AndroidRuntime/flutter 错误。设备 APK 与构建产物 SHA-256 一致（`7773c16d05eb07fdd28c0f6b49eed750d512a2a9635334f59726dbee408669f9`）。原 APK 与应用数据备份位于忽略且限权的 `build/e6_install/20260925_194928/`；安装前后、启动前的 `app_flutter`、`shared_prefs`、`files` 和会话工作区归档逐字节一致。没有卸载、清数据或更换签名，没有开启外部通道或执行命令；本次仅验证覆盖安装、上述数据保留与启动，不代替 E6 功能、冷启动或性能验收。
+
+每条通道单独完成实际验收。Termux 双向 MCP 服务桥、Root、PTY 和插件不混入本批。
 
 ## 9. E7：扩展包与插件钩子
 

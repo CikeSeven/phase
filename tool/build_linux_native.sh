@@ -8,8 +8,8 @@ jni_dir="$output/jniLibs/arm64-v8a"
 llvm="$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64/bin"
 cc="$llvm/aarch64-linux-android24-clang"
 # Versioned source archives and local build inputs determine the cache key.
-fingerprint=$(cat tool/build_linux_native.sh tool/native/talloc_replace.h tool/native/process_runner.c "$ndk_dir/source.properties" | sha256sum | cut -d ' ' -f1)
-if [[ -f "$output/stamp" && "$(cat "$output/stamp")" == "$fingerprint" && -f "$jni_dir/libphase_proot.so" && -f "$jni_dir/libphase_loader.so" && -f "$jni_dir/libphase_talloc.so" && -f "$jni_dir/libphase_exec.so" ]]; then exit 0; fi
+fingerprint=$(cat tool/build_linux_native.sh tool/native/talloc_replace.h tool/native/process_runner.c tool/native/command_runner.cpp tool/native/command_transfer.cpp tool/native/command_transfer.h tool/native/command_common.h "$ndk_dir/source.properties" | sha256sum | cut -d ' ' -f1)
+if [[ -f "$output/stamp" && "$(cat "$output/stamp")" == "$fingerprint" && -f "$jni_dir/libphase_proot.so" && -f "$jni_dir/libphase_loader.so" && -f "$jni_dir/libphase_talloc.so" && -f "$jni_dir/libphase_exec.so" && -f "$jni_dir/libphase_command.so" ]]; then exit 0; fi
 mkdir -p "$source_dir" "$jni_dir"
 fetch() {
   local url="$1" file="$2" digest="$3"
@@ -37,5 +37,6 @@ make -C "$source_dir/proot-5.1.107.92/src" -j4 \
 cp "$source_dir/proot-5.1.107.92/src/proot" "$jni_dir/libphase_proot.so"
 cp "$source_dir/proot-5.1.107.92/src/loader/loader" "$jni_dir/libphase_loader.so"
 "$cc" -O2 -Wall -Wextra -Werror tool/native/process_runner.c -Wl,-z,max-page-size=16384 -o "$jni_dir/libphase_exec.so"
+"$llvm/aarch64-linux-android24-clang++" -std=c++17 -O2 -Wall -Wextra -Werror -static-libstdc++ tool/native/command_runner.cpp tool/native/command_transfer.cpp -Wl,-z,max-page-size=16384 -o "$jni_dir/libphase_command.so"
 "$llvm/llvm-strip" "$jni_dir/"*.so
 printf '%s' "$fingerprint" > "$output/stamp"

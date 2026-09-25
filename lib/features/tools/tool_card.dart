@@ -1,3 +1,5 @@
+import '../commands/system_channel_tools.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -179,7 +181,8 @@ class _ToolCardState extends State<ToolCard>
                             ),
                           ),
                           if (detail != null &&
-                              !(record.toolName == 'shell' && _expanded)) ...[
+                              !(isCommandToolName(record.toolName) &&
+                                  _expanded)) ...[
                             const SizedBox(height: AppSpacing.xs),
                             Text(
                               detail,

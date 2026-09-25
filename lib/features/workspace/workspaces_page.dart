@@ -1,3 +1,6 @@
+import '../commands/command_channels_section.dart';
+import '../commands/command_channels_controller.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -31,14 +34,24 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     final replacesEnvironment = environment.value?.rootPath != null;
     final operation = ref.watch(environmentControllerProvider);
     final dependencies = ref.watch(dependencyControllerProvider);
+    final commandBusy =
+        ref.watch(commandChannelsControllerProvider).value?.busy == true;
     final showProgress =
-        operation.busy || environment.isLoading || dependencies.busy;
+        operation.busy ||
+        environment.isLoading ||
+        dependencies.busy ||
+        commandBusy;
     // 依赖安装没有可计量的总量，按设计规范使用不定进度。
     final progress =
-        !dependencies.busy && operation.busy && (operation.total ?? 0) > 0
+        !dependencies.busy &&
+            !commandBusy &&
+            operation.busy &&
+            (operation.total ?? 0) > 0
         ? (operation.bytes / operation.total!).clamp(0.0, 1.0)
         : null;
-    final progressLabel = dependencies.busy
+    final progressLabel = commandBusy
+        ? '正在配置命令通道'
+        : dependencies.busy
         ? '正在安装依赖'
         : operation.busy
         ? operation.uninstalling
@@ -321,6 +334,8 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                 ),
               ),
           ],
+          const SizedBox(height: 24),
+          const CommandChannelsSection(),
         ],
       ),
     );

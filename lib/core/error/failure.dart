@@ -149,3 +149,11 @@ final class WorkspaceFailure extends Failure {
   @override
   String get userMessage => message;
 }
+
+/// 外部命令通道与文件传输错误；不把文件 IO 失败当作业务数据库故障。
+final class CommandChannelFailure extends Failure {
+  const CommandChannelFailure(this.code, super.message);
+  final String code;
+  @override
+  String get userMessage => message;
+}

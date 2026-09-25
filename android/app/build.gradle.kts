@@ -5,6 +5,7 @@ plugins {
 }
 
 android {
+    buildFeatures { aidl = true }
     namespace = "app.xiangyue.phase"
     compileSdk = 37 // flutter_secure_storage 11.x 要求 compileSdk ≥ 37
     ndkVersion = flutter.ndkVersion
@@ -53,6 +54,8 @@ flutter {
 }
 
 dependencies {
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation("junit:junit:4.13.2")
 }

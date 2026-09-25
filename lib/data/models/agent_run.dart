@@ -1,3 +1,4 @@
+import 'command_channel.dart';
 import 'context_policy.dart';
 import 'permission_mode.dart';
 import 'memory_entry.dart';
@@ -73,6 +74,7 @@ class RunConfiguration {
     this.mcpServers = const [],
     this.skills = const [],
     this.workspace,
+    this.commandChannels = const [],
     this.mode = PermissionMode.basic,
     this.planExecutionMode = PermissionMode.basic,
     this.contextWindow,
@@ -122,6 +124,7 @@ class RunConfiguration {
   final List<McpServerProfile> mcpServers;
   final List<SkillSnapshot> skills;
   final WorkspaceSnapshot? workspace;
+  final List<CommandChannelSnapshot> commandChannels;
 
   /// 由会话模式解析的实际策略快照，不接受助手级覆盖。
   final Map<String, ToolPolicy> toolPolicies;
@@ -149,6 +152,7 @@ class RunConfiguration {
     'toolSnapshots': toolSnapshots.map((t) => t.toJson()).toList(),
     'mcpServers': mcpServers.map((s) => s.toJson()).toList(),
     'workspace': workspace?.toJson(),
+    'commandChannels': commandChannels.map((c) => c.toJson()).toList(),
     'skills': skills.map((s) => s.toJson()).toList(),
     'toolPolicies': {
       for (final entry in toolPolicies.entries) entry.key: entry.value.name,
@@ -179,6 +183,10 @@ class RunConfiguration {
     memoryScope: MemoryScope.values.byName(
       json['memoryScope'] as String? ?? 'disabled',
     ),
+    commandChannels: [
+      for (final value in json['commandChannels'] as List? ?? const [])
+        CommandChannelSnapshot.fromJson(value as Map<String, dynamic>),
+    ],
     workspace: json['workspace'] == null
         ? null
         : WorkspaceSnapshot.fromJson(json['workspace'] as Map<String, dynamic>),

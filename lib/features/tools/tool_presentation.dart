@@ -22,7 +22,8 @@ class ToolPresentation {
     'wait_for_user' => Symbols.pan_tool_alt,
     'system_info' => Symbols.schedule,
     'read_file' => Symbols.description,
-    'shell' => Symbols.terminal,
+    'shell' || 'shizuku_shell' || 'termux_shell' => Symbols.terminal,
+    'shizuku_transfer' || 'termux_transfer' => Symbols.sync_alt,
     'install_packages' => Symbols.download,
     'prepare_skill' => Symbols.folder_copy,
     'read_skill' => Symbols.auto_stories,
@@ -55,6 +56,10 @@ class ToolPresentation {
     'read_file' => '读取文件',
     'read_skill' => '读取 Skill',
     'shell' => '执行命令',
+    'shizuku_shell' => 'Shizuku 命令',
+    'termux_shell' => 'Termux 命令',
+    'shizuku_transfer' => 'Shizuku 文件传输',
+    'termux_transfer' => 'Termux 文件传输',
     'install_packages' => '安装依赖',
     'prepare_skill' => '准备 Skill 资源',
     'write_file' => '写入文件',
@@ -161,6 +166,16 @@ class ToolPresentation {
 
   /// 关键参数的中文标签；未登记的参数用原始键名。
   static const _parameterLabels = <String, Map<String, String>>{
+    'shizuku_transfer': {
+      'path': '工作区路径',
+      'remotePath': 'Shizuku 路径',
+      'direction': '传输方向',
+    },
+    'termux_transfer': {
+      'path': '工作区路径',
+      'remotePath': 'Termux 路径',
+      'direction': '传输方向',
+    },
     'read_memory': {'query': '检索关键字'},
     'read_history': {
       'sourceId': '历史来源',

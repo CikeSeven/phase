@@ -17,7 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 /** Runtime handles only. Dart owns persisted runs and all tool policy decisions. */
-class LinuxProcessHost(private val context: Context, private val flutter: LinuxProcessFlutterApi) : LinuxProcessHostApi {
+class LinuxProcessHost(private val context: Context, private val flutter: LinuxProcessFlutterApi, private val onOwnerStopped: (String) -> Unit = {}) : LinuxProcessHostApi {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val owners = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     private val tasks = ConcurrentHashMap<String, Running>()
@@ -72,6 +72,7 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
         owners.keys.toList().forEach(::stopFromSystem)
     }
     fun stopFromSystem(ownerId: String) {
+        onOwnerStopped(ownerId)
         owners.remove(ownerId)?.completeExceptionally(IllegalStateException("cancelled"))
         tasks.values.filter { it.spec.ownerId == ownerId }.forEach { it.terminate(cancelled = true) }
         scope.launch(Dispatchers.Main) { flutter.taskStopped(ownerId) }

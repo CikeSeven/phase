@@ -111,55 +111,65 @@ int _deepHash(Object? value) {
   return value.hashCode;
 }
 
-enum LinuxEventKind { started, stdout, stderr, exited }
+enum CommandEventKind { stdout, stderr, progress, exited }
 
-class LinuxPlatformInfo {
-  LinuxPlatformInfo({
-    required this.rootDirectory,
-    required this.abi,
-    required this.available,
-    required this.freeBytes,
+class CommandChannelStatus {
+  CommandChannelStatus({
+    required this.channel,
+    required this.state,
+    required this.message,
+    this.uid,
+    this.revision,
+    this.home,
   });
 
-  String rootDirectory;
+  String channel;
 
-  String abi;
+  String state;
 
-  bool available;
+  String message;
 
-  int freeBytes;
+  int? uid;
+
+  String? revision;
+
+  String? home;
 
   List<Object?> _toList() {
-    return <Object?>[rootDirectory, abi, available, freeBytes];
+    return <Object?>[channel, state, message, uid, revision, home];
   }
 
   Object encode() {
     return _toList();
   }
 
-  static LinuxPlatformInfo decode(Object result) {
+  static CommandChannelStatus decode(Object result) {
     result as List<Object?>;
-    return LinuxPlatformInfo(
-      rootDirectory: result[0]! as String,
-      abi: result[1]! as String,
-      available: result[2]! as bool,
-      freeBytes: result[3]! as int,
+    return CommandChannelStatus(
+      channel: result[0]! as String,
+      state: result[1]! as String,
+      message: result[2]! as String,
+      uid: result[3] as int?,
+      revision: result[4] as String?,
+      home: result[5] as String?,
     );
   }
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! LinuxPlatformInfo || other.runtimeType != runtimeType) {
+    if (other is! CommandChannelStatus || other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(rootDirectory, other.rootDirectory) &&
-        _deepEquals(abi, other.abi) &&
-        _deepEquals(available, other.available) &&
-        _deepEquals(freeBytes, other.freeBytes);
+    return _deepEquals(channel, other.channel) &&
+        _deepEquals(state, other.state) &&
+        _deepEquals(message, other.message) &&
+        _deepEquals(uid, other.uid) &&
+        _deepEquals(revision, other.revision) &&
+        _deepEquals(home, other.home);
   }
 
   @override
@@ -168,57 +178,47 @@ class LinuxPlatformInfo {
 
   @override
   String toString() {
-    return 'LinuxPlatformInfo(rootDirectory: $rootDirectory, abi: $abi, available: $available, freeBytes: $freeBytes)';
+    return 'CommandChannelStatus(channel: $channel, state: $state, message: $message, uid: $uid, revision: $revision, home: $home)';
   }
 }
 
-class LinuxProcessSpec {
-  LinuxProcessSpec({
+class ExternalCommandSpec {
+  ExternalCommandSpec({
     required this.ownerId,
-    required this.processId,
-    required this.rootfs,
-    required this.workspace,
-    required this.executable,
-    required this.argv,
+    required this.callId,
+    required this.channel,
+    required this.revision,
+    required this.uid,
+    required this.command,
     required this.cwd,
-    required this.environment,
-    this.timeoutMs,
-    this.outputLimitBytes,
+    required this.outputLimitBytes,
   });
 
   String ownerId;
 
-  String processId;
+  String callId;
 
-  String rootfs;
+  String channel;
 
-  String workspace;
+  String revision;
 
-  String executable;
+  int uid;
 
-  List<String> argv;
+  String command;
 
   String cwd;
 
-  Map<String, String> environment;
-
-  /// 超时毫秒数；null 表示不设超时（产品决策：命令不设超时，靠用户
-  /// 停止与任务收尾终止进程）。宿主只校验为正数，不设上限。
-  int? timeoutMs;
-
-  int? outputLimitBytes;
+  int outputLimitBytes;
 
   List<Object?> _toList() {
     return <Object?>[
       ownerId,
-      processId,
-      rootfs,
-      workspace,
-      executable,
-      argv,
+      callId,
+      channel,
+      revision,
+      uid,
+      command,
       cwd,
-      environment,
-      timeoutMs,
       outputLimitBytes,
     ];
   }
@@ -227,40 +227,36 @@ class LinuxProcessSpec {
     return _toList();
   }
 
-  static LinuxProcessSpec decode(Object result) {
+  static ExternalCommandSpec decode(Object result) {
     result as List<Object?>;
-    return LinuxProcessSpec(
+    return ExternalCommandSpec(
       ownerId: result[0]! as String,
-      processId: result[1]! as String,
-      rootfs: result[2]! as String,
-      workspace: result[3]! as String,
-      executable: result[4]! as String,
-      argv: (result[5]! as List<Object?>).cast<String>(),
+      callId: result[1]! as String,
+      channel: result[2]! as String,
+      revision: result[3]! as String,
+      uid: result[4]! as int,
+      command: result[5]! as String,
       cwd: result[6]! as String,
-      environment: (result[7]! as Map<Object?, Object?>).cast<String, String>(),
-      timeoutMs: result[8] as int?,
-      outputLimitBytes: result[9] as int?,
+      outputLimitBytes: result[7]! as int,
     );
   }
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! LinuxProcessSpec || other.runtimeType != runtimeType) {
+    if (other is! ExternalCommandSpec || other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
     return _deepEquals(ownerId, other.ownerId) &&
-        _deepEquals(processId, other.processId) &&
-        _deepEquals(rootfs, other.rootfs) &&
-        _deepEquals(workspace, other.workspace) &&
-        _deepEquals(executable, other.executable) &&
-        _deepEquals(argv, other.argv) &&
+        _deepEquals(callId, other.callId) &&
+        _deepEquals(channel, other.channel) &&
+        _deepEquals(revision, other.revision) &&
+        _deepEquals(uid, other.uid) &&
+        _deepEquals(command, other.command) &&
         _deepEquals(cwd, other.cwd) &&
-        _deepEquals(environment, other.environment) &&
-        _deepEquals(timeoutMs, other.timeoutMs) &&
         _deepEquals(outputLimitBytes, other.outputLimitBytes);
   }
 
@@ -270,32 +266,146 @@ class LinuxProcessSpec {
 
   @override
   String toString() {
-    return 'LinuxProcessSpec(ownerId: $ownerId, processId: $processId, rootfs: $rootfs, workspace: $workspace, executable: $executable, argv: $argv, cwd: $cwd, environment: $environment, timeoutMs: $timeoutMs, outputLimitBytes: $outputLimitBytes)';
+    return 'ExternalCommandSpec(ownerId: $ownerId, callId: $callId, channel: $channel, revision: $revision, uid: $uid, command: $command, cwd: $cwd, outputLimitBytes: $outputLimitBytes)';
   }
 }
 
-class LinuxProcessEvent {
-  LinuxProcessEvent({
+class ChannelTransferSpec {
+  ChannelTransferSpec({
     required this.ownerId,
-    required this.processId,
+    required this.callId,
+    required this.channel,
+    required this.revision,
+    required this.uid,
+    required this.localRoot,
+    required this.path,
+    required this.remotePath,
+    required this.toChannel,
+    required this.fileLimitBytes,
+    required this.totalLimitBytes,
+    required this.entryLimit,
+  });
+
+  String ownerId;
+
+  String callId;
+
+  String channel;
+
+  String revision;
+
+  int uid;
+
+  String localRoot;
+
+  String path;
+
+  String remotePath;
+
+  bool toChannel;
+
+  int fileLimitBytes;
+
+  int totalLimitBytes;
+
+  int entryLimit;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      ownerId,
+      callId,
+      channel,
+      revision,
+      uid,
+      localRoot,
+      path,
+      remotePath,
+      toChannel,
+      fileLimitBytes,
+      totalLimitBytes,
+      entryLimit,
+    ];
+  }
+
+  Object encode() {
+    return _toList();
+  }
+
+  static ChannelTransferSpec decode(Object result) {
+    result as List<Object?>;
+    return ChannelTransferSpec(
+      ownerId: result[0]! as String,
+      callId: result[1]! as String,
+      channel: result[2]! as String,
+      revision: result[3]! as String,
+      uid: result[4]! as int,
+      localRoot: result[5]! as String,
+      path: result[6]! as String,
+      remotePath: result[7]! as String,
+      toChannel: result[8]! as bool,
+      fileLimitBytes: result[9]! as int,
+      totalLimitBytes: result[10]! as int,
+      entryLimit: result[11]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! ChannelTransferSpec || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(ownerId, other.ownerId) &&
+        _deepEquals(callId, other.callId) &&
+        _deepEquals(channel, other.channel) &&
+        _deepEquals(revision, other.revision) &&
+        _deepEquals(uid, other.uid) &&
+        _deepEquals(localRoot, other.localRoot) &&
+        _deepEquals(path, other.path) &&
+        _deepEquals(remotePath, other.remotePath) &&
+        _deepEquals(toChannel, other.toChannel) &&
+        _deepEquals(fileLimitBytes, other.fileLimitBytes) &&
+        _deepEquals(totalLimitBytes, other.totalLimitBytes) &&
+        _deepEquals(entryLimit, other.entryLimit);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'ChannelTransferSpec(ownerId: $ownerId, callId: $callId, channel: $channel, revision: $revision, uid: $uid, localRoot: $localRoot, path: $path, remotePath: $remotePath, toChannel: $toChannel, fileLimitBytes: $fileLimitBytes, totalLimitBytes: $totalLimitBytes, entryLimit: $entryLimit)';
+  }
+}
+
+class ExternalCommandEvent {
+  ExternalCommandEvent({
+    required this.ownerId,
+    required this.callId,
     required this.sequence,
     required this.kind,
     this.bytes,
     this.exitCode,
     this.signal,
     this.error,
+    this.transferredBytes = 0,
+    this.completedPaths = const [],
     this.cancelled = false,
-    this.timedOut = false,
     this.outputLimitExceeded = false,
+    this.terminationAcknowledged = false,
   });
 
   String ownerId;
 
-  String processId;
+  String callId;
 
   int sequence;
 
-  LinuxEventKind kind;
+  CommandEventKind kind;
 
   Uint8List? bytes;
 
@@ -305,25 +415,31 @@ class LinuxProcessEvent {
 
   String? error;
 
+  int transferredBytes;
+
+  List<String> completedPaths;
+
   bool cancelled;
 
-  bool timedOut;
-
   bool outputLimitExceeded;
+
+  bool terminationAcknowledged;
 
   List<Object?> _toList() {
     return <Object?>[
       ownerId,
-      processId,
+      callId,
       sequence,
       kind,
       bytes,
       exitCode,
       signal,
       error,
+      transferredBytes,
+      completedPaths,
       cancelled,
-      timedOut,
       outputLimitExceeded,
+      terminationAcknowledged,
     ];
   }
 
@@ -331,43 +447,47 @@ class LinuxProcessEvent {
     return _toList();
   }
 
-  static LinuxProcessEvent decode(Object result) {
+  static ExternalCommandEvent decode(Object result) {
     result as List<Object?>;
-    return LinuxProcessEvent(
+    return ExternalCommandEvent(
       ownerId: result[0]! as String,
-      processId: result[1]! as String,
+      callId: result[1]! as String,
       sequence: result[2]! as int,
-      kind: result[3]! as LinuxEventKind,
+      kind: result[3]! as CommandEventKind,
       bytes: result[4] as Uint8List?,
       exitCode: result[5] as int?,
       signal: result[6] as int?,
       error: result[7] as String?,
-      cancelled: result[8]! as bool,
-      timedOut: result[9]! as bool,
-      outputLimitExceeded: result[10]! as bool,
+      transferredBytes: result[8]! as int,
+      completedPaths: (result[9]! as List<Object?>).cast<String>(),
+      cancelled: result[10]! as bool,
+      outputLimitExceeded: result[11]! as bool,
+      terminationAcknowledged: result[12]! as bool,
     );
   }
 
   @override
   // ignore: avoid_equals_and_hash_code_on_mutable_classes
   bool operator ==(Object other) {
-    if (other is! LinuxProcessEvent || other.runtimeType != runtimeType) {
+    if (other is! ExternalCommandEvent || other.runtimeType != runtimeType) {
       return false;
     }
     if (identical(this, other)) {
       return true;
     }
     return _deepEquals(ownerId, other.ownerId) &&
-        _deepEquals(processId, other.processId) &&
+        _deepEquals(callId, other.callId) &&
         _deepEquals(sequence, other.sequence) &&
         _deepEquals(kind, other.kind) &&
         _deepEquals(bytes, other.bytes) &&
         _deepEquals(exitCode, other.exitCode) &&
         _deepEquals(signal, other.signal) &&
         _deepEquals(error, other.error) &&
+        _deepEquals(transferredBytes, other.transferredBytes) &&
+        _deepEquals(completedPaths, other.completedPaths) &&
         _deepEquals(cancelled, other.cancelled) &&
-        _deepEquals(timedOut, other.timedOut) &&
-        _deepEquals(outputLimitExceeded, other.outputLimitExceeded);
+        _deepEquals(outputLimitExceeded, other.outputLimitExceeded) &&
+        _deepEquals(terminationAcknowledged, other.terminationAcknowledged);
   }
 
   @override
@@ -376,7 +496,7 @@ class LinuxProcessEvent {
 
   @override
   String toString() {
-    return 'LinuxProcessEvent(ownerId: $ownerId, processId: $processId, sequence: $sequence, kind: $kind, bytes: $bytes, exitCode: $exitCode, signal: $signal, error: $error, cancelled: $cancelled, timedOut: $timedOut, outputLimitExceeded: $outputLimitExceeded)';
+    return 'ExternalCommandEvent(ownerId: $ownerId, callId: $callId, sequence: $sequence, kind: $kind, bytes: $bytes, exitCode: $exitCode, signal: $signal, error: $error, transferredBytes: $transferredBytes, completedPaths: $completedPaths, cancelled: $cancelled, outputLimitExceeded: $outputLimitExceeded, terminationAcknowledged: $terminationAcknowledged)';
   }
 }
 
@@ -387,17 +507,20 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    } else if (value is LinuxEventKind) {
+    } else if (value is CommandEventKind) {
       buffer.putUint8(129);
       writeValue(buffer, value.index);
-    } else if (value is LinuxPlatformInfo) {
+    } else if (value is CommandChannelStatus) {
       buffer.putUint8(130);
       writeValue(buffer, value.encode());
-    } else if (value is LinuxProcessSpec) {
+    } else if (value is ExternalCommandSpec) {
       buffer.putUint8(131);
       writeValue(buffer, value.encode());
-    } else if (value is LinuxProcessEvent) {
+    } else if (value is ChannelTransferSpec) {
       buffer.putUint8(132);
+      writeValue(buffer, value.encode());
+    } else if (value is ExternalCommandEvent) {
+      buffer.putUint8(133);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -409,24 +532,26 @@ class _PigeonCodec extends StandardMessageCodec {
     switch (type) {
       case 129:
         final value = readValue(buffer) as int?;
-        return value == null ? null : LinuxEventKind.values[value];
+        return value == null ? null : CommandEventKind.values[value];
       case 130:
-        return LinuxPlatformInfo.decode(readValue(buffer)!);
+        return CommandChannelStatus.decode(readValue(buffer)!);
       case 131:
-        return LinuxProcessSpec.decode(readValue(buffer)!);
+        return ExternalCommandSpec.decode(readValue(buffer)!);
       case 132:
-        return LinuxProcessEvent.decode(readValue(buffer)!);
+        return ChannelTransferSpec.decode(readValue(buffer)!);
+      case 133:
+        return ExternalCommandEvent.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
   }
 }
 
-class LinuxProcessHostApi {
-  /// Constructor for [LinuxProcessHostApi]. The [binaryMessenger] named argument is
+class CommandChannelHostApi {
+  /// Constructor for [CommandChannelHostApi]. The [binaryMessenger] named argument is
   /// available for dependency injection. If it is left null, the default
   /// BinaryMessenger will be used which routes to the host platform.
-  LinuxProcessHostApi({
+  CommandChannelHostApi({
     BinaryMessenger? binaryMessenger,
     String messageChannelSuffix = '',
   }) : pigeonVar_binaryMessenger = binaryMessenger,
@@ -439,9 +564,9 @@ class LinuxProcessHostApi {
 
   final String pigeonVar_messageChannelSuffix;
 
-  Future<LinuxPlatformInfo> platformInfo() async {
+  Future<List<CommandChannelStatus>> status() async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.LinuxProcessHostApi.platformInfo$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.status$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -455,19 +580,20 @@ class LinuxProcessHostApi {
       pigeonVar_channelName,
       isNullValid: false,
     );
-    return pigeonVar_replyValue! as LinuxPlatformInfo;
+    return (pigeonVar_replyValue! as List<Object?>)
+        .cast<CommandChannelStatus>();
   }
 
-  Future<void> setModes(List<String> paths, List<int> modes) async {
+  Future<void> authorize(String channel) async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.LinuxProcessHostApi.setModes$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.authorize$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[paths, modes],
+      <Object?>[channel],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -478,16 +604,16 @@ class LinuxProcessHostApi {
     );
   }
 
-  Future<void> beginTask(String ownerId, String label) async {
+  Future<void> initialize(String channel) async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.LinuxProcessHostApi.beginTask$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.initialize$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[ownerId, label],
+      <Object?>[channel],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -498,16 +624,16 @@ class LinuxProcessHostApi {
     );
   }
 
-  Future<void> endTask(String ownerId) async {
+  Future<void> openSettings(String channel) async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.LinuxProcessHostApi.endTask$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.openSettings$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[ownerId],
+      <Object?>[channel],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -518,9 +644,29 @@ class LinuxProcessHostApi {
     );
   }
 
-  Future<void> start(LinuxProcessSpec spec) async {
+  Future<void> setEnabled(List<String> channels) async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.LinuxProcessHostApi.start$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.setEnabled$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
+      <Object?>[channels],
+    );
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+      pigeonVar_replyList,
+      pigeonVar_channelName,
+      isNullValid: true,
+    );
+  }
+
+  Future<void> start(ExternalCommandSpec spec) async {
+    final pigeonVar_channelName =
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.start$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
@@ -538,20 +684,16 @@ class LinuxProcessHostApi {
     );
   }
 
-  Future<void> writeStdin(
-    String ownerId,
-    String processId,
-    Uint8List bytes,
-  ) async {
+  Future<void> transfer(ChannelTransferSpec spec) async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.LinuxProcessHostApi.writeStdin$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.transfer$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[ownerId, processId, bytes],
+      <Object?>[spec],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -562,16 +704,16 @@ class LinuxProcessHostApi {
     );
   }
 
-  Future<void> closeStdin(String ownerId, String processId) async {
+  Future<void> cancel(String ownerId, String callId) async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.LinuxProcessHostApi.closeStdin$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.cancel$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[ownerId, processId],
+      <Object?>[ownerId, callId],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -582,16 +724,16 @@ class LinuxProcessHostApi {
     );
   }
 
-  Future<void> cancel(String ownerId, String processId) async {
+  Future<void> endOwner(String ownerId) async {
     final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.LinuxProcessHostApi.cancel$pigeonVar_messageChannelSuffix';
+        'dev.flutter.pigeon.phase.CommandChannelHostApi.endOwner$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[ownerId, processId],
+      <Object?>[ownerId],
     );
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
@@ -603,15 +745,17 @@ class LinuxProcessHostApi {
   }
 }
 
-abstract class LinuxProcessFlutterApi {
+abstract class CommandChannelFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
-  Future<void> event(LinuxProcessEvent event);
+  Future<void> event(ExternalCommandEvent event);
 
-  void taskStopped(String ownerId);
+  void statusChanged();
+
+  void ownerStopped(String ownerId);
 
   static void setUp(
-    LinuxProcessFlutterApi? api, {
+    CommandChannelFlutterApi? api, {
     BinaryMessenger? binaryMessenger,
     String messageChannelSuffix = '',
   }) {
@@ -620,7 +764,7 @@ abstract class LinuxProcessFlutterApi {
         : '';
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-        'dev.flutter.pigeon.phase.LinuxProcessFlutterApi.event$messageChannelSuffix',
+        'dev.flutter.pigeon.phase.CommandChannelFlutterApi.event$messageChannelSuffix',
         pigeonChannelCodec,
         binaryMessenger: binaryMessenger,
       );
@@ -629,7 +773,8 @@ abstract class LinuxProcessFlutterApi {
       } else {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           final List<Object?> args = message! as List<Object?>;
-          final LinuxProcessEvent arg_event = args[0]! as LinuxProcessEvent;
+          final ExternalCommandEvent arg_event =
+              args[0]! as ExternalCommandEvent;
           try {
             await api.event(arg_event);
             return wrapResponse(empty: true);
@@ -645,7 +790,30 @@ abstract class LinuxProcessFlutterApi {
     }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
-        'dev.flutter.pigeon.phase.LinuxProcessFlutterApi.taskStopped$messageChannelSuffix',
+        'dev.flutter.pigeon.phase.CommandChannelFlutterApi.statusChanged$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          try {
+            api.statusChanged();
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.phase.CommandChannelFlutterApi.ownerStopped$messageChannelSuffix',
         pigeonChannelCodec,
         binaryMessenger: binaryMessenger,
       );
@@ -656,7 +824,7 @@ abstract class LinuxProcessFlutterApi {
           final List<Object?> args = message! as List<Object?>;
           final String arg_ownerId = args[0]! as String;
           try {
-            api.taskStopped(arg_ownerId);
+            api.ownerStopped(arg_ownerId);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

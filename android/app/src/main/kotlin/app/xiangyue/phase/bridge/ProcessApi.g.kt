@@ -273,6 +273,10 @@ data class LinuxProcessSpec (
   val argv: List<String>,
   val cwd: String,
   val environment: Map<String, String>,
+  /**
+   * 超时毫秒数；null 表示不设超时（产品决策：命令不设超时，靠用户
+   * 停止与任务收尾终止进程）。宿主只校验为正数，不设上限。
+   */
   val timeoutMs: Long? = null,
   val outputLimitBytes: Long? = null
 )

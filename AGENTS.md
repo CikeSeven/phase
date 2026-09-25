@@ -69,7 +69,7 @@ git diff --check
 
 仅在用户明确要求运行 Flutter 测试时执行 `flutter test`，测试编写与执行遵循第 8 节。
 
-Android 设备桥接定义位于 `pigeons/execution_api.dart`，Linux 原始进程桥接位于 `pigeons/process_api.dart`；新增进程 API 时同步扩展 `pigeons/` 与生成脚本。定义修改后执行 `bash tool/generate_execution_bridge.sh`（Pigeon 生成、Dart 格式化、Kotlin 行尾空白归一化），随定义维护 Dart/Kotlin 生成物。原生执行代码变更且用户明确要求运行测试时，另执行 `cd android && ./gradlew :app:testDebugUnitTest`；JVM 测试不替代真机服务、权限、Activity 与线程验收。
+Android 设备桥接定义位于 `pigeons/execution_api.dart`，Linux 原始进程桥接位于 `pigeons/process_api.dart`，外部命令与传输桥接位于 `pigeons/command_api.dart`；新增进程 API 时同步扩展 `pigeons/` 与生成脚本。定义修改后执行 `bash tool/generate_execution_bridge.sh`（Pigeon 生成、Dart 格式化、Kotlin 行尾空白归一化），随定义维护 Dart/Kotlin 生成物。原生执行代码变更且用户明确要求运行测试时，另执行 `cd android && ./gradlew :app:testDebugUnitTest`；JVM 测试不替代真机服务、权限、Activity 与线程验收。
 
 真机 UI/性能验收使用 Profile；先用 `adb devices -l` 确认授权设备，将 `DEVICE` 设为其 ID：
 
@@ -107,6 +107,7 @@ adb -s "$DEVICE" shell am start -W -n app.xiangyue.phase/.MainActivity
 - 权限按会话独立保存为计划、基础、全权限三档，新会话默认基础；不绑定助手。计划仅开放宿主只读白名单及内部计划提交，应用工具中仅 `list_apps` 属只读；基础档对写文件/编辑/Skill 复制、命令（含依赖安装）及其他应用操作 ask，其余已开放工具 allow；全权限档均 allow。系统授权、应用名单、能力和扩展启用范围不被模式绕过，运行中不切模式。计划批准绑定当前修订，恢复来源运行记录的规划前执行档并原子创建关联运行；记忆仍限启用范围，摘要和普通工具结果不自动写入长期记忆。
 - 动态工具按稳定来源 ID 和定义修订注册；MCP/Skills 仍由助手选择启用范围，但不保存独立执行策略。服务器说明、Skill 指导和插件清单不授予权限；停用、移出范围和系统撤权即时生效，新增许可不扩大旧快照。MCP 在计划档不开放，在基础/全权限档直接执行。
 - 发送第一条消息时创建会话专属工作区；空白聊天页不落库、不显示文件入口。不提供手动新建、选择或共享工作区；复制会话复制独立文件，删除会话清理工作区、附件、产物与来源记录，失败保留可重试状态。环境就绪且模型支持工具时，按会话模式注入 shell 与 install_packages；两者共用命令权限类别，计划档 deny、基础档 ask、全权限档 allow。
+- Shizuku/Termux 与 Ubuntu 并列；外部通道全局显式启用，运行固定集合与身份，新增授权不扩大旧快照，撤权停止活动调用。外部文件/递归目录通过独立传输工具显式复制，同名覆盖但不删除额外文件；外部导出目标不随会话删除。实现及未验收边界见 `docs/system_command_channels_design.md`。
 - 本地命令按需使用 Ubuntu PRoot 工作区，MCP stdio 使用独立 stdin/stdout/stderr 管道，PTY 只用于交互终端。进程按运行/调用归属，取消和超时回收受管理子进程与 FD，重启不重放命令。Termux/Shizuku 是显式选择的独立通道。
 - PRoot 执行文件通过 ABI 对应的 JNI 库目录交付，验证当前 targetSdk，不降低 SDK 绕过运行问题。PRoot 与同 UID 插件进程不是强隔离沙箱，不宣称工作区路径检查可以限制任意脚本访问。
 - MCP 凭据、敏感头和环境机密按用途与 ID 存入 `SecureKeyStorage`，业务模型只保存引用；不传给模型、诊断或备份。插件不得直接读取通用密钥存储。

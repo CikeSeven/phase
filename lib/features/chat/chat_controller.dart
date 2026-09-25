@@ -1,3 +1,7 @@
+import '../../../data/models/command_channel.dart';
+import '../commands/command_channel_driver.dart';
+import '../commands/command_channels_controller.dart';
+import '../commands/system_channel_tools.dart';
 import '../../../data/models/permission_mode.dart';
 import '../tools/tool_permission_policy.dart';
 import 'context/history_resolver.dart';
@@ -710,8 +714,22 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             assistantId: assistant?.id,
             linuxAvailable: workspace?.linuxAvailable == true,
           );
+    final commandChannels =
+        selection.supportsTools && mode != PermissionMode.plan
+        ? await commandSnapshots(ref)
+        : <CommandChannelSnapshot>[];
     final registry = ToolRegistry([
       ...extra,
+      for (final channel in commandChannels) ...[
+        ExternalShellTool(channel, ref.read(commandChannelDriverProvider)),
+        if (workspace != null)
+          ChannelTransferTool(
+            channel,
+            ref.read(commandChannelDriverProvider),
+            workspace,
+            workspaces,
+          ),
+      ],
       ...ref.read(toolRegistryProvider).tools,
       ?skillTool,
       if (skillTool != null &&
@@ -786,6 +804,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       catalogMaxOutputTokens: limits.catalogMaxOutputTokens,
       skills: skills,
       workspace: workspace,
+      commandChannels: commandChannels,
       enabledTools: enabled,
       toolPolicies: policies,
       executionScope: ref.read(settingsStorageProvider).readExecutionScope(),
@@ -949,6 +968,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             inputMessageId: inputMessageId,
           )
         : <Tool>[];
+    final commandChannels =
+        selection.supportsTools && mode != PermissionMode.plan
+        ? await commandSnapshots(ref)
+        : <CommandChannelSnapshot>[];
     final baseRegistry = ToolRegistry([
       ...ref.read(toolRegistryProvider).tools,
       ...extraTools,
@@ -1000,7 +1023,20 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                 await ref.read(workspaceRepositoryProvider.future),
               ),
             );
+      final channelTools = <Tool>[
+        for (final channel in commandChannels) ...[
+          ExternalShellTool(channel, ref.read(commandChannelDriverProvider)),
+          if (workspace != null)
+            ChannelTransferTool(
+              channel,
+              ref.read(commandChannelDriverProvider),
+              workspace,
+              await ref.read(workspaceRepositoryProvider.future),
+            ),
+        ],
+      ];
       final snapshots = <ToolSnapshot>[
+        ...channelTools.map((tool) => tool.snapshot),
         if (skillTool != null) skillTool.snapshot,
         if (prepareSkill != null && mode != PermissionMode.plan)
           prepareSkill.snapshot,
@@ -1049,6 +1085,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           toolSnapshots: snapshots,
           skills: skills,
           workspace: workspace,
+          commandChannels: commandChannels,
           mcpServers: [
             for (final entry in mcpEntries)
               if (snapshots.any(
@@ -1070,6 +1107,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               ? {
                   ...policiesForMode(mode, [
                     ...baseRegistry.tools,
+                    ...channelTools,
                     ?skillTool,
                     ?prepareSkill,
                   ]),
@@ -1145,7 +1183,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final workspaceFiles = workspaceRepository == null
         ? null
         : WorkspaceFiles(workspaceRepository);
-    final processDriver = binding?.linuxAvailable != true
+    final commandDriver = run.configuration.commandChannels.isEmpty
+        ? null
+        : ref.read(commandChannelDriverProvider);
+    if (commandDriver != null) {
+      await commandDriver.setEnabled(
+        ref.read(settingsStorageProvider).readCommandChannels().channels,
+      );
+    }
+    final processDriver =
+        binding?.linuxAvailable != true && commandDriver == null
         ? null
         : ref.read(processDriverProvider);
     final agentTools = selection.supportsTools
@@ -1158,6 +1205,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         : <Tool>[];
     final registry = ToolRegistry([
       ...agentTools,
+      for (final channel in run.configuration.commandChannels) ...[
+        ExternalShellTool(channel, commandDriver!),
+        if (binding != null)
+          ChannelTransferTool(
+            channel,
+            commandDriver,
+            binding,
+            workspaceRepository!,
+          ),
+      ],
       for (final tool in base.tools)
         if (!_environmentTools.contains(tool.name))
           if (tool is WaitForUserTool) WaitForUserTool(_waitForUser) else tool,
@@ -1205,6 +1262,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         );
       },
       currentPolicy: (tool) async {
+        if (tool is SystemChannelTool &&
+            !ref
+                .read(settingsStorageProvider)
+                .readCommandChannels()
+                .enabled(tool.channel)) {
+          return ToolPolicy.deny;
+        }
         if (run.configuration.mode == PermissionMode.plan &&
             !allowedInPlan(tool)) {
           return ToolPolicy.deny;
@@ -1238,14 +1302,17 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                 status: '准备${ToolPresentation.toolLabel(tool.name)}',
               ),
         );
-        if (tool is ShellTool) {
-          await processDriver!.beginTask(run.id, '工作区命令');
+        if (tool is ShellTool || tool is SystemChannelTool) {
+          await processDriver!.beginTask(
+            run.id,
+            tool is ShellTool ? '工作区命令' : '系统命令',
+          );
           await execution.showAvailablePanel(run.id);
         }
         if (tool.usesPlatform(arguments)) {
           await execution.ensureDeviceHost(
             run.id,
-            deviceTask: tool.channel != ExecutionChannel.app,
+            deviceTask: tool.channel == ExecutionChannel.accessibility,
           );
         }
       },
@@ -1267,6 +1334,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     _turnTailId = null;
     recovery.runStarted(run.id);
     WorkspaceLease? resumedWorkspace;
+    final commandStops = commandDriver?.stops.listen((owner) {
+      if (owner == run.id) stop();
+    });
     final processStops = processDriver?.stops.listen((owner) {
       if (owner == run.id) stop();
     });
@@ -1338,6 +1408,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _streamingMessageId = null;
       _cancellation?.cancel();
       await mcp?.close();
+      try {
+        await commandDriver?.endOwner(run.id);
+      } on Failure {
+        AppLogger.warning('系统命令任务未收到完整结束回执');
+      }
+      await commandStops?.cancel();
       try {
         if (processDriver != null) await processDriver.endTask(run.id);
       } on Failure {
@@ -1828,7 +1904,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     final label = ToolPresentation.recordLabel(record);
     final status = switch (record.status) {
       ToolCallStatus.succeeded =>
-        '执行了${record.toolName == 'shell' ? '命令' : label}',
+        '执行了${isCommandToolName(record.toolName) ? '命令' : label}',
       ToolCallStatus.rejected => '已拒绝$label',
       ToolCallStatus.cancelled => '已取消$label',
       _ => '$label失败',
@@ -2687,7 +2763,7 @@ List<MessagePart> _partsFromLive(List<_LivePart> liveParts) {
 }
 
 String _toolActivity(Tool tool, Map<String, dynamic> arguments) =>
-    tool.name == 'shell'
+    isCommandToolName(tool.name)
     ? '\$ ${panelExcerpt(arguments['command'] as String? ?? '', limit: 300)}'
     : panelExcerpt(tool.describeAction(arguments), limit: 300);
 

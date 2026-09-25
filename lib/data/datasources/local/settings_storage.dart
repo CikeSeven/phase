@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
 import '../../models/execution_scope.dart';
+import '../../models/command_channel.dart';
 import '../../../core/error/failure.dart';
 
 part 'settings_storage.g.dart';
@@ -31,6 +32,27 @@ class SettingsStorage {
       jsonEncode(scope.toJson()),
     )) {
       throw const OperationFailure('执行范围保存失败，请重试');
+    }
+  }
+
+  CommandChannelSettings readCommandChannels() {
+    final value = _prefs.getString('command_channels');
+    if (value == null) return const CommandChannelSettings();
+    try {
+      return CommandChannelSettings.fromJson(
+        jsonDecode(value) as Map<String, dynamic>,
+      );
+    } on Object {
+      throw const OperationFailure('命令通道设置读取失败');
+    }
+  }
+
+  Future<void> writeCommandChannels(CommandChannelSettings value) async {
+    if (!await _prefs.setString(
+      'command_channels',
+      jsonEncode(value.toJson()),
+    )) {
+      throw const OperationFailure('命令通道设置保存失败，请重试');
     }
   }
 

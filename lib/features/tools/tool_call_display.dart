@@ -1,3 +1,5 @@
+import '../commands/system_channel_tools.dart';
+
 import 'dart:convert';
 
 import '../../../data/models/attachment.dart';
@@ -50,7 +52,10 @@ class ToolCallDisplay {
     return switch (record.toolName) {
       'wait_for_user' =>
         args['prompt'] is String ? args['prompt'] as String : null,
-      'shell' => args['command'] is String ? '\$ ${args['command']}' : null,
+      'shell' || 'shizuku_shell' || 'termux_shell' =>
+        args['command'] is String ? '\$ ${args['command']}' : null,
+      'shizuku_transfer' ||
+      'termux_transfer' => '${args['path']} ↔ ${args['remotePath']}',
       'install_packages' => null,
       'write_file' ||
       'edit_file' ||
@@ -80,6 +85,14 @@ class ToolCallDisplay {
     final output = ToolPresentation.outputText(record);
     if (isBuiltIn(record)) {
       switch (record.toolName) {
+        case 'shizuku_transfer':
+        case 'termux_transfer':
+          return ToolCallDisplay(
+            call:
+                '${args['direction'] == 'to_channel' ? '导出' : '导入'} ${args['path']} ↔ ${args['remotePath']}',
+            output: output,
+            metadata: '目录递归；同名文件覆盖，额外文件保留',
+          );
         case 'wait_for_user':
           if (args['prompt'] case final String prompt) {
             return ToolCallDisplay(
@@ -90,6 +103,8 @@ class ToolCallDisplay {
             );
           }
         case 'shell':
+        case 'shizuku_shell':
+        case 'termux_shell':
           if (args['command'] case final String command) {
             final metadata = [
               if (args['cwd'] case final String cwd when cwd != '/workspace')
@@ -186,7 +201,7 @@ class ToolCallDisplay {
 
   /// 已完整显示的命令日志不再重复列成文件，用户生成的产物仍保留。
   static String? artifactLabel(ToolCallRecord record, Attachment artifact) {
-    if (isBuiltIn(record) && record.toolName == 'shell') {
+    if (isBuiltIn(record) && isCommandToolName(record.toolName)) {
       for (final stream in ['stdout', 'stderr']) {
         if (artifact.name != '${record.id}-$stream.txt') continue;
         try {
@@ -197,6 +212,9 @@ class ToolCallDisplay {
               if (result['previewTruncated'] != true &&
                   artifact.size <= utf8.encode(text).length) {
                 return null;
+              }
+              if (result['outputIncomplete'] == true) {
+                return stream == 'stdout' ? '已收集的命令输出' : '已收集的错误输出';
               }
               return stream == 'stdout' ? '完整命令输出' : '完整错误输出';
             }

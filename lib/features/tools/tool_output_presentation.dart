@@ -15,6 +15,8 @@ String presentToolOutput(ToolCallRecord record, String result) {
       decoded is Map<String, dynamic>) {
     switch (record.toolName) {
       case 'shell':
+      case 'shizuku_shell':
+      case 'termux_shell':
         if (decoded case {
           'stdout': final String out,
           'stderr': final String err,
@@ -26,15 +28,31 @@ String presentToolOutput(ToolCallRecord record, String result) {
             if (decoded['exitCode'] case final num code when code != 0)
               '退出码：$code',
             if (decoded['signal'] case final num signal) '终止信号：$signal',
-            if (decoded['cancelled'] == true) '命令已停止',
+            if (decoded['cancelled'] == true)
+              decoded['terminationAcknowledged'] == false
+                  ? '已请求停止，未收到完整退出回执'
+                  : '命令已停止',
             if (decoded['timedOut'] == true) '命令执行超时',
-            if (decoded['outputLimitExceeded'] == true) '输出达到上限，进程已停止',
+            if (decoded['outputLimitExceeded'] == true)
+              decoded['terminationAcknowledged'] == false
+                  ? '输出达到上限，未收到完整退出回执'
+                  : '输出达到上限，进程已停止',
             if (decoded['previewTruncated'] == true)
               record.artifacts.isEmpty ? '输出预览已截断' : '输出预览已截断，完整输出见附件',
             if (decoded['error'] case final String error) error,
             if (decoded['warning'] case final String warning) warning,
           ].join('\n\n');
         }
+      case 'shizuku_transfer':
+      case 'termux_transfer':
+        return [
+          '已传输 ${decoded['transferredBytes'] ?? 0} 字节',
+          if (decoded['completedPaths'] case final List paths
+              when paths.isNotEmpty)
+            '已完成 ${paths.length} 项',
+          if (decoded['cancelled'] == true) '传输已停止，已提交的文件保留',
+          if (decoded['error'] case final String error) error,
+        ].join('\n');
       case 'read_file':
         if (decoded['text'] case final String content) {
           return _contentWithDetails(content, decoded, const {

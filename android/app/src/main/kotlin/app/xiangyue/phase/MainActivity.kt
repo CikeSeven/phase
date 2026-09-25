@@ -28,6 +28,7 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         runtime.coordinator.setup.attach(this)
+        runtime.commands.attach(this)
         runtime.coordinator.setActivityResumed(true)
         if (!checkedApplicationListPermission) {
             // Set before dispatch: dismissing the permission dialog resumes this Activity again.
@@ -43,7 +44,13 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         runtime.coordinator.setup.detach(this)
+        runtime.commands.detach(this)
         super.onDestroy()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 4602) runtime.commands.changed()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
