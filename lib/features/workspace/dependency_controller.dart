@@ -40,15 +40,28 @@ class DependencyController extends _$DependencyController {
   }
 
   void cancel() => _cancellation?.cancel();
-  Future<void> install() async {
+  void reset() {
+    if (!state.busy) state = const DependencyOperation();
+  }
+
+  Future<void> install() => installWithCancellation(RunCancellation());
+
+  /// Ubuntu 安装与后续依赖共用取消信号，阶段切换不丢失停止请求。
+  Future<void> installWithCancellation(
+    RunCancellation cancellation, {
+    String? taskOwner,
+  }) async {
     if (state.busy) return;
-    final cancellation = RunCancellation();
     _cancellation = cancellation;
     state = const DependencyOperation(busy: true);
     try {
+      final repository = await ref.read(workspaceRepositoryProvider.future);
+      if (!ref.mounted) return;
+      cancellation.throwIfCancelled();
       final installer = DependencyInstaller(
-        await ref.read(workspaceRepositoryProvider.future),
+        repository,
         ref.read(processDriverProvider),
+        taskOwner: taskOwner,
       );
       await installer.install(cancellation, (step, line) {
         if (!ref.mounted) return;

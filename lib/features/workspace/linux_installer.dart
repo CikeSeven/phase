@@ -56,6 +56,7 @@ class LinuxInstaller {
     this.dio, {
     this.image = UbuntuImage.manifest,
     this.traceUrl = UbuntuImage.traceUrl,
+    this.taskOwner,
   });
   final LinuxImage image;
   final WorkspaceRepository repository;
@@ -63,12 +64,15 @@ class LinuxInstaller {
   final Dio dio;
   final String traceUrl;
 
+  /// 组合安装复用前台任务，成功后由后续依赖安装与调用者收尾。
+  final String? taskOwner;
+
   Future<void> install(
     RunCancellation cancellation,
     void Function(EnvironmentPhase, int, int?) progress,
   ) async {
     repository.beginEnvironmentChange();
-    final owner = 'install-${generateId()}';
+    final owner = taskOwner ?? 'install-${generateId()}';
     final staging = Directory(
       p.join(repository.root.path, 'staging', generateId()),
     );
@@ -286,7 +290,7 @@ class LinuxInstaller {
       );
     } finally {
       try {
-        await driver.endTask(owner);
+        if (taskOwner == null || !committed) await driver.endTask(owner);
         if (!committed && installed != null && await installed.exists()) {
           await installed.delete(recursive: true);
         }

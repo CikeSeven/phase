@@ -160,7 +160,7 @@
 
 设计入口：[扩展设计 §3.4](./agent_extensions_design.md#extensions-mcp)。
 
-- [x] 添加 Node/npm、Python/uv、Git/搜索工具的按需安装，记录版本和结果，安装失败/取消保留已知状态；按用户要求三组合并为一次完整安装，设置页与模型工具共用同一白名单。
+- [x] Node/npm、Python/pip/venv、Git/ripgrep 合并为完整依赖安装（不包含 uv/uvx），记录版本和结果，失败/取消保留已知状态；Ubuntu 安装完成后自动接续，未完成可“修复环境”，与模型工具共用同一白名单。
 - [x] MCP 配置开放 stdio，选择已有环境/工作区及 executable/argv/cwd；敏感环境变量仅保存引用，npx/uvx 依赖预先安装并固定版本。
 - [x] Dart 客户端直接连接进程原始管道，stderr 与 JSON stdout 分离，stdin 可持续写入。
 - [x] 绑定服务会话与进程生命周期，关闭/取消/服务异常不会遗留进程或自动重跑调用。
@@ -169,6 +169,11 @@
 交付用例：固定版本 Node 和 Python 各一个 MCP 服务，完成发现、确认调用、分片输出、错误、停止及退出；再选择一个实际 npm/uvx 服务做明确环境下的兼容性检查。依赖安装不是普通 tools/call 的隐藏步骤，PTY 不能替代 stdio。
 
 实现入口：[stdio 客户端](../lib/features/mcp/mcp_stdio_client.dart)、[连接管理](../lib/features/mcp/mcp_connections.dart)、[配置模型](../lib/data/models/mcp_server_profile.dart)、[依赖安装](../lib/features/workspace/dependency_installer.dart)、[测试](../test/features/mcp/mcp_stdio_test.dart)。
+
+2026-09-27 Ubuntu 与依赖一体安装：
+
+- Ubuntu 提交后自动继续完整依赖安装，阶段间复用前台任务与取消信号；依赖失败/取消不回滚 Ubuntu。仅依赖记录缺失或未完整安装时显示“修复环境”，重开应用仍可继续；完整安装后的详情仅显示版本与关闭，不提供修复入口。修复复用既有 apt 流程，不重新下载 rootfs；schema 与 Termux 行为不变。
+- 已重新生成 Riverpod，应用格式、`flutter analyze --no-pub lib`、diff 检查及 Profile 构建通过；设备 `1b8418ca` 覆盖安装返回 `Success`，启动 `Status: ok`。全量检查仍有既有测试替身的 2 处接口错误、2 条 lint 与 `schema8_fixture.dart` 格式问题，未修改或运行测试。未在设备重装 Ubuntu 或触发依赖下载，自动接续、失败修复、后台停止与视觉交互尚未真机验收。
 
 2026-09-19 E4 实现与本机验收记录：
 

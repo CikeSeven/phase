@@ -4,11 +4,13 @@ import 'package:dio/dio.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
+import '../../../core/utils/id.dart';
 import '../../../data/datasources/local/settings_storage.dart';
 import '../../../data/models/workspace.dart';
 import '../../../data/repositories/workspace_repository.dart';
 import '../commands/command_channel_driver.dart';
 import '../tools/tool.dart';
+import 'dependency_controller.dart';
 import 'linux_installer.dart';
 import 'process_driver.dart';
 import 'process_api.g.dart';
@@ -115,9 +117,18 @@ class EnvironmentController extends _$EnvironmentController {
   Future<void> install() => _operate(false);
   Future<void> uninstall() => _operate(true);
   Future<void> _operate(bool uninstall) async {
-    if (state.busy) return;
+    if (state.busy || ref.read(dependencyControllerProvider).busy) return;
+    final dependencies = ref.read(dependencyControllerProvider.notifier);
+    dependencies.reset();
     final cancellation = RunCancellation();
     _cancellation = cancellation;
+    final driver = ref.read(processDriverProvider);
+    final owner = uninstall ? null : 'install-${generateId()}';
+    final stops = owner == null
+        ? null
+        : driver.stops.listen((id) {
+            if (id == owner) cancellation.cancel();
+          });
     state = EnvironmentOperation(
       busy: true,
       uninstalling: uninstall,
@@ -130,34 +141,59 @@ class EnvironmentController extends _$EnvironmentController {
       ),
     );
     try {
-      final installer = LinuxInstaller(
-        await ref.read(workspaceRepositoryProvider.future),
-        ref.read(processDriverProvider),
-        dio,
-      );
-      if (uninstall) {
-        await installer.uninstall();
-      } else {
-        var last = DateTime.fromMillisecondsSinceEpoch(0);
-        await installer.install(cancellation, (phase, bytes, total) {
-          // Keep the final check visible until commit and cleanup both finish.
-          if (phase == EnvironmentPhase.ready) return;
-          final now = DateTime.now();
-          if (ref.mounted &&
-              (state.phase != phase ||
-                  now.difference(last).inMilliseconds >= 100 ||
-                  bytes == total)) {
-            state = EnvironmentOperation(
-              busy: true,
-              phase: phase,
-              bytes: bytes,
-              total: total,
-              phaseStartedAt: state.phase == phase ? state.phaseStartedAt : now,
-              lastProgressAt: now,
-            );
-            last = now;
-          }
-        });
+      try {
+        final repository = await ref.read(workspaceRepositoryProvider.future);
+        if (!ref.mounted) return;
+        cancellation.throwIfCancelled();
+        final installer = LinuxInstaller(
+          repository,
+          driver,
+          dio,
+          taskOwner: owner,
+        );
+        if (uninstall) {
+          await installer.uninstall();
+        } else {
+          var last = DateTime.fromMillisecondsSinceEpoch(0);
+          await installer.install(cancellation, (phase, bytes, total) {
+            // Keep the final check visible until commit and cleanup both finish.
+            if (phase == EnvironmentPhase.ready) return;
+            final now = DateTime.now();
+            if (ref.mounted &&
+                (state.phase != phase ||
+                    now.difference(last).inMilliseconds >= 100 ||
+                    bytes == total)) {
+              state = EnvironmentOperation(
+                busy: true,
+                phase: phase,
+                bytes: bytes,
+                total: total,
+                phaseStartedAt: state.phase == phase
+                    ? state.phaseStartedAt
+                    : now,
+                lastProgressAt: now,
+              );
+              last = now;
+            }
+          });
+          if (!ref.mounted) return;
+          // rootfs 已提交后独立安装依赖；失败只保留修复入口，不回滚 Ubuntu。
+          state = const EnvironmentOperation(
+            busy: true,
+            phase: EnvironmentPhase.ready,
+          );
+          await dependencies.installWithCancellation(
+            cancellation,
+            taskOwner: owner,
+          );
+        }
+      } finally {
+        try {
+          // 依赖尚未派发或 provider 已销毁时，也释放跨阶段保留的前台任务。
+          if (owner != null) await driver.endTask(owner);
+        } finally {
+          await stops?.cancel();
+        }
       }
       if (ref.mounted) state = const EnvironmentOperation();
     } on ToolCancelled {

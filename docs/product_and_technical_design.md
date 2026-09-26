@@ -18,7 +18,7 @@
 | 模型接入 | 四协议 `AiProvider`，协议选择显式、运行配置固定 |
 | 工具入口 | 内置、MCP、命令及后续插件统一进入 `ToolRegistry` / `ToolExecutor` |
 | 插件基础 | MCP 远程 Streamable HTTP、本地 stdio、按需加载 Skills |
-| 本地命令 | 建设按需安装的 Ubuntu 24.04 PRoot 环境；Node/Python 按需要安装 |
+| 本地命令 | 按需安装 Ubuntu 24.04 PRoot 环境，自动安装 Python/pip/venv、Node/npm、Git/ripgrep；依赖未完成可修复 |
 | 系统通道 | 无障碍、Shizuku、Termux 各自声明能力与授权，不自动互换 |
 | 扩展内核 | 不引入第二套常驻 Agent 循环；Pi 扩展、Operit ToolPkg 不列为直接兼容格式 |
 | 平台与发行 | 仅 Android；首次发行使用 GitHub Releases，发行验收独立排期 |

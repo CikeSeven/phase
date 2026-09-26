@@ -39,8 +39,17 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     final replacesEnvironment = environment.value?.rootPath != null;
     final operation = ref.watch(environmentControllerProvider);
     final dependencies = ref.watch(dependencyControllerProvider);
+    final installingDependencies =
+        operation.busy && operation.phase == EnvironmentPhase.ready;
+    final allDependenciesInstalled = DependencyProfile.all.every(
+      (profile) =>
+          environment.value?.installedDependencies.containsKey(profile.id) ==
+          true,
+    );
+    final needsRepair = !allDependenciesInstalled;
     final VoidCallback? onInstallEnvironment =
         environment.hasValue &&
+            !operation.busy &&
             !dependencies.busy &&
             platform.value?.available == true
         ? () => _confirmEnvironmentInstall(
@@ -58,7 +67,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
         !dependencies.busy && operation.busy && (operation.total ?? 0) > 0
         ? (operation.bytes / operation.total!).clamp(0.0, 1.0)
         : null;
-    final progressLabel = dependencies.busy
+    final progressLabel = dependencies.busy || installingDependencies
         ? '正在安装依赖'
         : operation.busy
         ? operation.uninstalling
@@ -159,7 +168,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                         ),
                       ),
                     ),
-                  if (operation.busy) ...[
+                  if (operation.busy && !installingDependencies) ...[
                     const SizedBox(height: AppSpacing.l),
                     if (operation.uninstalling)
                       const Text('正在卸载环境…')
@@ -212,20 +221,19 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
               ),
             ),
           ),
-          if (!operation.busy && environment.value?.ready == true) ...[
+          if ((!operation.busy || installingDependencies) &&
+              environment.value?.ready == true) ...[
             const SizedBox(height: 24),
             AppSection(
               title: '环境依赖',
               child: _DependencyTile(
                 records: environment.value!.installedDependencies,
                 operation: dependencies,
-                onInstall: dependencies.busy ? null : () => _confirmInstall(),
-                onShowInfo: () => _showDependencyInfo(
-                  environment.value!.installedDependencies,
-                ),
-                onReinstall: dependencies.busy
+                onShowInfo: operation.busy || dependencies.busy
                     ? null
-                    : () => _confirmInstall(reinstall: true),
+                    : () => _showDependencyInfo(
+                        environment.value!.installedDependencies,
+                      ),
               ),
             ),
             if (dependencies.busy ||
@@ -258,24 +266,28 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
             if (dependencies.error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        dependencies.error!,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ),
-                    if (dependencies.failed)
-                      TextButton(
-                        onPressed: () => ref
-                            .read(dependencyControllerProvider.notifier)
-                            .install(),
-                        child: const Text('重试'),
-                      ),
-                  ],
+                child: Text(
+                  dependencies.error!,
+                  style: TextStyle(color: colors.error),
+                ),
+              )
+            else if (needsRepair && !operation.busy && !dependencies.busy)
+              const Padding(
+                padding: EdgeInsets.only(top: AppSpacing.m),
+                child: Text('开发依赖未安装完成'),
+              ),
+            if (needsRepair && !operation.busy && !dependencies.busy)
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.m),
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                    onPressed: platform.value?.available == true
+                        ? _repairEnvironment
+                        : null,
+                    icon: const Icon(Symbols.build),
+                    label: const Text('修复环境'),
+                  ),
                 ),
               ),
           ],
@@ -298,7 +310,9 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
         icon: replacesEnvironment ? Symbols.warning : null,
         tone: replacesEnvironment ? AppTone.error : AppTone.primary,
         content: Text(
-          '下载固定版本 ${UbuntuImage.revision}，需至少 605 MiB 可用空间。${ready ? '安装成功后替换原环境及其依赖，工作区文件保留。' : '工作区程序以相月应用身份运行，请只执行信任的程序。'}',
+          '安装 Ubuntu ${UbuntuImage.revision}，并自动安装 Python、Node.js、Git 与 ripgrep。'
+          '基础环境需至少 605 MiB 可用空间，依赖安装另需空间。'
+          '${ready ? '替换原环境及其依赖，工作区文件保留。' : '工作区程序以相月应用身份运行，请只执行信任的程序。'}',
         ),
         actions: [
           TextButton(
@@ -353,36 +367,21 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     }
   }
 
-  Future<void> _confirmInstall({bool reinstall = false}) async {
-    final allowed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AppDialog(
-        title: reinstall ? '重新安装环境依赖？' : '安装环境依赖？',
-        icon: reinstall ? Symbols.refresh : Symbols.terminal,
-        content: Text(
-          reinstall
-              ? '通过 Ubuntu 软件源覆盖安装相同软件包，已有配置保留，可能需要数分钟。'
-              : '通过 Ubuntu 软件源一次安装 ${DependencyProfile.completePackages}，'
-                    '可能需要数分钟；已安装内容跨会话保留。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(reinstall ? '重新安装' : '安装'),
-          ),
-        ],
-      ),
-    );
-    if (allowed == true && mounted) {
-      await ref.read(dependencyControllerProvider.notifier).install();
+  Future<void> _repairEnvironment() async {
+    final environment = ref.read(runtimeEnvironmentProvider).value;
+    if (ref.read(environmentControllerProvider).busy ||
+        ref.read(dependencyControllerProvider).busy ||
+        environment == null ||
+        !environment.ready ||
+        DependencyProfile.all.every(
+          (profile) =>
+              environment.installedDependencies.containsKey(profile.id),
+        )) {
+      return;
     }
+    await ref.read(dependencyControllerProvider.notifier).install();
   }
 
-  /// 全部安装后点击条目的信息概览；重装从这里或右侧按钮进入同一确认。
   Future<void> _showDependencyInfo(
     Map<String, InstalledDependency> records,
   ) async {
@@ -390,7 +389,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     for (final record in records.values) {
       if (record.installedAt.isAfter(latest)) latest = record.installedAt;
     }
-    final action = await showDialog<String>(
+    await showDialog<void>(
       context: context,
       builder: (context) => AppDialog(
         title: '开发依赖',
@@ -409,19 +408,12 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, 'close'),
+            onPressed: () => Navigator.pop(context),
             child: const Text('关闭'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, 'reinstall'),
-            child: const Text('重新安装'),
           ),
         ],
       ),
     );
-    if (action == 'reinstall' && mounted) {
-      await _confirmInstall(reinstall: true);
-    }
   }
 }
 
@@ -492,17 +484,11 @@ class _DependencyTile extends StatelessWidget {
   const _DependencyTile({
     required this.records,
     required this.operation,
-    required this.onInstall,
     required this.onShowInfo,
-    required this.onReinstall,
   });
   final Map<String, InstalledDependency> records;
   final DependencyOperation operation;
-  final VoidCallback? onInstall;
   final VoidCallback? onShowInfo;
-
-  /// 全部安装后条目右侧的重装按钮；与 onInstall 分开便于概览弹窗复用。
-  final VoidCallback? onReinstall;
 
   @override
   Widget build(BuildContext context) {
@@ -529,18 +515,9 @@ class _DependencyTile extends StatelessWidget {
         trailing: installing
             ? const AppLoadingIndicator.small(size: 20)
             : allInstalled
-            ? IconButton(
-                tooltip: '重新安装',
-                onPressed: onReinstall,
-                icon: const Icon(Symbols.refresh),
-              )
-            : const Icon(Symbols.download),
-        // 全部安装后点击展示概览而不是重复的安装确认。
-        onTap: installing
-            ? null
-            : allInstalled
-            ? onShowInfo
-            : onInstall,
+            ? const Icon(Symbols.chevron_right)
+            : null,
+        onTap: !installing && allInstalled ? onShowInfo : null,
       ),
     );
   }

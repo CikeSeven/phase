@@ -14,7 +14,7 @@
 | 工具接入 | `ToolRegistry` / `ToolExecutor` | 内置、MCP、进程与插件工具走相同策略和结果保存 |
 | 通用生态 | MCP Streamable HTTP + stdio；Skills | 通信标准和指导格式不绑定某个 Agent 框架 |
 | 本地环境 | 按需下载 Ubuntu 24.04 ARM64 rootfs + PRoot | 程序运行环境，不承载另一套 Agent 内核 |
-| 依赖运行时 | Node.js/npm、Python/uv 按任务安装 | 用于 MCP 服务或脚本，不成为普通聊天的前置条件 |
+| 依赖运行时 | Ubuntu 安装后自动安装 Python/pip/venv、Node.js/npm、Git/ripgrep | 用于 MCP 服务或脚本，不成为普通聊天的前置条件；不包含 uv/uvx |
 | 系统能力 | 无障碍、Shizuku、Termux 显式通道 | 独立身份、目录和授权；不在失败后自动换通道 |
 | 应用扩展 | 数据声明包先行，Node 宿主钩子后续 | 不承诺直接加载 Pi 扩展或 Operit ToolPkg |
 
@@ -182,7 +182,7 @@ E2 当前实现：上述本地导入、助手范围、版本固定、管理界�
 
 ### 5.3 依赖与终端
 
-环境详情按需安装 Node/npm、Python/uv 和 Git/搜索工具。安装计划显示来源、用途与可用体积信息；固定本次解析的包版本并记录实际结果，安装失败保留已有环境。依赖安装可取消，不把取消描述成完全回滚软件包操作。
+Ubuntu 基础环境检查并提交后，自动安装 python3/pip/venv、nodejs/npm、git/ripgrep，沿用软件源与完整依赖白名单，不包含 uv/uvx。基础环境的 ready 只表示 shell 与文件读写可用，开发依赖全部验证并保存版本记录后才视为完整安装。依赖失败、取消或进程中断不回滚 Ubuntu 与已装软件包；环境设置按持久化依赖记录显示“修复环境”，点击执行包状态修复、索引更新、完整安装与逐组验证，不重新下载 rootfs。Ubuntu 安装的阶段切换共用取消信号，依赖修复不替换 rootfs；模型侧 `install_packages` 仍是独立、受权限控制的工具，不在 MCP 调用内隐式执行。Termux 依赖不受此流程管理。
 
 基础命令与 stdio 先完成，再提供 PTY 终端：输入、窗口尺寸、Ctrl-C、退出与会话切换。关闭终端页面不等于结束有明确宿主的任务；终端退出操作必须终止自己的进程。交互终端不暴露给模型充当 MCP 传输。
 

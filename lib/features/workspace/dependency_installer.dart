@@ -16,9 +16,10 @@ import 'process_driver.dart';
 /// 托管 apt 安装：修复、更新、一次装齐全部依赖组，再逐组验证并记录版本。
 /// 失败或取消保留已知状态；不替换 rootfs，因此可与模型运行并发。
 class DependencyInstaller {
-  DependencyInstaller(this.repository, this.driver);
+  DependencyInstaller(this.repository, this.driver, {this.taskOwner});
   final WorkspaceRepository repository;
   final ProcessDriver driver;
+  final String? taskOwner;
   static const outputLimitBytes = 8 * 1024 * 1024;
   // apt otherwise suppresses transfer progress when stdout is a pipe. Keep
   // native CR-delimited progress without allocating a PTY or mixing streams.
@@ -49,7 +50,7 @@ class DependencyInstaller {
   ) async {
     final profiles = DependencyProfile.all;
     repository.beginDependencyChange();
-    final owner = 'deps-${generateId()}';
+    final owner = taskOwner ?? 'deps-${generateId()}';
     // The host only accepts guest workspaces under managed paths; staging
     // holds a scratch directory for the duration of the run.
     final scratch = Directory(
