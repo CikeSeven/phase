@@ -170,7 +170,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           AppSpacing.l,
           AppSpacing.s,
           AppSpacing.l,
-          AppSpacing.m,
+          AppSpacing.xs,
         ),
         child: ChatInputSurface(
           focused: _focusNode.hasFocus,
