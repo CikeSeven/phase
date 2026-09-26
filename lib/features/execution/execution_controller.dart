@@ -266,6 +266,9 @@ class ExecutionController extends _$ExecutionController {
         final message = switch (reason) {
           'locked' => '设备已锁定，自动操作已停止',
           'permissionRequired' => '无障碍授权已关闭，自动操作已停止',
+          'shizukuPermissionRequired' => 'Shizuku 授权或执行身份已改变，虚拟屏操作已停止',
+          'channelDisabled' => 'Shizuku 已关闭，虚拟屏操作已停止',
+          'channelDisconnected' => 'Shizuku 服务已断开，虚拟屏操作已停止',
           'targetChanged' => '目标 App 已改变，自动操作已停止',
           'serviceStopped' => '任务服务已停止',
           'applicationDenied' => '应用已被名单禁止，自动操作已停止',

@@ -14,9 +14,14 @@ const applicationOperationTools = {
   'input_text',
   'capture_screen',
   'perform_gestures',
+  'shizuku_display',
 };
 
-const visualOperationTools = {'capture_screen', 'perform_gestures'};
+const visualOperationTools = {
+  'capture_screen',
+  'perform_gestures',
+  'shizuku_display',
+};
 
 ToolPolicy toolPolicyFromName(String? name) {
   for (final policy in ToolPolicy.values) {

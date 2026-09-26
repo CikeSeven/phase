@@ -21,6 +21,7 @@ class ApplicationToolDisplay {
         'input_text',
         'capture_screen',
         'perform_gestures',
+        'shizuku_display',
       }.contains(record.toolName);
 
   String? get packageName {
@@ -38,15 +39,26 @@ class ApplicationToolDisplay {
         : null;
   }
 
-  String? get title =>
-      record.toolName == 'perform_gestures' &&
-          record.arguments['actions'] is List
+  String? get title => record.toolName == 'shizuku_display'
+      ? switch (record.arguments['action']) {
+          'launch' => '在虚拟屏打开应用',
+          'capture' => '观察虚拟屏',
+          'tap' => '点击虚拟屏',
+          'swipe' => '滑动虚拟屏',
+          'key' => '虚拟屏按键',
+          'text' => '虚拟屏输入',
+          'close' => '关闭虚拟屏',
+          _ => '控制虚拟屏',
+        }
+      : record.toolName == 'perform_gestures' &&
+            record.arguments['actions'] is List
       ? '执行 ${(record.arguments['actions'] as List).length} 步手势'
       : null;
 
   bool get showScreenshots =>
       record.toolName == 'capture_screen' ||
-      record.toolName == 'perform_gestures';
+      record.toolName == 'perform_gestures' ||
+      record.toolName == 'shizuku_display';
 
   String? get call {
     final args = record.arguments;
@@ -62,6 +74,14 @@ class ApplicationToolDisplay {
       'input_text' =>
         '$node\n${args['text'] is String ? args['text'] : '未提供输入文字'}',
       'perform_gestures' => _gestures(args),
+      'shizuku_display' => switch (args['action']) {
+        'tap' => '图片坐标 (${args['x']}, ${args['y']})',
+        'swipe' =>
+          '图片坐标 (${args['x']}, ${args['y']}) → (${args['endX']}, ${args['endY']}) · ${args['durationMs'] ?? 400} 毫秒',
+        'key' => '${args['key']}',
+        'text' => '${args['text']}',
+        _ => null,
+      },
       'list_apps' => [
         if (args['query'] case final String query when query.isNotEmpty)
           '搜索「$query」',
@@ -88,6 +108,14 @@ class ApplicationToolDisplay {
       if (data['actionAccepted'] == true && data['observationChanged'] == false)
         '系统已接受动作，界面未变化',
       if (data['actionAccepted'] == false) '系统未接受动作',
+      if (record.toolName == 'shizuku_display' &&
+          data['actionDispatched'] == true &&
+          data['actionAccepted'] != true)
+        '动作已派发，未收到完整执行回执',
+      if (record.toolName == 'shizuku_display' &&
+          data['dispatchRequested'] == true &&
+          data['actionDispatched'] != true)
+        '已请求执行，未收到完整回执',
       if (record.toolName == 'perform_gestures') ...[
         if (data['completedCount'] case final num count)
           '已完成 $count/${record.arguments['actions'] is List ? (record.arguments['actions'] as List).length : 0} 步',

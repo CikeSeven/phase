@@ -15,7 +15,6 @@ String presentToolOutput(ToolCallRecord record, String result) {
       decoded is Map<String, dynamic>) {
     switch (record.toolName) {
       case 'shell':
-      case 'shizuku_shell':
       case 'termux_shell':
         if (decoded case {
           'stdout': final String out,
@@ -47,7 +46,6 @@ String presentToolOutput(ToolCallRecord record, String result) {
         return decoded['copied'] == true
             ? '已复制 ${decoded['path']}'
             : '${decoded['error'] ?? '复制未完成'}';
-      case 'shizuku_transfer':
       case 'termux_transfer':
         return [
           '已传输 ${decoded['transferredBytes'] ?? 0} 字节',

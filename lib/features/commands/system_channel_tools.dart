@@ -16,19 +16,22 @@ import 'command_api.g.dart';
 import 'command_channel_driver.dart';
 import 'command_output_collector.dart';
 
-const externalShellNames = {'shizuku_shell', 'termux_shell'};
-const externalTransferNames = {'shizuku_transfer', 'termux_transfer'};
+const externalShellNames = {'termux_shell'};
+const externalTransferNames = {'termux_transfer'};
 bool isCommandToolName(String name) =>
     name == 'shell' || externalShellNames.contains(name);
 
 abstract class SystemChannelTool extends Tool {
-  const SystemChannelTool(this.binding, this.driver);
+  SystemChannelTool(this.binding, this.driver) {
+    if (binding.channel != ExecutionChannel.termux) {
+      throw ArgumentError.value(binding.channel, 'channel', '仅支持 Termux 命令与传输');
+    }
+  }
   final CommandChannelSnapshot binding;
   final CommandChannelDriver driver;
   @override
   ExecutionChannel get channel => binding.channel;
-  String get channelName =>
-      channel == ExecutionChannel.shizuku ? 'Shizuku' : 'Termux';
+  String get channelName => 'Termux';
   @override
   String get policyKey => commandExecutionPolicyKey;
   @override
@@ -41,7 +44,7 @@ abstract class SystemChannelTool extends Tool {
 }
 
 class ExternalShellTool extends SystemChannelTool {
-  const ExternalShellTool(super.binding, super.driver);
+  ExternalShellTool(super.binding, super.driver);
   @override
   String get name => '${channel.name}_shell';
   @override
@@ -156,7 +159,7 @@ class ExternalShellTool extends SystemChannelTool {
 }
 
 class ChannelTransferTool extends SystemChannelTool {
-  const ChannelTransferTool(
+  ChannelTransferTool(
     super.binding,
     super.driver,
     this.workspace,

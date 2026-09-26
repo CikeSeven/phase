@@ -22,10 +22,8 @@ class ToolPresentation {
     'wait_for_user' => Symbols.pan_tool_alt,
     'system_info' => Symbols.schedule,
     'read_file' => Symbols.description,
-    'shell' || 'shizuku_shell' || 'termux_shell' => Symbols.terminal,
-    'workspace_transfer' ||
-    'shizuku_transfer' ||
-    'termux_transfer' => Symbols.sync_alt,
+    'shell' || 'termux_shell' => Symbols.terminal,
+    'workspace_transfer' || 'termux_transfer' => Symbols.sync_alt,
     'install_packages' => Symbols.download,
     'prepare_skill' => Symbols.folder_copy,
     'read_skill' => Symbols.auto_stories,
@@ -34,6 +32,7 @@ class ToolPresentation {
     'list_files' => Symbols.folder_open,
     'http_request' => Symbols.language,
     'capture_screen' => Symbols.screenshot,
+    'shizuku_display' => Symbols.phone_android,
     'perform_gestures' => Symbols.touch_app,
     _ => Symbols.build,
   };
@@ -59,9 +58,7 @@ class ToolPresentation {
     'read_skill' => '读取 Skill',
     'shell' => '执行命令',
     'workspace_transfer' => '跨环境复制',
-    'shizuku_shell' => 'Shizuku 命令',
     'termux_shell' => 'Termux 命令',
-    'shizuku_transfer' => 'Shizuku 文件传输',
     'termux_transfer' => 'Termux 文件传输',
     'install_packages' => '安装依赖',
     'prepare_skill' => '准备 Skill 资源',
@@ -76,6 +73,7 @@ class ToolPresentation {
     'scroll' => '滚动界面',
     'input_text' => '输入文本',
     'capture_screen' => '截图观察',
+    'shizuku_display' => '控制虚拟屏',
     'perform_gestures' => '执行手势组合',
     _ => toolName,
   };
@@ -169,10 +167,17 @@ class ToolPresentation {
 
   /// 关键参数的中文标签；未登记的参数用原始键名。
   static const _parameterLabels = <String, Map<String, String>>{
-    'shizuku_transfer': {
-      'path': '工作区路径',
-      'remotePath': 'Shizuku 路径',
-      'direction': '传输方向',
+    'shizuku_display': {
+      'action': '虚拟屏操作',
+      'packageName': '目标应用',
+      'screenshotId': '参照截图',
+      'x': '图片 X 坐标',
+      'y': '图片 Y 坐标',
+      'endX': '终点 X 坐标',
+      'endY': '终点 Y 坐标',
+      'durationMs': '时长（毫秒）',
+      'key': '按键',
+      'text': '输入文字',
     },
     'termux_transfer': {
       'path': '工作区路径',

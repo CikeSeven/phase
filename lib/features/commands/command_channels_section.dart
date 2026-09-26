@@ -87,7 +87,7 @@ class _CommandChannelsSectionState
       error: (error, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(error is Failure ? error.userMessage : '命令通道状态读取失败'),
+          Text(error is Failure ? error.userMessage : '系统能力状态读取失败'),
           TextButton(
             onPressed: () => ref.invalidate(commandChannelsControllerProvider),
             child: const Text('重试'),

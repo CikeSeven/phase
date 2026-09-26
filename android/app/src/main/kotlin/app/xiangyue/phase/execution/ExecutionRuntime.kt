@@ -21,8 +21,8 @@ class ExecutionRuntime(context: Context) {
         ExecutionFlutterApi(engine.dartExecutor.binaryMessenger),
     )
 
-    val processes: LinuxProcessHost = LinuxProcessHost(context.applicationContext, LinuxProcessFlutterApi(engine.dartExecutor.binaryMessenger)) { owner -> commands.stopOwner(owner) }
-    val commands: CommandChannelHost = CommandChannelHost(context.applicationContext, CommandChannelFlutterApi(engine.dartExecutor.binaryMessenger), processes::expectsStart)
+    val processes: LinuxProcessHost = LinuxProcessHost(context.applicationContext, LinuxProcessFlutterApi(engine.dartExecutor.binaryMessenger)) { owner -> commands.stopOwner(owner); coordinator.externalOwnerStopped(owner) }
+    val commands: CommandChannelHost = CommandChannelHost(context.applicationContext, CommandChannelFlutterApi(engine.dartExecutor.binaryMessenger), processes::expectsStart, coordinator.shizuku)
 
     init {
         CommandChannelHostApi.setUp(engine.dartExecutor.binaryMessenger, commands)

@@ -132,7 +132,7 @@ class CommandChannelsController extends _$CommandChannelsController {
             busy: true,
           ),
         );
-        if (!hasShizukuCommandPermission(statuses)) {
+        if (!hasShizukuDevicePermission(statuses)) {
           throw OperationFailure(
             statuses
                     .where((status) => status.channel == 'shizuku')

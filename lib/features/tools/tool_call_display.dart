@@ -41,7 +41,9 @@ class ToolCallDisplay {
   static String? detail(ToolCallRecord record, {String? appName}) {
     if (!isBuiltIn(record)) return null;
     if (ApplicationToolDisplay.supports(record)) {
-      return record.toolName == 'list_apps'
+      return record.toolName == 'list_apps' ||
+              (record.toolName == 'shizuku_display' &&
+                  record.arguments['action'] == 'close')
           ? null
           : appName ??
                 (record.toolName == 'capture_screen' && record.result == null
@@ -52,10 +54,9 @@ class ToolCallDisplay {
     return switch (record.toolName) {
       'wait_for_user' =>
         args['prompt'] is String ? args['prompt'] as String : null,
-      'shell' || 'shizuku_shell' || 'termux_shell' =>
+      'shell' || 'termux_shell' =>
         args['command'] is String ? '\$ ${args['command']}' : null,
       'workspace_transfer' => '${args['path']}',
-      'shizuku_transfer' ||
       'termux_transfer' => '${args['path']} ↔ ${args['remotePath']}',
       'install_packages' => null,
       'write_file' ||
@@ -86,7 +87,6 @@ class ToolCallDisplay {
     final output = ToolPresentation.outputText(record);
     if (isBuiltIn(record)) {
       switch (record.toolName) {
-        case 'shizuku_transfer':
         case 'termux_transfer':
           return ToolCallDisplay(
             call:
@@ -104,7 +104,6 @@ class ToolCallDisplay {
             );
           }
         case 'shell':
-        case 'shizuku_shell':
         case 'termux_shell':
           if (args['command'] case final String command) {
             final metadata = [

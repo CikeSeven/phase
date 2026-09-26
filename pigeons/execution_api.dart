@@ -20,6 +20,7 @@ enum ExecutionAction {
   listFiles,
   captureScreen,
   performGestures,
+  controlDisplay,
 }
 
 enum ExecutionStatus { succeeded, failed, cancelled }

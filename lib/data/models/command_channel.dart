@@ -1,6 +1,6 @@
 import 'tool_call_record.dart';
 
-/// 仅 Shizuku 保留应用内开关；Termux 由系统授权和运行时就绪状态守门。
+/// Shizuku 开关仅用于虚拟屏；Termux 命令由系统授权和运行时就绪状态守门。
 class CommandChannelSettings {
   const CommandChannelSettings({this.shizuku = false});
   final bool shizuku;
@@ -15,6 +15,7 @@ class CommandChannelSettings {
       CommandChannelSettings(shizuku: json['shizuku'] == true);
 }
 
+/// Shizuku 绑定设备修订与 UID（home 为空）；Termux 绑定命令 runner 与目录。
 class CommandChannelSnapshot {
   const CommandChannelSnapshot({
     required this.channel,

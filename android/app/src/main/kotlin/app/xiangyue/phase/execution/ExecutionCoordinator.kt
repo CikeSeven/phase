@@ -16,9 +16,11 @@ import app.xiangyue.phase.applications.ApplicationCatalog
 import app.xiangyue.phase.applications.ApplicationCatalogRestricted
 import app.xiangyue.phase.applications.ApplicationListPermissionRequired
 import app.xiangyue.phase.applications.ApplicationAccess
+import app.xiangyue.phase.shizuku.ShizukuDeviceHost
 
 class ExecutionCoordinator(private val context: Context, private val flutter: ExecutionFlutterApi) : ExecutionHostApi {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    val shizuku = ShizukuDeviceHost(context, ::stopFromSystem)
     val files = AppFileDriver(context)
     private val applications = ApplicationCatalog(context)
     val setup = ExecutionSetup(context, files, applications, ::updateApplicationPolicy)
@@ -27,15 +29,24 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     private var activeTargetPackage: String? = null
     private val deviceQueue = DeviceActionQueue()
     private var deviceActive = false
+    private var virtualDeviceActive = false
     private var launching = false
     private var overlaySuppressed = false
     private val panel = TaskPanelSession()
     private val fileActions = setOf(ExecutionAction.READ_FILE, ExecutionAction.WRITE_FILE, ExecutionAction.LIST_FILES)
     private val visualActions = setOf(ExecutionAction.CAPTURE_SCREEN, ExecutionAction.PERFORM_GESTURES)
-    private val tasks = NativeExecutionTasks(scope, ExecutionAction.entries.associateWith { action ->
+    private val tasks: NativeExecutionTasks = NativeExecutionTasks(scope, ExecutionAction.entries.associateWith { action ->
         NativeAction { request, progress ->
             if (action in fileActions) files.execute(request, session?.fileUris ?: emptyList())
             else if (action == ExecutionAction.LIST_APPS) listApplications(request)
+            else if (action == ExecutionAction.CONTROL_DISPLAY) deviceQueue.withLock {
+                virtualDeviceActive = true
+                activeTargetPackage = null
+                shizuku.execute(request, allowed = { target ->
+                    val app = applications.get(target)
+                    app != null && allowed(app)
+                }, checkpoint = { tasks.checkpoint(request.toolCallId, it) })
+            }
             else executeUi(request, progress)
         }
     }) { progress ->
@@ -62,7 +73,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
             ((accessibility?.serviceInfo?.capabilities ?: 0) and
                 android.accessibilityservice.AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT) != 0
         return ExecutionCapabilities(tasks.capabilities.filter {
-            (it in fileActions || it == ExecutionAction.LIST_APPS || connected) &&
+            (if (it == ExecutionAction.CONTROL_DISPLAY) shizuku.available() else it in fileActions || it == ExecutionAction.LIST_APPS || connected) &&
                 (it != ExecutionAction.CAPTURE_SCREEN || screenshots)
         }, manager.areNotificationsEnabled() && channelEnabled, resumed, connected)
     }
@@ -121,8 +132,9 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         if (tasks.runId != runId) return
         panel.finish(runId)
         clearConfirmation()
+        shizuku.endOwner(runId)
         tasks.end(runId)
-        session = null; deviceActive = false; activeTargetPackage = null
+        session = null; deviceActive = false; virtualDeviceActive = false; activeTargetPackage = null
         PhaseAccessibilityService.instance?.driver?.clear()
         PhaseAccessibilityService.instance?.visual?.clear()
         refreshOverlay()
@@ -132,9 +144,12 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         host?.finishTask()
     }
 
+    fun externalOwnerStopped(owner: String) { scope.launch { stopFromSystem(owner, "serviceStopped") } }
+
     /** Latch native stop before notifying Dart, so a late dispatch cannot escape cancellation. */
     fun stopFromSystem(runId: String, reason: String? = null) {
         if (tasks.runId != runId) return
+        shizuku.endOwner(runId)
         tasks.stop(runId)
         deviceActive = false
         panel.finish(runId)
@@ -182,6 +197,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     }
 
     private suspend fun executeUi(request: ExecutionRequest, progress: suspend (ProgressKind, String) -> Unit): ExecutionResult = deviceQueue.withLock {
+        virtualDeviceActive = false
         val accessibility = PhaseAccessibilityService.instance
         if (request.action == ExecutionAction.CAPTURE_SCREEN && (!deviceActive || accessibility == null))
             return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.PERMISSION_REQUIRED)
@@ -267,6 +283,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         val runId = tasks.runId ?: return
         val targets = listOfNotNull(activeTargetPackage, confirmation?.arguments?.get("packageName") as? String).distinct()
         scope.launch {
+            shizuku.policyChanged()
             for (target in targets) {
                 val app = try { applications.get(target) } catch (_: Exception) { null }
                 if (tasks.runId != runId) return@launch
@@ -334,7 +351,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     }
 
     fun accessibilityChanged() { send { flutter.capabilityChanged(queryCapabilities()) } }
-    fun interruptDevice(reason: String) { if (deviceActive) tasks.runId?.let { stopFromSystem(it, reason) }; refreshOverlay() }
+    fun interruptDevice(reason: String) { if (deviceActive && !virtualDeviceActive) tasks.runId?.let { stopFromSystem(it, reason) }; refreshOverlay() }
     fun windowChanged(packageName: String?) {
         if (panel.finished) refreshOverlay()
         if (deviceActive && !panel.waitingForUser && activeTargetPackage != null && !launching && !resumed && packageName != null && packageName != context.packageName && packageName != activeTargetPackage) interruptDevice("targetChanged")

@@ -142,99 +142,125 @@ class VisualTool extends Tool {
       cancellation,
       onProgress: (event) => onProgress?.call(event.payload),
     );
-    final details = Map<String, Object?>.from(result.result);
-    final ids = <String>[];
-    try {
-      if (result.status == ExecutionStatus.succeeded &&
-          !cancellation.isCancelled &&
-          (_capture ||
-              result.artifacts.isNotEmpty ||
-              details.containsKey('screenshot'))) {
-        if (result.artifacts.length != 1 || details['screenshot'] is! Map) {
-          return _observationFailure(
-            details,
-            '截图数据未完整返回，请重新观察',
-            'screenshotMissing',
-          );
-        }
-        final artifact = result.artifacts.single;
-        final path = artifact.localPath;
-        if (path == null ||
-            artifact.size <= 0 ||
-            artifact.size > 4 * 1024 * 1024) {
-          throw const OperationFailure('截图文件缺失或超出大小限制');
-        }
-        final file = File(path);
-        if (await file.length() != artifact.size) {
-          throw const OperationFailure('截图文件大小不匹配');
-        }
-        final bytes = await file.readAsBytes();
-        final metadata = details['screenshot'] as Map;
-        if (!_matchesScreenshot(bytes, metadata)) {
-          throw const OperationFailure('截图图像与返回尺寸不一致');
-        }
-        cancellation.throwIfCancelled();
-        final saved = await context.storage.registerBytes(
-          conversationId: context.conversationId,
-          name: 'screen-${context.toolCallId}.png',
-          mimeType: 'image/png',
-          bytes: bytes,
+    return visualResultOutcome(
+      result,
+      context,
+      cancellation,
+      captureRequired: _capture,
+    );
+  }
+}
+
+/// Both device backends use the same bounded PNG validation and attachment lifecycle.
+Future<ToolOutcome> visualResultOutcome(
+  ExecutionResult result,
+  ToolContext context,
+  RunCancellation cancellation, {
+  required bool captureRequired,
+}) async {
+  final details = Map<String, Object?>.from(result.result);
+  final ids = <String>[];
+  try {
+    if (result.status == ExecutionStatus.succeeded &&
+        !cancellation.isCancelled &&
+        (captureRequired ||
+            result.artifacts.isNotEmpty ||
+            details.containsKey('screenshot'))) {
+      if (result.artifacts.length != 1 || details['screenshot'] is! Map) {
+        return _observationFailure(
+          captureRequired,
+          details,
+          '截图数据未完整返回，请重新观察',
+          'screenshotMissing',
         );
-        ids.add(saved.id);
       }
-      final reason = details['reason'];
-      if (reason is String) details['reason'] = visualReason(reason);
-      final observationError = details['observationError'];
-      if (observationError is String) {
-        details['observationError'] = visualReason(observationError);
+      final artifact = result.artifacts.single;
+      final path = artifact.localPath;
+      if (path == null ||
+          artifact.size <= 0 ||
+          artifact.size > 4 * 1024 * 1024) {
+        throw const OperationFailure('截图文件缺失或超出大小限制');
       }
-      return ToolOutcome(
-        ok:
-            result.status == ExecutionStatus.succeeded &&
-            !cancellation.isCancelled,
-        cancelled:
-            result.status == ExecutionStatus.cancelled ||
-            cancellation.isCancelled,
-        content: jsonEncode(details),
-        artifacts: ids,
-        errorCode: result.error?.name,
+      final file = File(path);
+      if (await file.length() != artifact.size) {
+        throw const OperationFailure('截图文件大小不匹配');
+      }
+      final bytes = await file.readAsBytes();
+      final metadata = details['screenshot'] as Map;
+      if (!_matchesScreenshot(bytes, metadata)) {
+        throw const OperationFailure('截图图像与返回尺寸不一致');
+      }
+      cancellation.throwIfCancelled();
+      final saved = await context.storage.registerBytes(
+        conversationId: context.conversationId,
+        name: 'screen-${context.toolCallId}.png',
+        mimeType: 'image/png',
+        bytes: bytes,
       );
-    } on ToolCancelled {
-      return ToolOutcome.cancelled(
-        jsonEncode({...details, 'reason': '任务已停止，已派发手势不代表已撤销'}),
-      );
-    } on FileSystemException {
-      return _observationFailure(details, '无法读取截图文件', 'screenshotReadFailed');
-    } on OperationFailure catch (error) {
-      return _observationFailure(
-        details,
-        error.userMessage,
-        'screenshotReadFailed',
-      );
-    } finally {
-      for (final artifact in result.artifacts) {
-        final path = artifact.localPath;
-        if (path == null) continue;
-        try {
-          await File(path).delete();
-        } on FileSystemException {
-          AppLogger.warning('截图临时文件清理失败');
-        }
+      ids.add(saved.id);
+    }
+    final reason = details['reason'];
+    if (reason is String) details['reason'] = visualReason(reason);
+    final observationError = details['observationError'];
+    if (observationError is String) {
+      details['observationError'] = visualReason(observationError);
+    }
+    return ToolOutcome(
+      ok:
+          result.status == ExecutionStatus.succeeded &&
+          !cancellation.isCancelled,
+      cancelled:
+          result.status == ExecutionStatus.cancelled ||
+          cancellation.isCancelled,
+      content: jsonEncode(details),
+      artifacts: ids,
+      errorCode: result.error?.name,
+    );
+  } on ToolCancelled {
+    return ToolOutcome.cancelled(
+      jsonEncode({...details, 'reason': '任务已停止，已派发手势不代表已撤销'}),
+    );
+  } on FileSystemException {
+    return _observationFailure(
+      captureRequired,
+      details,
+      '无法读取截图文件',
+      'screenshotReadFailed',
+    );
+  } on OperationFailure catch (error) {
+    return _observationFailure(
+      captureRequired,
+      details,
+      error.userMessage,
+      'screenshotReadFailed',
+    );
+  } finally {
+    for (final artifact in result.artifacts) {
+      final path = artifact.localPath;
+      if (path == null) continue;
+      try {
+        await File(path).delete();
+      } on FileSystemException {
+        AppLogger.warning('截图临时文件清理失败');
       }
     }
   }
+}
 
-  ToolOutcome _observationFailure(
-    Map<String, Object?> details,
-    String message,
-    String code,
-  ) => _capture
+ToolOutcome _observationFailure(
+  bool captureRequired,
+  Map<String, Object?> details,
+  String message,
+  String code,
+) {
+  final observation = {...details}..remove('screenshot');
+  return captureRequired
       ? ToolOutcome.failure(
-          jsonEncode({...details, 'reason': message}),
+          jsonEncode({...observation, 'reason': message}),
           errorCode: code,
         )
       : ToolOutcome.success(
-          jsonEncode({...details, 'observationError': message}),
+          jsonEncode({...observation, 'observationError': message}),
         );
 }
 

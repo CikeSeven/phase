@@ -13,7 +13,7 @@ import 'command_api.g.dart';
 part 'command_channel_driver.g.dart';
 
 /// Shizuku 的 ready 同时要求服务运行、系统授权及可读取的实际执行身份。
-bool hasShizukuCommandPermission(Iterable<CommandChannelStatus> statuses) =>
+bool hasShizukuDevicePermission(Iterable<CommandChannelStatus> statuses) =>
     statuses.any(
       (status) => status.channel == 'shizuku' && status.state == 'ready',
     );
@@ -320,6 +320,7 @@ String commandErrorText(String code) => switch (code) {
   'notRunning' => 'Shizuku 未运行',
   'identityChanged' => '执行身份或运行组件已改变，请开始新运行',
   'invalidOwner' => '命令任务归属无效',
+  'deviceInitializationFailed' => 'Shizuku 设备服务连接失败，请检查服务及授权',
   'initializationFailed' => '运行组件初始化失败，请检查授权、外部调用设置与所需程序',
   'symbolicLink' || 'unsupportedFile' => '无法传输符号链接或特殊文件',
   'invalidPath' || 'invalidManifest' => '传输路径或目录清单无效',

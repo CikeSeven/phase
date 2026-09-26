@@ -2,7 +2,6 @@ package app.xiangyue.phase.commands
 
 import android.app.Activity
 import android.content.*
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.*
 import android.provider.Settings
@@ -17,15 +16,15 @@ import java.security.MessageDigest
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.*
-import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
-import rikka.shizuku.Shizuku
+import app.xiangyue.phase.shizuku.ShizukuDeviceHost
 
 class CommandChannelHost(
     private val context: Context, private val flutter: CommandChannelFlutterApi,
     private val ownerActive: (String) -> Boolean,
+    private val device: ShizukuDeviceHost,
 ) : CommandChannelHostApi {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var activity = WeakReference<Activity>(null)
@@ -34,8 +33,7 @@ class CommandChannelHost(
     private val seen = ConcurrentHashMap.newKeySet<String>()
     private val termux = TermuxTransport(context)
     private val setupMutex = Mutex()
-    private val shizuku = ShizukuConnection(context, ::changed) { stopChannel("shizuku", "channelDisconnected") }
-    private val client = Binder()
+    init { device.onStatusChanged = ::changed }
     private var termuxReady: String? = null
     private val idPattern = Regex("[a-zA-Z0-9_-]{1,100}")
     fun attach(value: Activity) { activity = WeakReference(value); changed() }
@@ -44,16 +42,7 @@ class CommandChannelHost(
     private fun fail(code: String, message: String): Nothing = throw FlutterError(code, message, null)
     private fun supported() = Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a" && termux.packaged.canExecute()
     override suspend fun status(): List<CommandChannelStatus> = withContext(Dispatchers.IO) {
-        val installed = runCatching { context.packageManager.getApplicationInfo("moe.shizuku.privileged.api", 0) }.isSuccess
-        val shizukuUid = shizuku.uid()
-        val s = when {
-            !supported() -> CommandChannelStatus("shizuku", "unsupported", "此设备不支持命令运行组件")
-            !installed -> CommandChannelStatus("shizuku", "notInstalled", "未安装 Shizuku")
-            !shizuku.running() -> CommandChannelStatus("shizuku", "notRunning", "Shizuku 未运行")
-            !shizuku.permission() -> CommandChannelStatus("shizuku", "permissionRequired", "未授权 Shizuku")
-            shizukuUid < 0 -> CommandChannelStatus("shizuku", "unavailable", "无法读取 Shizuku 执行身份")
-            else -> CommandChannelStatus("shizuku", "ready", "已授权", shizukuUid.toLong(), termux.revision, "/")
-        }
+        val s = device.status()
         val t = when {
             !supported() -> CommandChannelStatus("termux", "unsupported", "此设备不支持命令运行组件")
             !termux.installed() -> CommandChannelStatus("termux", "notInstalled", "未安装 Termux")
@@ -69,23 +58,25 @@ class CommandChannelHost(
     override suspend fun authorize(channel: String) = withContext(Dispatchers.Main) {
         val host = activity.get() ?: fail("unavailable", "请返回相月后授权")
         when (channel) {
-            "shizuku" -> { if (!shizuku.running()) fail("notRunning", "请先启动 Shizuku"); Shizuku.requestPermission(4601) }
+            "shizuku" -> { if (device.status().state == "notRunning") fail("notRunning", "请先启动 Shizuku"); device.authorize() }
             "termux" -> { if (!termux.installed()) fail("notInstalled", "请先安装 Termux"); host.requestPermissions(arrayOf(TermuxTransport.PERMISSION), 4602) }
             else -> fail("invalidChannel", "命令通道无效")
         }
     }
     override suspend fun initialize(channel: String) = setupMutex.withLock {
         try {
-            check(supported())
             when (channel) {
-                "shizuku" -> { val reply = withContext(Dispatchers.IO) { shizuku.get().probe() }; check(reply.getBoolean("available") && reply.getInt("uid") == shizuku.uid()) }
+                "shizuku" -> device.initialize()
                 "termux" -> {
-                    check(active.values.none { it.channel == "termux" })
+                    check(supported() && active.values.none { it.channel == "termux" })
                     termux.initialize(); termuxReady = termux.revision
                 }
                 else -> error("invalidChannel")
             }
-        } catch (_: Exception) { fail("initializationFailed", if (channel == "termux") "Termux 初始化失败，请检查外部调用设置、权限与所需程序" else "Shizuku 连接失败，请检查服务及授权") }
+        } catch (_: Exception) {
+            if (channel == "termux") fail("initializationFailed", "Termux 初始化失败，请检查外部调用设置、权限与所需程序")
+            else fail("deviceInitializationFailed", "Shizuku 设备服务连接失败，请检查服务及授权")
+        }
         finally { changed() }
     }
     override fun openSettings(channel: String) {
@@ -101,18 +92,19 @@ class CommandChannelHost(
     }
     override suspend fun setEnabled(channels: List<String>) {
         require(channels.all { it == "shizuku" || it == "termux" })
-        val old = enabled; enabled = channels.toSet()
+        device.setEnabled("shizuku" in channels)
+        val old = enabled; enabled = channels.filter { it == "termux" }.toSet()
         (old - enabled).forEach { stopChannel(it, "channelDisabled") }
     }
     private fun permitted(channel: String) = channel in enabled && when (channel) {
-        "shizuku" -> shizuku.permission()
         "termux" -> termux.permitted()
         else -> false
     }
     private fun validate(owner: String, call: String, channel: String, revision: String, uid: Long) {
+        if (channel != "termux") fail("invalidChannel", "Shizuku 不提供命令或文件传输")
         if (!idPattern.matches(owner) || !idPattern.matches(call) || !ownerActive(owner)) fail("invalidOwner", "命令任务归属无效")
         if (!permitted(channel)) fail("permissionRequired", "命令通道未启用或授权已撤销")
-        val currentUid = if (channel == "shizuku") shizuku.uid().toLong() else termux.uid().toLong()
+        val currentUid = termux.uid().toLong()
         if (!supported() || revision != termux.revision || currentUid < 0 || uid != currentUid) fail("identityChanged", "执行身份或运行组件已改变，请开始新运行")
     }
     private inner class Operation(val owner: String, val call: String, val channel: String) {
@@ -240,43 +232,8 @@ class CommandChannelHost(
         validate(spec.ownerId, spec.callId, spec.channel, spec.revision, spec.uid)
         require(spec.command.toByteArray().size <= 120 * 1024 && '\u0000' !in spec.command && spec.cwd.startsWith('/') && '\u0000' !in spec.cwd && spec.outputLimitBytes in 1..(64L * 1024 * 1024))
         register(spec.ownerId, spec.callId, spec.channel) { op ->
-            if (spec.channel == "shizuku") shizukuCommand(spec, op) else termuxCommand(spec, op)
+            termuxCommand(spec, op)
         }
-    }
-    private suspend fun shizukuCommand(spec: ExternalCommandSpec, op: Operation): Bundle = coroutineScope {
-        val service = shizuku.get()
-        val result = CompletableDeferred<Bundle>()
-        val stdout = ParcelFileDescriptor.createPipe(); val stderr = ParcelFileDescriptor.createPipe()
-        val out = ParcelFileDescriptor.AutoCloseInputStream(stdout[0]); val err = ParcelFileDescriptor.AutoCloseInputStream(stderr[0])
-        op.resources += out; op.resources += err
-        val callback = object : ICommandCallback.Stub() { override fun finished(value: Bundle) { result.complete(value) } }
-        op.stopAction = { withContext(Dispatchers.IO) { service.cancel(op.owner, op.call) } }
-        val monitor = launch {
-            while (isActive) { delay(1000); if (!permitted(op.channel)) {
-                op.stop("permissionRequired"); result.completeExceptionally(IllegalStateException("permissionRequired")); op.close(); break
-            } }
-        }
-        try {
-            op.check()
-            withContext(Dispatchers.IO) { service.start(Bundle().apply {
-                putString("owner", op.owner); putString("call", op.call); putString("token", TermuxResults.token())
-                putLong("uid", spec.uid)
-                putString("command", spec.command); putString("cwd", spec.cwd); putLong("limit", spec.outputLimitBytes)
-            }, stdout[1], stderr[1], callback, client) }
-            stdout[1].close(); stderr[1].close()
-            if (op.cancelled) op.stopAction()
-            suspend fun pump(input: InputStream, kind: CommandEventKind) {
-                val buffer = ByteArray(16384)
-                while (true) { val n = withContext(Dispatchers.IO) { input.read(buffer) }; if (n < 0) break; op.emit(kind, buffer.copyOf(n)) }
-            }
-            val a = async(Dispatchers.IO) { pump(out, CommandEventKind.STDOUT) }
-            val b = async(Dispatchers.IO) { pump(err, CommandEventKind.STDERR) }
-            val final = select<Bundle> {
-                result.onAwait { it }
-                op.lost.onAwait { throw IllegalStateException("channelDisconnected") }
-            }
-            a.await(); b.await(); final
-        } finally { monitor.cancel(); runCatching { stdout[1].close() }; runCatching { stderr[1].close() }; op.close() }
     }
     private suspend fun termuxCommand(spec: ExternalCommandSpec, op: Operation, workspaceArgs: List<String>? = null): Bundle {
         val token = TermuxResults.token()
@@ -312,7 +269,7 @@ class CommandChannelHost(
                 if (result.getString("state") == "exited" &&
                     ((out.isEmpty() && err.isEmpty()) || op.cancelled)) {
                     settled = true
-                    return CommandUserService.jsonResult(result).apply {
+                    return commandResult(result).apply {
                         if (op.cancelled && (out.isNotEmpty() || err.isNotEmpty())) {
                             putString("error", "outputStopped")
                         }
@@ -330,6 +287,12 @@ class CommandChannelHost(
             if (settled) runCatching { termux.call(listOf("cleanup") + identity) }
         }
     }
+    private fun commandResult(json: JSONObject) = Bundle().apply {
+        if (!json.isNull("exitCode")) putInt("exitCode", json.getInt("exitCode"))
+        if (!json.isNull("signal")) putInt("signal", json.getInt("signal"))
+        for (key in listOf("cancelled", "outputLimitExceeded", "terminationAcknowledged")) putBoolean(key, json.optBoolean(key))
+        if (!json.isNull("error")) putString("error", json.getString("error"))
+    }
     override suspend fun transfer(spec: ChannelTransferSpec) {
         validate(spec.ownerId, spec.callId, spec.channel, spec.revision, spec.uid)
         val root = File(spec.localRoot).canonicalFile
@@ -340,7 +303,7 @@ class CommandChannelHost(
         require(local.canonicalPath == root.path || local.canonicalPath.startsWith(root.path + "/"))
         require(spec.remotePath.startsWith('/') && '\u0000' !in spec.remotePath && spec.fileLimitBytes in 1..(64L*1024*1024) && spec.totalLimitBytes in 1..(256L*1024*1024) && spec.entryLimit in 1..1000)
         register(spec.ownerId, spec.callId, spec.channel) { op ->
-            if (spec.channel == "shizuku") shizukuTransfer(spec, local, op) else termuxTransfer(spec, local, op)
+            termuxTransfer(spec, local, op)
         }
     }
     private fun reportBundle(report: TransferReport) = Bundle().apply {
@@ -354,33 +317,6 @@ class CommandChannelHost(
                 last = SystemClock.elapsedRealtime(); runBlocking { op.emit(CommandEventKind.PROGRESS, progress = bytes) }
             }
         }
-    }
-    private suspend fun shizukuTransfer(spec: ChannelTransferSpec, local: File, op: Operation): Bundle {
-        val service = shizuku.get(); val pair = ParcelFileDescriptor.createSocketPair()
-        val input = ParcelFileDescriptor.AutoCloseInputStream(pair[0]); val output = ParcelFileDescriptor.AutoCloseOutputStream(ParcelFileDescriptor.dup(pair[0].fileDescriptor))
-        op.resources += input; op.resources += output
-        val result = CompletableDeferred<Bundle>()
-        op.stopAction = { op.close(); withContext(Dispatchers.IO) { service.cancel(op.owner, op.call) } }
-        var copied: TransferReport? = null
-        try {
-            op.check()
-            withContext(Dispatchers.IO) { service.transfer(Bundle().apply {
-                putString("owner", op.owner); putString("call", op.call); putString("remotePath", spec.remotePath); putBoolean("toChannel", spec.toChannel)
-                putLong("uid", spec.uid)
-                putLong("fileLimit", spec.fileLimitBytes); putLong("totalLimit", spec.totalLimitBytes); putInt("entryLimit", spec.entryLimit.toInt())
-            }, pair[1], object : ICommandCallback.Stub() { override fun finished(value: Bundle) { result.complete(value) } }, client) }
-            pair[1].close(); if (op.cancelled) op.stopAction()
-            val report = withContext(Dispatchers.IO) { copy(spec, local, op, input, output) }
-            copied = report
-            val remote = withTimeout(15000) { result.await() }
-            check(!remote.containsKey("error")) { "transferFailed" }
-            return reportBundle(report)
-        } catch (error: Exception) {
-            val remoteError = withTimeoutOrNull(1500) { result.await().getString("error") }
-            if (copied != null) throw TransferFault(remoteError ?: "transferFailed", copied)
-            if (error is TransferFault && remoteError != null) throw TransferFault(remoteError, error.report)
-            throw error
-        } finally { runCatching { pair[1].close() }; op.close() }
     }
     private suspend fun termuxTransfer(spec: ChannelTransferSpec, local: File, op: Operation): Bundle {
         val server = ServerSocket(0, 4, InetAddress.getByName("127.0.0.1")); server.soTimeout = 1000

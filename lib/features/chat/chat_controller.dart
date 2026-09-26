@@ -1,3 +1,4 @@
+import '../execution/shizuku_display_tool.dart';
 import '../workspace/workspace_controller.dart';
 import '../../../data/models/workspace.dart';
 import '../workspace/workspace_transfer_tool.dart';
@@ -761,8 +762,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       ...extra,
       for (final channel in commandChannels) ...[
         if (channel.channel == ExecutionChannel.shizuku)
-          ExternalShellTool(channel, ref.read(commandChannelDriverProvider)),
-        if (workspace != null)
+          ShizukuDisplayTool(channel, () => ref.read(channelDriverProvider)),
+        if (channel.channel == ExecutionChannel.termux && workspace != null)
           ChannelTransferTool(
             channel,
             ref.read(commandChannelDriverProvider),
@@ -791,7 +792,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       (name) =>
           (_environmentTools.contains(name) &&
               !_workspaceToolAvailable(name, workspace)) ||
-          (name == 'capture_screen' && !selection.supportsImages),
+          (const {'capture_screen', 'shizuku_display'}.contains(name) &&
+              !selection.supportsImages),
     );
     final policies = policiesForMode(mode, registry.tools);
     final tools = registry.definitionsFor(
@@ -1076,8 +1078,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           ),
         for (final channel in commandChannels) ...[
           if (channel.channel == ExecutionChannel.shizuku)
-            ExternalShellTool(channel, ref.read(commandChannelDriverProvider)),
-          if (workspace != null)
+            ShizukuDisplayTool(channel, () => ref.read(channelDriverProvider)),
+          if (channel.channel == ExecutionChannel.termux && workspace != null)
             ChannelTransferTool(
               channel,
               ref.read(commandChannelDriverProvider),
@@ -1151,7 +1153,11 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               .readExecutionScope(),
           enabledTools: {
             for (final snapshot in snapshots)
-              if (selection.supportsImages || snapshot.name != 'capture_screen')
+              if (selection.supportsImages ||
+                  !const {
+                    'capture_screen',
+                    'shizuku_display',
+                  }.contains(snapshot.name))
                 snapshot.name,
           },
           toolPolicies: selection.supportsTools
@@ -1259,8 +1265,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       ...agentTools,
       for (final channel in run.configuration.commandChannels) ...[
         if (channel.channel == ExecutionChannel.shizuku)
-          ExternalShellTool(channel, commandDriver!),
-        if (binding != null)
+          ShizukuDisplayTool(channel, () => ref.read(channelDriverProvider)),
+        if (channel.channel == ExecutionChannel.termux && binding != null)
           ChannelTransferTool(
             channel,
             commandDriver!,
@@ -1319,7 +1325,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         );
       },
       currentPolicy: (tool) async {
-        if (tool is SystemChannelTool &&
+        if ((tool is SystemChannelTool || tool is ShizukuDisplayTool) &&
             !ref
                 .read(settingsStorageProvider)
                 .readCommandChannels()
@@ -1359,12 +1365,20 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                 status: '准备${ToolPresentation.toolLabel(tool.name)}',
               ),
         );
-        if (tool is ShellTool || tool is SystemChannelTool) {
+        if (tool is ShellTool ||
+            tool is SystemChannelTool ||
+            tool is ShizukuDisplayTool) {
           await processDriver!.beginTask(
             run.id,
-            tool is ShellTool ? '工作区命令' : '系统命令',
+            tool is ShizukuDisplayTool
+                ? '虚拟屏控制'
+                : tool is ShellTool
+                ? '工作区命令'
+                : '系统命令',
           );
-          await execution.showAvailablePanel(run.id);
+          if (tool is! ShizukuDisplayTool) {
+            await execution.showAvailablePanel(run.id);
+          }
         }
         if (tool.usesPlatform(arguments)) {
           await execution.ensureDeviceHost(

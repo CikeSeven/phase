@@ -69,7 +69,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
   LocalHistoryEntry? _history;
 
   bool get _termux => widget.channel == ExecutionChannel.termux;
-  String get _name => _termux ? 'Termux' : 'Shizuku';
+  String get _name => _termux ? 'Termux' : 'Shizuku 虚拟屏';
 
   String _actionLabel(CommandChannelAction action) => switch (action) {
     CommandChannelAction.open =>
@@ -273,7 +273,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
   Widget _shizukuSwitch(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final canToggle =
-        widget.enabled || hasShizukuCommandPermission([?widget.status]);
+        widget.enabled || hasShizukuDevicePermission([?widget.status]);
     return SizedBox(
       width: 60,
       child: GestureDetector(
@@ -283,7 +283,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
         onTap: !canToggle ? () {} : null,
         child: Semantics(
           container: true,
-          label: '启用 Shizuku 命令与文件传输',
+          label: '启用 Shizuku 虚拟屏控制',
           child: Switch(
             value: widget.enabled,
             // 临时操作锁保持外观稳定；真正未授权时弱化并禁止开启。
