@@ -85,6 +85,8 @@ class ResolvedToolResult extends ResolvedPart {
     required this.content,
     this.isError = false,
     this.images = const [],
+    this.visualImageTurnId,
+    this.omittedImages = const [],
     this.artifactIds = const [],
     this.recordId,
     this.status,
@@ -100,6 +102,12 @@ class ResolvedToolResult extends ResolvedPart {
 
   /// Tool-produced images; persisted attachments remain the source of truth.
   final List<Attachment> images;
+
+  /// 宿主设备观察所属的助手轮次；同轮图片一起保留，MCP 图片不参与淘汰。
+  final String? visualImageTurnId;
+
+  /// 被更新观察替换的图片引用，只用于还原历史计量前缀，不发送给模型。
+  final List<Attachment> omittedImages;
 
   /// 摘要保留的产物引用；不改变协议的原始结果内容。
   final List<String> artifactIds;

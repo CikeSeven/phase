@@ -3,6 +3,7 @@ import '../../../data/models/model_catalog.dart';
 import '../../../data/models/model_request_record.dart';
 import '../../../data/models/token_usage.dart';
 import '../../../providers/request_plan.dart';
+import '../../../providers/tool_result_images.dart';
 
 enum ContextMeasurementSource { estimated, usageAnchored }
 
@@ -115,11 +116,14 @@ class ContextMeter {
       ).any((same) => !same)) {
         continue;
       }
-      // 配置与内容覆盖分开校验：追加内容不使锚点失效，修改/切离前缀则失效。
+      // 按基准输入范围还原当时的设备观察，不能用新截图淘汰旧图后的前缀校验。
+      // 仍以实际协议负载指纹验证，编辑历史/图片或切离分支不能复用基准。
       final prefix = await planRequest(
         plan.profile,
         plan.request.copyWith(
-          messages: plan.request.messages.take(oldIds.length).toList(),
+          messages: projectVisualToolImages(
+            plan.request.messages.take(oldIds.length).toList(),
+          ),
         ),
       );
       if (prefix.inputFingerprint != s['inputFingerprint'] ||

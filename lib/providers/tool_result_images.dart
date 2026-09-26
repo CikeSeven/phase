@@ -1,6 +1,51 @@
 import '../data/models/chat_message.dart';
 import '../data/models/chat_request.dart';
 
+/// 按所选历史范围保留最新一轮设备观察；旧图片引用用于校验 usage 基准。
+List<ResolvedMessage> projectVisualToolImages(List<ResolvedMessage> messages) {
+  String? latestTurn;
+  for (final result
+      in messages.expand((m) => m.parts).whereType<ResolvedToolResult>()) {
+    if (result.visualImageTurnId != null &&
+        (result.images.isNotEmpty || result.omittedImages.isNotEmpty)) {
+      latestTurn = result.visualImageTurnId;
+    }
+  }
+  if (latestTurn == null) return messages;
+
+  ResolvedPart project(ResolvedPart part) {
+    if (part is! ResolvedToolResult || part.visualImageTurnId == null) {
+      return part;
+    }
+    final keep = part.visualImageTurnId == latestTurn;
+    if (keep ? part.omittedImages.isEmpty : part.images.isEmpty) return part;
+    final images = [...part.images, ...part.omittedImages];
+    return ResolvedToolResult(
+      callId: part.callId,
+      content: part.content,
+      isError: part.isError,
+      images: keep ? images : const [],
+      visualImageTurnId: part.visualImageTurnId,
+      omittedImages: keep ? const [] : images,
+      artifactIds: part.artifactIds,
+      recordId: part.recordId,
+      status: part.status,
+      closed: part.closed,
+    );
+  }
+
+  return [
+    for (final message in messages)
+      ResolvedMessage(
+        role: message.role,
+        parts: message.parts.map(project).toList(),
+        sameModel: message.sameModel,
+        sourceMessageId: message.sourceMessageId,
+        runtimeContextSections: message.runtimeContextSections,
+      ),
+  ];
+}
+
 /// For adapters using user image input, keep the complete tool-result group
 /// contiguous, then add its images as explicitly labelled observations, not instructions.
 /// Responses, Anthropic and Gemini 3+ instead use native multimodal tool results.

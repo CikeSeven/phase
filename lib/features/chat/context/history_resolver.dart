@@ -13,6 +13,7 @@ import '../../../data/models/tool_policy.dart';
 import '../../../data/models/workspace.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
+import '../../../providers/tool_result_images.dart';
 import '../../tools/tool.dart';
 import 'read_history_tool.dart';
 
@@ -39,26 +40,6 @@ class HistoryResolver {
   }) async {
     final records = await historyRecords(repository, messages);
     final sourceRuns = <String, AgentRun?>{};
-    final visualImageRecords = <String>{};
-    String? visualImageTurn;
-    for (final part
-        in messages
-            .expand((message) => message.parts)
-            .whereType<ToolResultPart>()) {
-      final record = records[part.toolCallId];
-      if (record == null ||
-          !visualOperationTools.contains(record.toolName) ||
-          !record.artifacts.any((id) => attachments[id]?.isImage == true)) {
-        continue;
-      }
-      // 同轮多张图要一起送达；后续失败或无图手势不能抹掉已取得的观察。
-      // 只有新一轮实际返回图片时才替换，图片仍绑定原调用及其时间、应用元数据。
-      if (visualImageTurn != record.assistantMessageId) {
-        visualImageRecords.clear();
-        visualImageTurn = record.assistantMessageId;
-      }
-      visualImageRecords.add(record.id);
-    }
     // 结果文本以结果消息为准：拒绝等状态只写进结果消息，记录里可能没有。
     final results = <String, ResolvedToolResult>{};
     for (final message in messages) {
@@ -101,8 +82,13 @@ class HistoryResolver {
             ToolCallStatus.executing,
           }.contains(record.status),
           callId: callId,
+          visualImageTurnId:
+              record.source?.kind != ToolSourceKind.mcp &&
+                  visualOperationTools.contains(record.toolName)
+              ? record.assistantMessageId
+              : null,
           images:
-              visualImageRecords.contains(record.id) ||
+              visualOperationTools.contains(record.toolName) ||
                   record.source?.kind == ToolSourceKind.mcp
               ? [
                   for (final id in record.artifacts)
@@ -246,7 +232,8 @@ class HistoryResolver {
         );
       }
     }
-    return resolved;
+    // 同轮图片一起送达；无图手势不替换观察，旧图只保留计量校验所需的引用。
+    return projectVisualToolImages(resolved);
   }
 
   /// 调用没有得到结果时的合成回执：如实说明，不假装成功。
