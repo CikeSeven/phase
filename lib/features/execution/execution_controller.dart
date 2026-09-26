@@ -418,6 +418,7 @@ class ExecutionController extends _$ExecutionController {
             arguments: request.record.arguments,
             targetLabel: request.record.target,
             expiresAtMs: request.expiresAt.millisecondsSinceEpoch,
+            applicationOperationsForRun: request.applicationOperationsForRun,
           );
     final runId = state.runId;
     final driver = ref.read(channelDriverProvider);

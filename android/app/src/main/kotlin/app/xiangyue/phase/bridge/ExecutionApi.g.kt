@@ -861,7 +861,8 @@ data class ExecutionConfirmation (
   val summary: String,
   val arguments: Map<String, Any?>,
   val targetLabel: String? = null,
-  val expiresAtMs: Long
+  val expiresAtMs: Long,
+  val applicationOperationsForRun: Boolean
 )
  {
   companion object {
@@ -873,7 +874,8 @@ data class ExecutionConfirmation (
       val arguments = pigeonVar_list[4] as Map<String, Any?>
       val targetLabel = pigeonVar_list[5] as String?
       val expiresAtMs = pigeonVar_list[6] as Long
-      return ExecutionConfirmation(runId, toolCallId, toolName, summary, arguments, targetLabel, expiresAtMs)
+      val applicationOperationsForRun = pigeonVar_list[7] as Boolean
+      return ExecutionConfirmation(runId, toolCallId, toolName, summary, arguments, targetLabel, expiresAtMs, applicationOperationsForRun)
     }
   }
   fun toList(): List<Any?> {
@@ -885,6 +887,7 @@ data class ExecutionConfirmation (
       arguments,
       targetLabel,
       expiresAtMs,
+      applicationOperationsForRun,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -895,7 +898,7 @@ data class ExecutionConfirmation (
       return true
     }
     val other = other as ExecutionConfirmation
-    return ExecutionApiPigeonUtils.deepEquals(this.runId, other.runId) && ExecutionApiPigeonUtils.deepEquals(this.toolCallId, other.toolCallId) && ExecutionApiPigeonUtils.deepEquals(this.toolName, other.toolName) && ExecutionApiPigeonUtils.deepEquals(this.summary, other.summary) && ExecutionApiPigeonUtils.deepEquals(this.arguments, other.arguments) && ExecutionApiPigeonUtils.deepEquals(this.targetLabel, other.targetLabel) && ExecutionApiPigeonUtils.deepEquals(this.expiresAtMs, other.expiresAtMs)
+    return ExecutionApiPigeonUtils.deepEquals(this.runId, other.runId) && ExecutionApiPigeonUtils.deepEquals(this.toolCallId, other.toolCallId) && ExecutionApiPigeonUtils.deepEquals(this.toolName, other.toolName) && ExecutionApiPigeonUtils.deepEquals(this.summary, other.summary) && ExecutionApiPigeonUtils.deepEquals(this.arguments, other.arguments) && ExecutionApiPigeonUtils.deepEquals(this.targetLabel, other.targetLabel) && ExecutionApiPigeonUtils.deepEquals(this.expiresAtMs, other.expiresAtMs) && ExecutionApiPigeonUtils.deepEquals(this.applicationOperationsForRun, other.applicationOperationsForRun)
   }
 
   override fun hashCode(): Int {
@@ -907,10 +910,11 @@ data class ExecutionConfirmation (
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.arguments)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.targetLabel)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.expiresAtMs)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.applicationOperationsForRun)
     return result
   }
   override fun toString(): String {
-    return "ExecutionConfirmation(runId=$runId, toolCallId=$toolCallId, toolName=$toolName, summary=$summary, arguments=$arguments, targetLabel=$targetLabel, expiresAtMs=$expiresAtMs)"
+    return "ExecutionConfirmation(runId=$runId, toolCallId=$toolCallId, toolName=$toolName, summary=$summary, arguments=$arguments, targetLabel=$targetLabel, expiresAtMs=$expiresAtMs, applicationOperationsForRun=$applicationOperationsForRun)"
   }
 }
 

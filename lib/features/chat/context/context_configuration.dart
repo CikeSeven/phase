@@ -33,7 +33,9 @@ List<RuntimeContextPart> contextRuntimeParts(RunConfiguration config) {
       PermissionMode.plan => planModePrompt,
       PermissionMode.basic =>
         '当前为基础模式，之前的计划模式已结束。'
-            '写入、编辑、Skill 复制、命令和非只读应用操作需要宿主确认；MCP 在已启用范围内执行。'
+            '写入、编辑、Skill 复制和命令逐次由宿主确认；'
+            '应用操作由宿主在本轮首次使用时请求确认，批准后本轮后续应用操作不再重复确认，新一轮或中断恢复后重新确认；'
+            'MCP 在已启用范围内执行。'
             'submit_plan 仅供计划模式使用；系统授权、应用名单及扩展范围仍有效。',
       PermissionMode.fullAccess =>
         '当前为全权限模式，之前的计划模式已结束。'

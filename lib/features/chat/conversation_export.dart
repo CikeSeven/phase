@@ -371,7 +371,7 @@ void _writeToolCall(
     ..writeln()
     ..writeln('- 记录 ID：`${record.id}`')
     ..writeln('- 状态：${ToolPresentation.statusLabel(record.status)}')
-    ..writeln('- 决定：${ToolPresentation.decisionLabel(record.decision)}')
+    ..writeln('- 决定：${ToolPresentation.decisionLabel(record)}')
     ..writeln('- 执行通道：${ToolPresentation.channelLabel(record.channel)}')
     ..writeln('- 创建时间：${_formatTime(record.createdAt)}');
   final target = (record.target ?? '').trim();

@@ -815,6 +815,7 @@ class ExecutionConfirmation {
     required this.arguments,
     this.targetLabel,
     required this.expiresAtMs,
+    this.applicationOperationsForRun = false,
   });
 
   String runId;
@@ -831,6 +832,8 @@ class ExecutionConfirmation {
 
   int expiresAtMs;
 
+  bool applicationOperationsForRun;
+
   List<Object?> _toList() {
     return <Object?>[
       runId,
@@ -840,6 +843,7 @@ class ExecutionConfirmation {
       arguments,
       targetLabel,
       expiresAtMs,
+      applicationOperationsForRun,
     ];
   }
 
@@ -857,6 +861,7 @@ class ExecutionConfirmation {
       arguments: (result[4]! as Map<Object?, Object?>).cast<String, Object?>(),
       targetLabel: result[5] as String?,
       expiresAtMs: result[6]! as int,
+      applicationOperationsForRun: result[7]! as bool,
     );
   }
 
@@ -875,7 +880,11 @@ class ExecutionConfirmation {
         _deepEquals(summary, other.summary) &&
         _deepEquals(arguments, other.arguments) &&
         _deepEquals(targetLabel, other.targetLabel) &&
-        _deepEquals(expiresAtMs, other.expiresAtMs);
+        _deepEquals(expiresAtMs, other.expiresAtMs) &&
+        _deepEquals(
+          applicationOperationsForRun,
+          other.applicationOperationsForRun,
+        );
   }
 
   @override
@@ -884,7 +893,7 @@ class ExecutionConfirmation {
 
   @override
   String toString() {
-    return 'ExecutionConfirmation(runId: $runId, toolCallId: $toolCallId, toolName: $toolName, summary: $summary, arguments: $arguments, targetLabel: $targetLabel, expiresAtMs: $expiresAtMs)';
+    return 'ExecutionConfirmation(runId: $runId, toolCallId: $toolCallId, toolName: $toolName, summary: $summary, arguments: $arguments, targetLabel: $targetLabel, expiresAtMs: $expiresAtMs, applicationOperationsForRun: $applicationOperationsForRun)';
   }
 }
 

@@ -201,6 +201,7 @@ class ExecutionConfirmation {
     required this.arguments,
     required this.targetLabel,
     required this.expiresAtMs,
+    this.applicationOperationsForRun = false,
   });
   String runId;
   String toolCallId;
@@ -209,6 +210,7 @@ class ExecutionConfirmation {
   Map<String, Object?> arguments;
   String? targetLabel;
   int expiresAtMs;
+  bool applicationOperationsForRun;
 }
 
 enum TaskPanelPhase {

@@ -30,7 +30,7 @@ Ubuntu / Termux 在环境设置中全局单选；新会话首次发送绑定已�
 
 入口：`pigeons/execution_api.dart` 的 `controlDisplay`、`lib/features/execution/shizuku_display_tool.dart`、Android `shizuku/`。保持 Dart AgentLoop / ToolExecutor，不另建执行循环或会话事实库。
 
-- 仅在 Shizuku 已启用、已授权且模型支持工具与图片时开放 `shizuku_display`。它属于 `app_operations`：计划 deny、基础 ask、全权限 allow；定义可见不授予执行权。计划档不会因调用而绑定 UserService 或创建显示屏。
+- 仅在 Shizuku 已启用、已授权且模型支持工具与图片时开放 `shizuku_display`。它属于 `app_operations`：计划 deny、基础 ask、全权限 allow；基础档与其他内置应用操作共用本轮首次批准，结束、停止或中断恢复后不继承，系统授权与名单仍逐次核对。定义可见不授予执行权。计划档不会因调用而绑定 UserService 或创建显示屏。
 - 动作固定为 `launch/capture/tap/swipe/key/text/close`。继续复用宿主的 `list_apps`。不接受任意命令、文件路径或 Android displayId；主屏无障碍工具保持独立，不在失败时切换后端重发。
 - 首次 `launch` 创建本次运行专属的 720×1280、320 dpi VirtualDisplay，应用使用指定 displayId 启动。系统必须具备独立焦点和禁止抢占主屏顶层焦点的相应标志，缺失则失败，不默默忽略。不申请安全显示能力，不绕过 Android 受保护内容限制。
 - 启动使用显示屏 Context 创建一次性、不可变 `PendingIntent`，发送时指定 `launchDisplayId`，结束后清理令牌。与 Aether 使用相同的系统启动入口，不从未向 ActivityManager 注册为应用进程的 UserService 直接调用 `Context.startActivity`；不回退主屏或自动重发。UserService 绑定版本为 3，避免重用旧启动/按键文字输入实现。系统 API 的 `SecurityException` 不等同于 Shizuku 撤权；启动被拒绝/请求取消分别回填，已明确收到拒绝时不再提示“未收到完整执行回执”。真正的开关、系统授权和 UID 检查仍由宿主执行。

@@ -13,6 +13,9 @@ enum ToolConfirmationOutcome {
   /// 允许这一次动作。
   allowOnce,
 
+  /// 允许本轮连续运行中的应用操作。
+  allowApplicationOperationsForRun,
+
   /// 拒绝这一次动作。
   reject,
 
@@ -25,8 +28,8 @@ enum ToolConfirmationOutcome {
 
 /// 弹出一次工具确认面板，返回用户决定。
 ///
-/// 每次确认都是一次独立的请求：面板只展示本次请求的动作与真实参数，
-/// 不复用上一次的批准（design 第一部分 §5.3）。关闭面板按未决定处理。
+/// 展示本次动作的真实参数及批准范围；本轮应用操作授权由执行器持有。
+/// 关闭面板按未决定处理。
 Future<ToolConfirmationOutcome> showToolConfirmationSheet(
   BuildContext context,
   ToolConfirmationRequest request,
@@ -124,7 +127,7 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
           color: _remaining <= _urgent ? colors.error : colors.onSurfaceVariant,
         ),
       ),
-      // 三个动作各占一整行：从最重（停止任务）到最轻（允许一次）自上而下排，
+      // 三个动作各占一整行：停止、拒绝、允许自上而下排，
       // 大字号下也不会被挤成换行的一团。
       footer: Column(
         mainAxisSize: MainAxisSize.min,
@@ -148,8 +151,14 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
           const SizedBox(height: AppSpacing.s),
           FilledButton(
             key: const ValueKey('tool-confirm-allow'),
-            onPressed: () => _decide(ToolConfirmationOutcome.allowOnce),
-            child: const Text('允许一次'),
+            onPressed: () => _decide(
+              widget.request.applicationOperationsForRun
+                  ? ToolConfirmationOutcome.allowApplicationOperationsForRun
+                  : ToolConfirmationOutcome.allowOnce,
+            ),
+            child: Text(
+              widget.request.applicationOperationsForRun ? '允许本轮操作应用' : '允许一次',
+            ),
           ),
           // 再留一点底部内边距：三个按钮贴着面板下沿和手势条太近，容易误触。
           const SizedBox(height: AppSpacing.l),
@@ -183,7 +192,9 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
           for (final detail in details) _ParameterBlock(detail: detail),
           const SizedBox(height: AppSpacing.l),
           Text(
-            '允许只对本次动作生效；目标或参数变化会重新确认。',
+            widget.request.applicationOperationsForRun
+                ? '允许本轮后续应用操作，本轮结束后失效。'
+                : '允许只对本次动作生效；目标或参数变化会重新确认。',
             style: theme.textTheme.bodySmall?.copyWith(
               color: colors.onSurfaceVariant,
             ),

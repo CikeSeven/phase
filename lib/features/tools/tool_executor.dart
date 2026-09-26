@@ -65,6 +65,7 @@ class ToolConfirmationRequest {
     required this.summary,
     required this.policy,
     required this.expiresAt,
+    this.applicationOperationsForRun = false,
   });
 
   final ToolCallRecord record;
@@ -74,6 +75,9 @@ class ToolConfirmationRequest {
 
   /// 本次调用的策略（ask 才会走到确认）。
   final ToolPolicy policy;
+
+  /// 批准后允许本轮后续应用操作；不扩大系统授权或运行工具范围。
+  final bool applicationOperationsForRun;
 
   /// 期限；到点未决定按拒绝处理。
   final DateTime expiresAt;
@@ -126,6 +130,9 @@ class ToolExecutor {
   onConfirmationRequired;
 
   final Duration confirmationTimeout;
+
+  // 执行器随一次运行驱动创建；恢复驱动使用新实例，不从历史批准恢复授权。
+  (String, RunCancellation)? _applicationOperationsApproval;
 
   /// 策略和参数有效后才准备平台宿主；禁止的调用不触发服务或权限交互。
   final Future<void> Function(Tool tool, Map<String, dynamic> arguments)?
@@ -245,8 +252,19 @@ class ToolExecutor {
         return ToolExecutionResult(record: failed, outcome: outcome);
       }
     }
-    if (policy == ToolPolicy.ask) {
-      final decision = await _confirm(record, tool, cancellation);
+    final applicationOperationsForRun =
+        tool.source.kind == ToolSourceKind.builtIn &&
+        tool.policyKey == applicationOperationsPolicyKey;
+    final approvalKey = (request.runId, cancellation);
+    if (policy == ToolPolicy.ask &&
+        (!applicationOperationsForRun ||
+            _applicationOperationsApproval != approvalKey)) {
+      final decision = await _confirm(
+        record,
+        tool,
+        cancellation,
+        applicationOperationsForRun: applicationOperationsForRun,
+      );
       if (decision == null) {
         // 等待确认期间用户停止：结束等待，本次确认不再生效。
         return ToolExecutionResult(
@@ -262,6 +280,9 @@ class ToolExecutor {
           record: await toolCalls.getById(record.id),
           outcome: ToolOutcome.failure('用户拒绝了本次动作', errorCode: 'userRejected'),
         );
+      }
+      if (applicationOperationsForRun && !cancellation.isCancelled) {
+        _applicationOperationsApproval = approvalKey;
       }
     }
 
@@ -401,8 +422,9 @@ class ToolExecutor {
   Future<ToolDecision?> _confirm(
     ToolCallRecord record,
     Tool tool,
-    RunCancellation cancellation,
-  ) async {
+    RunCancellation cancellation, {
+    required bool applicationOperationsForRun,
+  }) async {
     final awaiting = await toolCalls.requestConfirmation(record.id);
     final expiresAt =
         awaiting.confirmationExpiresAt ??
@@ -428,6 +450,7 @@ class ToolExecutor {
               summary: tool.describeAction(record.arguments),
               policy: ToolPolicy.ask,
               expiresAt: expiresAt,
+              applicationOperationsForRun: applicationOperationsForRun,
             ),
           ),
         expired.future,

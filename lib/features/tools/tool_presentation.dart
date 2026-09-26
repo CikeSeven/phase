@@ -135,12 +135,17 @@ class ToolPresentation {
   };
 
   /// 用户决定文案；未要求确认时为 null。
-  static String decisionLabel(ToolDecision? decision) => switch (decision) {
-    ToolDecision.approved => '允许一次',
-    ToolDecision.rejected => '拒绝',
-    ToolDecision.expired => '超时未决定',
-    null => '未要求确认',
-  };
+  static String decisionLabel(ToolCallRecord record) =>
+      switch (record.decision) {
+        ToolDecision.approved =>
+          record.source?.kind != ToolSourceKind.mcp &&
+                  applicationOperationTools.contains(record.toolName)
+              ? '已允许'
+              : '允许一次',
+        ToolDecision.rejected => '拒绝',
+        ToolDecision.expired => '超时未决定',
+        null => '未要求确认',
+      };
 
   /// 确认面板展示的参数：标签 + 真实值。
   ///

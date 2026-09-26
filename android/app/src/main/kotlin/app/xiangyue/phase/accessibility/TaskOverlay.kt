@@ -222,6 +222,11 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
         // A single action in the narrow capsule. Expanded handoff keeps both Continue and Stop.
         stopButton?.visibility = if (waiting && expanded) View.VISIBLE else View.GONE
         footer?.visibility = if (pending != null) View.VISIBLE else View.GONE
+        footer?.getChildAt(1)?.apply {
+            contentDescription = if (pending?.applicationOperationsForRun == true)
+                "允许本轮操作应用" else "允许本次动作"
+            if (Build.VERSION.SDK_INT >= 26) tooltipText = contentDescription
+        }
         column?.visibility = View.VISIBLE
         column?.importantForAccessibility = if (finished) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
         terminal?.visibility = if (finished) View.VISIBLE else View.GONE
@@ -274,8 +279,9 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
         val pending = confirmation
         if (pending != null) {
             val seconds = ((pending.expiresAtMs - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
+            val scope = if (pending.applicationOperationsForRun) "本轮应用操作" else "本次动作"
             items.add(TaskPanelMessage("confirmation/${pending.toolCallId}", TaskPanelMessageKind.TOOL,
-                "等待确认 · $seconds 秒", "${pending.summary}\n目标：${pending.targetLabel ?: "选定 App"}\n执行通道：Android\n${JSONObject(pending.arguments).toString(2)}"))
+                "确认$scope · $seconds 秒", "${pending.summary}\n目标：${pending.targetLabel ?: "选定 App"}\n执行通道：Android\n${JSONObject(pending.arguments).toString(2)}"))
         } else if (waiting) {
             val id = "tool/${snapshot?.waitingToolCallId}"
             val request = TaskPanelMessage(id, TaskPanelMessageKind.TOOL, "请你操作",
