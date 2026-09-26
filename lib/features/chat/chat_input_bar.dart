@@ -10,6 +10,7 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/attachment.dart';
 import 'attachment_chips.dart';
 import 'attachment_picker.dart';
@@ -281,7 +282,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            SnackBar(
+            buildAppSnackBar(
               content: const Text('请先在设置中配置服务商与模型'),
               action: SnackBarAction(
                 label: '去配置',
@@ -301,7 +302,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            SnackBar(
+            buildAppSnackBar(
               content: Text(
                 error is Failure ? error.userMessage : '发送失败，请稍后重试',
               ),
@@ -321,7 +322,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     if (source == null || !mounted) return;
     if (source != AttachmentSource.file && !_modelSupportsImages()) {
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('当前模型未标记支持图片输入')));
+          .showSnackBar(buildAppSnackBar(content: const Text('当前模型未标记支持图片输入')));
       return;
     }
     try {
@@ -340,7 +341,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
     } on Failure catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(error.userMessage)));
+            .showSnackBar(buildAppSnackBar(content: Text(error.userMessage)));
       }
     }
   }

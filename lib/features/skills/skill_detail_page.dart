@@ -11,6 +11,7 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import 'skill_controller.dart';
 
 class SkillDetailPage extends ConsumerStatefulWidget {
@@ -30,7 +31,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          buildAppSnackBar(
             content: Text(error is Failure ? error.userMessage : '操作失败，请重试'),
           ),
         );

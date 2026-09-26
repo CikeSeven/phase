@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../execution/execution_controller.dart';
 import '../tools/tool_executor.dart';
@@ -143,9 +144,9 @@ class _ToolConfirmationHostState extends ConsumerState<ToolConfirmationHost>
           if (!mounted) return;
           final context = widget.navigatorKey.currentContext;
           if (context != null) {
-            ScaffoldMessenger.maybeOf(
-              context,
-            )?.showSnackBar(SnackBar(content: Text(next.failure!.userMessage)));
+            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+              buildAppSnackBar(content: Text(next.failure!.userMessage)),
+            );
           }
         });
       }

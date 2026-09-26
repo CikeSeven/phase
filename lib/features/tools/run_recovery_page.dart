@@ -10,6 +10,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../chat/chat_controller.dart';
 import 'run_recovery_controller.dart';
@@ -47,7 +48,7 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          buildAppSnackBar(
             content: Text(error is Failure ? error.userMessage : '停止任务失败'),
           ),
         );
@@ -69,7 +70,7 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
       future.catchError((Object error) {
         if (messenger.mounted) {
           messenger.showSnackBar(
-            SnackBar(
+            buildAppSnackBar(
               content: Text(error is Failure ? error.userMessage : '继续任务失败'),
             ),
           );

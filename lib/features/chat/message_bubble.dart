@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/message_part.dart';
@@ -380,7 +381,7 @@ class MessageBubble extends StatelessWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.maybeOf(context)
       ?..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(feedback)));
+      ..showSnackBar(buildAppSnackBar(content: Text(feedback)));
   }
 }
 

@@ -13,6 +13,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/api_protocol.dart';
 import '../../../data/models/openai_compat.dart';
 import '../../../data/models/profile_model.dart';
@@ -569,7 +570,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final messenger = _messenger;
       if (messenger != null && messenger.mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(message)));
+        messenger.showSnackBar(buildAppSnackBar(content: Text(message)));
       }
     });
     WidgetsBinding.instance.ensureVisualUpdate();
@@ -663,12 +664,12 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('已保存服务商配置')));
+          .showSnackBar(buildAppSnackBar(content: const Text('已保存服务商配置')));
       _close();
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        buildAppSnackBar(
           content: Text(error is Failure ? error.userMessage : '保存失败，请重试。'),
         ),
       );

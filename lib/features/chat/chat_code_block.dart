@@ -11,6 +11,7 @@ import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import 'chat_code_highlighter.dart';
 import 'chat_markdown_scroll_view.dart';
 
@@ -203,7 +204,9 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
       if (!mounted) return;
       ScaffoldMessenger.maybeOf(context)
         ?..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('无法打开 HTML 预览，请重试')));
+        ..showSnackBar(
+          buildAppSnackBar(content: const Text('无法打开 HTML 预览，请重试')),
+        );
     } finally {
       if (mounted) setState(() => _previewOpen = false);
     }
@@ -228,7 +231,7 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
       setState(() => _copied = false);
       ScaffoldMessenger.maybeOf(context)
         ?..hideCurrentSnackBar()
-        ..showSnackBar(const SnackBar(content: Text('复制失败，请重试')));
+        ..showSnackBar(buildAppSnackBar(content: const Text('复制失败，请重试')));
     } finally {
       _copying = false;
     }

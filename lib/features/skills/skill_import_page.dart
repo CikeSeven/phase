@@ -7,6 +7,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import 'skill_controller.dart';
 
 class SkillImportPage extends ConsumerWidget {
@@ -39,7 +40,9 @@ class SkillImportPage extends ConsumerWidget {
                         if (!context.mounted || installed == null) return;
                         final error = ref.read(provider).error;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(error ?? '已安装，请在助手中选择使用范围')),
+                          buildAppSnackBar(
+                            content: Text(error ?? '已安装，请在助手中选择使用范围'),
+                          ),
                         );
                         context.pop();
                       },

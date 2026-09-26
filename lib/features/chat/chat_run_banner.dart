@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/error/failure.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../tools/run_recovery_controller.dart';
 import '../execution/execution_controller.dart';
 import 'chat_controller.dart';
@@ -27,7 +28,7 @@ class ChatRunBanner extends ConsumerWidget {
     } catch (error) {
       if (messenger.mounted) {
         messenger.showSnackBar(
-          SnackBar(
+          buildAppSnackBar(
             content: Text(error is Failure ? error.userMessage : '打开运行会话失败'),
           ),
         );

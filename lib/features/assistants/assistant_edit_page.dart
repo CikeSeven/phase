@@ -13,6 +13,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/assistant.dart';
 import '../../../data/models/model_selection.dart';
 import '../../../data/repositories/assistant_repository.dart';
@@ -144,13 +145,13 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
       }
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('已保存助手')));
+          .showSnackBar(buildAppSnackBar(content: const Text('已保存助手')));
       context.pop();
     } catch (error) {
       if (!mounted) return;
       setState(() => _saving = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        buildAppSnackBar(
           content: Text(error is Failure ? error.userMessage : '保存助手失败，请重试。'),
         ),
       );
@@ -197,7 +198,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        buildAppSnackBar(
           content: Text(error is Failure ? error.userMessage : '删除助手失败，请重试。'),
         ),
       );

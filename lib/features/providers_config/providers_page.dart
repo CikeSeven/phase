@@ -13,6 +13,7 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/datasources/local/model_catalog_cache.dart';
 import '../../../data/datasources/remote/models_dev_client.dart';
 import '../../../data/models/model_catalog.dart';
@@ -65,14 +66,16 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
       if (!mounted) return;
       switch (result) {
         case ModelsDevNotModified():
-          messenger.showSnackBar(const SnackBar(content: Text('模型目录已是最新')));
+          messenger.showSnackBar(
+            buildAppSnackBar(content: const Text('模型目录已是最新')),
+          );
         case ModelsDevFetched(:final catalog, :final etag):
           await cache.write(CachedModelCatalog(catalog: catalog, etag: etag));
           // 已进入原子写的操作会完成；即使页面已退出，也要同步应用级读取状态。
           container.invalidate(modelCatalogProvider);
           if (!mounted) return;
           messenger.showSnackBar(
-            SnackBar(
+            buildAppSnackBar(
               content: Text(
                 '模型目录已更新（${catalog.providers.length} 个服务商 / '
                 '${catalog.modelCount} 个模型）',
@@ -82,13 +85,19 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
       }
     } on ProviderError catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
+      messenger.showSnackBar(
+        buildAppSnackBar(content: Text(error.userMessage)),
+      );
     } on Failure catch (error) {
       if (!mounted) return;
-      messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
+      messenger.showSnackBar(
+        buildAppSnackBar(content: Text(error.userMessage)),
+      );
     } on Object {
       if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(content: Text('模型目录更新失败，请重试。')));
+      messenger.showSnackBar(
+        buildAppSnackBar(content: const Text('模型目录更新失败，请重试。')),
+      );
     } finally {
       _catalogCancellation = null;
       if (mounted) setState(() => _refreshingCatalog = false);

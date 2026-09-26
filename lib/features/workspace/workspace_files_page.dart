@@ -10,6 +10,7 @@ import '../../../core/error/failure.dart';
 import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../chat/tool_artifact_viewer.dart';
 import 'workspace_actions.dart';
 
@@ -25,7 +26,7 @@ class WorkspaceFilesPage extends ConsumerWidget {
     ref.listen(workspaceActionsProvider, (_, next) {
       if (next.hasError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          buildAppSnackBar(
             content: Text(
               next.error is Failure
                   ? (next.error as Failure).userMessage

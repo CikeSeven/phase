@@ -15,6 +15,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_background.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../core/widgets/app_top_bar.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/reasoning_effort.dart';
@@ -42,6 +43,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   static const _defaultToolbarHeight = 64.0;
   static const _compactRowHeight = 24.0;
   static const _drawerOpenTouchSlop = 36.0;
+  static const _contentMaxWidth = 840.0;
 
   final _scaffoldKey = GlobalKey<ScaffoldState>();
   bool _drawerOpen = false;
@@ -75,6 +77,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final selection = ref.watch(modelSelectionProvider);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
+    final media = MediaQuery.of(context);
+    final snackBarHorizontalInset =
+        AppSpacing.l + math.max(0.0, (media.size.width - _contentMaxWidth) / 2);
+    final snackBarSafeBottom = media.viewInsets.bottom > 0
+        ? 0.0
+        : media.viewPadding.bottom;
     final contentGestureSettings = MediaQuery.gestureSettingsOf(context);
     final scaler = MediaQuery.textScalerOf(context);
     final titleStyle = theme.textTheme.titleMedium;
@@ -321,7 +329,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             child: Center(
                               child: ConstrainedBox(
                                 constraints: BoxConstraints(
-                                  maxWidth: 840,
+                                  maxWidth: _contentMaxWidth,
                                   maxHeight: composerHeight,
                                 ),
                                 child: _ReportSize(
@@ -361,7 +369,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ),
       child: ChatHorizontalDragPriority(
         guardDrawerOpening: !_drawerOpen,
-        child: page,
+        child: SnackBarTheme(
+          data: theme.snackBarTheme.copyWith(
+            insetPadding: EdgeInsets.fromLTRB(
+              snackBarHorizontalInset,
+              AppSpacing.s,
+              snackBarHorizontalInset,
+              // Scaffold 已避让键盘和底部安全区，只补输入栏的实测高度。
+              math.max(AppSpacing.s, _composerExtent - snackBarSafeBottom),
+            ),
+          ),
+          child: page,
+        ),
       ),
     );
   }
@@ -402,7 +421,9 @@ class _ConversationMessages extends ConsumerWidget {
     try {
       await ref.read(chatControllerProvider.notifier).regenerate();
     } on Failure catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
+      messenger.showSnackBar(
+        buildAppSnackBar(content: Text(error.userMessage)),
+      );
     }
   }
 

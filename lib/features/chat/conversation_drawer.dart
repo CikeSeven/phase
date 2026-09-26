@@ -12,6 +12,7 @@ import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_menu_anchor.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/conversation.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import 'chat_controller.dart';
@@ -514,9 +515,11 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
           .duplicateFrom(conversationId);
       if (!context.mounted) return;
       Navigator.of(context).maybePop();
-      messenger.showSnackBar(const SnackBar(content: Text('已复制会话')));
+      messenger.showSnackBar(buildAppSnackBar(content: const Text('已复制会话')));
     } on Failure catch (error) {
-      messenger.showSnackBar(SnackBar(content: Text(error.userMessage)));
+      messenger.showSnackBar(
+        buildAppSnackBar(content: Text(error.userMessage)),
+      );
     }
   }
 
@@ -535,7 +538,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
     } on Failure catch (error) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(error.userMessage)));
+        ..showSnackBar(buildAppSnackBar(content: Text(error.userMessage)));
       return;
     }
     if (!context.mounted) return;
@@ -545,12 +548,14 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
       messenger
         ..hideCurrentSnackBar()
         ..showSnackBar(
-          SnackBar(content: Text('已导出 ${result.formatLabel}：${result.path}')),
+          buildAppSnackBar(
+            content: Text('已导出 ${result.formatLabel}：${result.path}'),
+          ),
         );
     } on Failure catch (error) {
       messenger
         ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(error.userMessage)));
+        ..showSnackBar(buildAppSnackBar(content: Text(error.userMessage)));
     }
   }
 
@@ -603,7 +608,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
         messenger
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            SnackBar(
+            buildAppSnackBar(
               content: Text(
                 error is Failure ? error.userMessage : '会话操作失败，请稍后重试',
               ),

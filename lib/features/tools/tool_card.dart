@@ -10,6 +10,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../core/widgets/content_expansion_notification.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
@@ -478,5 +479,5 @@ Future<void> _copy(BuildContext context, String text, String label) async {
   if (!context.mounted) return;
   ScaffoldMessenger.maybeOf(context)
     ?..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(feedback)));
+    ..showSnackBar(buildAppSnackBar(content: Text(feedback)));
 }

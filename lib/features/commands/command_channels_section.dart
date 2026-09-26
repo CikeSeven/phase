@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/tool_call_record.dart';
 import 'command_channel_card.dart';
 import 'command_channels_controller.dart';
@@ -76,7 +77,7 @@ class _CommandChannelsSectionState
     }
     if (!mounted) return;
     ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+        .showSnackBar(buildAppSnackBar(content: Text(message)));
   }
 
   @override

@@ -11,6 +11,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/theme/frosted_surface.dart';
 import '../../../core/widgets/app_menu_anchor.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/permission_mode.dart';
 import 'chat_controller.dart';
 
@@ -80,7 +81,7 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+        buildAppSnackBar(
           content: Text(error is Failure ? error.userMessage : '保存权限模式失败，请重试'),
         ),
       );

@@ -366,13 +366,26 @@ abstract final class AppTheme {
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        shape: const RoundedRectangleBorder(borderRadius: AppRadius.mediumAll),
-        backgroundColor: colors.inverseSurface,
-        contentTextStyle: text.bodyMedium?.copyWith(
-          color: colors.onInverseSurface,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadius.mediumAll,
+          side: BorderSide(
+            color: (dark ? colors.onSurface : colors.surfaceContainerLowest)
+                .withValues(alpha: dark ? 0.18 : 0.55),
+          ),
         ),
-        actionTextColor: colors.inversePrimary,
-        elevation: 2,
+        backgroundColor: colors.primaryContainer.withValues(
+          alpha: dark ? 0.90 : 0.86,
+        ),
+        contentTextStyle: text.bodyMedium?.copyWith(
+          color: colors.onSurface,
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+        actionTextColor: colors.onSurface,
+        showCloseIcon: true,
+        closeIconColor: colors.onSurface,
+        // 避免实体阴影叠在半透明底色后方，遮掉透出的阅读区。
+        elevation: 0,
         insetPadding: const EdgeInsets.all(AppSpacing.l),
       ),
       drawerTheme: DrawerThemeData(

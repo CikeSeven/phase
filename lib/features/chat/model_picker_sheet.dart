@@ -13,6 +13,7 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/model_selection.dart' as model;
 import '../../../data/models/profile_model.dart';
 import '../../../data/models/provider_profile.dart';
@@ -711,7 +712,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       if (mounted) {
         setState(() => _saveError = message);
       } else if (messenger.mounted) {
-        messenger.showSnackBar(SnackBar(content: Text(message)));
+        messenger.showSnackBar(buildAppSnackBar(content: Text(message)));
       }
     }
   }

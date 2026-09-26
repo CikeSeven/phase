@@ -7,6 +7,7 @@ import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/assistant.dart';
 import '../chat/chat_controller.dart';
 
@@ -63,7 +64,7 @@ class _AssistantPickerSheet extends ConsumerWidget {
                     .selectAssistant(assistant.id);
               } on Failure catch (error) {
                 messenger.showSnackBar(
-                  SnackBar(content: Text(error.userMessage)),
+                  buildAppSnackBar(content: Text(error.userMessage)),
                 );
                 return;
               }

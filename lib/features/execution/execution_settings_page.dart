@@ -11,6 +11,7 @@ import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/application_access_policy.dart';
 import '../../../data/models/execution_scope.dart';
 import 'application_policy_sheet.dart';
@@ -60,7 +61,7 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          buildAppSnackBar(
             content: Text(
               error is Failure ? error.userMessage : '执行设置操作失败，请重试',
             ),
