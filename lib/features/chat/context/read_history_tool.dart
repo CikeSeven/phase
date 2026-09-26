@@ -70,6 +70,10 @@ class ReadHistoryTool extends Tool {
           for (final part in message.parts)
             switch (part) {
               TextPart(:final text) => {'text': text},
+              RuntimeContextPart(:final section, :final text) => {
+                'runtimeContext': section,
+                'text': text,
+              },
               ReasoningPart(:final publicText) => {'reasoning': publicText},
               ImagePart(:final attachmentId) ||
               DocumentPart(

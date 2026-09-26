@@ -80,7 +80,7 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
   void didUpdateWidget(ContextUsageIndicator oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.conversationId != widget.conversationId) {
-      // 首次发送从草稿接管新会话时，保留同一个 0% 基线到本轮结束。
+      // 首次发送从草稿接管新会话时，保留 0% 到首份请求计量就绪。
       final running = ref.read(chatControllerProvider);
       final adopting =
           oldWidget.conversationId == null &&
@@ -107,23 +107,17 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
     final preview = id == null
         ? const AsyncData<ContextBuild?>(null)
         : ref.watch(contextPreviewProvider(id));
-    final running = ref.watch(
-      chatControllerProvider.select(
-        (s) => (s.isGenerating, s.runningConversationId),
-      ),
+    final generating = ref.watch(
+      chatControllerProvider.select((s) => s.isGenerating),
     );
-    final generatingHere = running.$1 && running.$2 == id;
-    final frozen = generatingHere || (widget.submitting && !running.$1);
+    final preparing = widget.submitting && !generating;
     final measured = preview.isLoading || preview.hasError
         ? null
         : preview.value?.measurement;
-    // 请求开始时 controller 会清空计量，工具轮之间也会换测量；这些都不重置圆环。
-    if (!frozen && measured != null) {
+    // 复用请求前后与工具结果回填后的计量，不逐 Token 重算；暂时无值时保留上次显示。
+    if (!preparing && measured != null) {
       _displayed = measured;
       _empty = false;
-    } else if (frozen && !_empty && _displayed == null && measured != null) {
-      // 中途首次进入运行中的会话，只采用第一份可用快照，随后冻结。
-      _displayed = measured;
     }
     final measurement = _displayed;
     final ratio = _empty

@@ -1,6 +1,6 @@
 /// 工具策略三档（design 第一部分 §5.2）。
 ///
-/// allow 在已授权范围内直接执行，ask 需要用户确认，deny 不向模型开放。
+/// allow 在已授权范围内直接执行，ask 需要用户确认，deny 禁止派发；定义可保持可见。
 enum ToolPolicy { allow, ask, deny }
 
 const commandExecutionPolicyKey = 'command_execution';

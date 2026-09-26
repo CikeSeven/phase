@@ -60,7 +60,7 @@ class ChatMessage {
       ReasoningPart() => part.publicText.isNotEmpty,
       ImagePart() || DocumentPart() => true,
       ToolCallPart() || ToolResultPart() => true,
-      ProviderPart() => false,
+      ProviderPart() || RuntimeContextPart() => false,
     },
   );
 

@@ -36,6 +36,45 @@ class TextPart extends MessagePart {
   );
 }
 
+/// 宿主追加的运行状态快照；不作为聊天正文或外部内容解析。
+class RuntimeContextPart extends MessagePart {
+  const RuntimeContextPart({required this.section, required this.text});
+
+  final String section;
+  final String text;
+
+  @override
+  String get type => 'runtimeContext';
+
+  @override
+  Map<String, dynamic> toJson() => {
+    'type': type,
+    'section': section,
+    'text': text,
+  };
+
+  factory RuntimeContextPart.fromJson(Map<String, dynamic> json) =>
+      RuntimeContextPart(
+        section: json['section'] as String,
+        text: json['text'] as String,
+      );
+
+  /// 只比较当前分支最后一次发布的同类状态，不改写历史。
+  static List<RuntimeContextPart> changes(
+    Iterable<MessagePart> history,
+    List<RuntimeContextPart> current,
+  ) {
+    final previous = <String, String>{};
+    for (final part in history.whereType<RuntimeContextPart>()) {
+      previous[part.section] = part.text;
+    }
+    return [
+      for (final part in current)
+        if (previous[part.section] != part.text) part,
+    ];
+  }
+}
+
 /// 接口实际公开的思考文本/摘要；签名与加密字段属于 [ProviderPart]。
 class ReasoningPart extends MessagePart {
   const ReasoningPart({
@@ -205,6 +244,7 @@ List<MessagePart> decodeMessageParts(Object? json) {
 MessagePart _partFromJson(Map<String, dynamic> json) {
   return switch (json['type']) {
     'text' => TextPart.fromJson(json),
+    'runtimeContext' => RuntimeContextPart.fromJson(json),
     'reasoning' => ReasoningPart.fromJson(json),
     'image' => ImagePart.fromJson(json),
     'document' => DocumentPart.fromJson(json),

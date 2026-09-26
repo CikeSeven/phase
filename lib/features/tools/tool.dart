@@ -305,16 +305,19 @@ class ToolRegistry {
 
   bool contains(String name) => _tools.containsKey(name);
 
-  /// 本次运行开放给模型的工具定义：策略为 deny 的不下发。
+  /// 定义展示与执行授权分离；固定目录可包含当前模式禁止执行的工具。
   List<ToolDefinition> definitionsFor(
     Set<String> enabledTools,
-    Map<String, ToolPolicy> overrides,
-  ) {
-    return [
+    Map<String, ToolPolicy> overrides, {
+    bool includeDenied = false,
+  }) {
+    return <ToolDefinition>[
       for (final tool in _tools.values)
-        if (policyFor(tool, enabledTools, overrides) != ToolPolicy.deny)
+        if (enabledTools.contains(tool.name) &&
+            (includeDenied ||
+                policyFor(tool, enabledTools, overrides) != ToolPolicy.deny))
           _DefinitionOf(tool),
-    ];
+    ]..sort((a, b) => a.name.compareTo(b.name));
   }
 
   /// 先校验运行工具范围，再应用由模式生成的策略快照。

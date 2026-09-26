@@ -86,6 +86,8 @@ Map<String, dynamic> messageEvidence(
   'messageId': m.sourceMessageId,
   'role': m.role.name,
   'sameModel': m.sameModel,
+  if (m.isRuntimeContext)
+    'runtimeContextSections': m.runtimeContextSections.toList()..sort(),
   'parts': [
     for (final p in m.parts)
       switch (p) {
@@ -169,6 +171,16 @@ class SummarySource {
 /// 只选择完整组；原始消息与工具记录始终不变。
 class ContextBuilder {
   const ContextBuilder();
+
+  Set<ResolvedMessage> _currentRuntimeContext(List<ResolvedMessage> messages) {
+    final latest = <String, ResolvedMessage>{};
+    for (final message in messages) {
+      for (final section in message.runtimeContextSections) {
+        latest[section] = message;
+      }
+    }
+    return latest.values.toSet();
+  }
 
   List<ContextGroup> groups(List<ResolvedMessage> messages) {
     final result = <ContextGroup>[];
@@ -269,6 +281,7 @@ class ContextBuilder {
     bool canReadHistory = false,
   }) {
     final all = groups(messages);
+    final currentRuntime = _currentRuntimeContext(messages);
     if (all.length < 2) return null;
     var cut = all.length - 1;
     var kept = all.last.messages.fold(
@@ -299,6 +312,7 @@ class ContextBuilder {
               g.ids.isNotEmpty &&
               !g.ids.any(alreadyCovered.contains) &&
               !g.ids.any(protectedIds.contains) &&
+              !g.messages.any(currentRuntime.contains) &&
               (canReadHistory
                   ? g.readOnly
                   : g.calls.isEmpty &&
@@ -327,6 +341,7 @@ class ContextBuilder {
         ? null
         : coverage(summary, summaries, messages);
     if (covered == null) return messages;
+    final currentRuntime = _currentRuntimeContext(messages);
     final kept = <ResolvedMessage>[];
     final facts = <Object>[];
     for (final group in groups(messages)) {
@@ -334,6 +349,7 @@ class ContextBuilder {
           group.closed &&
           covered.containsAll(group.ids) &&
           !group.ids.any(protectedIds.contains) &&
+          !group.messages.any(currentRuntime.contains) &&
           (canReadHistory
               ? group.readOnly
               : group.calls.isEmpty &&

@@ -141,6 +141,8 @@ class HistoryResolver {
             if (message.role != ChatRole.tool && text.isNotEmpty) {
               parts.add(ResolvedText(text));
             }
+          case RuntimeContextPart(:final text):
+            if (message.role == ChatRole.system) parts.add(ResolvedText(text));
           case ReasoningPart(:final publicText, :final providerData):
             // 中断那一轮的思考是半截的：回放给模型会把它带回被打断的思路，
             // 而半截思考既没有完整签名也不该当正文发回去。
@@ -206,6 +208,11 @@ class HistoryResolver {
           role: message.role,
           sourceMessageId: message.id,
           parts: parts,
+          runtimeContextSections: {
+            if (message.role == ChatRole.system)
+              for (final part in message.parts.whereType<RuntimeContextPart>())
+                part.section,
+          },
           // 协议状态绑定配置、协议与模型；名称相同不代表签名可以跨端点回放。
           sameModel: sameModel,
         ),

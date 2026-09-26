@@ -23,7 +23,8 @@ bool allowedInPlan(Tool tool) =>
         (tool.name == 'read_file' || tool.name == 'list_files'));
 
 const planModePrompt =
-    '\n当前为计划模式：只允许宿主开放的只读工具，不执行外部动作。'
+    '当前为计划模式：只允许宿主只读白名单及 submit_plan，不执行外部动作。'
+    '完整工具定义仅用于保持目录稳定；写入、命令、MCP 和其他非只读工具仍禁止调用。'
     '使用 submit_plan 提交标题和步骤后结束本轮，等待用户编辑、批准或取消。'
     '正文不是计划批准，批准也不授予工具执行权限。';
 

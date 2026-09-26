@@ -15,7 +15,7 @@ import '../sse_transport.dart';
 
 /// 构造 Anthropic Messages（POST /v1/messages）请求体。
 ///
-/// systemPrompt 提取为顶层 system 字段；system 角色消息并入其中。
+/// 固定 system 消息进入顶层；宿主动态状态保留历史位置，以 user 文本表达。
 /// 推理等级映射 `thinking: {type: enabled, budget_tokens}`，
 /// 并保证 budget + 1024 ≤ max_tokens（不够就抬 max_tokens）；
 /// 模型不支持推理时不下发 thinking 字段。
@@ -44,8 +44,8 @@ Future<Map<String, dynamic>> buildAnthropicPayload(
   var index = 0;
   while (index < resolved.length) {
     final message = resolved[index];
-    // system 角色消息并入顶层 system 字段，不进入 messages。
-    if (message.role == ChatRole.system) {
+    // 普通 system 并入顶层；宿主状态不能前移，否则模式变化会改写已发送前缀。
+    if (message.role == ChatRole.system && !message.isRuntimeContext) {
       index++;
       continue;
     }
@@ -205,7 +205,7 @@ bool _isToolResult(ResolvedMessage message) =>
 String _systemText(ChatRequest request) => [
   if (request.systemPrompt.isNotEmpty) request.systemPrompt,
   for (final message in request.messages)
-    if (message.role == ChatRole.system)
+    if (message.role == ChatRole.system && !message.isRuntimeContext)
       for (final part in message.parts)
         if (part is ResolvedText && part.text.isNotEmpty) part.text,
 ].join('\n\n');

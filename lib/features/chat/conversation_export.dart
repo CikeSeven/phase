@@ -165,6 +165,7 @@ String conversationMarkdown(
     ..writeln();
 
   for (final message in branch) {
+    if (message.role == ChatRole.system && !message.hasVisibleContent) continue;
     final title = switch (message.role) {
       ChatRole.user => '用户',
       ChatRole.assistant =>
@@ -195,7 +196,7 @@ String conversationMarkdown(
           break;
         case ToolCallPart(:final toolCallId):
           _writeToolCall(buffer, toolCalls[toolCallId], attachmentsById);
-        case ToolResultPart() || ProviderPart():
+        case ToolResultPart() || ProviderPart() || RuntimeContextPart():
           break;
       }
     }

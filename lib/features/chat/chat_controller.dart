@@ -223,7 +223,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   String? _requestId;
   int _usageRevision = 0;
   String? _responseModelId;
-  ContextMeasurement? _measurement;
 
   /// 本轮思考耗时；恢复已知工具结果时沿用原消息的值。
   int? _turnThinkingDurationMs;
@@ -645,7 +644,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   bool get isCancelled => _cancellation?.isCancelled ?? false;
 
   Future<List<Tool>> _agentTools({
-    required PermissionMode mode,
     required String? assistantId,
     required MemoryScope scope,
     required String inputMessageId,
@@ -654,19 +652,17 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       await ref.read(conversationRepositoryProvider.future),
       await ref.read(toolCallRepositoryProvider.future),
     ),
-    if (mode == PermissionMode.plan)
-      SubmitPlanTool(await ref.read(planRepositoryProvider.future)),
+    SubmitPlanTool(await ref.read(planRepositoryProvider.future)),
     if (scope != MemoryScope.disabled)
       for (final write in [false, true])
-        if (mode != PermissionMode.plan || !write)
-          MemoryTool(
-            repository: await ref.read(memoryRepositoryProvider.future),
-            assistants: await ref.read(assistantRepositoryProvider.future),
-            assistantId: assistantId,
-            scope: scope,
-            sourceMessageId: inputMessageId,
-            write: write,
-          ),
+        MemoryTool(
+          repository: await ref.read(memoryRepositoryProvider.future),
+          assistants: await ref.read(assistantRepositoryProvider.future),
+          assistantId: assistantId,
+          scope: scope,
+          sourceMessageId: inputMessageId,
+          write: write,
+        ),
   ];
 
   Future<void> approvePlan(AgentPlan plan) async {
@@ -733,7 +729,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         : await workspaces.snapshot(workspaceId);
     final extra = selection.supportsTools
         ? await _agentTools(
-            mode: mode,
             assistantId: assistant?.id,
             scope: assistant?.memoryScope ?? MemoryScope.disabled,
             inputMessageId: thread.currentMessageId!,
@@ -759,8 +754,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             assistantId: assistant?.id,
             linuxAvailable: workspace?.executable == true,
           );
-    final commandChannels =
-        selection.supportsTools && mode != PermissionMode.plan
+    final commandChannels = selection.supportsTools
         ? await commandSnapshots(ref)
         : <CommandChannelSnapshot>[];
     final registry = ToolRegistry([
@@ -778,12 +772,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       ],
       for (final tool in ref.read(toolRegistryProvider).tools)
         if (tool is ShellTool) ShellTool(workspace: workspace) else tool,
-      if (workspace?.termux != null && mode != PermissionMode.plan)
+      if (workspace?.termux != null)
         WorkspaceTransferTool(workspace!, WorkspaceFiles(workspaces)),
       ?skillTool,
-      if (skillTool != null &&
-          workspace?.executable == true &&
-          mode != PermissionMode.plan)
+      if (skillTool != null && workspace?.executable == true)
         PrepareSkillTool(skillTool, workspace!, WorkspaceFiles(workspaces)),
     ]);
     final enabled = selection.supportsTools
@@ -799,15 +791,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       (name) =>
           (_environmentTools.contains(name) &&
               !_workspaceToolAvailable(name, workspace)) ||
-          (name == 'capture_screen' && !selection.supportsImages) ||
-          (mode == PermissionMode.plan &&
-              (registry.byName(name) == null ||
-                  !allowedInPlan(registry.byName(name)!))),
+          (name == 'capture_screen' && !selection.supportsImages),
     );
     final policies = policiesForMode(mode, registry.tools);
-    final tools = registry.definitionsFor(enabled, policies);
-    if (mode != PermissionMode.plan &&
-        enabled.any((n) => n.startsWith('mcp_'))) {
+    final tools = registry.definitionsFor(
+      enabled,
+      policies,
+      includeDenied: true,
+    );
+    if (enabled.any((n) => n.startsWith('mcp_'))) {
       for (final entry in await (await ref.read(
         mcpServerRepositoryProvider.future,
       )).list()) {
@@ -819,6 +811,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         );
       }
     }
+    tools.sort((a, b) => a.name.compareTo(b.name));
     final config = selection.profile.models
         .where((m) => m.id == selection.model)
         .firstOrNull;
@@ -858,6 +851,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       toolPolicies: policies,
       executionScope: ref.read(settingsStorageProvider).readExecutionScope(),
       supportsReasoning: selection.supportsReasoning,
+      supportsImages: selection.supportsImages,
+      supportsTools: selection.supportsTools,
     );
     final resolver = HistoryResolver(
       repository: repository,
@@ -865,10 +860,15 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       profile: selection.profile,
       registry: registry,
     );
-    final messages = await resolver.resolve(
+    final resolved = await resolver.resolve(
       thread.branch,
       await _attachmentIndex(conversationId, const []),
       currentModelId: selection.model,
+    );
+    final messages = previewRuntimeContext(
+      resolved,
+      thread.branch,
+      configuration,
     );
     return PreparedContext(
       assistantId: assistant?.id,
@@ -876,9 +876,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         final latest = await repository.getThread(conversationId);
         if (latest == null) return const [];
         final attachments = await repository.attachmentsFor(conversationId);
-        return resolver.resolve(latest.branch, {
+        final resolved = await resolver.resolve(latest.branch, {
           for (final attachment in attachments) attachment.id: attachment,
         }, currentModelId: selection.model);
+        return previewRuntimeContext(resolved, latest.branch, configuration);
       },
       conversationId: conversationId,
       branchHeadId: thread.currentMessageId!,
@@ -1011,14 +1012,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     }
     final extraTools = selection.supportsTools
         ? await _agentTools(
-            mode: mode,
             assistantId: assistant?.id,
             scope: assistant?.memoryScope ?? MemoryScope.disabled,
             inputMessageId: inputMessageId,
           )
         : <Tool>[];
-    final commandChannels =
-        selection.supportsTools && mode != PermissionMode.plan
+    final commandChannels = selection.supportsTools
         ? await commandSnapshots(ref)
         : <CommandChannelSnapshot>[];
     final baseRegistry = ToolRegistry([
@@ -1032,9 +1031,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           }
         : <String>{};
     // 仅助手选择了 MCP 时访问目录；普通聊天没有扩展连接前置。
-    final mcpEntries =
-        mode != PermissionMode.plan &&
-            enabled.any((name) => name.startsWith('mcp_'))
+    final mcpEntries = enabled.any((name) => name.startsWith('mcp_'))
         ? await (await ref.read(mcpServerRepositoryProvider.future)).list()
         : const [];
     final skillLease =
@@ -1072,7 +1069,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               ),
             );
       final channelTools = <Tool>[
-        if (workspace?.termux != null && mode != PermissionMode.plan)
+        if (selection.supportsTools && workspace?.termux != null)
           WorkspaceTransferTool(
             workspace!,
             WorkspaceFiles(await ref.read(workspaceRepositoryProvider.future)),
@@ -1092,11 +1089,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       final snapshots = <ToolSnapshot>[
         ...channelTools.map((tool) => tool.snapshot),
         if (skillTool != null) skillTool.snapshot,
-        if (prepareSkill != null && mode != PermissionMode.plan)
-          prepareSkill.snapshot,
+        if (prepareSkill != null) prepareSkill.snapshot,
         for (final tool in baseRegistry.tools)
-          if ((mode != PermissionMode.plan || allowedInPlan(tool)) &&
-              enabled.contains(tool.name) &&
+          if (enabled.contains(tool.name) &&
               (!_environmentTools.contains(tool.name) ||
                   _workspaceToolAvailable(tool.name, workspace)))
             tool is ShellTool
@@ -1169,7 +1164,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
                   ]),
                   for (final snapshot in snapshots)
                     if (snapshot.source.kind == ToolSourceKind.mcp)
-                      snapshot.name: ToolPolicy.allow,
+                      snapshot.name: mode == PermissionMode.plan
+                          ? ToolPolicy.deny
+                          : ToolPolicy.allow,
                 }
               : const {},
           supportsReasoning: selection.supportsReasoning,
@@ -1253,7 +1250,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         : ref.read(processDriverProvider);
     final agentTools = selection.supportsTools
         ? await _agentTools(
-            mode: run.configuration.mode,
             assistantId: run.assistantId,
             scope: run.configuration.memoryScope,
             inputMessageId: run.inputMessageId,
@@ -1289,8 +1285,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           repository: workspaceRepository,
           driver: processDriver,
         ),
-      if (binding?.termux != null &&
-          run.configuration.mode != PermissionMode.plan)
+      if (binding?.termux != null)
         WorkspaceTransferTool(binding!, WorkspaceFiles(workspaceRepository!)),
       if (binding?.executable == true && skillTool != null)
         PrepareSkillTool(skillTool, binding!, workspaceFiles!),
@@ -1437,6 +1432,30 @@ class ChatController extends _$ChatController implements AgentLoopHost {
               : AgentFinishReason.completed,
         );
         return;
+      }
+      if (!isCancelled) {
+        // 运行互斥期间比较当前分支；状态消息与分支/运行位置由既有仓储事务提交。
+        final thread = await repository.getThread(run.conversationId);
+        if (thread == null) throw const OperationFailure('会话已不存在');
+        final changed = RuntimeContextPart.changes(
+          thread.branch
+              .where((message) => message.role == ChatRole.system)
+              .expand((message) => message.parts),
+          contextRuntimeParts(run.configuration),
+        );
+        if (changed.isNotEmpty && !isCancelled) {
+          final message = ChatMessage(
+            id: generateId(),
+            conversationId: run.conversationId,
+            parentId: thread.currentMessageId,
+            runId: run.id,
+            role: ChatRole.system,
+            parts: changed,
+            createdAt: DateTime.now(),
+          );
+          await repository.appendMessage(message);
+          _turnTailId = message.id;
+        }
       }
       await AgentLoop(
         this,
@@ -1682,6 +1701,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     AiProvider provider,
     ChatRequest request, {
     required String? parentId,
+    required ContextMeasurement? inputMeasurement,
   }) async {
     final run = _run!;
     final repository = _repository!;
@@ -1711,7 +1731,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         protocol: run.configuration.connection.protocol,
         requestedModelId: selection.model,
         assistantMessageId: assistantMessage.id,
-        contextSnapshot: _measurement?.toSnapshot() ?? const {},
+        contextSnapshot: inputMeasurement?.toSnapshot() ?? const {},
         createdAt: DateTime.now(),
       ),
     );
@@ -1894,18 +1914,21 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   Future<void> _settleAttempt(
     ModelRequestStatus status,
     Future<void> Function() persist,
-  ) => _requests!.settle(
-    _requestId!,
-    status: status,
-    usage: _turnUsage,
-    revision: _usageRevision,
-    usageComplete: _responseComplete && _turnUsage != null,
-    responseModelId: _responseModelId,
-    errorCode:
-        _streamError?.category.name ??
-        (status == ModelRequestStatus.failed ? _turnFailure?.name : null),
-    persistResult: persist,
-  );
+  ) async {
+    await _requests!.settle(
+      _requestId!,
+      status: status,
+      usage: _turnUsage,
+      revision: _usageRevision,
+      usageComplete: _responseComplete && _turnUsage != null,
+      responseModelId: _responseModelId,
+      errorCode:
+          _streamError?.category.name ??
+          (status == ModelRequestStatus.failed ? _turnFailure?.name : null),
+      persistResult: persist,
+    );
+    await _refreshRunningContext();
+  }
 
   /// 执行一次工具调用：记录 → 结果消息 → 结果进入下一轮上下文。
   @override
@@ -2027,6 +2050,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       message: message,
     );
     _turnTailId = message.id;
+    await _refreshRunningContext();
     return ExecutedTool(
       callId: call.callId,
       content: content,
@@ -2223,12 +2247,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         cancelled: true,
       );
     }
-    if (ref.mounted) {
-      state = state.copyWith(
-        contextBuild: context,
-        contextConversationId: _run!.conversationId,
-      );
-    }
     var request =
         context.preparedRequest ??
         ChatRequest(
@@ -2248,7 +2266,19 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     var recoveredContext = false;
     for (var attempt = 0; ; attempt++) {
       _attemptIndex = attempt + 1;
-      final turn = await _streamAttempt(provider, request, parentId: parentId);
+      if (ref.mounted) {
+        // 重试仍显示并保存原请求输入，不把失败后的显示预览作为请求基准。
+        state = state.copyWith(
+          contextBuild: context,
+          contextConversationId: _run!.conversationId,
+        );
+      }
+      final turn = await _streamAttempt(
+        provider,
+        request,
+        parentId: parentId,
+        inputMeasurement: context.measurement,
+      );
       if (isCancelled || turn.cancelled) return turn;
       final error = _streamError;
       if (error == null) return turn;
@@ -2272,7 +2302,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           return turn;
         }
         request = context.preparedRequest!;
-        if (ref.mounted) state = state.copyWith(contextBuild: context);
         continue;
       }
       final delay = policy.delayFor(error, attempt + 1);
@@ -2304,12 +2333,55 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     }
   }
 
+  /// 请求或单个工具结果落库后，只刷新显示，不触发摘要、准入或新的 API 请求。
+  Future<void> _refreshRunningContext() async {
+    final run = _run;
+    final selection = _selection;
+    if (run == null || selection == null) return;
+    bool isCurrent() =>
+        ref.mounted &&
+        !isCancelled &&
+        _run?.id == run.id &&
+        state.isGenerating &&
+        state.runningConversationId == run.conversationId;
+    if (!isCurrent()) return;
+
+    try {
+      final thread = await _repository!.getThread(run.conversationId);
+      if (thread == null || !isCurrent()) return;
+      final messages = await _resolveHistory(
+        thread.branch,
+        _runAttachments,
+        currentModelId: selection.model,
+      );
+      if (!isCurrent()) return;
+      final context = await _buildContext(
+        ref.read(aiProviderFactoryProvider)(selection.profile, ''),
+        messages,
+        contextSystemPrompt(run.configuration),
+        _toolDefinitions(),
+        measureOnly: true,
+      );
+      if (!isCurrent()) return;
+      state = state.copyWith(
+        contextBuild: context,
+        contextConversationId: run.conversationId,
+      );
+    } on StorageFailure {
+      rethrow;
+    } catch (_) {
+      // 显示预览失败不改写已收口的模型/工具结果；应用状态存储故障仍走运行收尾。
+      AppLogger.warning('更新上下文占用失败，保留上次显示');
+    }
+  }
+
   Future<ContextBuild> _buildContext(
     AiProvider provider,
     List<ResolvedMessage> messages,
     String system,
     List<ToolDefinition> tools, {
     bool force = false,
+    bool measureOnly = false,
   }) async {
     final run = _run!;
     final repository = await ref.read(agentContextRepositoryProvider.future);
@@ -2360,11 +2432,11 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           catalogMaxOutputTokens: run.configuration.catalogMaxOutputTokens,
           policy: run.configuration.contextPolicy,
           force: force,
+          measureOnly: measureOnly,
           onSummarizing: (value) {
             if (ref.mounted) state = state.copyWith(summarizing: value);
           },
         );
-    _measurement = context.measurement;
     return context;
   }
 
@@ -2435,20 +2507,18 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     }
   }
 
-  /// 本次运行下发的工具定义：固定模式、启用范围与模型工具能力共同限制。
+  /// 定义目录按范围和能力固定，当前模式只限制执行，不改变工具顺序或 schema。
   List<ToolDefinition> _toolDefinitions() {
     final selection = _selection;
     final run = _run;
     final registry = _registry;
     if (selection == null || run == null || registry == null) return const [];
     if (!selection.supportsTools) return const [];
-    return registry.definitionsFor({
-      for (final name in run.configuration.enabledTools)
-        if (run.configuration.mode != PermissionMode.plan ||
-            (registry.byName(name) != null &&
-                allowedInPlan(registry.byName(name)!)))
-          name,
-    }, run.configuration.toolPolicies);
+    return registry.definitionsFor(
+      run.configuration.enabledTools,
+      run.configuration.toolPolicies,
+      includeDenied: true,
+    );
   }
 
   /// 本轮的工具调用：完整响应结束后才解析参数片段。
@@ -2902,7 +2972,10 @@ List<ChatMessage> visibleMessages(ConversationThread thread, ChatState state) {
   final visible = <ChatMessage>[];
   for (var index = 0; index <= tail; index++) {
     final message = thread.branch[index];
-    if (message.role == ChatRole.tool) continue;
+    if (message.role == ChatRole.tool ||
+        (message.role == ChatRole.system && !message.hasVisibleContent)) {
+      continue;
+    }
     final live =
         streaming &&
         index == tail &&

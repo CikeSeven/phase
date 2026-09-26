@@ -85,7 +85,7 @@
 | 控件读取、截图、打开应用、点击、滚动、输入、手势 | deny | ask | allow |
 | HTTP、显式记忆写入、已启用 MCP | deny | allow | allow |
 
-计划档另有内部 `submit_plan`；只读判断采用宿主白名单，不信任第三方 annotations。`wait_for_user` 在执行档直接开放，是交还操作权而非授权确认。全权限不会自动启用扩展、绕过系统权限或应用名单，也不会替用户完成协作等待。
+上表约束执行，不约束定义展示：用户于 2026-09-26 同意各模式保留已启用范围内相同的工具定义并稳定排序，deny 仍在派发、通道准备或 MCP 连接之前拒绝。`submit_plan` 定义常驻但只在计划档执行；只读判断采用宿主白名单，不信任第三方 annotations。`wait_for_user` 在执行档直接开放，是交还操作权而非授权确认。全权限不会自动启用扩展、绕过系统权限或应用名单，也不会替用户完成协作等待。
 
 `list_apps` 独立归入只读；其余应用工具共用 `app_operations`。`shell` 与 `install_packages` 共用 `command_execution`，仅在环境就绪且模型支持工具时注入。入口是 [权限解析器](../lib/features/tools/tool_permission_policy.dart)，模型可见范围、派发与扩展复检不得回退至旧助手策略。
 
@@ -254,6 +254,8 @@ Linux 工作区与原始进程桥已有实现，真机安装/原始进程桥通�
 ### 2.3 结构化 Part
 
 `TextPart`、`ReasoningPart`、`ImagePart`、`DocumentPart`、`ToolCallPart`、`ToolResultPart` 等以当前封闭类型定义为准。工具 Part 引用记录 ID，不复制参数和结果。公开思考计时表示本地接收阶段，不表示服务端完整推理时间。协议状态绑定对应 Part 和来源模型。
+
+`RuntimeContextPart(section, text)` 保存宿主权限、环境、Skill 的分区状态，只在变化时追加到当前分支的 system 消息。聊天阅读区隐藏，JSON 导出和历史读取保留；不新增表或修改 schema 10，不改写既有消息。固定提示词与动态状态分离，协议映射、压缩保留和缓存边界见[上下文专项方案 §8.4](./context_management_and_usage_design.md#84-稳定前缀与运行状态追加)。
 
 ## 3. 持久化
 

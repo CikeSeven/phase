@@ -16,7 +16,7 @@ import '../sse_transport.dart';
 
 /// 构造 Google Generative AI（streamGenerateContent）请求体。
 ///
-/// systemPrompt 提取为 systemInstruction；system 角色消息并入其中。
+/// 固定 system 消息进入 systemInstruction；宿主动态状态以 user 文本留在原位。
 /// 推理等级映射 `generationConfig.thinkingConfig.thinkingBudget`
 /// （off → 0；Gemini 2.x 支持以 0 关闭思考）；模型不支持推理时不下发。
 Future<Map<String, dynamic>> buildGooglePayload(
@@ -37,8 +37,8 @@ Future<Map<String, dynamic>> buildGooglePayload(
       ? request.messages
       : expandToolResultImages(request.messages);
   for (final message in resolved) {
-    // system 角色消息并入 systemInstruction，不进入 contents。
-    if (message.role == ChatRole.system) continue;
+    // 宿主状态留在原位；不使用本协议未定义的中途 system 角色。
+    if (message.role == ChatRole.system && !message.isRuntimeContext) continue;
     for (final call in message.parts.whereType<ResolvedToolCall>()) {
       toolNames[call.callId] = call.toolName;
     }
@@ -193,7 +193,7 @@ Future<List<Map<String, dynamic>>> _googleParts(
 String _systemText(ChatRequest request) => [
   if (request.systemPrompt.isNotEmpty) request.systemPrompt,
   for (final message in request.messages)
-    if (message.role == ChatRole.system)
+    if (message.role == ChatRole.system && !message.isRuntimeContext)
       for (final part in message.parts)
         if (part is ResolvedText && part.text.isNotEmpty) part.text,
 ].join('\n\n');

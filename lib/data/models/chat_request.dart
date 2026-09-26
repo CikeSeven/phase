@@ -12,11 +12,16 @@ class ResolvedMessage {
     required this.parts,
     this.sameModel = true,
     this.sourceMessageId,
+    this.runtimeContextSections = const {},
   });
 
   final String? sourceMessageId;
   final ChatRole role;
   final List<ResolvedPart> parts;
+
+  /// 已落库的宿主状态分区；只有宿主消息可设置，普通 system 消息保持原协议语义。
+  final Set<String> runtimeContextSections;
+  bool get isRuntimeContext => runtimeContextSections.isNotEmpty;
 
   /// 这条消息是否由当前模型产生。
   ///
