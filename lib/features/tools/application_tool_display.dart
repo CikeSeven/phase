@@ -110,7 +110,7 @@ class ApplicationToolDisplay {
       if (data['actionAccepted'] == false) '系统未接受动作',
       if (record.toolName == 'shizuku_display' &&
           data['actionDispatched'] == true &&
-          data['actionAccepted'] != true)
+          data['actionAccepted'] == null)
         '动作已派发，未收到完整执行回执',
       if (record.toolName == 'shizuku_display' &&
           data['dispatchRequested'] == true &&

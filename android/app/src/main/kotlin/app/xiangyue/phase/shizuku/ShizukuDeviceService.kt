@@ -2,6 +2,7 @@ package app.xiangyue.phase.shizuku
 
 import android.app.ActivityManager
 import android.app.ActivityOptions
+import android.app.PendingIntent
 import android.app.TaskInfo
 import android.app.KeyguardManager
 import android.content.Context
@@ -106,8 +107,10 @@ class ShizukuDeviceService(private val context: Context) : IDeviceUserService.St
                 result.putString("error", "cancelled")
             } catch (error: DeviceFault) {
                 result.putString("error", error.code)
+            } catch (error: DisplayTextFault) {
+                result.putString("error", error.code)
             } catch (_: SecurityException) {
-                result.putString("error", "permissionRequired")
+                result.putString("error", "systemOperationDenied")
             } catch (_: Exception) {
                 result.putString("error", "deviceUnavailable")
             } finally {
@@ -157,6 +160,39 @@ class ShizukuDeviceService(private val context: Context) : IDeviceUserService.St
         } catch (error: Exception) { reader.close(); throw error }
     }
 
+    private suspend fun launch(owner: Owner, key: String, target: String, result: Bundle) {
+        var pending: PendingIntent? = null
+        try {
+            val intent = privileged.packageManager.getLaunchIntentForPackage(target)
+                ?: throw DeviceFault("notLaunchable")
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
+            val display = managed(owner).display
+            if (!display.isValid || display.displayId <= Display.DEFAULT_DISPLAY) throw DeviceFault("displayMissing")
+            val options = ActivityOptions.makeBasic().apply { launchDisplayId = display.displayId }
+            // A Shizuku UserService is not an ActivityManager-attached app process.
+            // PendingIntent avoids Context.startActivity's application-thread caller check.
+            val launch = PendingIntent.getActivity(
+                privileged.createDisplayContext(display), display.displayId, intent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            pending = launch
+            checkpoint(owner, key)
+            owner.screenshotId = null
+            result.putBoolean("actionDispatched", true)
+            launch.send(privileged, 0, null, null, null, null, options.toBundle())
+            result.putBoolean("actionAccepted", true)
+        } catch (_: SecurityException) {
+            result.putBoolean("actionAccepted", false)
+            throw DeviceFault("launchDenied")
+        } catch (_: PendingIntent.CanceledException) {
+            result.putBoolean("actionAccepted", false)
+            throw DeviceFault("launchCancelled")
+        } finally {
+            // Do not leave a reusable launch token after cancellation or a rejected send.
+            pending?.let { runCatching { it.cancel() } }
+        }
+    }
+
     private suspend fun dispatch(owner: Owner, key: String, request: Bundle, output: ParcelFileDescriptor, result: Bundle) {
         val action = request.getString("action") ?: throw DeviceFault("invalidArguments")
         val target = request.getString("packageName").orEmpty()
@@ -178,13 +214,7 @@ class ShizukuDeviceService(private val context: Context) : IDeviceUserService.St
         }
         when (action) {
             "launch" -> {
-                val intent = privileged.packageManager.getLaunchIntentForPackage(target) ?: throw DeviceFault("notLaunchable")
-                owner.screenshotId = null
-                checkpoint(owner, key)
-                val options = ActivityOptions.makeBasic().apply { launchDisplayId = managed(owner).display.displayId }
-                result.putBoolean("actionDispatched", true)
-                privileged.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK), options.toBundle())
-                result.putBoolean("actionAccepted", true)
+                launch(owner, key, target, result)
                 val deadline = SystemClock.uptimeMillis() + 4000
                 while (true) {
                     checkpoint(owner, key)
@@ -212,19 +242,18 @@ class ShizukuDeviceService(private val context: Context) : IDeviceUserService.St
                 gesture(owner, key, x, y, endX, endY, duration) { beforeInput() }
                 result.putBoolean("actionAccepted", true)
             }
-            "key", "text" -> {
-                val events = if (action == "key") {
-                    val code = KEYS[request.getString("key")] ?: throw DeviceFault("invalidArguments")
-                    val now = SystemClock.uptimeMillis()
-                    arrayOf(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0), KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0))
-                } else {
-                    val text = request.getString("text").orEmpty()
-                    if (text.isEmpty() || text.length > 500 || '\u0000' in text) throw DeviceFault("invalidArguments")
-                    KeyCharacterMap.load(KeyCharacterMap.VIRTUAL_KEYBOARD).getEvents(text.toCharArray())
-                        ?: throw DeviceFault("textUnsupported")
-                }
+            "text" -> {
+                val text = request.getString("text").orEmpty()
+                if (text.isEmpty() || text.length > 500 || '\u0000' in text) throw DeviceFault("invalidArguments")
+                DisplayTextInput.insert(privileged, managed(owner).display, target, text, result,
+                    validate = { checkpoint(owner, key); foreground(owner, target) },
+                    beforeDispatch = { owner.screenshotId = null })
+            }
+            "key" -> {
+                val code = KEYS[request.getString("key")] ?: throw DeviceFault("invalidArguments")
+                val now = SystemClock.uptimeMillis()
+                val events = arrayOf(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0), KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0))
                 owner.screenshotId = null
-                if (events.any { it.keyCode == KeyEvent.KEYCODE_UNKNOWN }) throw DeviceFault("textUnsupported")
                 val held = linkedMapOf<Int, KeyEvent>()
                 try {
                     for (event in events) {

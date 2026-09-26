@@ -30,7 +30,7 @@ internal class ShizukuConnection(private val context: Context, private val chang
         remote?.takeIf { it.asBinder().pingBinder() }?.let { return@withLock it }
         val ready = CompletableDeferred<IDeviceUserService>()
         val serviceArgs = Shizuku.UserServiceArgs(ComponentName(context, ShizukuDeviceService::class.java))
-            .tag("phase.device").processNameSuffix("device").version(1).daemon(false)
+            .tag("phase.device").processNameSuffix("device").version(3).daemon(false)
         val listener = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
                 if (connection !== this || ready.isCompleted) return
