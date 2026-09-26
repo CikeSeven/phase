@@ -255,7 +255,7 @@
 
 实现契约与调研依据见 [系统命令专项设计](./system_command_channels_design.md)。2026-09-25 用户确认并列通道、全局启用和显式目录递归传输后接入：
 
-- [x] Shizuku 状态/授权入口、shell UID UserService、PFD 输出、native supervisor 与调用归属。
+- [x] Shizuku 状态/授权入口、实际授权 UID UserService、PFD 输出、native supervisor 与调用归属。
 - [x] Termux RUN_COMMAND、版本化原生 runner 初始化、严格 PendingIntent 回调、私有日志分块、停止和宿主租约。
 - [x] 运行快照、三档权限和任务通知共用既有宿主；不要求无障碍，不自动更换身份/重发命令。
 - [x] 显式文件/目录传输、限量清单、摘要校验、逐文件提交、部分完成与来源/产物记录；无自动同步或远端删除联动。

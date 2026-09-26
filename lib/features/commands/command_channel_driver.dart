@@ -12,7 +12,7 @@ import 'command_api.g.dart';
 
 part 'command_channel_driver.g.dart';
 
-/// Shizuku 的 ready 同时要求服务运行、系统授权及受支持的 shell 身份。
+/// Shizuku 的 ready 同时要求服务运行、系统授权及可读取的实际执行身份。
 bool hasShizukuCommandPermission(Iterable<CommandChannelStatus> statuses) =>
     statuses.any(
       (status) => status.channel == 'shizuku' && status.state == 'ready',

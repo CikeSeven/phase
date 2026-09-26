@@ -19,9 +19,7 @@ List<CommandChannelAction> commandChannelActions(
   ExecutionChannel channel,
   String? state,
 ) => switch (state) {
-  'notInstalled' ||
-  'notRunning' ||
-  'identityUnsupported' => const [CommandChannelAction.open],
+  'notInstalled' || 'notRunning' => const [CommandChannelAction.open],
   'permissionRequired' => [
     CommandChannelAction.authorize,
     CommandChannelAction.open,

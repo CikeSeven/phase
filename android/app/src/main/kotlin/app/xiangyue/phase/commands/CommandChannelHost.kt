@@ -45,13 +45,14 @@ class CommandChannelHost(
     private fun supported() = Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a" && termux.packaged.canExecute()
     override suspend fun status(): List<CommandChannelStatus> = withContext(Dispatchers.IO) {
         val installed = runCatching { context.packageManager.getApplicationInfo("moe.shizuku.privileged.api", 0) }.isSuccess
+        val shizukuUid = shizuku.uid()
         val s = when {
             !supported() -> CommandChannelStatus("shizuku", "unsupported", "此设备不支持命令运行组件")
             !installed -> CommandChannelStatus("shizuku", "notInstalled", "未安装 Shizuku")
             !shizuku.running() -> CommandChannelStatus("shizuku", "notRunning", "Shizuku 未运行")
             !shizuku.permission() -> CommandChannelStatus("shizuku", "permissionRequired", "未授权 Shizuku")
-            shizuku.uid() != 2000 -> CommandChannelStatus("shizuku", "identityUnsupported", "仅支持 shell 身份的 Shizuku")
-            else -> CommandChannelStatus("shizuku", "ready", "已授权", 2000, termux.revision, "/")
+            shizukuUid < 0 -> CommandChannelStatus("shizuku", "unavailable", "无法读取 Shizuku 执行身份")
+            else -> CommandChannelStatus("shizuku", "ready", "已授权", shizukuUid.toLong(), termux.revision, "/")
         }
         val t = when {
             !supported() -> CommandChannelStatus("termux", "unsupported", "此设备不支持命令运行组件")
@@ -77,7 +78,7 @@ class CommandChannelHost(
         try {
             check(supported())
             when (channel) {
-                "shizuku" -> { val reply = withContext(Dispatchers.IO) { shizuku.get().probe() }; check(reply.getBoolean("available") && reply.getInt("uid") == 2000) }
+                "shizuku" -> { val reply = withContext(Dispatchers.IO) { shizuku.get().probe() }; check(reply.getBoolean("available") && reply.getInt("uid") == shizuku.uid()) }
                 "termux" -> {
                     check(active.values.none { it.channel == "termux" })
                     termux.initialize(); termuxReady = termux.revision
@@ -104,14 +105,15 @@ class CommandChannelHost(
         (old - enabled).forEach { stopChannel(it, "channelDisabled") }
     }
     private fun permitted(channel: String) = channel in enabled && when (channel) {
-        "shizuku" -> shizuku.permission() && shizuku.uid() == 2000
+        "shizuku" -> shizuku.permission()
         "termux" -> termux.permitted()
         else -> false
     }
     private fun validate(owner: String, call: String, channel: String, revision: String, uid: Long) {
         if (!idPattern.matches(owner) || !idPattern.matches(call) || !ownerActive(owner)) fail("invalidOwner", "命令任务归属无效")
         if (!permitted(channel)) fail("permissionRequired", "命令通道未启用或授权已撤销")
-        if (!supported() || revision != termux.revision || uid != (if (channel == "shizuku") 2000L else termux.uid().toLong())) fail("identityChanged", "执行身份或运行组件已改变，请开始新运行")
+        val currentUid = if (channel == "shizuku") shizuku.uid().toLong() else termux.uid().toLong()
+        if (!supported() || revision != termux.revision || currentUid < 0 || uid != currentUid) fail("identityChanged", "执行身份或运行组件已改变，请开始新运行")
     }
     private inner class Operation(val owner: String, val call: String, val channel: String) {
         @Volatile var cancelled = false
@@ -258,6 +260,7 @@ class CommandChannelHost(
             op.check()
             withContext(Dispatchers.IO) { service.start(Bundle().apply {
                 putString("owner", op.owner); putString("call", op.call); putString("token", TermuxResults.token())
+                putLong("uid", spec.uid)
                 putString("command", spec.command); putString("cwd", spec.cwd); putLong("limit", spec.outputLimitBytes)
             }, stdout[1], stderr[1], callback, client) }
             stdout[1].close(); stderr[1].close()
@@ -363,6 +366,7 @@ class CommandChannelHost(
             op.check()
             withContext(Dispatchers.IO) { service.transfer(Bundle().apply {
                 putString("owner", op.owner); putString("call", op.call); putString("remotePath", spec.remotePath); putBoolean("toChannel", spec.toChannel)
+                putLong("uid", spec.uid)
                 putLong("fileLimit", spec.fileLimitBytes); putLong("totalLimit", spec.totalLimitBytes); putInt("entryLimit", spec.entryLimit.toInt())
             }, pair[1], object : ICommandCallback.Stub() { override fun finished(value: Bundle) { result.complete(value) } }, client) }
             pair[1].close(); if (op.cancelled) op.stopAction()

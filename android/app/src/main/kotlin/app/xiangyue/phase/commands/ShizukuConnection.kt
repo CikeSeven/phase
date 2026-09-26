@@ -22,11 +22,11 @@ internal class ShizukuConnection(private val context: Context, private val chang
     fun uid(): Int = runCatching { Shizuku.getUid() }.getOrDefault(-1)
     fun running() = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
     suspend fun get(): ICommandUserService = mutex.withLock {
-        check(permission() && uid() == 2000) { "permissionRequired" }
+        check(permission()) { "permissionRequired" }
         remote?.takeIf { it.asBinder().pingBinder() }?.let { return@withLock it }
         val value = CompletableDeferred<ICommandUserService>()
         val serviceArgs = Shizuku.UserServiceArgs(ComponentName(context, CommandUserService::class.java))
-            .tag("phase.commands").processNameSuffix("commands").version(1).daemon(false)
+            .tag("phase.commands").processNameSuffix("commands").version(2).daemon(false)
         val listener = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
                 if (connection !== this) return

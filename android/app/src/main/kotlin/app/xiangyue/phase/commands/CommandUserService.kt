@@ -9,7 +9,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.*
 import org.json.JSONObject
 
-/** A shell-UID service. Binder threads never perform command or transfer IO. */
+/** Runs under the authorized Shizuku UID. Binder threads never perform command or transfer IO. */
 @androidx.annotation.Keep
 class CommandUserService(private val context: Context) : ICommandUserService.Stub() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -19,10 +19,11 @@ class CommandUserService(private val context: Context) : ICommandUserService.Stu
     private val runner get() = File(context.applicationInfo.nativeLibraryDir, "libphase_command.so")
     override fun probe() = Bundle().apply {
         putInt("uid", Process.myUid())
-        putBoolean("available", Process.myUid() == 2000 && runner.canExecute() && Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a")
+        putBoolean("available", runner.canExecute() && Build.SUPPORTED_ABIS.firstOrNull() == "arm64-v8a")
     }
     private fun own(spec: Bundle, close: () -> Unit): Task {
-        check(Process.myUid() == 2000 && Binder.getCallingUid() == context.applicationInfo.uid)
+        check(Binder.getCallingUid() == context.applicationInfo.uid)
+        check(spec.getLong("uid", -1) == Process.myUid().toLong()) { "identityChanged" }
         val id = spec.getString("call")!!
         check(id.matches(Regex("[a-zA-Z0-9_-]{1,100}")) && seen.add(id))
         val owner = spec.getString("owner")!!
@@ -39,7 +40,8 @@ class CommandUserService(private val context: Context) : ICommandUserService.Stu
             throw error
         }
         val id = spec.getString("call")!!
-        val root = File("/data/local/tmp/phase-${context.packageName}")
+        // Keep ownership separate when Shizuku restarts under a different UID.
+        val root = File("/data/local/tmp/phase-${context.packageName}-${Process.myUid()}")
         val job = File(root, id)
         val death = IBinder.DeathRecipient { task.cancel.set(true); task.close() }
         try { client.linkToDeath(death, 0) }
