@@ -16,12 +16,16 @@ class AppInteractiveSurface extends StatefulWidget {
     super.key,
     this.color,
     this.radius = AppRadius.medium,
+    this.animateShape = true,
     this.onLongPress,
     this.focusNode,
   });
 
   final bool? selected;
   final double radius;
+
+  /// 关闭时固定圆角，供外层统一裁剪的连续操作面使用。
+  final bool animateShape;
   final VoidCallback? onLongPress;
   final VoidCallback? onTap;
   final Widget child;
@@ -41,7 +45,9 @@ class _AppInteractiveSurfaceState extends State<AppInteractiveSurface>
   bool _pressed = false;
   bool _reduceMotion = false;
 
-  double get _targetRadius => _pressed && widget.onTap != null
+  double get _targetRadius => !widget.animateShape
+      ? widget.radius
+      : _pressed && widget.onTap != null
       ? AppRadius.small
       : widget.selected == true
       ? AppRadius.large
@@ -60,13 +66,14 @@ class _AppInteractiveSurfaceState extends State<AppInteractiveSurface>
     if (widget.onTap == null) _pressed = false;
     if (widget.selected != oldWidget.selected ||
         widget.radius != oldWidget.radius ||
+        widget.animateShape != oldWidget.animateShape ||
         (oldWidget.onTap != null && widget.onTap == null)) {
       _animateShape();
     }
   }
 
   void _animateShape() {
-    if (_reduceMotion) {
+    if (_reduceMotion || !widget.animateShape) {
       _radius.value = _targetRadius;
       return;
     }

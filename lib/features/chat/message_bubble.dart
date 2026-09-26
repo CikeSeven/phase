@@ -10,6 +10,7 @@ import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/message_part.dart';
+import 'activity_card_group.dart';
 import 'attachment_chips.dart';
 import 'chat_markdown.dart';
 import 'message_actions_sheet.dart';
@@ -54,7 +55,8 @@ class MessageBubble extends StatelessWidget {
 
     void flushText() {
       if (text.isEmpty) return;
-      segments.add(_TextSegment(text.toString()));
+      final content = text.toString();
+      if (content.trim().isNotEmpty) segments.add(_TextSegment(content));
       text.clear();
     }
 
@@ -102,6 +104,102 @@ class MessageBubble extends StatelessWidget {
     }
     flush();
     return segments;
+  }
+
+  List<Widget> _buildContent({
+    required List<_ContentSegment> segments,
+    required Color textColor,
+    required bool streaming,
+  }) {
+    final children = <Widget>[];
+    var cards = <Widget>[];
+    var reasoningParts = <ReasoningPart>[];
+    var toolCallIds = <String>{};
+    ReasoningPart? activeReasoningPart;
+    final lastThinkingIndex = segments.lastIndexWhere(
+      (segment) => segment is _ThinkingSegment,
+    );
+    // 正文或工具开始后，前面的思考不再处于接收状态。
+    final liveThinkingIndex =
+        streaming && lastThinkingIndex == segments.length - 1
+        ? lastThinkingIndex
+        : -1;
+    final onlyThinking = segments.whereType<_ThinkingSegment>().length == 1;
+    var thinkingOrdinal = 0;
+
+    void flushCards() {
+      if (cards.isEmpty) return;
+      // 以首张卡片标识分组，流式追加不会重建已有卡片的展开状态。
+      children.add(
+        ActivityCardGroup(
+          key: cards.first.key,
+          reasoningParts: reasoningParts,
+          activeReasoningPart: activeReasoningPart,
+          fallbackThinkingDurationMs: onlyThinking && !streaming
+              ? message.thinkingDurationMs
+              : null,
+          toolCallCount: toolCallIds.length,
+          children: cards,
+        ),
+      );
+      cards = <Widget>[];
+      reasoningParts = <ReasoningPart>[];
+      toolCallIds = <String>{};
+      activeReasoningPart = null;
+    }
+
+    for (final (index, segment) in segments.indexed) {
+      switch (segment) {
+        case _TextSegment(:final text):
+          flushCards();
+          children.add(
+            ChatMarkdown(
+              text: text,
+              key: index == 0 ? const ValueKey('message-markdown') : null,
+              textColor: textColor,
+              streaming: streaming,
+            ),
+          );
+        case _ThinkingSegment(:final reasoning, :final parts):
+          reasoningParts.addAll(parts);
+          if (index == liveThinkingIndex && parts.last.durationMs == null) {
+            activeReasoningPart = parts.last;
+          }
+          cards.add(
+            ThinkingPanel(
+              // 用思考区序号而非段序号，正文先后变化不改变其身份。
+              key: ValueKey('thinking-${message.id}-${thinkingOrdinal++}'),
+              grouped: true,
+              reasoning: reasoning,
+              streaming:
+                  index == liveThinkingIndex && parts.last.durationMs == null,
+              startedAt: parts.last.durationMs == null
+                  ? parts.last.startedAt
+                  : null,
+              // 逐段汇总；仅有一段且无块级计时时，沿用消息已记录的总值。
+              duration: _thinkingDuration(
+                parts,
+                fallback: onlyThinking && !streaming
+                    ? message.thinkingDurationMs
+                    : null,
+              ),
+            ),
+          );
+        case _ToolSegment(:final toolCallId):
+          toolCallIds.add(toolCallId);
+          cards.add(
+            ToolCallCard(
+              key: ValueKey('tool-$toolCallId'),
+              grouped: true,
+              conversationId: message.conversationId,
+              toolCallId: toolCallId,
+              attachments: attachments,
+            ),
+          );
+      }
+    }
+    flushCards();
+    return children;
   }
 
   /// 用户消息的附件与正文；助手消息的正文与思考分开渲染。
@@ -191,19 +289,6 @@ class MessageBubble extends StatelessWidget {
                   );
                 }
                 final segments = _contentSegments();
-                final lastThinkingIndex = segments.lastIndexWhere(
-                  (segment) => segment is _ThinkingSegment,
-                );
-                // 思考区的稳定身份用「第几个思考区」，不用段序号：正文与思考
-                // 的先后一变，段序号就会跳，面板会重建、用户的折叠偏好丢失。
-                var thinkingOrdinal = 0;
-                // 正文或工具开始后，前面的思考不再处于接收状态。
-                final liveThinkingIndex =
-                    streaming && lastThinkingIndex == segments.length - 1
-                    ? lastThinkingIndex
-                    : -1;
-                final onlyThinking =
-                    segments.whereType<_ThinkingSegment>().length == 1;
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -275,54 +360,11 @@ class MessageBubble extends StatelessWidget {
                             ),
                             const SizedBox(height: AppSpacing.s),
                           ],
-                          // 正文、思考与工具卡片按 Part 顺序交错渲染：一轮
-                          // 回答里模型先想一段、说一句、调用工具、再接着说，
-                          // 顺序就是用户实际看到的顺序（design 第二部分 §6.2）。
-                          for (final (index, segment) in segments.indexed)
-                            switch (segment) {
-                              _TextSegment(:final text) => ChatMarkdown(
-                                text: text,
-                                key: index == 0
-                                    ? const ValueKey('message-markdown')
-                                    : null,
-                                textColor: textColor,
-                                streaming: streaming,
-                              ),
-                              _ThinkingSegment(
-                                :final reasoning,
-                                :final parts,
-                              ) =>
-                                Padding(
-                                  key: ValueKey(
-                                    'thinking-${message.id}-${thinkingOrdinal++}',
-                                  ),
-                                  padding: const EdgeInsets.only(
-                                    bottom: AppSpacing.xs,
-                                  ),
-                                  child: ThinkingPanel(
-                                    reasoning: reasoning,
-                                    // 已结束的块不会因后续模型轮仍在运行而重新计时。
-                                    streaming:
-                                        index == liveThinkingIndex &&
-                                        parts.last.durationMs == null,
-                                    startedAt: parts.last.durationMs == null
-                                        ? parts.last.startedAt
-                                        : null,
-                                    // 逐段汇总；仅有一段且无块级计时时，沿用消息已记录的总值。
-                                    duration: _thinkingDuration(
-                                      parts,
-                                      fallback: onlyThinking && !streaming
-                                          ? message.thinkingDurationMs
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                              _ToolSegment(:final toolCallId) => ToolCallCard(
-                                conversationId: message.conversationId,
-                                toolCallId: toolCallId,
-                                attachments: attachments,
-                              ),
-                            },
+                          ..._buildContent(
+                            segments: segments,
+                            textColor: textColor,
+                            streaming: streaming,
+                          ),
                         ],
                       ),
                     ),

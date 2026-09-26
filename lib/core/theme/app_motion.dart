@@ -7,6 +7,14 @@ abstract final class AppMotion {
   static const menuClose = Duration(milliseconds: 120);
   static const menuCurve = Cubic(0.2, 0.8, 0.2, 1);
   static const menuReverseCurve = Curves.easeOutCubic;
+  static const expansionOpen = Duration(milliseconds: 280);
+  static const expansionClose = Duration(milliseconds: 180);
+  static const expansionCurve = Curves.easeOutCubic;
+  static const expansionSpacingCurve = Interval(
+    0.6,
+    1,
+    curve: Curves.easeOutCubic,
+  );
 
   static final shapeSpring = SpringDescription.withDampingRatio(
     mass: 1,

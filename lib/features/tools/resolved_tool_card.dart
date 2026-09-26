@@ -13,10 +13,12 @@ class ResolvedToolCard extends ConsumerWidget {
     required this.record,
     this.artifacts = const [],
     this.onOpenArtifact,
+    this.grouped = false,
     super.key,
   });
 
   final ToolCallRecord record;
+  final bool grouped;
   final List<Attachment> artifacts;
   final void Function(Attachment)? onOpenArtifact;
 
@@ -33,6 +35,7 @@ class ResolvedToolCard extends ConsumerWidget {
     }
     return ToolCard(
       record: record,
+      grouped: grouped,
       appName: appName,
       artifacts: artifacts,
       onOpenArtifact: onOpenArtifact,

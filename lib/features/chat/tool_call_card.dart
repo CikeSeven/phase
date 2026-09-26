@@ -31,11 +31,13 @@ class ToolCallCard extends ConsumerWidget {
     required this.toolCallId,
     this.attachments = const {},
     this.conversationId,
+    this.grouped = false,
     super.key,
   });
 
   final String toolCallId;
   final String? conversationId;
+  final bool grouped;
 
   /// 会话附件索引：把记录里的产物 id 还原成可查看的文件。
   final Map<String, Attachment> attachments;
@@ -51,10 +53,11 @@ class ToolCallCard extends ConsumerWidget {
       final plan = plans.value
           ?.where((p) => p.sourceRunId == record.runId)
           .firstOrNull;
-      if (plan != null) return PlanCard(plan: plan);
+      if (plan != null) return PlanCard(plan: plan, grouped: grouped);
     }
     return ResolvedToolCard(
       record: record,
+      grouped: grouped,
       artifacts: [
         for (final id in record.artifacts)
           if (attachments[id] != null) attachments[id]!,

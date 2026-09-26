@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../../core/error/failure.dart';
-import '../../../../core/widgets/app_card.dart';
+import '../../../../core/theme/app_radius.dart';
+import '../../../../core/theme/app_spacing.dart';
+import '../../../../core/theme/brand_colors.dart';
 import '../../../../core/widgets/app_dialog.dart';
 import '../../../../core/widgets/app_loading_indicator.dart';
 import '../../../../data/models/agent_plan.dart';
@@ -11,8 +13,9 @@ import '../../../../data/repositories/plan_repository.dart';
 import '../chat_controller.dart';
 
 class PlanCard extends ConsumerStatefulWidget {
-  const PlanCard({required this.plan, super.key});
+  const PlanCard({required this.plan, this.grouped = false, super.key});
   final AgentPlan plan;
+  final bool grouped;
   @override
   ConsumerState<PlanCard> createState() => _PlanCardState();
 }
@@ -47,70 +50,77 @@ class _PlanCardState extends ConsumerState<PlanCard> {
       ),
     );
     final disabled = generating || _busy;
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(p.title, style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          Text(
-            '计划 · 修订 ${p.revision} · ${switch (p.status) {
-              PlanStatus.draft => '待批准',
-              PlanStatus.approved => '已批准并创建执行运行',
-              PlanStatus.cancelled => '已取消',
-            }}',
-          ),
-          const SizedBox(height: 12),
-          for (final (i, step) in p.steps.indexed)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: SelectableText('${i + 1}. $step'),
-            ),
-          const Text('批准当前修订后恢复规划前的权限档位，按该模式执行。'),
-          if (_error != null)
+    return Material(
+      color: context.brandColors.tealContainer,
+      borderRadius: widget.grouped ? BorderRadius.zero : AppRadius.mediumAll,
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.l),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(p.title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
             Text(
-              _error!,
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
+              '计划 · 修订 ${p.revision} · ${switch (p.status) {
+                PlanStatus.draft => '待批准',
+                PlanStatus.approved => '已批准并创建执行运行',
+                PlanStatus.cancelled => '已取消',
+              }}',
             ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              if (p.status == PlanStatus.draft)
-                FilledButton(
-                  onPressed: disabled
-                      ? null
-                      : () => _perform(
-                          () => ref
-                              .read(chatControllerProvider.notifier)
-                              .approvePlan(p),
-                        ),
-                  child: const Text('批准并执行'),
-                ),
-              TextButton.icon(
-                onPressed: disabled
-                    ? null
-                    : () => showDialog<void>(
-                        context: context,
-                        builder: (_) => _PlanEditor(plan: p),
-                      ),
-                icon: const Icon(Symbols.edit),
-                label: Text(p.status == PlanStatus.draft ? '编辑' : '创建新修订'),
+            const SizedBox(height: 12),
+            for (final (i, step) in p.steps.indexed)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: SelectableText('${i + 1}. $step'),
               ),
-              if (p.status == PlanStatus.draft)
-                TextButton(
+            const Text('批准当前修订后恢复规划前的权限档位，按该模式执行。'),
+            if (_error != null)
+              Text(
+                _error!,
+                style: TextStyle(color: Theme.of(context).colorScheme.error),
+              ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (p.status == PlanStatus.draft)
+                  FilledButton(
+                    onPressed: disabled
+                        ? null
+                        : () => _perform(
+                            () => ref
+                                .read(chatControllerProvider.notifier)
+                                .approvePlan(p),
+                          ),
+                    child: const Text('批准并执行'),
+                  ),
+                TextButton.icon(
                   onPressed: disabled
                       ? null
-                      : () => _perform(() async {
-                          await (await ref.read(planRepositoryProvider.future))
-                              .cancel(p.id, p.revision);
-                        }),
-                  child: const Text('取消计划'),
+                      : () => showDialog<void>(
+                          context: context,
+                          builder: (_) => _PlanEditor(plan: p),
+                        ),
+                  icon: const Icon(Symbols.edit),
+                  label: Text(p.status == PlanStatus.draft ? '编辑' : '创建新修订'),
                 ),
-            ],
-          ),
-        ],
+                if (p.status == PlanStatus.draft)
+                  TextButton(
+                    onPressed: disabled
+                        ? null
+                        : () => _perform(() async {
+                            await (await ref.read(
+                              planRepositoryProvider.future,
+                            )).cancel(p.id, p.revision);
+                          }),
+                    child: const Text('取消计划'),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

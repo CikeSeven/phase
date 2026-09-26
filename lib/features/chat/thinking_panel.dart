@@ -7,6 +7,7 @@ import 'package:material_symbols_icons/material_symbols_icons.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
+import '../../../core/widgets/app_expansion.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/content_expansion_notification.dart';
 
@@ -18,10 +19,14 @@ class ThinkingPanel extends StatefulWidget {
     super.key,
     this.duration,
     this.startedAt,
+    this.grouped = false,
   });
 
   final String reasoning;
   final bool streaming;
+
+  /// 连续卡片组由外层统一提供圆角。
+  final bool grouped;
 
   /// 该段已结束的思考块耗时之和；未知时为 null，只显示「已思考」。
   final Duration? duration;
@@ -76,18 +81,23 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   @override
   void didUpdateWidget(covariant ThinkingPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 流式增量时跟随到最新思考内容底部。
+    // 增量与完成快照仅在贴底阅读时跟随，不打断用户回看。
     if (_expanded &&
-        widget.streaming &&
         _followInner &&
-        widget.reasoning != oldWidget.reasoning) {
+        (widget.reasoning != oldWidget.reasoning ||
+            widget.streaming != oldWidget.streaming)) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollInnerToEnd());
     }
     _syncTicker();
   }
 
   void _scrollInnerToEnd() {
-    if (!mounted || !_innerController.hasClients) return;
+    if (!mounted ||
+        !_expanded ||
+        !_followInner ||
+        !_innerController.hasClients) {
+      return;
+    }
     _innerController.jumpTo(_innerController.position.maxScrollExtent);
   }
 
@@ -100,10 +110,11 @@ class _ThinkingPanelState extends State<ThinkingPanel>
   }
 
   bool _onInnerScroll(ScrollNotification notification) {
+    if (notification.depth != 0) return false;
     if (notification is OverscrollNotification) {
       _handOffOverscroll(notification);
     } else if (notification is UserScrollNotification) {
-      if (notification.direction == ScrollDirection.reverse) {
+      if (notification.direction != ScrollDirection.idle) {
         _followInner = false;
       }
     } else if (notification is ScrollEndNotification) {
@@ -155,7 +166,8 @@ class _ThinkingPanelState extends State<ThinkingPanel>
       _userToggled = true;
     });
     updateKeepAlive();
-    if (_expanded && widget.streaming && _followInner) {
+    if (_expanded) {
+      _followInner = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollInnerToEnd());
     }
   }
@@ -187,7 +199,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
     final brand = context.brandColors;
     return Material(
       color: brand.tealContainer,
-      borderRadius: AppRadius.mediumAll,
+      borderRadius: widget.grouped ? BorderRadius.zero : AppRadius.mediumAll,
       clipBehavior: Clip.antiAlias,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -199,6 +211,8 @@ class _ThinkingPanelState extends State<ThinkingPanel>
             expanded: _expanded,
             child: AppInteractiveSurface(
               onTap: _toggle,
+              radius: widget.grouped ? 0 : AppRadius.medium,
+              animateShape: !widget.grouped,
               child: ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: 48),
                 child: Padding(
@@ -223,11 +237,8 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                         ),
                       ),
                       const SizedBox(width: AppSpacing.s),
-                      Icon(
-                        _expanded
-                            ? Symbols.expand_less_rounded
-                            : Symbols.expand_more_rounded,
-                        size: 18,
+                      AppExpansionArrow(
+                        expanded: _expanded,
                         color: brand.onTealContainer,
                       ),
                     ],
@@ -236,8 +247,9 @@ class _ThinkingPanelState extends State<ThinkingPanel>
               ),
             ),
           ),
-          if (_expanded)
-            Padding(
+          AppExpansionBody(
+            expanded: _expanded,
+            builder: (context) => Padding(
               padding: const EdgeInsets.only(
                 bottom: AppSpacing.s,
                 left: AppSpacing.m,
@@ -266,6 +278,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                 ),
               ),
             ),
+          ),
         ],
       ),
     );
