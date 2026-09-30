@@ -1,7 +1,5 @@
 package app.xiangyue.phase.applications
 
-import app.xiangyue.phase.bridge.ApplicationListMode
-import app.xiangyue.phase.bridge.ApplicationPolicy
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -23,13 +21,8 @@ class ApplicationInventoryTest {
         }
     }
 
-    @Test fun normalInventoryMayStillBecomeAnEmptyWhitelistAfterValidation() {
+    @Test fun inventoryContainingSystemAndThirdPartyAppsIsAccepted() {
         val packages = listOf(own, "android", "com.android.settings", "fixture.notes")
         requireApplicationInventory(packages, own)
-        val emptyWhitelist = ApplicationPolicy(ApplicationListMode.WHITELIST, emptyList(), emptyList(), emptyList())
-        assertTrue(packages.none { ApplicationAccess.allows(emptyWhitelist, emptyWhitelist, it, false) })
-        // Keeping 相月 selectable is independent from rejecting a system-truncated inventory.
-        val ownWhitelist = ApplicationPolicy(ApplicationListMode.WHITELIST, emptyList(), listOf(own), emptyList())
-        assertTrue(ApplicationAccess.allows(ownWhitelist, ownWhitelist, own, false))
     }
 }

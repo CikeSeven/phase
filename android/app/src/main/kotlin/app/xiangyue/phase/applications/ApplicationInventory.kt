@@ -1,6 +1,6 @@
 package app.xiangyue.phase.applications
 
-/** Validate the unfiltered platform response, never a searched or policy-filtered list. */
+/** Validate the unfiltered platform response, never a searched or paginated list. */
 fun requireApplicationInventory(packageNames: List<String>, ownPackage: String) {
     if (packageNames.isEmpty()) throw ApplicationCatalogUnavailable()
     // A real phone inventory contains more than the calling app and the framework package.

@@ -32,8 +32,7 @@ class ExecutionSmokeRunner : Instrumentation() {
     }
     private var stage = "start"
     private var targetPackage = ""
-    private fun policy() = ApplicationPolicy(ApplicationListMode.BLACKLIST, emptyList(), emptyList(), emptyList())
-    private fun session(id: String, device: Boolean, roots: List<String> = emptyList()) = ExecutionSession(id, device, roots, policy(), policy())
+    private fun session(id: String, device: Boolean, roots: List<String> = emptyList()) = ExecutionSession(id, device, roots)
     private suspend fun runScenario(report: Bundle) {
         val scenario = options.getString("scenario") ?: "fixture"
         if (scenario == "linux-native") { LinuxNativeSmokeScenario(this).run(report); return }
@@ -166,22 +165,18 @@ class ExecutionSmokeRunner : Instrumentation() {
             report.putString("phase_native_status", "${initial.status}/${initial.error}")
             report.putInt("phase_fixture_count", (initial.result["applications"] as? List<*>)?.size ?: -1)
             check(initial.status == ExecutionStatus.SUCCEEDED && (initial.result["applications"] as List<*>).size == 1)
-            val blocked = ApplicationPolicy(ApplicationListMode.BLACKLIST, listOf(fixture), emptyList(), emptyList())
-            withContext(Dispatchers.Main) { coordinator.setup.updateApplicationPolicy(blocked) }
-            stage = "application-blacklist-list"
-            check((call(ExecutionAction.LIST_APPS, mapOf("query" to fixture)).result["applications"] as List<*>).isEmpty())
-            stage = "application-dispatch-denial"
+            stage = "application-system-list"
+            val system = call(ExecutionAction.LIST_APPS, mapOf("query" to "com.android.settings"))
+            check(system.status == ExecutionStatus.SUCCEEDED)
+            check((system.result["applications"] as List<*>).any { entry ->
+                val application = entry as Map<*, *>
+                application["packageName"] == "com.android.settings" && application["isSystem"] == true
+            })
+            stage = "application-system-permission-guard"
             val denied = call(ExecutionAction.OPEN_APP, mapOf("packageName" to fixture), fixture)
-            check(denied.status == ExecutionStatus.FAILED && denied.result["reasonCode"] == "applicationDenied")
+            check(denied.status == ExecutionStatus.FAILED && denied.error == ChannelError.PERMISSION_REQUIRED)
             check(call(ExecutionAction.OPEN_APP, mapOf("packageName" to fixture), "android").error == ChannelError.INVALID_ARGUMENTS)
-            withContext(Dispatchers.Main) { coordinator.endRun(id) }
-            stage = "application-whitelist-list"
-            val white = ApplicationPolicy(ApplicationListMode.WHITELIST, emptyList(), listOf(fixture), emptyList())
-            check(withContext(Dispatchers.Main) { coordinator.startRun(ExecutionSession(id, false, emptyList(), white, white)).error } == null)
-            val allowed = call(ExecutionAction.LIST_APPS, emptyMap())
-            check((allowed.result["applications"] as List<*>).size == 1)
-            check((allowed.result["applications"] as List<*>).first().let { (it as Map<*, *>)["packageName"] } == fixture)
-            report.putString("phase_result", "passed: native list filtering, blacklist dispatch guard, package mismatch, whitelist")
+            report.putString("phase_result", "passed: native third-party/system discovery, system permission guard, package mismatch")
         } finally { withContext(Dispatchers.Main) { coordinator.endRun(id) } }
     }
     @Suppress("UNCHECKED_CAST")

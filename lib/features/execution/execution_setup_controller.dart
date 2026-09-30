@@ -8,8 +8,6 @@ import '../../../data/datasources/local/settings_storage.dart';
 import '../../../data/models/execution_scope.dart';
 import 'channel_driver.dart';
 import 'execution_api.g.dart';
-import 'application_policy_bridge.dart';
-import 'execution_controller.dart';
 
 part 'execution_setup_controller.g.dart';
 
@@ -94,9 +92,6 @@ class ExecutionSetupController extends _$ExecutionSetupController {
     }
   }
 
-  Future<List<InstalledApplication>> loadApplications() =>
-      _boundary(ref.read(executionSetupApiProvider).installedApplications);
-
   Future<FileGrant?> chooseFile(bool directory) async {
     if (_busy) throw const OperationFailure('请等待当前操作完成');
     if (_grantsLoading != null) {
@@ -119,20 +114,6 @@ class ExecutionSetupController extends _$ExecutionSetupController {
     _busy = true;
     try {
       await ref.read(settingsStorageProvider).writeExecutionScope(scope);
-      try {
-        await _boundary(
-          () => ref
-              .read(executionSetupApiProvider)
-              .updateApplicationPolicy(scope.appPolicy.toBridge()),
-        );
-      } on Failure {
-        // 名单已保存而原生同步未确认时，停止当前任务，保留页面供重试。
-        final runId = ref.read(executionControllerProvider).runId;
-        if (runId != null) {
-          ref.read(executionControllerProvider.notifier).stopRun(runId);
-        }
-        throw const OperationFailure('执行设置已保存，但权限同步失败；请重试。运行中的任务已停止。');
-      }
     } finally {
       _busy = false;
     }
@@ -152,7 +133,6 @@ class ExecutionSetupController extends _$ExecutionSetupController {
       final old = settings.readExecutionScope();
       await settings.writeExecutionScope(
         ExecutionScope(
-          appPolicy: old.appPolicy,
           fileUris: old.fileUris.where((value) => value != uri).toList(),
         ),
       );
@@ -173,19 +153,6 @@ class ExecutionSetupController extends _$ExecutionSetupController {
     try {
       return await action().timeout(timeout);
     } on PlatformException catch (error) {
-      if (error.code == 'applicationListPermissionRequired') {
-        throw const ApplicationListFailure(
-          ApplicationListFailureCode.permissionRequired,
-        );
-      }
-      if (error.code == 'applicationListRestricted') {
-        throw const ApplicationListFailure(
-          ApplicationListFailureCode.restricted,
-        );
-      }
-      if (error.code == 'applicationListUnavailable') {
-        throw const OperationFailure('系统未返回应用列表，请检查应用列表访问权限或稍后重试');
-      }
       throw ExecutionFailure(
         ExecutionFailureCode.values
                 .where((code) => code.name == error.code)

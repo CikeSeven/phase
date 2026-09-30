@@ -20,7 +20,7 @@ import java.io.File
 
 /** User-driven setup only. Picker cancellation does not change the saved selection. */
 class ExecutionSetup(private val context: Context, private val files: AppFileDriver,
-    private val applications: ApplicationCatalog, private val applyPolicy: (ApplicationPolicy) -> Unit) : ExecutionSetupApi {
+    private val applications: ApplicationCatalog) : ExecutionSetupApi {
     private var activity = WeakReference<MainActivity>(null)
     private var pending: CompletableDeferred<Uri?>? = null
     private var pendingCode = PICK_FILE
@@ -130,8 +130,6 @@ class ExecutionSetup(private val context: Context, private val files: AppFileDri
         catch (_: ApplicationCatalogRestricted) { throw FlutterError("applicationListRestricted", "应用列表访问受限", null) }
         catch (_: ApplicationCatalogUnavailable) { throw FlutterError("applicationListUnavailable", "系统未返回应用列表", null) }
         catch (_: Exception) { throw FlutterError("unavailable", "读取应用列表失败", null) }
-    override fun updateApplicationPolicy(policy: ApplicationPolicy) = applyPolicy(policy)
-
     override fun openPermissionSettings(screen: PermissionScreen) {
         val host = activity.get() ?: throw FlutterError("unavailable", "请返回相月", null)
         if (screen == PermissionScreen.APPLICATIONS) {

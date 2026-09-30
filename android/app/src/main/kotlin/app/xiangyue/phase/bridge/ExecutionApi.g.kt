@@ -273,17 +273,6 @@ enum class ConfirmationDecision(val raw: Int) {
   }
 }
 
-enum class ApplicationListMode(val raw: Int) {
-  BLACKLIST(0),
-  WHITELIST(1);
-
-  companion object {
-    fun ofRaw(raw: Int): ApplicationListMode? {
-      return values().firstOrNull { it.raw == raw }
-    }
-  }
-}
-
 enum class PermissionScreen(val raw: Int) {
   NOTIFICATIONS(0),
   ACCESSIBILITY(1),
@@ -645,9 +634,7 @@ data class ExecutionCapabilities (
 data class ExecutionSession (
   val runId: String,
   val deviceTask: Boolean,
-  val fileUris: List<String>,
-  val appPolicy: ApplicationPolicy,
-  val currentAppPolicy: ApplicationPolicy
+  val fileUris: List<String>
 )
  {
   companion object {
@@ -655,9 +642,7 @@ data class ExecutionSession (
       val runId = pigeonVar_list[0] as String
       val deviceTask = pigeonVar_list[1] as Boolean
       val fileUris = pigeonVar_list[2] as List<String>
-      val appPolicy = pigeonVar_list[3] as ApplicationPolicy
-      val currentAppPolicy = pigeonVar_list[4] as ApplicationPolicy
-      return ExecutionSession(runId, deviceTask, fileUris, appPolicy, currentAppPolicy)
+      return ExecutionSession(runId, deviceTask, fileUris)
     }
   }
   fun toList(): List<Any?> {
@@ -665,8 +650,6 @@ data class ExecutionSession (
       runId,
       deviceTask,
       fileUris,
-      appPolicy,
-      currentAppPolicy,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -677,7 +660,7 @@ data class ExecutionSession (
       return true
     }
     val other = other as ExecutionSession
-    return ExecutionApiPigeonUtils.deepEquals(this.runId, other.runId) && ExecutionApiPigeonUtils.deepEquals(this.deviceTask, other.deviceTask) && ExecutionApiPigeonUtils.deepEquals(this.fileUris, other.fileUris) && ExecutionApiPigeonUtils.deepEquals(this.appPolicy, other.appPolicy) && ExecutionApiPigeonUtils.deepEquals(this.currentAppPolicy, other.currentAppPolicy)
+    return ExecutionApiPigeonUtils.deepEquals(this.runId, other.runId) && ExecutionApiPigeonUtils.deepEquals(this.deviceTask, other.deviceTask) && ExecutionApiPigeonUtils.deepEquals(this.fileUris, other.fileUris)
   }
 
   override fun hashCode(): Int {
@@ -685,61 +668,10 @@ data class ExecutionSession (
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.runId)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.deviceTask)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.fileUris)
-    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.appPolicy)
-    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.currentAppPolicy)
     return result
   }
   override fun toString(): String {
-    return "ExecutionSession(runId=$runId, deviceTask=$deviceTask, fileUris=$fileUris, appPolicy=$appPolicy, currentAppPolicy=$currentAppPolicy)"
-  }
-}
-
-/** Generated class from Pigeon that represents data sent in messages. */
-data class ApplicationPolicy (
-  val mode: ApplicationListMode,
-  val blacklist: List<String>,
-  val whitelist: List<String>,
-  val allowedSystemApps: List<String>
-)
- {
-  companion object {
-    fun fromList(pigeonVar_list: List<Any?>): ApplicationPolicy {
-      val mode = pigeonVar_list[0] as ApplicationListMode
-      val blacklist = pigeonVar_list[1] as List<String>
-      val whitelist = pigeonVar_list[2] as List<String>
-      val allowedSystemApps = pigeonVar_list[3] as List<String>
-      return ApplicationPolicy(mode, blacklist, whitelist, allowedSystemApps)
-    }
-  }
-  fun toList(): List<Any?> {
-    return listOf(
-      mode,
-      blacklist,
-      whitelist,
-      allowedSystemApps,
-    )
-  }
-  override fun equals(other: Any?): Boolean {
-    if (other == null || other.javaClass != javaClass) {
-      return false
-    }
-    if (this === other) {
-      return true
-    }
-    val other = other as ApplicationPolicy
-    return ExecutionApiPigeonUtils.deepEquals(this.mode, other.mode) && ExecutionApiPigeonUtils.deepEquals(this.blacklist, other.blacklist) && ExecutionApiPigeonUtils.deepEquals(this.whitelist, other.whitelist) && ExecutionApiPigeonUtils.deepEquals(this.allowedSystemApps, other.allowedSystemApps)
-  }
-
-  override fun hashCode(): Int {
-    var result = javaClass.hashCode()
-    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.mode)
-    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.blacklist)
-    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.whitelist)
-    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.allowedSystemApps)
-    return result
-  }
-  override fun toString(): String {
-    return "ApplicationPolicy(mode=$mode, blacklist=$blacklist, whitelist=$whitelist, allowedSystemApps=$allowedSystemApps)"
+    return "ExecutionSession(runId=$runId, deviceTask=$deviceTask, fileUris=$fileUris)"
   }
 }
 
@@ -1192,100 +1124,90 @@ private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
       }
       134.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          ApplicationListMode.ofRaw(it.toInt())
+          PermissionScreen.ofRaw(it.toInt())
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          PermissionScreen.ofRaw(it.toInt())
+          TaskPanelPhase.ofRaw(it.toInt())
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as Long?)?.let {
-          TaskPanelPhase.ofRaw(it.toInt())
-        }
-      }
-      137.toByte() -> {
-        return (readValue(buffer) as Long?)?.let {
           TaskPanelMessageKind.ofRaw(it.toInt())
         }
       }
-      138.toByte() -> {
+      137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ExecutionTarget.fromList(it)
         }
       }
-      139.toByte() -> {
+      138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ExecutionRequest.fromList(it)
         }
       }
-      140.toByte() -> {
+      139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ExecutionArtifact.fromList(it)
         }
       }
-      141.toByte() -> {
+      140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ExecutionResult.fromList(it)
         }
       }
-      142.toByte() -> {
+      141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ExecutionProgress.fromList(it)
         }
       }
-      143.toByte() -> {
+      142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ExecutionCapabilities.fromList(it)
         }
       }
-      144.toByte() -> {
+      143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ExecutionSession.fromList(it)
         }
       }
-      145.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ApplicationPolicy.fromList(it)
-        }
-      }
-      146.toByte() -> {
+      144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           FileGrant.fromList(it)
         }
       }
-      147.toByte() -> {
+      145.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           InstalledApplication.fromList(it)
         }
       }
-      148.toByte() -> {
+      146.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           ExecutionConfirmation.fromList(it)
         }
       }
-      149.toByte() -> {
+      147.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           TaskPanelMessage.fromList(it)
         }
       }
-      150.toByte() -> {
+      148.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           TaskPanelSnapshot.fromList(it)
         }
       }
-      151.toByte() -> {
+      149.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           HostReply.fromList(it)
         }
       }
-      152.toByte() -> {
+      150.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           SkillDirectoryImport.fromList(it)
         }
       }
-      153.toByte() -> {
+      151.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           SkillDirectoryCopy.fromList(it)
         }
@@ -1315,84 +1237,76 @@ private open class ExecutionApiPigeonCodec : StandardMessageCodec() {
         stream.write(133)
         writeValue(stream, value.raw.toLong())
       }
-      is ApplicationListMode -> {
+      is PermissionScreen -> {
         stream.write(134)
         writeValue(stream, value.raw.toLong())
       }
-      is PermissionScreen -> {
+      is TaskPanelPhase -> {
         stream.write(135)
         writeValue(stream, value.raw.toLong())
       }
-      is TaskPanelPhase -> {
+      is TaskPanelMessageKind -> {
         stream.write(136)
         writeValue(stream, value.raw.toLong())
       }
-      is TaskPanelMessageKind -> {
-        stream.write(137)
-        writeValue(stream, value.raw.toLong())
-      }
       is ExecutionTarget -> {
-        stream.write(138)
+        stream.write(137)
         writeValue(stream, value.toList())
       }
       is ExecutionRequest -> {
-        stream.write(139)
+        stream.write(138)
         writeValue(stream, value.toList())
       }
       is ExecutionArtifact -> {
-        stream.write(140)
+        stream.write(139)
         writeValue(stream, value.toList())
       }
       is ExecutionResult -> {
-        stream.write(141)
+        stream.write(140)
         writeValue(stream, value.toList())
       }
       is ExecutionProgress -> {
-        stream.write(142)
+        stream.write(141)
         writeValue(stream, value.toList())
       }
       is ExecutionCapabilities -> {
-        stream.write(143)
+        stream.write(142)
         writeValue(stream, value.toList())
       }
       is ExecutionSession -> {
-        stream.write(144)
-        writeValue(stream, value.toList())
-      }
-      is ApplicationPolicy -> {
-        stream.write(145)
+        stream.write(143)
         writeValue(stream, value.toList())
       }
       is FileGrant -> {
-        stream.write(146)
+        stream.write(144)
         writeValue(stream, value.toList())
       }
       is InstalledApplication -> {
-        stream.write(147)
+        stream.write(145)
         writeValue(stream, value.toList())
       }
       is ExecutionConfirmation -> {
-        stream.write(148)
+        stream.write(146)
         writeValue(stream, value.toList())
       }
       is TaskPanelMessage -> {
-        stream.write(149)
+        stream.write(147)
         writeValue(stream, value.toList())
       }
       is TaskPanelSnapshot -> {
-        stream.write(150)
+        stream.write(148)
         writeValue(stream, value.toList())
       }
       is HostReply -> {
-        stream.write(151)
+        stream.write(149)
         writeValue(stream, value.toList())
       }
       is SkillDirectoryImport -> {
-        stream.write(152)
+        stream.write(150)
         writeValue(stream, value.toList())
       }
       is SkillDirectoryCopy -> {
-        stream.write(153)
+        stream.write(151)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1557,7 +1471,6 @@ interface ExecutionSetupApi {
   suspend fun fileGrants(): List<FileGrant>
   fun releaseFileGrant(uri: String)
   suspend fun installedApplications(): List<InstalledApplication>
-  fun updateApplicationPolicy(policy: ApplicationPolicy)
   fun openPermissionSettings(screen: PermissionScreen)
 
   companion object {
@@ -1693,24 +1606,6 @@ interface ExecutionSetupApi {
               }
               reply.reply(wrapped)
             }
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.updateApplicationPolicy$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val policyArg = args[0] as ApplicationPolicy
-            val wrapped: List<Any?> = try {
-              api.updateApplicationPolicy(policyArg)
-              listOf(null)
-            } catch (exception: Throwable) {
-              ExecutionApiPigeonUtils.wrapError(exception)
-            }
-            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)

@@ -142,8 +142,6 @@ enum ProgressKind { stage, progress }
 
 enum ConfirmationDecision { approve, reject, stop }
 
-enum ApplicationListMode { blacklist, whitelist }
-
 enum PermissionScreen { notifications, accessibility, applications }
 
 enum TaskPanelPhase {
@@ -547,8 +545,6 @@ class ExecutionSession {
     required this.runId,
     required this.deviceTask,
     required this.fileUris,
-    required this.appPolicy,
-    required this.currentAppPolicy,
   });
 
   String runId;
@@ -557,12 +553,8 @@ class ExecutionSession {
 
   List<String> fileUris;
 
-  ApplicationPolicy appPolicy;
-
-  ApplicationPolicy currentAppPolicy;
-
   List<Object?> _toList() {
-    return <Object?>[runId, deviceTask, fileUris, appPolicy, currentAppPolicy];
+    return <Object?>[runId, deviceTask, fileUris];
   }
 
   Object encode() {
@@ -575,8 +567,6 @@ class ExecutionSession {
       runId: result[0]! as String,
       deviceTask: result[1]! as bool,
       fileUris: (result[2]! as List<Object?>).cast<String>(),
-      appPolicy: result[3]! as ApplicationPolicy,
-      currentAppPolicy: result[4]! as ApplicationPolicy,
     );
   }
 
@@ -591,9 +581,7 @@ class ExecutionSession {
     }
     return _deepEquals(runId, other.runId) &&
         _deepEquals(deviceTask, other.deviceTask) &&
-        _deepEquals(fileUris, other.fileUris) &&
-        _deepEquals(appPolicy, other.appPolicy) &&
-        _deepEquals(currentAppPolicy, other.currentAppPolicy);
+        _deepEquals(fileUris, other.fileUris);
   }
 
   @override
@@ -602,66 +590,7 @@ class ExecutionSession {
 
   @override
   String toString() {
-    return 'ExecutionSession(runId: $runId, deviceTask: $deviceTask, fileUris: $fileUris, appPolicy: $appPolicy, currentAppPolicy: $currentAppPolicy)';
-  }
-}
-
-class ApplicationPolicy {
-  ApplicationPolicy({
-    required this.mode,
-    required this.blacklist,
-    required this.whitelist,
-    required this.allowedSystemApps,
-  });
-
-  ApplicationListMode mode;
-
-  List<String> blacklist;
-
-  List<String> whitelist;
-
-  List<String> allowedSystemApps;
-
-  List<Object?> _toList() {
-    return <Object?>[mode, blacklist, whitelist, allowedSystemApps];
-  }
-
-  Object encode() {
-    return _toList();
-  }
-
-  static ApplicationPolicy decode(Object result) {
-    result as List<Object?>;
-    return ApplicationPolicy(
-      mode: result[0]! as ApplicationListMode,
-      blacklist: (result[1]! as List<Object?>).cast<String>(),
-      whitelist: (result[2]! as List<Object?>).cast<String>(),
-      allowedSystemApps: (result[3]! as List<Object?>).cast<String>(),
-    );
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  bool operator ==(Object other) {
-    if (other is! ApplicationPolicy || other.runtimeType != runtimeType) {
-      return false;
-    }
-    if (identical(this, other)) {
-      return true;
-    }
-    return _deepEquals(mode, other.mode) &&
-        _deepEquals(blacklist, other.blacklist) &&
-        _deepEquals(whitelist, other.whitelist) &&
-        _deepEquals(allowedSystemApps, other.allowedSystemApps);
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
-
-  @override
-  String toString() {
-    return 'ApplicationPolicy(mode: $mode, blacklist: $blacklist, whitelist: $whitelist, allowedSystemApps: $allowedSystemApps)';
+    return 'ExecutionSession(runId: $runId, deviceTask: $deviceTask, fileUris: $fileUris)';
   }
 }
 
@@ -1216,65 +1145,59 @@ class _PigeonCodec extends StandardMessageCodec {
     } else if (value is ConfirmationDecision) {
       buffer.putUint8(133);
       writeValue(buffer, value.index);
-    } else if (value is ApplicationListMode) {
+    } else if (value is PermissionScreen) {
       buffer.putUint8(134);
       writeValue(buffer, value.index);
-    } else if (value is PermissionScreen) {
+    } else if (value is TaskPanelPhase) {
       buffer.putUint8(135);
       writeValue(buffer, value.index);
-    } else if (value is TaskPanelPhase) {
+    } else if (value is TaskPanelMessageKind) {
       buffer.putUint8(136);
       writeValue(buffer, value.index);
-    } else if (value is TaskPanelMessageKind) {
-      buffer.putUint8(137);
-      writeValue(buffer, value.index);
     } else if (value is ExecutionTarget) {
-      buffer.putUint8(138);
+      buffer.putUint8(137);
       writeValue(buffer, value.encode());
     } else if (value is ExecutionRequest) {
-      buffer.putUint8(139);
+      buffer.putUint8(138);
       writeValue(buffer, value.encode());
     } else if (value is ExecutionArtifact) {
-      buffer.putUint8(140);
+      buffer.putUint8(139);
       writeValue(buffer, value.encode());
     } else if (value is ExecutionResult) {
-      buffer.putUint8(141);
+      buffer.putUint8(140);
       writeValue(buffer, value.encode());
     } else if (value is ExecutionProgress) {
-      buffer.putUint8(142);
+      buffer.putUint8(141);
       writeValue(buffer, value.encode());
     } else if (value is ExecutionCapabilities) {
-      buffer.putUint8(143);
+      buffer.putUint8(142);
       writeValue(buffer, value.encode());
     } else if (value is ExecutionSession) {
-      buffer.putUint8(144);
-      writeValue(buffer, value.encode());
-    } else if (value is ApplicationPolicy) {
-      buffer.putUint8(145);
+      buffer.putUint8(143);
       writeValue(buffer, value.encode());
     } else if (value is FileGrant) {
-      buffer.putUint8(146);
+      buffer.putUint8(144);
       writeValue(buffer, value.encode());
     } else if (value is InstalledApplication) {
-      buffer.putUint8(147);
+      buffer.putUint8(145);
       writeValue(buffer, value.encode());
     } else if (value is ExecutionConfirmation) {
-      buffer.putUint8(148);
+      buffer.putUint8(146);
       writeValue(buffer, value.encode());
     } else if (value is TaskPanelMessage) {
-      buffer.putUint8(149);
+      buffer.putUint8(147);
       writeValue(buffer, value.encode());
     } else if (value is TaskPanelSnapshot) {
-      buffer.putUint8(150);
+      buffer.putUint8(148);
       writeValue(buffer, value.encode());
     } else if (value is HostReply) {
-      buffer.putUint8(151);
+      buffer.putUint8(149);
       writeValue(buffer, value.encode());
     } else if (value is SkillDirectoryImport) {
-      buffer.putUint8(152);
+      buffer.putUint8(150);
       writeValue(buffer, value.encode());
     } else if (value is SkillDirectoryCopy) {
-      buffer.putUint8(153);
+      buffer.putUint8(151);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1301,47 +1224,42 @@ class _PigeonCodec extends StandardMessageCodec {
         return value == null ? null : ConfirmationDecision.values[value];
       case 134:
         final value = readValue(buffer) as int?;
-        return value == null ? null : ApplicationListMode.values[value];
+        return value == null ? null : PermissionScreen.values[value];
       case 135:
         final value = readValue(buffer) as int?;
-        return value == null ? null : PermissionScreen.values[value];
+        return value == null ? null : TaskPanelPhase.values[value];
       case 136:
         final value = readValue(buffer) as int?;
-        return value == null ? null : TaskPanelPhase.values[value];
-      case 137:
-        final value = readValue(buffer) as int?;
         return value == null ? null : TaskPanelMessageKind.values[value];
-      case 138:
+      case 137:
         return ExecutionTarget.decode(readValue(buffer)!);
-      case 139:
+      case 138:
         return ExecutionRequest.decode(readValue(buffer)!);
-      case 140:
+      case 139:
         return ExecutionArtifact.decode(readValue(buffer)!);
-      case 141:
+      case 140:
         return ExecutionResult.decode(readValue(buffer)!);
-      case 142:
+      case 141:
         return ExecutionProgress.decode(readValue(buffer)!);
-      case 143:
+      case 142:
         return ExecutionCapabilities.decode(readValue(buffer)!);
-      case 144:
+      case 143:
         return ExecutionSession.decode(readValue(buffer)!);
-      case 145:
-        return ApplicationPolicy.decode(readValue(buffer)!);
-      case 146:
+      case 144:
         return FileGrant.decode(readValue(buffer)!);
-      case 147:
+      case 145:
         return InstalledApplication.decode(readValue(buffer)!);
-      case 148:
+      case 146:
         return ExecutionConfirmation.decode(readValue(buffer)!);
-      case 149:
+      case 147:
         return TaskPanelMessage.decode(readValue(buffer)!);
-      case 150:
+      case 148:
         return TaskPanelSnapshot.decode(readValue(buffer)!);
-      case 151:
+      case 149:
         return HostReply.decode(readValue(buffer)!);
-      case 152:
+      case 150:
         return SkillDirectoryImport.decode(readValue(buffer)!);
-      case 153:
+      case 151:
         return SkillDirectoryCopy.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1671,26 +1589,6 @@ class ExecutionSetupApi {
     );
     return (pigeonVar_replyValue! as List<Object?>)
         .cast<InstalledApplication>();
-  }
-
-  Future<void> updateApplicationPolicy(ApplicationPolicy policy) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.ExecutionSetupApi.updateApplicationPolicy$pigeonVar_messageChannelSuffix';
-    final pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[policy],
-    );
-    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
-
-    _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
   }
 
   Future<void> openPermissionSettings(PermissionScreen screen) async {

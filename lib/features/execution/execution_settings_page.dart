@@ -12,9 +12,6 @@ import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_snack_bar.dart';
-import '../../../data/models/application_access_policy.dart';
-import '../../../data/models/execution_scope.dart';
-import 'application_policy_sheet.dart';
 import 'execution_api.g.dart';
 import 'execution_setup_controller.dart';
 
@@ -27,7 +24,6 @@ class ExecutionSettingsPage extends ConsumerStatefulWidget {
 
 class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
     with WidgetsBindingObserver {
-  ExecutionScope? _draft;
   bool _busy = false;
   @override
   void initState() {
@@ -73,27 +69,6 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
     }
   }
 
-  Future<void> _editApplicationPolicy(ExecutionScope draft) async {
-    final policy = await showApplicationPolicySheet(
-      context,
-      loadApplications: ref
-          .read(executionSetupControllerProvider.notifier)
-          .loadApplications,
-      initialPolicy: draft.appPolicy,
-      openPermissionSettings: () => ref
-          .read(executionSetupControllerProvider.notifier)
-          .openPermission(PermissionScreen.applications),
-    );
-    if (mounted && policy != null) {
-      setState(
-        () => _draft = ExecutionScope(
-          appPolicy: policy,
-          fileUris: draft.fileUris,
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final data = ref.watch(executionSetupControllerProvider);
@@ -102,16 +77,6 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
       canPop: !_busy,
       child: AppScaffold(
         title: '执行与权限',
-        bottomBar: FilledButton(
-          key: const ValueKey('save-execution-scope'),
-          onPressed: _busy || data.value == null
-              ? null
-              : () => _action(() async {
-                  await controller.save(_draft ?? data.value!.scope);
-                  if (context.mounted) Navigator.pop(context);
-                }),
-          child: const Text('保存执行设置'),
-        ),
         body: data.when(
           loading: () => const Center(child: AppLoadingIndicator()),
           error: (error, _) => Center(
@@ -121,64 +86,47 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
               onRetry: controller.load,
             ),
           ),
-          data: (value) {
-            final draft = _draft ?? value.scope;
-            return ListView(
-              padding: const EdgeInsets.all(AppSpacing.l),
-              children: [
-                _PermissionTile(
-                  title: '任务通知',
-                  statusKey: const ValueKey('notifications-permission-status'),
-                  granted: value.capabilities.whenData(
-                    (capabilities) => capabilities.notificationsAllowed,
-                  ),
-                  onTap: _busy
-                      ? null
-                      : () => _action(
-                          () => controller.openPermission(
-                            PermissionScreen.notifications,
-                          ),
+          data: (value) => ListView(
+            padding: const EdgeInsets.all(AppSpacing.l),
+            children: [
+              _PermissionTile(
+                title: '任务通知',
+                statusKey: const ValueKey('notifications-permission-status'),
+                granted: value.capabilities.whenData(
+                  (capabilities) => capabilities.notificationsAllowed,
+                ),
+                onTap: _busy
+                    ? null
+                    : () => _action(
+                        () => controller.openPermission(
+                          PermissionScreen.notifications,
                         ),
+                      ),
+              ),
+              const SizedBox(height: AppSpacing.s),
+              _PermissionTile(
+                title: '无障碍服务',
+                statusKey: const ValueKey('accessibility-permission-status'),
+                granted: value.capabilities.whenData(
+                  (capabilities) => capabilities.accessibilityConnected,
                 ),
-                const SizedBox(height: AppSpacing.s),
-                _PermissionTile(
-                  title: '无障碍服务',
-                  statusKey: const ValueKey('accessibility-permission-status'),
-                  granted: value.capabilities.whenData(
-                    (capabilities) => capabilities.accessibilityConnected,
-                  ),
-                  onTap: _busy
-                      ? null
-                      : () => _action(
-                          () => controller.openPermission(
-                            PermissionScreen.accessibility,
-                          ),
+                onTap: _busy
+                    ? null
+                    : () => _action(
+                        () => controller.openPermission(
+                          PermissionScreen.accessibility,
                         ),
+                      ),
+              ),
+              if (value.capabilities.error case final error?)
+                _LoadError(
+                  key: const ValueKey('capabilities-error'),
+                  error: error,
+                  fallback: '读取权限状态失败',
+                  onRetry: _busy ? null : controller.loadCapabilities,
                 ),
-                if (value.capabilities.error case final error?)
-                  _LoadError(
-                    key: const ValueKey('capabilities-error'),
-                    error: error,
-                    fallback: '读取权限状态失败',
-                    onRetry: _busy ? null : controller.loadCapabilities,
-                  ),
-                const SizedBox(height: AppSpacing.l),
-                AppListTile(
-                  key: const ValueKey('edit-application-policy'),
-                  title: const Text('应用名单'),
-                  subtitle: Text(
-                    draft.appPolicy.mode == AppListMode.blacklist
-                        ? '黑名单 · 屏蔽 ${draft.appPolicy.blacklist.length} 个 · 放行 ${draft.appPolicy.allowedSystemApps.length} 个系统应用'
-                        : '白名单 · 允许 ${draft.appPolicy.whitelist.length} 个应用',
-                  ),
-                  trailing: const Icon(Symbols.chevron_right),
-                  onTap: _busy
-                      ? null
-                      : () => _action(() => _editApplicationPolicy(draft)),
-                ),
-              ],
-            );
-          },
+            ],
+          ),
         ),
       ),
     );

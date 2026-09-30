@@ -17,7 +17,7 @@ import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlin.math.roundToInt
 
-/** Only the approved application window is captured; overlays and other applications are excluded. */
+/** Each observation binds one actual foreground application window; overlays are excluded. */
 class VisualDriver(private val service: PhaseAccessibilityService) {
     private var deliveredFile: File? = null
     fun clear() { deliveredFile?.delete(); deliveredFile = null }
@@ -39,7 +39,7 @@ class VisualDriver(private val service: PhaseAccessibilityService) {
     suspend fun execute(
         request: ExecutionRequest,
         target: String,
-        validatePolicy: suspend () -> Unit,
+        validateTarget: suspend (String) -> Unit,
         checkpoint: (Map<String, Any?>) -> Unit,
         progress: suspend (ProgressKind, String) -> Unit,
     ): ExecutionResult {
@@ -48,8 +48,9 @@ class VisualDriver(private val service: PhaseAccessibilityService) {
             if (request.action == ExecutionAction.PERFORM_GESTURES) {
                 val coordinates = GestureCoordinates.parse(request.arguments)
                 val parsed = GesturePlan.parse(request.arguments["actions"])
-                validatePolicy()
-                val (_, initialBounds) = window(target)
+                validateTarget(target)
+                val (initialWindowId, initialBounds) = window(target)
+                val initialRotation = rotation()
                 // Resolve the whole batch once, before any dispatch. The coordinate convention
                 // can be reused; it is not tied to a screenshot's lifetime or content events.
                 val steps = coordinates.toScreen(parsed, gestureBounds(initialBounds))
@@ -57,8 +58,10 @@ class VisualDriver(private val service: PhaseAccessibilityService) {
                 var stepIndex = 0
                 val accepted = batch.execute(steps, validate = {
                     progress(ProgressKind.STAGE, "正在执行第 ${stepIndex + 1}/${steps.size} 步手势")
-                    validatePolicy()
-                    val (_, bounds) = window(target)
+                    validateTarget(target)
+                    val (windowId, bounds) = window(target)
+                    if (windowId != initialWindowId || bounds != initialBounds || rotation() != initialRotation)
+                        throw VisualBlocked("targetChanged")
                     gestureBounds(bounds).check(steps[stepIndex])
                     stepIndex++
                 }, dispatch = { step ->
@@ -68,24 +71,31 @@ class VisualDriver(private val service: PhaseAccessibilityService) {
                     batch.state() + ("reason" to "gestureRejected"), emptyList(), ChannelError.EXECUTION_FAILED)
             }
             try {
-                validatePolicy()
-                val (frame, artifact) = capture(target, validatePolicy)
+                // A completed navigation gesture starts a new observation segment. Do not
+                // force its screenshot to belong to the application that received the gesture.
+                val observationTarget = if (batch == null) target else
+                    service.driver.activePackage() ?: throw VisualBlocked("unavailable")
+                validateTarget(observationTarget)
+                val (frame, artifact) = capture(observationTarget, validateTarget)
                 ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED,
-                    (batch?.state() ?: emptyMap()) + ("screenshot" to frame.metadata()), listOf(artifact))
+                    (batch?.state() ?: emptyMap()) + mapOf("foregroundPackageName" to frame.packageName,
+                        "screenshot" to frame.metadata()), listOf(artifact))
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 // Observation cannot retroactively fail or replay a completed gesture batch.
                 if (batch == null) throw error
                 ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED,
-                    batch.state() + ("observationError" to reason(error)), emptyList())
+                    batch.state() + mapOf("observationError" to reason(error),
+                        "foregroundPackageName" to service.driver.activePackage()), emptyList())
             }
         } catch (error: CancellationException) {
             throw error // NativeExecutionTasks preserves the latest immutable checkpoint.
         } catch (error: Exception) {
             val reason = reason(error)
             ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
-                (batch?.state() ?: emptyMap()) + ("reason" to reason), emptyList(),
+                (batch?.state() ?: emptyMap()) + mapOf("reason" to reason,
+                    "foregroundPackageName" to service.driver.activePackage()), emptyList(),
                 when (reason) {
                     "targetChanged" -> ChannelError.TARGET_CHANGED
                     "invalidArguments" -> ChannelError.INVALID_ARGUMENTS
@@ -103,7 +113,7 @@ class VisualDriver(private val service: PhaseAccessibilityService) {
         else -> "screenshotFailed"
     }
 
-    private suspend fun capture(target: String, validatePolicy: suspend () -> Unit): Pair<VisualFrame, ExecutionArtifact> {
+    private suspend fun capture(target: String, validateTarget: suspend (String) -> Unit): Pair<VisualFrame, ExecutionArtifact> {
         deliveredFile?.delete(); deliveredFile = null
         if (Build.VERSION.SDK_INT < 34) throw VisualBlocked("requiresAndroid14")
         if (service.serviceInfo.capabilities and android.accessibilityservice.AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT == 0)
@@ -114,7 +124,7 @@ class VisualDriver(private val service: PhaseAccessibilityService) {
         val file = File(service.cacheDir, "visual-${UUID.randomUUID()}.png")
         var delivered = false
         try {
-            validatePolicy()
+            validateTarget(target)
             val (afterId, afterBounds) = window(target)
             if (id != afterId || bounds != afterBounds || rotation != rotation()) throw VisualBlocked("targetChanged")
             // Never guess the origin/scale for cropped or vendor-specific screenshot buffers.
@@ -131,7 +141,7 @@ class VisualDriver(private val service: PhaseAccessibilityService) {
                 } finally { if (scaled !== bitmap) scaled.recycle() }
             }
             currentCoroutineContext().ensureActive()
-            validatePolicy()
+            validateTarget(target)
             val (finalId, finalBounds) = window(target)
             if (id != finalId || bounds != finalBounds || rotation != rotation()) throw VisualBlocked("targetChanged")
             val frame = VisualFrame(UUID.randomUUID().toString(), target, id, bounds.left, bounds.top,

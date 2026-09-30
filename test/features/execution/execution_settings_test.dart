@@ -10,7 +10,6 @@ import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/theme/brand_colors.dart';
 import 'package:phase/core/widgets/app_list_tile.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
-import 'package:phase/data/models/application_access_policy.dart';
 import 'package:phase/data/models/execution_scope.dart';
 import 'package:phase/features/execution/channel_driver.dart';
 import 'package:phase/features/execution/execution_api.g.dart';
@@ -32,10 +31,8 @@ class _Driver extends FakeChannelDriver {
 }
 
 class _SetupApi extends ExecutionSetupApi {
-  bool emptyPlatformList = false;
   int fileLoads = 0;
   int appLoads = 0;
-  Future<List<InstalledApplication>> Function()? applicationsHandler;
   Future<void> Function()? permissionSettingsHandler;
   FileGrant? selected;
   final released = <String>[];
@@ -58,23 +55,9 @@ class _SetupApi extends ExecutionSetupApi {
   @override
   Future<List<InstalledApplication>> installedApplications() async {
     appLoads++;
-    if (applicationsHandler != null) return await applicationsHandler!();
-    if (emptyPlatformList) {
-      throw PlatformException(code: 'applicationListUnavailable');
-    }
-    return [
-      InstalledApplication(
-        packageName: 'fixture.new',
-        label: '测试新 App',
-        isSystem: false,
-        installedAtMs: 1,
-        launchable: true,
-      ),
-    ];
+    return [];
   }
 
-  @override
-  Future<void> updateApplicationPolicy(ApplicationPolicy policy) async {}
   @override
   Future<FileGrant?> selectFile(bool directory) async => selected;
   @override
@@ -83,16 +66,6 @@ class _SetupApi extends ExecutionSetupApi {
   Future<void> openPermissionSettings(PermissionScreen screen) async {
     opened.add(screen);
     await permissionSettingsHandler?.call();
-  }
-}
-
-class _Settings extends SettingsStorage {
-  _Settings(super.prefs);
-  bool failSave = false;
-  @override
-  Future<void> writeExecutionScope(ExecutionScope scope) async {
-    if (failSave) throw const OperationFailure('保存失败，可重试');
-    await super.writeExecutionScope(scope);
   }
 }
 
@@ -114,7 +87,7 @@ void main() {
   Future<
     ({
       ProviderContainer container,
-      _Settings settings,
+      SettingsStorage settings,
       _SetupApi api,
       _Driver driver,
     })
@@ -135,7 +108,7 @@ void main() {
     addTearDown(tester.view.reset);
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
-    final settings = _Settings(prefs);
+    final settings = SettingsStorage(prefs);
     await settings.writeExecutionScope(scope);
     api ??= _SetupApi();
     driver ??= _Driver();
@@ -192,30 +165,6 @@ void main() {
       api: setup,
       driver: channel,
     );
-  }
-
-  Future<void> editPolicy(WidgetTester tester, {bool confirm = true}) async {
-    final entry = find.byKey(const ValueKey('edit-application-policy'));
-    await reveal(tester, entry);
-    await tester.tap(entry);
-    await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(
-      find.text('测试新 App'),
-      250,
-      scrollable: find
-          .descendant(
-            of: find.byKey(const ValueKey('application-list-scroll')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
-    await tester.tap(find.text('测试新 App'));
-    final action = confirm
-        ? find.byKey(const ValueKey('confirm-application-policy'))
-        : find.byTooltip('关闭');
-    await tester.ensureVisible(action);
-    await tester.tap(action);
-    await tester.pumpAndSettle();
   }
 
   for (final dark in [false, true]) {
@@ -275,6 +224,18 @@ void main() {
         expect(find.textContaining('授权文件与目录'), findsNothing);
         expect(find.text('选择文件'), findsNothing);
         expect(find.text('选择目录'), findsNothing);
+        expect(find.text('应用名单'), findsNothing);
+        expect(find.text('黑名单'), findsNothing);
+        expect(find.text('白名单'), findsNothing);
+        expect(
+          find.byKey(const ValueKey('edit-application-policy')),
+          findsNothing,
+        );
+        expect(
+          find.byKey(const ValueKey('save-execution-scope')),
+          findsNothing,
+        );
+        expect(find.text('保存执行设置'), findsNothing);
         expect(
           find.byWidgetPredicate(
             (widget) => widget is AppListTile && widget.selected != null,
@@ -307,231 +268,15 @@ void main() {
     }
   }
 
-  testWidgets('名单确认仅更新草稿，再次打开取消保留草稿；窄屏大字保存保留已有文件范围', (tester) async {
-    const scope = ExecutionScope(fileUris: ['content://fixture/saved']);
-    final h = await pump(tester, scope: scope);
-    await editPolicy(tester);
-    expect(h.settings.readExecutionScope().toJson(), scope.toJson());
-    await editPolicy(tester, confirm: false);
-    await tester.tap(find.byKey(const ValueKey('save-execution-scope')));
-    await tester.pumpAndSettle();
-    expect(h.settings.readExecutionScope().appPolicy.blacklist, {
-      'fixture.new',
-    });
-    expect(h.settings.readExecutionScope().fileUris, scope.fileUris);
-    expect(h.api.fileLoads, 0);
-    expect(h.api.released, isEmpty);
-    expect(find.text('open'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('保存失败保留名单草稿，重试成功且不更改文件授权', (tester) async {
-    const scope = ExecutionScope(fileUris: ['content://fixture/saved']);
-    final h = await pump(tester, scope: scope);
-    await editPolicy(tester);
-    h.settings.failSave = true;
-    await tester.tap(find.byKey(const ValueKey('save-execution-scope')));
-    await tester.pumpAndSettle();
-    expect(find.text('保存失败，可重试'), findsOneWidget);
-    expect(h.settings.readExecutionScope().toJson(), scope.toJson());
-    h.settings.failSave = false;
-    await tester.tap(find.byKey(const ValueKey('save-execution-scope')));
-    await tester.pumpAndSettle();
-    expect(h.settings.readExecutionScope().appPolicy.blacklist, {
-      'fixture.new',
-    });
-    expect(h.settings.readExecutionScope().fileUris, scope.fileUris);
-  });
-
-  testWidgets('页面返回放弃应用名单草稿，不改已有授权', (tester) async {
-    const scope = ExecutionScope(fileUris: ['content://fixture/saved']);
-    final h = await pump(tester, scope: scope);
-    await editPolicy(tester);
-    await tester.pageBack();
-    await tester.pumpAndSettle();
-    expect(h.settings.readExecutionScope().toJson(), scope.toJson());
-  });
-
-  testWidgets('系统应用清单读取失败显示明确错误，重试不重复查询权限或文件', (tester) async {
-    final h = await pump(tester);
-    h.api.emptyPlatformList = true;
-    final entry = find.byKey(const ValueKey('edit-application-policy'));
-    await reveal(tester, entry);
-    await tester.tap(entry);
-    await tester.pumpAndSettle();
-    expect(find.text('系统未返回应用列表，请检查应用列表访问权限或稍后重试'), findsOneWidget);
-    expect(h.api.appLoads, 1);
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.byKey(const ValueKey('confirm-application-policy')),
-          )
-          .onPressed,
-      isNull,
-    );
-    h.api.emptyPlatformList = false;
-    await tester.tap(find.text('重试'));
-    await tester.pumpAndSettle();
-    expect(h.api.appLoads, 2);
-    expect(h.api.fileLoads, 0);
-    expect(h.driver.capabilityLoads, 1);
-    expect(
-      find.byKey(const ValueKey('application-list-scroll')),
-      findsOneWidget,
-    );
-  });
-
-  for (final code in [
-    'applicationListPermissionRequired',
-    'applicationListRestricted',
-  ]) {
-    testWidgets('$code 明确提示授权，不展示受限名单；设置返回自动刷新并保留原策略', (tester) async {
-      final api = _SetupApi()
-        ..applicationsHandler = () async {
-          throw PlatformException(
-            code: code,
-            message: 'private platform details',
-          );
-        };
-      const scope = ExecutionScope(
-        fileUris: ['content://fixture/saved'],
-        appPolicy: ApplicationAccessPolicy(blacklist: {'fixture.saved'}),
-      );
-      final h = await pump(tester, api: api, scope: scope);
-      final entry = find.byKey(const ValueKey('edit-application-policy'));
-      await reveal(tester, entry);
-      await tester.tap(entry);
-      await tester.pumpAndSettle();
-      expect(find.text('无法读取应用列表'), findsOneWidget);
-      expect(
-        find.textContaining(
-          code == 'applicationListPermissionRequired'
-              ? '未授权获取应用列表'
-              : '应用列表访问受限',
-        ),
-        findsOneWidget,
-      );
-      expect(find.textContaining('private platform'), findsNothing);
-      expect(
-        find.byKey(const ValueKey('application-list-scroll')),
-        findsNothing,
-      );
-      final confirm = find.byKey(const ValueKey('confirm-application-policy'));
-      expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
-      final authorize = find.byKey(
-        const ValueKey('authorize-application-list'),
-      );
-      await tester.ensureVisible(authorize);
-      await tester.tap(authorize);
-      await tester.pumpAndSettle();
-      expect(api.opened, [PermissionScreen.applications]);
-      expect(api.appLoads, 1);
-      api.applicationsHandler = null;
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-      await tester.pumpAndSettle();
-      expect(api.appLoads, 2);
-      expect(find.text('无法读取应用列表'), findsNothing);
-      expect(
-        find.byKey(const ValueKey('application-list-scroll')),
-        findsOneWidget,
-      );
-      await tester.ensureVisible(confirm);
-      await tester.tap(confirm);
-      await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('save-execution-scope')));
-      await tester.pumpAndSettle();
-      expect(h.settings.readExecutionScope().toJson(), scope.toJson());
-      expect(api.fileLoads, 0);
-      expect(tester.takeException(), isNull);
-    });
-  }
-
-  testWidgets('授权设置失败可重试、防重复；拒绝后仍提示权限不足，不反复打开授权', (tester) async {
-    final opened = Completer<void>();
-    final api = _SetupApi()
-      ..applicationsHandler = () async {
-        throw PlatformException(code: 'applicationListPermissionRequired');
-      }
-      ..permissionSettingsHandler = () => opened.future;
-    final h = await pump(tester, api: api, largeText: false);
-    await tester.tap(find.byKey(const ValueKey('edit-application-policy')));
-    await tester.pumpAndSettle();
-    final authorize = find.byKey(const ValueKey('authorize-application-list'));
-    await tester.tap(authorize);
-    await tester.tap(authorize);
-    await tester.pump();
-    expect(api.opened, [PermissionScreen.applications]);
-    expect(tester.widget<FilledButton>(authorize).onPressed, isNull);
-    opened.completeError(
-      PlatformException(
-        code: 'unavailable',
-        message: 'private settings failure',
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(find.textContaining('private settings'), findsNothing);
-    expect(find.text('执行通道不可用，请返回相月后重试'), findsOneWidget);
-    expect(tester.widget<FilledButton>(authorize).onPressed, isNotNull);
-    api.permissionSettingsHandler = null;
-    await tester.tap(authorize);
-    await tester.pumpAndSettle();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('未授权获取应用列表'), findsOneWidget);
-    expect(api.appLoads, 2);
-    expect(api.opened, [
-      PermissionScreen.applications,
-      PermissionScreen.applications,
-    ]);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-    expect(api.appLoads, 2);
-    expect(api.opened, hasLength(2));
-    await tester.tap(find.byTooltip('关闭'));
-    await tester.pumpAndSettle();
-    expect(h.settings.readExecutionScope().appPolicy.blacklist, isEmpty);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('授权设置尚未返回时关闭面板，迟到错误不会修改页面或原名单', (tester) async {
-    final opened = Completer<void>();
-    final api = _SetupApi()
-      ..applicationsHandler = () async {
-        throw PlatformException(code: 'applicationListPermissionRequired');
-      }
-      ..permissionSettingsHandler = () => opened.future;
-    final h = await pump(tester, api: api, largeText: false);
-    await tester.tap(find.byKey(const ValueKey('edit-application-policy')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('authorize-application-list')));
-    await tester.pump();
-    await tester.tap(find.byTooltip('关闭'));
-    await tester.pumpAndSettle();
-    opened.completeError(PlatformException(code: 'unavailable'));
-    await tester.pumpAndSettle();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
-    expect(api.appLoads, 1);
-    expect(h.settings.readExecutionScope().appPolicy.blacklist, isEmpty);
-    expect(find.textContaining('执行通道不可用'), findsNothing);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('权限读取缓慢不伪装未授权，不阻塞权限入口和保存，也不预取应用清单', (tester) async {
+  testWidgets('权限读取缓慢不伪装未授权，不阻塞系统权限入口或返回，也不预取应用清单', (tester) async {
     final capabilities = Completer<ExecutionCapabilities>();
-    const scope = ExecutionScope(
-      fileUris: ['content://fixture/saved'],
-      appPolicy: ApplicationAccessPolicy(blacklist: {'fixture.saved'}),
-    );
+    const scope = ExecutionScope(fileUris: ['content://fixture/saved']);
     final h = await pump(
       tester,
       driver: _Driver()..capabilitiesHandler = () => capabilities.future,
       largeText: false,
       scope: scope,
+      settle: false,
     );
     expect(find.text('读取中…'), findsNWidgets(2));
     expect(find.text('未授权'), findsNothing);
@@ -540,7 +285,7 @@ void main() {
     await tester.tap(find.text('任务通知'));
     await tester.pump();
     expect(h.api.opened, [PermissionScreen.notifications]);
-    await tester.tap(find.byKey(const ValueKey('save-execution-scope')));
+    await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.text('open'), findsOneWidget);
     capabilities.complete(
@@ -555,10 +300,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('权限读取失败不伪装未授权，名单草稿可编辑，重试只刷新权限', (tester) async {
+  testWidgets('权限读取失败不伪装未授权，重试只刷新权限且不改变文件授权', (tester) async {
     final capabilities = Completer<ExecutionCapabilities>();
     final driver = _Driver()..capabilitiesHandler = () => capabilities.future;
-    final h = await pump(tester, driver: driver, largeText: false);
+    final h = await pump(
+      tester,
+      driver: driver,
+      largeText: false,
+      settle: false,
+    );
     capabilities.completeError(
       const ExecutionFailure(ExecutionFailureCode.timeout),
     );
@@ -566,24 +316,22 @@ void main() {
     expect(find.text('读取失败'), findsNWidgets(2));
     expect(find.text('未授权'), findsNothing);
     expect(find.byKey(const ValueKey('capabilities-error')), findsOneWidget);
-    await editPolicy(tester);
     driver.capabilitiesHandler = null;
     await reveal(tester, find.text('重试'));
     await tester.tap(find.text('重试'));
     await tester.pumpAndSettle();
     expect(driver.capabilityLoads, 2);
     expect(h.api.fileLoads, 0);
-    expect(h.api.appLoads, 1);
+    expect(h.api.appLoads, 0);
     expect(find.text('已授权'), findsOneWidget);
     expect(find.text('未授权'), findsOneWidget);
-    await tester.tap(find.byKey(const ValueKey('save-execution-scope')));
-    await tester.pumpAndSettle();
-    expect(h.settings.readExecutionScope().appPolicy.blacklist, {
-      'fixture.new',
-    });
+    expect(
+      h.settings.readExecutionScope().toJson(),
+      const ExecutionScope().toJson(),
+    );
   });
 
-  testWidgets('权限加载去重，前后台往返保留名单草稿和已有文件范围', (tester) async {
+  testWidgets('权限加载去重，前后台往返不查询应用清单或改变已有文件范围', (tester) async {
     final capabilities = Completer<ExecutionCapabilities>();
     final driver = _Driver()..capabilitiesHandler = () => capabilities.future;
     const scope = ExecutionScope(fileUris: ['content://fixture/saved']);
@@ -592,13 +340,13 @@ void main() {
       driver: driver,
       largeText: false,
       scope: scope,
+      settle: false,
     );
     final controller = h.container.read(
       executionSetupControllerProvider.notifier,
     );
     final refreshes = [controller.load(), controller.load()];
     expect(driver.capabilityLoads, 1);
-    await editPolicy(tester);
     capabilities.complete(
       ExecutionCapabilities(
         actions: [ExecutionAction.captureScreen],
@@ -617,73 +365,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.api.fileLoads, 0);
     expect(driver.capabilityLoads, 2);
-    expect(h.api.appLoads, 1);
+    expect(h.api.appLoads, 0);
     expect(h.settings.readExecutionScope().toJson(), scope.toJson());
-    await tester.tap(find.byKey(const ValueKey('save-execution-scope')));
-    await tester.pumpAndSettle();
-    expect(h.settings.readExecutionScope().appPolicy.blacklist, {
-      'fixture.new',
-    });
+
     expect(h.settings.readExecutionScope().fileUris, scope.fileUris);
   });
 
-  testWidgets('应用清单按需加载，关闭无需等待，旧响应不覆盖重新打开的面板', (tester) async {
-    final first = Completer<List<InstalledApplication>>();
-    final second = Completer<List<InstalledApplication>>();
-    final responses = [first, second];
+  testWidgets('系统权限设置失败显示安全错误，重试不改变文件授权', (tester) async {
+    const scope = ExecutionScope(fileUris: ['content://fixture/saved']);
     final api = _SetupApi()
-      ..applicationsHandler = () => responses.removeAt(0).future;
-    final h = await pump(tester, api: api, largeText: false);
-    final entry = find.byKey(const ValueKey('edit-application-policy'));
-    final confirm = find.byKey(const ValueKey('confirm-application-policy'));
-    expect(api.appLoads, 0);
-    await tester.tap(entry);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-    expect(api.appLoads, 1);
-    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
-    await tester.tap(find.byTooltip('关闭'));
+      ..permissionSettingsHandler = () async => throw PlatformException(
+        code: 'unavailable',
+        message: 'private platform details',
+      );
+    final h = await pump(tester, api: api, scope: scope, largeText: false);
+    await tester.tap(find.text('无障碍服务'));
     await tester.pumpAndSettle();
-    expect(confirm, findsNothing);
-    expect(h.settings.readExecutionScope().appPolicy.blacklist, isEmpty);
-    await tester.tap(entry);
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 350));
-    expect(api.appLoads, 2);
-    first.completeError(
-      PlatformException(code: 'unavailable', message: 'private stale response'),
-    );
-    await tester.pump();
-    expect(find.text('重试'), findsNothing);
-    expect(find.textContaining('private stale response'), findsNothing);
-    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
-    second.complete([
-      InstalledApplication(
-        packageName: 'fixture.current',
-        label: '当前应用',
-        isSystem: false,
-        installedAtMs: 1,
-        launchable: true,
+    expect(
+      find.text(
+        const ExecutionFailure(ExecutionFailureCode.unavailable).userMessage,
       ),
-    ]);
-    await tester.pumpAndSettle();
-    expect(tester.widget<FilledButton>(confirm).onPressed, isNotNull);
-    await tester.scrollUntilVisible(
-      find.text('当前应用'),
-      200,
-      scrollable: find
-          .descendant(
-            of: find.byKey(const ValueKey('application-list-scroll')),
-            matching: find.byType(Scrollable),
-          )
-          .first,
+      findsOneWidget,
     );
-    await tester.tap(find.text('当前应用'));
-    await tester.tap(find.byTooltip('关闭'));
+    expect(find.textContaining('private platform details'), findsNothing);
+    api.permissionSettingsHandler = null;
+    await tester.tap(find.text('任务通知'));
     await tester.pumpAndSettle();
-    expect(h.settings.readExecutionScope().appPolicy.blacklist, isEmpty);
-    expect(api.fileLoads, 0);
-    expect(h.driver.capabilityLoads, 1);
+    expect(api.opened, [
+      PermissionScreen.accessibility,
+      PermissionScreen.notifications,
+    ]);
+    expect(h.settings.readExecutionScope().toJson(), scope.toJson());
+    expect(api.appLoads, 0);
     expect(tester.takeException(), isNull);
   });
 

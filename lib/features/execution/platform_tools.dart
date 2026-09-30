@@ -21,25 +21,21 @@ String executionScopePrompt(
   bool applicationOperations = false,
   bool toolExecution = false,
 }) {
-  // 不把黑名单包名放进模型提示词，应用信息只通过过滤后的 list_apps 提供。
   return '${!toolExecution ? '' : '\n工具响应和错误由你处理；需要判断效果时读取当前界面或文件，不要求用户核验普通操作或填写状态。失败或取消不代表外部效果已撤销，不要无条件重发有副作用动作；无法继续时说明错误。必要的授权和敏感输入由用户提供。'}'
       '${scope.fileUris.isEmpty ? '' : '\n本次授权文件句柄：${jsonEncode(scope.fileUris)}。'}'
-      '${!applicationOperations ? '' : '\n应用操作受应用名单限制；打开应用前用 list_apps 查询真实包名，再调用 open_app。依据最新界面选择操作，动作后根据返回的观察或重新读取界面判断效果。系统接受动作不等于任务完成。支付、密码、验证码由用户手动处理。'}';
+      '${!applicationOperations ? '' : '\n打开应用前用 list_apps 查询真实包名，再调用 open_app。回桌面或跨应用跳转不结束任务；动作后按返回的实际前台观察继续，不沿用旧窗口的控件和坐标。观察失败时重新读取当前界面，不重放已完成或已派发的动作。系统接受动作不等于任务完成。支付、密码、验证码由用户手动处理。'}';
 }
 
 ToolOutcome platformOutcome(ExecutionResult result) {
   final details = {...result.result};
-  final reason = details['reason'];
-  final message = switch (reason) {
-    'manualIntervention' => '界面包含密码、验证码或支付操作，请手动处理',
-    'locked' => '设备已锁定，请解锁后重新发起任务',
-    'targetChanged' => '目标窗口或控件已改变，请重新观察',
-    'unavailable' => '当前没有可操作的目标窗口',
-    _ => null,
-  };
-  if (message != null) {
-    details['reasonCode'] = reason;
-    details['reason'] = message;
+  for (final field in ['reason', 'observationError']) {
+    final reason = details[field];
+    final message = _platformReason(reason);
+    if (message != null) {
+      details[field == 'reason' ? 'reasonCode' : 'observationErrorCode'] =
+          reason;
+      details[field] = message;
+    }
   }
   final content = jsonEncode(details);
   return switch (result.status) {
@@ -57,6 +53,14 @@ ToolOutcome platformOutcome(ExecutionResult result) {
     ),
   };
 }
+
+String? _platformReason(Object? reason) => switch (reason) {
+  'manualIntervention' => '界面包含密码、验证码或支付操作，请手动处理',
+  'locked' => '设备已锁定，请解锁后重新发起任务',
+  'targetChanged' => '目标窗口或控件已改变，请重新观察',
+  'unavailable' => '当前没有可操作的目标窗口',
+  _ => null,
+};
 
 /// 同一组文件工具根据显式 URI 路由；私有附件不绕行 Kotlin。
 class ScopedFileTool extends Tool {
@@ -418,7 +422,7 @@ class ApplicationTool extends Tool {
   @override
   String get description => switch (action) {
     ExecutionAction.listApps =>
-      '查询名单允许的已安装应用，返回名称、包名、系统属性、版本、安装时间、安装包大小及可否打开；支持搜索、排序和分页。',
+      '查询已安装应用，包含第三方和系统应用，返回名称、包名、系统属性、版本、安装时间、安装包大小及可否打开；支持搜索、排序和分页。',
     ExecutionAction.openApp =>
       '打开 packageName 对应应用，返回文字控件树 snapshot，不含截图图片。'
           '需要查看画面或控件树信息不足时，调用可用的 capture_screen 读取当前前台截图。',
@@ -442,7 +446,7 @@ class ApplicationTool extends Tool {
     'additionalProperties': false,
     'properties': {
       if (action != ExecutionAction.listApps)
-        'packageName': {'type': 'string', 'description': '名单允许的目标应用包名'},
+        'packageName': {'type': 'string', 'description': '目标应用包名'},
       if (action == ExecutionAction.listApps) ...{
         'query': {'type': 'string', 'description': '按名称或包名搜索'},
         'sort': {
@@ -477,7 +481,7 @@ class ApplicationTool extends Tool {
   }.contains(action);
   @override
   String describeAction(Map<String, dynamic> arguments) => switch (action) {
-    ExecutionAction.listApps => '获取名单允许的应用信息并发送给所选模型',
+    ExecutionAction.listApps => '获取已安装应用信息并发送给所选模型',
     ExecutionAction.openApp => '打开应用：${arguments['packageName']}',
     ExecutionAction.inspectUi => '读取 ${arguments['packageName']} 的可见界面并发送给所选模型',
     ExecutionAction.inputText =>

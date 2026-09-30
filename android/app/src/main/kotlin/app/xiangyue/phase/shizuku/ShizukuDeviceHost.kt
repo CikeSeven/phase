@@ -18,7 +18,7 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
         scope.launch { owners.keys.toList().forEach { stop(it, "channelDisconnected") } }
     }
     @Volatile private var enabled = false
-    private class Owner(val uid: Long, val allowed: suspend (String) -> Boolean) {
+    private class Owner(val uid: Long, val applicationExists: suspend (String) -> Boolean) {
         val client = Binder()
         var target: String? = null
         var monitor: Job? = null
@@ -51,12 +51,12 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
     }
     private fun locked() = context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
     private fun permitted(uid: Long) = available() && connection.uid().toLong() == uid
-    private suspend fun allowedNow(owner: Owner, target: String): Boolean = try {
-        owner.allowed(target)
+    private suspend fun applicationExistsNow(owner: Owner, target: String): Boolean = try {
+        owner.applicationExists(target)
     } catch (error: CancellationException) { throw error } catch (_: Exception) { false }
     private fun cacheDirectory(owner: String) = File(context.cacheDir, "virtual-display/$owner")
 
-    suspend fun execute(request: ExecutionRequest, allowed: suspend (String) -> Boolean, checkpoint: (Map<String, Any?>) -> Unit): ExecutionResult {
+    suspend fun execute(request: ExecutionRequest, applicationExists: suspend (String) -> Boolean, checkpoint: (Map<String, Any?>) -> Unit): ExecutionResult {
         if (!Regex("[a-zA-Z0-9_-]{1,100}").matches(request.runId)) return failure(request, "invalidArguments")
         val uid = (request.arguments["uid"] as? Number)?.toLong() ?: return failure(request, "identityChanged")
         if (request.arguments["revision"] != ShizukuDeviceService.REVISION || !permitted(uid)) return failure(request, "identityChanged")
@@ -65,8 +65,9 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
         val action = request.arguments["action"] as? String ?: return failure(request, "invalidArguments")
         val target = request.target.packageName
         if (request.arguments["packageName"] != target || action !in setOf("launch", "capture", "tap", "swipe", "key", "text", "close")) return failure(request, "invalidArguments")
-        if (action != "close" && (target.isNullOrBlank() || !allowed(target))) return failure(request, "applicationDenied")
-        val owner = owners.getOrPut(request.runId) { Owner(uid, allowed) }
+        if (action != "close" && target.isNullOrBlank()) return failure(request, "invalidArguments")
+        if (action != "close" && !applicationExists(target!!)) return failure(request, "applicationUnavailable")
+        val owner = owners.getOrPut(request.runId) { Owner(uid, applicationExists) }
         if (owner.uid != uid) return failure(request, "identityChanged")
         if (owner.monitor == null) owner.monitor = scope.launch {
             while (isActive && owners[request.runId] === owner) {
@@ -74,7 +75,7 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
                 val reason = when {
                     !permitted(uid) -> "permissionRequired"
                     locked() -> "locked"
-                    owner.target != null && !allowedNow(owner, owner.target!!) -> "applicationDenied"
+                    owner.target != null && !applicationExistsNow(owner, owner.target!!) -> "applicationUnavailable"
                     else -> null
                 }
                 if (reason != null) { stop(request.runId, reason); break }
@@ -91,7 +92,7 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
             remote = connection.get()
             currentCoroutineContext().ensureActive()
             if (owners[request.runId] !== owner || !permitted(uid)) return failure(request, "permissionRequired")
-            if (action != "close" && !allowed(target!!)) return failure(request, "applicationDenied")
+            if (action != "close" && !applicationExists(target!!)) return failure(request, "applicationUnavailable")
             owner.target = if (action == "close") null else target
             ParcelFileDescriptor.open(image, ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE or ParcelFileDescriptor.MODE_WRITE_ONLY).use { fd ->
                 val spec = Bundle().apply {
@@ -111,7 +112,7 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
             val reply = withTimeout(15000) { result.await() }
             currentCoroutineContext().ensureActive()
             if (!permitted(uid) || owners[request.runId] !== owner) return failure(request, "permissionRequired", dispatched)
-            if (action != "close" && !allowed(target!!)) return failure(request, "applicationDenied", dispatched)
+            if (action != "close" && !applicationExists(target!!)) return failure(request, "applicationUnavailable", dispatched)
             currentCoroutineContext().ensureActive()
             if (locked()) { stop(request.runId, "locked"); return failure(request, "locked", dispatched) }
             val details = mutableMapOf<String, Any?>("action" to action, "packageName" to target)
@@ -167,12 +168,6 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
         endOwner(owner)
         stopped(owner, if (reason == "permissionRequired") "shizukuPermissionRequired" else reason)
     }
-    suspend fun policyChanged() {
-        for ((id, owner) in owners.toMap()) {
-            val target = owner.target ?: continue
-            if (!allowedNow(owner, target)) stop(id, "applicationDenied")
-        }
-    }
     private fun failure(request: ExecutionRequest, code: String, dispatched: Boolean = false) = ExecutionResult(
         request.toolCallId, ExecutionStatus.FAILED,
         mapOf("reason" to reason(code), "dispatchRequested" to dispatched), emptyList(), ChannelError.EXECUTION_FAILED)
@@ -183,10 +178,10 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
             "systemOperationDenied" -> "Android 系统拒绝了虚拟屏操作"
             "launchDenied" -> "Android 系统拒绝在虚拟屏启动此应用"
             "launchCancelled" -> "虚拟屏应用启动请求已取消，未自动重试"
-            "applicationDenied" -> "目标应用未被当前应用名单允许"
+            "applicationUnavailable" -> "目标应用不存在或已不可用"
             "displayUnsupported" -> "此系统不支持所需的独立焦点虚拟屏，未改用主屏"
             "displayReleaseFailed" -> "未收到虚拟屏资源释放的完整回执"
-            "displayMissing" -> "本次运行还没有虚拟屏，请先启动允许的应用"
+            "displayMissing" -> "本次运行还没有虚拟屏，请先启动目标应用"
             "displayTargetChanged" -> "虚拟屏前台任务不属于目标应用，未继续操作或返回截图"
             "staleScreenshot" -> "虚拟屏截图已过期，请重新观察后操作"
             "textUnsupported" -> "此输入框不支持直接写入文字"

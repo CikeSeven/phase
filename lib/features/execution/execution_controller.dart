@@ -6,7 +6,6 @@ import '../../../core/error/failure.dart';
 import '../../../core/utils/logger.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/execution_scope.dart';
-import '../../../data/models/application_access_policy.dart';
 import '../tools/tool.dart';
 import '../tools/tool_executor.dart';
 import 'channel_driver.dart';
@@ -58,7 +57,6 @@ class ExecutionController extends _$ExecutionController {
   bool _deviceTask = false;
   bool _nativeTask = false;
   ExecutionScope _scope = const ExecutionScope();
-  ApplicationAccessPolicy Function()? _readCurrentAppPolicy;
   bool _stopped = false;
   Future<void> _nativeUpdates = Future.value();
   StreamSubscription<NativeExecutionEvent>? _nativeSubscription;
@@ -83,7 +81,6 @@ class ExecutionController extends _$ExecutionController {
     String runId, {
     required void Function() stop,
     ExecutionScope scope = const ExecutionScope(),
-    ApplicationAccessPolicy Function()? readCurrentAppPolicy,
   }) {
     if (state.runId != null) throw const OperationFailure('已有运行中的任务');
     _stop = stop;
@@ -91,7 +88,6 @@ class ExecutionController extends _$ExecutionController {
     _deviceTask = false;
     _nativeTask = false;
     _scope = scope;
-    _readCurrentAppPolicy = readCurrentAppPolicy;
     state = ExecutionState(runId: runId, foreground: state.foreground);
   }
 
@@ -104,12 +100,7 @@ class ExecutionController extends _$ExecutionController {
     try {
       final driver = ref.read(channelDriverProvider);
       _nativeSubscription ??= driver.events.listen(_onNativeEvent);
-      await driver.startRun(
-        runId,
-        scope: _scope,
-        deviceTask: deviceTask,
-        currentAppPolicy: _readCurrentAppPolicy?.call() ?? _scope.appPolicy,
-      );
+      await driver.startRun(runId, scope: _scope, deviceTask: deviceTask);
       if (!ref.mounted || state.runId != runId || _stopped) {
         await driver.endRun(runId);
         throw const ExecutionFailure(ExecutionFailureCode.cancelled);
@@ -269,9 +260,8 @@ class ExecutionController extends _$ExecutionController {
           'shizukuPermissionRequired' => 'Shizuku 授权或执行身份已改变，虚拟屏操作已停止',
           'channelDisabled' => 'Shizuku 已关闭，虚拟屏操作已停止',
           'channelDisconnected' => 'Shizuku 服务已断开，虚拟屏操作已停止',
-          'targetChanged' => '目标 App 已改变，自动操作已停止',
           'serviceStopped' => '任务服务已停止',
-          'applicationDenied' => '应用已被名单禁止，自动操作已停止',
+          'applicationUnavailable' => '目标应用已不可用，自动操作已停止',
           _ => null,
         };
         if (message != null && state.runId == runId) {

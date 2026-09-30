@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/data/models/execution_scope.dart';
-import 'package:phase/data/models/application_access_policy.dart';
 import 'package:phase/features/execution/channel_driver.dart';
 import 'package:phase/features/execution/execution_api.g.dart';
 import 'package:phase/features/tools/tool.dart';
@@ -37,7 +36,6 @@ class FakeChannelDriver implements ChannelDriver {
     String runId, {
     ExecutionScope scope = const ExecutionScope(),
     bool deviceTask = true,
-    ApplicationAccessPolicy? currentAppPolicy,
   }) async {
     starts.add(runId);
     scopes.add(scope);

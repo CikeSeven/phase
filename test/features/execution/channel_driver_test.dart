@@ -12,6 +12,7 @@ void main() {
   final messenger =
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
   final calls = <ExecutionRequest>[];
+  final sessions = <ExecutionSession>[];
   final cancellations = <String>[];
   late Completer<ExecutionResult> response;
   late PigeonChannelDriver driver;
@@ -47,9 +48,13 @@ void main() {
 
   setUp(() async {
     calls.clear();
+    sessions.clear();
     cancellations.clear();
     response = Completer<ExecutionResult>();
-    host('startRun', (_) async => [HostReply()]);
+    host('startRun', (message) async {
+      sessions.add((message as List).single as ExecutionSession);
+      return [HostReply()];
+    });
     host('endRun', (_) async => [null]);
     host('cancel', (message) async {
       cancellations.add((message as List).single as String);
@@ -65,6 +70,7 @@ void main() {
   });
 
   test('真实 Pigeon 编解码保留应用调用 ID 和固定参数；进度不产生终态', () async {
+    expect(sessions.single.encode(), ['run', true, <String>[]]);
     final cancel = RunCancellation();
     addTearDown(cancel.cancel);
     final progress = <int>[];

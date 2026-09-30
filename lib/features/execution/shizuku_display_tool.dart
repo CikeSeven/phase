@@ -29,7 +29,7 @@ class ShizukuDisplayTool extends Tool {
   @override
   String get description =>
       '以 Shizuku UID ${binding.uid} 控制本次运行专属的 Android 虚拟屏，不操作主屏。'
-      '先用 list_apps 选择允许的应用，launch 创建虚拟屏并启动；capture 重新观察。'
+      '先用 list_apps 查询目标应用包名，launch 创建虚拟屏并启动；capture 重新观察。'
       'tap/swipe/key/text 必须引用此屏最近返回的 screenshotId，坐标为返回图片的像素。'
       '每次操作后返回可获得的真实截图；观察失败不代表动作未执行，不得直接重放。'
       'key 仅接受 back/enter/tab/delete/escape/up/down/left/right；text 支持中文及 Emoji，需先点击虚拟屏中的普通输入框取得焦点，按光标插入并替换选中内容。'
@@ -48,7 +48,7 @@ class ShizukuDisplayTool extends Tool {
       },
       'packageName': {
         'type': 'string',
-        'description': '除 close 外必填；launch 指定要启动的允许应用，其余操作必须匹配虚拟屏实际前台应用',
+        'description': '除 close 外必填；launch 指定要启动的应用，其余操作必须匹配虚拟屏实际前台应用',
       },
       'screenshotId': {
         'type': 'string',

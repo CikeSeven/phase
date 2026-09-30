@@ -1422,8 +1422,6 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         run.id,
         stop: stop,
         scope: run.configuration.executionScope,
-        readCurrentAppPolicy: () =>
-            ref.read(settingsStorageProvider).readExecutionScope().appPolicy,
       );
       _runAttachments = await _attachmentIndex(run.conversationId, const []);
       state = state.copyWith(

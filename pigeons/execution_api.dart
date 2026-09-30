@@ -133,29 +133,10 @@ class ExecutionSession {
     required this.runId,
     required this.deviceTask,
     required this.fileUris,
-    required this.appPolicy,
-    required this.currentAppPolicy,
   });
   String runId;
   bool deviceTask;
   List<String> fileUris;
-  ApplicationPolicy appPolicy;
-  ApplicationPolicy currentAppPolicy;
-}
-
-enum ApplicationListMode { blacklist, whitelist }
-
-class ApplicationPolicy {
-  ApplicationPolicy({
-    required this.mode,
-    required this.blacklist,
-    required this.whitelist,
-    required this.allowedSystemApps,
-  });
-  ApplicationListMode mode;
-  List<String> blacklist;
-  List<String> whitelist;
-  List<String> allowedSystemApps;
 }
 
 class FileGrant {
@@ -310,7 +291,6 @@ abstract class ExecutionSetupApi {
   void releaseFileGrant(String uri);
   @async
   List<InstalledApplication> installedApplications();
-  void updateApplicationPolicy(ApplicationPolicy policy);
   void openPermissionSettings(PermissionScreen screen);
 }
 

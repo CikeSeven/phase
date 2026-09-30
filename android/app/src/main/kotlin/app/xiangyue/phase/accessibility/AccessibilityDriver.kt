@@ -29,6 +29,10 @@ class AccessibilityDriver(private val service: PhaseAccessibilityService) {
         nodes.values.forEach { it.native.recycle() }
         nodes.clear(); snapshotId = null; snapshotWindow = -1; snapshotPackage = null
     }
+    fun invalidateForeground(packageName: String?) {
+        // A delayed window event must not discard a newer snapshot of that foreground.
+        if (snapshotPackage != null && snapshotPackage != packageName) clear()
+    }
 
     private fun activeRoot(): AccessibilityNodeInfo? {
         val windows = service.windows
@@ -139,25 +143,35 @@ class AccessibilityDriver(private val service: PhaseAccessibilityService) {
                 val observed = withTimeoutOrNull(3000) {
                     var last = sequence
                     while (true) {
-                        observation = snapshot(target)
+                        val foreground = activePackage() ?: throw UiBlocked("unavailable")
+                        observation = snapshot(foreground)
                         val confirmed = if (request.action == ExecutionAction.INPUT_TEXT)
                             readbackNode.refresh() && readbackNode.text?.toString() == expected
-                        else snapshotFingerprint != before
+                        else foreground != target || snapshotWindow != window || snapshotFingerprint != before
                         if (confirmed) break
                         events.first { it != last }; last = events.value
                     }
                     true
                 } ?: false
                 if (!observed && request.action == ExecutionAction.INPUT_TEXT) return ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
-                    mapOf("actionAccepted" to true, "textMatched" to false, "snapshot" to observation,
+                    mapOf("packageName" to target, "actionAccepted" to true, "textMatched" to false, "snapshot" to observation,
+                        "foregroundPackageName" to observation?.get("packageName"),
                         "reason" to "输入回读不匹配，请根据当前快照选择后续操作"), emptyList(), ChannelError.EXECUTION_FAILED)
                 // A click can legitimately leave the screen unchanged. Return the actual observation;
                 // task-goal judgement belongs to the model, not a manual verification form.
-                success(request, mapOf("actionAccepted" to true, "observationChanged" to observed, "snapshot" to observation))
+                success(request, mapOf("packageName" to target, "actionAccepted" to true,
+                    "observationChanged" to observed, "snapshot" to observation,
+                    "foregroundPackageName" to observation?.get("packageName")))
             } finally { readbackNode.recycle() }
         } catch (blocked: UiBlocked) {
             val error = if (blocked.reason == "targetChanged") ChannelError.TARGET_CHANGED else ChannelError.UNAVAILABLE
-            if (accepted) ExecutionResult(request.toolCallId, ExecutionStatus.FAILED, mapOf("actionAccepted" to true, "reason" to blocked.reason), emptyList(), ChannelError.EXECUTION_FAILED)
+            // Navigation or an unreadable destination cannot undo an accepted click/scroll.
+            // Text still requires its original-field readback before reporting success.
+            if (accepted && request.action != ExecutionAction.INPUT_TEXT) success(request,
+                mapOf("packageName" to target, "actionAccepted" to true,
+                    "foregroundPackageName" to activePackage(), "observationError" to blocked.reason))
+            else if (accepted) ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
+                mapOf("packageName" to target, "actionAccepted" to true, "reason" to blocked.reason), emptyList(), ChannelError.EXECUTION_FAILED)
             else failure(request, error, blocked.reason, false)
         } catch (_: IllegalArgumentException) {
             failure(request, ChannelError.INVALID_ARGUMENTS, "节点或动作参数无效", accepted)

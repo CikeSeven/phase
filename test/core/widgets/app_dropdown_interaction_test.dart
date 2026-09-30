@@ -6,11 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/theme/app_motion.dart';
 import 'package:phase/core/theme/app_radius.dart';
 import 'package:phase/core/theme/app_theme.dart';
-import 'package:phase/data/models/application_access_policy.dart';
 import 'package:phase/core/widgets/app_dropdown.dart';
-import 'package:phase/features/execution/application_policy_sheet.dart';
+import 'package:phase/core/widgets/app_sheet.dart';
 
-import 'application_access_test.dart' show app;
+enum _Sort { name, installedAt, size }
 
 void main() {
   const dropdownKey = ValueKey('sort-dropdown');
@@ -22,13 +21,13 @@ void main() {
     bool reduced = false,
     double scale = 1,
     Size size = const Size(320, 800),
-    ValueChanged<ApplicationSort>? onChanged,
+    ValueChanged<_Sort>? onChanged,
     VoidCallback? onOutside,
   }) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    var selected = ApplicationSort.name;
+    var selected = _Sort.name;
     await tester.pumpWidget(
       MaterialApp(
         theme: dark ? AppTheme.dark() : AppTheme.light(),
@@ -56,9 +55,9 @@ void main() {
                       label: '排序',
                       value: selected,
                       options: const {
-                        ApplicationSort.name: '名称',
-                        ApplicationSort.installedAt: '安装时间（新到旧）',
-                        ApplicationSort.size: '安装包大小（大到小）',
+                        _Sort.name: '名称',
+                        _Sort.installedAt: '安装时间（新到旧）',
+                        _Sort.size: '安装包大小（大到小）',
                       },
                       onChanged: (value) {
                         update(() => selected = value);
@@ -83,7 +82,7 @@ void main() {
       ) async {
         final semantics = tester.ensureSemantics();
         try {
-          final changes = <ApplicationSort>[];
+          final changes = <_Sort>[];
           await pump(tester, dark: dark, scale: scale, onChanged: changes.add);
           await tester.tap(dropdown);
           await tester.pumpAndSettle();
@@ -126,7 +125,7 @@ void main() {
           await tester.ensureVisible(size);
           await tester.tap(size);
           await tester.pumpAndSettle();
-          expect(changes, [ApplicationSort.size]);
+          expect(changes, [_Sort.size]);
           expect(find.byType(MenuItemButton), findsNothing);
           expect(find.text('安装包大小（大到小）'), findsOneWidget);
           await tester.tap(dropdown);
@@ -149,7 +148,7 @@ void main() {
 
   testWidgets('点击菜单外只关闭菜单，不触发底层动作或修改选择', (tester) async {
     var outside = 0;
-    final changes = <ApplicationSort>[];
+    final changes = <_Sort>[];
     await pump(tester, onOutside: () => outside++, onChanged: changes.add);
     await tester.tap(dropdown);
     await tester.pumpAndSettle();
@@ -163,7 +162,7 @@ void main() {
   });
 
   testWidgets('键盘开启、方向键选择与 Escape 取消，不唤起软键盘', (tester) async {
-    final changes = <ApplicationSort>[];
+    final changes = <_Sort>[];
     await pump(tester, onChanged: changes.add);
     final anchor = tester.widget<InkWell>(
       find.descendant(of: dropdown, matching: find.byType(InkWell)).first,
@@ -177,7 +176,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     await tester.pumpAndSettle();
-    expect(changes, [ApplicationSort.installedAt]);
+    expect(changes, [_Sort.installedAt]);
     expect(tester.testTextInput.isVisible, isFalse);
     await tester.tap(dropdown);
     await tester.pumpAndSettle();
@@ -188,7 +187,7 @@ void main() {
   });
 
   testWidgets('短屏大字菜单可滚动，减少动画立即生效', (tester) async {
-    final changes = <ApplicationSort>[];
+    final changes = <_Sort>[];
     await pump(
       tester,
       reduced: true,
@@ -211,7 +210,7 @@ void main() {
     );
     await tester.tap(size);
     await tester.pumpAndSettle();
-    expect(changes, [ApplicationSort.size]);
+    expect(changes, [_Sort.size]);
     expect(tester.takeException(), isNull);
   });
 
@@ -232,8 +231,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('系统返回先关闭下拉，保留名单面板和草稿，第二次才取消面板', (tester) async {
-    ApplicationAccessPolicy? result;
+  testWidgets('系统返回先关闭下拉，第二次才取消所属面板', (tester) async {
+    var selected = _Sort.name;
     var closed = false;
     await tester.pumpWidget(
       MaterialApp(
@@ -242,10 +241,20 @@ void main() {
           builder: (context) => Scaffold(
             body: TextButton(
               onPressed: () async {
-                result = await showApplicationPolicySheet(
-                  context,
-                  loadApplications: () async => [app('test')],
-                  initialPolicy: const ApplicationAccessPolicy(),
+                await showModalBottomSheet<void>(
+                  context: context,
+                  builder: (_) => AppSheet(
+                    title: '选择项目',
+                    child: StatefulBuilder(
+                      builder: (context, update) => AppDropdown(
+                        key: dropdownKey,
+                        label: '排序',
+                        value: selected,
+                        options: const {_Sort.name: '名称', _Sort.size: '大小'},
+                        onChanged: (value) => update(() => selected = value),
+                      ),
+                    ),
+                  ),
                 );
                 closed = true;
               },
@@ -257,16 +266,16 @@ void main() {
     );
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('application-list-mode')));
+    await tester.tap(dropdown);
     await tester.pumpAndSettle();
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(find.byType(MenuItemButton), findsNothing);
-    expect(find.byType(ApplicationPolicySheet), findsOneWidget);
+    expect(find.byType(AppSheet), findsOneWidget);
     expect(closed, isFalse);
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
     expect(closed, isTrue);
-    expect(result, isNull);
+    expect(selected, _Sort.name);
   });
 }

@@ -15,7 +15,6 @@ import app.xiangyue.phase.accessibility.DeviceActionQueue
 import app.xiangyue.phase.applications.ApplicationCatalog
 import app.xiangyue.phase.applications.ApplicationCatalogRestricted
 import app.xiangyue.phase.applications.ApplicationListPermissionRequired
-import app.xiangyue.phase.applications.ApplicationAccess
 import app.xiangyue.phase.shizuku.ShizukuDeviceHost
 
 class ExecutionCoordinator(private val context: Context, private val flutter: ExecutionFlutterApi) : ExecutionHostApi {
@@ -23,10 +22,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     val shizuku = ShizukuDeviceHost(context, ::stopFromSystem)
     val files = AppFileDriver(context)
     private val applications = ApplicationCatalog(context)
-    val setup = ExecutionSetup(context, files, applications, ::updateApplicationPolicy)
+    val setup = ExecutionSetup(context, files, applications)
     private var session: ExecutionSession? = null
-    private var currentAppPolicy: ApplicationPolicy? = null
-    private var activeTargetPackage: String? = null
     private val deviceQueue = DeviceActionQueue()
     private var deviceActive = false
     private var virtualDeviceActive = false
@@ -41,10 +38,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
             else if (action == ExecutionAction.LIST_APPS) listApplications(request)
             else if (action == ExecutionAction.CONTROL_DISPLAY) deviceQueue.withLock {
                 virtualDeviceActive = true
-                activeTargetPackage = null
-                shizuku.execute(request, allowed = { target ->
-                    val app = applications.get(target)
-                    app != null && allowed(app)
+                shizuku.execute(request, applicationExists = { target ->
+                    applications.get(target) != null
                 }, checkpoint = { tasks.checkpoint(request.toolCallId, it) })
             }
             else executeUi(request, progress)
@@ -89,9 +84,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         val runId = session.runId
         val existing = this.session
         if (runId.isBlank() || (tasks.runId != null && tasks.runId != runId) ||
-            (existing != null && (existing.fileUris != session.fileUris || existing.appPolicy != session.appPolicy))) return HostReply(ChannelError.INVALID_ARGUMENTS)
-        if (existing == null) { this.session = session; tasks.begin(runId); activeTargetPackage = null; panel.clear(); refreshOverlay() }
-        currentAppPolicy = session.currentAppPolicy
+            (existing != null && existing.fileUris != session.fileUris)) return HostReply(ChannelError.INVALID_ARGUMENTS)
+        if (existing == null) { this.session = session; tasks.begin(runId); panel.clear(); refreshOverlay() }
         if (!session.deviceTask || deviceActive) return HostReply()
         if (!resumed) return HostReply(ChannelError.UNAVAILABLE)
         if (!queryCapabilities().notificationsAllowed || PhaseAccessibilityService.instance == null) return HostReply(ChannelError.PERMISSION_REQUIRED)
@@ -134,7 +128,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         clearConfirmation()
         shizuku.endOwner(runId)
         tasks.end(runId)
-        session = null; deviceActive = false; virtualDeviceActive = false; activeTargetPackage = null
+        session = null; deviceActive = false; virtualDeviceActive = false
         PhaseAccessibilityService.instance?.driver?.clear()
         PhaseAccessibilityService.instance?.visual?.clear()
         refreshOverlay()
@@ -207,43 +201,33 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         } ?: return@withLock ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
             mapOf("reason" to "当前没有可截图的前台应用窗口"), emptyList(), ChannelError.UNAVAILABLE)
         val application = applications.get(target)
-        if (application == null || application.packageName != target || !allowed(application)) return@withLock denied(request)
+        if (application == null || application.packageName != target) return@withLock applicationUnavailable(request)
         if (!deviceActive || accessibility == null) return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.PERMISSION_REQUIRED)
+        windowChanged(accessibility.driver.activePackage())
         overlaySuppressed = true
         accessibility.overlay.hide()
         try {
             if (request.action == ExecutionAction.OPEN_APP) {
                 val intent = applications.launchIntent(target) ?: return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.UNAVAILABLE)
-                if (intent.component?.packageName != target) return@withLock denied(request)
-                // A settings change while the package lookup was suspended must still veto dispatch.
-                if (!allowed(application)) return@withLock denied(request)
+                if (intent.component?.packageName != target) return@withLock ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
+                    mapOf("reason" to "应用启动目标与指定包名不一致", "reasonCode" to "targetChanged"), emptyList(), ChannelError.TARGET_CHANGED)
                 launching = true
-                activeTargetPackage = target
                 context.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                 if (!accessibility.driver.awaitTarget(target)) return@withLock ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
                     mapOf("packageName" to target, "actionAccepted" to true, "observationChanged" to false), emptyList(), ChannelError.TIMEOUT)
-                if (!allowed(application)) return@withLock denied(request)
                 ExecutionResult(request.toolCallId, ExecutionStatus.SUCCEEDED, mapOf("packageName" to target, "actionAccepted" to true,
                     "observationChanged" to true, "snapshot" to accessibility.driver.snapshot(target)), emptyList())
             } else if (request.action in visualActions) {
-                activeTargetPackage = target
-                accessibility.visual.execute(request, target, validatePolicy = {
+                accessibility.visual.execute(request, target, validateTarget = { packageName ->
                     currentCoroutineContext().ensureActive()
-                    val current = applications.get(target)
-                    if (current == null || !allowed(current)) throw app.xiangyue.phase.vision.VisualBlocked("applicationDenied")
+                    val current = applications.get(packageName)
+                    if (current == null) throw app.xiangyue.phase.vision.VisualBlocked("applicationUnavailable")
                 }, checkpoint = { tasks.checkpoint(request.toolCallId, it) }, progress = progress)
             } else {
                 // No implicit launch or switch: snapshot/package/window identity is checked by the driver.
-                val result = accessibility.driver.execute(request, target)
-                if (result.status == ExecutionStatus.SUCCEEDED) activeTargetPackage = target
-                result
+                accessibility.driver.execute(request, target)
             }
         } finally { launching = false; overlaySuppressed = false; refreshOverlay() }
-    }
-
-    private fun allowed(app: InstalledApplication): Boolean {
-        val frozen = session?.appPolicy ?: return false
-        return ApplicationAccess.allows(frozen, currentAppPolicy ?: frozen, app.packageName, app.isSystem)
     }
 
     private suspend fun listApplications(request: ExecutionRequest): ExecutionResult {
@@ -264,7 +248,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         val limit = (request.arguments["limit"] as? Number)?.toInt() ?: 30
         val sort = request.arguments["sort"] as? String ?: "name"
         if (offset !in 0..Int.MAX_VALUE.toLong() || limit !in 1..50 || sort !in setOf("name", "installedAt", "size")) return NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.INVALID_ARGUMENTS)
-        val filtered = ApplicationCatalog.sorted(all.filter { allowed(it) && "${it.label} ${it.packageName}".lowercase(java.util.Locale.ROOT).contains(query) }, sort)
+        val filtered = ApplicationCatalog.sorted(all.filter { "${it.label} ${it.packageName}".lowercase(java.util.Locale.ROOT).contains(query) }, sort)
         val page = mutableListOf<Map<String, Any?>>()
         var bytes = 0
         for (app in filtered.drop(offset.toInt()).take(limit)) {
@@ -278,24 +262,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
                 "nextOffset" to if (offset + page.size < filtered.size) offset + page.size else null), emptyList())
     }
 
-    private fun updateApplicationPolicy(policy: ApplicationPolicy) {
-        currentAppPolicy = policy
-        val runId = tasks.runId ?: return
-        val targets = listOfNotNull(activeTargetPackage, confirmation?.arguments?.get("packageName") as? String).distinct()
-        scope.launch {
-            shizuku.policyChanged()
-            for (target in targets) {
-                val app = try { applications.get(target) } catch (_: Exception) { null }
-                if (tasks.runId != runId) return@launch
-                if ((target == activeTargetPackage || target == confirmation?.arguments?.get("packageName")) && (app == null || !allowed(app))) {
-                    stopFromSystem(runId, "applicationDenied"); return@launch
-                }
-            }
-        }
-    }
-
-    private fun denied(request: ExecutionRequest) = ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
-        mapOf("reason" to "应用不存在或被当前名单禁止", "reasonCode" to "applicationDenied"), emptyList(), ChannelError.PERMISSION_REQUIRED)
+    private fun applicationUnavailable(request: ExecutionRequest) = ExecutionResult(request.toolCallId, ExecutionStatus.FAILED,
+        mapOf("reason" to "目标应用不存在或已不可用", "reasonCode" to "applicationUnavailable"), emptyList(), ChannelError.UNAVAILABLE)
 
     override fun setTaskPanel(snapshot: TaskPanelSnapshot) {
         if (snapshot.runId != tasks.runId || !deviceActive) return
@@ -306,7 +274,6 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     }
 
     private fun clearHandoffTarget() {
-        activeTargetPackage = null
         PhaseAccessibilityService.instance?.driver?.clear()
         PhaseAccessibilityService.instance?.visual?.clear()
     }
@@ -353,8 +320,9 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     fun accessibilityChanged() { send { flutter.capabilityChanged(queryCapabilities()) } }
     fun interruptDevice(reason: String) { if (deviceActive && !virtualDeviceActive) tasks.runId?.let { stopFromSystem(it, reason) }; refreshOverlay() }
     fun windowChanged(packageName: String?) {
+        // Navigation invalidates old node identities, not the logical agent run.
+        PhaseAccessibilityService.instance?.driver?.invalidateForeground(packageName)
         if (panel.finished) refreshOverlay()
-        if (deviceActive && !panel.waitingForUser && activeTargetPackage != null && !launching && !resumed && packageName != null && packageName != context.packageName && packageName != activeTargetPackage) interruptDevice("targetChanged")
     }
 
     private fun send(block: suspend () -> Unit) {

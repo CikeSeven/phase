@@ -7,10 +7,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/utils/logger.dart';
 import '../../../data/models/execution_scope.dart';
-import '../../../data/models/application_access_policy.dart';
 import '../tools/tool.dart';
 import 'execution_api.g.dart';
-import 'application_policy_bridge.dart';
 
 part 'channel_driver.g.dart';
 
@@ -48,7 +46,6 @@ abstract interface class ChannelDriver {
     String runId, {
     ExecutionScope scope = const ExecutionScope(),
     bool deviceTask = true,
-    ApplicationAccessPolicy? currentAppPolicy,
   });
   Future<void> endRun(String runId);
   Future<void> setConfirmation(ExecutionConfirmation? confirmation);
@@ -111,7 +108,6 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
     String runId, {
     ExecutionScope scope = const ExecutionScope(),
     bool deviceTask = true,
-    ApplicationAccessPolicy? currentAppPolicy,
   }) async {
     if ((_runId != null && _runId != runId) || runId.isEmpty) {
       throw const ExecutionFailure(ExecutionFailureCode.invalidArguments);
@@ -125,8 +121,6 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
             runId: runId,
             deviceTask: deviceTask,
             fileUris: scope.fileUris,
-            appPolicy: scope.appPolicy.toBridge(),
-            currentAppPolicy: (currentAppPolicy ?? scope.appPolicy).toBridge(),
           ),
         ),
       );
@@ -284,11 +278,21 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
       final result = await _host.execute(request);
       if (result.toolCallId == pending.id &&
           !pending.done.isCompleted &&
-          !pending.cancelling &&
-          result.result['snapshot'] is Map) {
-        _latestSnapshot = Map<String, Object?>.from(
-          result.result['snapshot'] as Map,
-        );
+          !pending.cancelling) {
+        final snapshot = result.result['snapshot'];
+        if (snapshot is Map) {
+          _latestSnapshot = Map<String, Object?>.from(snapshot);
+        } else if (const {
+          ExecutionAction.openApp,
+          ExecutionAction.inspectUi,
+          ExecutionAction.clickNode,
+          ExecutionAction.scroll,
+          ExecutionAction.inputText,
+          ExecutionAction.captureScreen,
+          ExecutionAction.performGestures,
+        }.contains(request.action)) {
+          _latestSnapshot = null;
+        }
       }
       pending.complete(
         result.toolCallId == pending.id ? result : _failed(pending.id),

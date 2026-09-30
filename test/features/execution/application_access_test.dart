@@ -1,104 +1,29 @@
-import 'package:phase/data/models/permission_mode.dart';
-import 'package:phase/features/tools/tool_permission_policy.dart';
-
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:phase/data/models/application_access_policy.dart';
 import 'package:phase/data/models/execution_scope.dart';
+import 'package:phase/data/models/permission_mode.dart';
 import 'package:phase/data/models/tool_policy.dart';
-import 'package:phase/data/models/tool_call_record.dart';
-import 'package:phase/features/execution/application_policy_sheet.dart';
 import 'package:phase/features/execution/channel_driver.dart';
 import 'package:phase/features/execution/execution_api.g.dart';
 import 'package:phase/features/execution/platform_tools.dart';
 import 'package:phase/features/tools/tool_registry.dart';
-import 'package:phase/data/datasources/local/settings_storage.dart';
+import 'package:phase/features/tools/tool_permission_policy.dart';
 
 import '../../support/fake_channel_driver.dart';
 import '../tools/tool_loop_harness.dart';
 
-InstalledApplication app(
-  String package, {
-  String? label,
-  bool system = false,
-  int installed = 1,
-  int? size,
-}) => InstalledApplication(
-  packageName: package,
-  label: label ?? package,
-  isSystem: system,
-  installedAtMs: installed,
-  sizeBytes: size,
-  launchable: true,
-);
-
 void main() {
-  test('默认允许第三方，系统应用可在黑名单逐个放行；模式切换不覆盖另一份名单', () {
-    const defaults = ApplicationAccessPolicy();
-    expect(defaults.allows('third', isSystem: false), isTrue);
-    expect(defaults.allows('system', isSystem: true), isFalse);
-    final black = defaults
-        .select('third', isSystem: false, selected: true)
-        .select('system', isSystem: true, selected: false);
-    expect(black.allows('third', isSystem: false), isFalse);
-    expect(black.allows('system', isSystem: true), isTrue);
-    final white = black
-        .withMode(AppListMode.whitelist)
-        .select('white', isSystem: false, selected: true);
-    expect(white.allows('system', isSystem: true), isFalse);
-    expect(white.allows('white', isSystem: false), isTrue);
-    final restored = ApplicationAccessPolicy.fromJson(
-      jsonDecode(jsonEncode(white.toJson())) as Map<String, dynamic>,
-    ).withMode(AppListMode.blacklist);
-    expect(restored.blacklist, {'third'});
-    expect(restored.whitelist, {'white'});
-    expect(restored.allowedSystemApps, {'system'});
-    expect(restored.allows('system', isSystem: true), isTrue);
-    expect(
-      restored
-          .select('system', isSystem: true, selected: true)
-          .allows('system', isSystem: true),
-      isFalse,
+  test('执行范围只保存文件授权，不再保存应用名单', () {
+    const scope = ExecutionScope(fileUris: ['content://fixture/root']);
+    final encoded = jsonEncode(scope.toJson());
+    expect(jsonDecode(encoded), {
+      'fileUris': ['content://fixture/root'],
+    });
+    final restored = ExecutionScope.fromJson(
+      jsonDecode(encoded) as Map<String, dynamic>,
     );
-  });
-
-  test('应用列表按名称、首次安装时间和大小稳定排序，筛选和搜索不改变策略', () {
-    final apps = [
-      app('b', label: 'Beta', installed: 30, size: 10),
-      app('a', label: 'Alpha', system: true, installed: 20, size: 90),
-      app('c', label: 'Gamma', installed: 10),
-    ];
-    expect(filterApplications(apps).map((a) => a.packageName), ['a', 'b', 'c']);
-    expect(
-      filterApplications(
-        apps,
-        sort: ApplicationSort.installedAt,
-      ).map((a) => a.packageName),
-      ['b', 'a', 'c'],
-    );
-    expect(
-      filterApplications(
-        apps,
-        sort: ApplicationSort.size,
-      ).map((a) => a.packageName),
-      ['a', 'b', 'c'],
-    );
-    expect(
-      filterApplications(
-        apps,
-        filter: ApplicationFilter.system,
-      ).map((a) => a.packageName),
-      ['a'],
-    );
-    expect(
-      filterApplications(
-        apps,
-        filter: ApplicationFilter.thirdParty,
-        query: 'BETA',
-      ).map((a) => a.packageName),
-      ['b'],
-    );
+    expect(restored.fileUris, scope.fileUris);
   });
 
   test('模式统一控制应用操作；应用列表独立归入只读', () {
@@ -123,17 +48,11 @@ void main() {
     }
   });
 
-  test('获取应用列表经统一策略与真实工具落库，黑名单包名不会泄漏进模型提示词', () async {
+  test('应用列表返回第三方和系统应用，经过只读权限与真实工具落库', () async {
     final h = await ToolLoopHarness.create();
     final driver = h.container.read(channelDriverProvider) as FakeChannelDriver;
-    await h.container
-        .read(settingsStorageProvider)
-        .writeExecutionScope(
-          const ExecutionScope(
-            appPolicy: ApplicationAccessPolicy(blacklist: {'private.blocked'}),
-          ),
-        );
-    h.onConfirmation = (_) async => ToolDecision.approved;
+    h.onConfirmation = (_) async =>
+        throw StateError('list_apps must not request confirmation');
     driver.executeHandler = (request, _) async {
       expect(request.action, ExecutionAction.listApps);
       return ExecutionResult(
@@ -142,12 +61,18 @@ void main() {
         result: {
           'applications': [
             {
-              'packageName': 'third.allowed',
-              'name': 'Allowed',
+              'packageName': 'third.installed',
+              'name': 'Third party',
               'sizeBytes': 123,
+              'isSystem': false,
+            },
+            {
+              'packageName': 'com.android.settings',
+              'name': 'Settings',
+              'isSystem': true,
             },
           ],
-          'total': 1,
+          'total': 2,
         },
         artifacts: [],
       );
@@ -160,21 +85,18 @@ void main() {
     expect(driver.deviceTasks, [false]);
     expect(
       (await h.recordsByCall())['apps']!.result,
-      contains('third.allowed'),
+      contains('third.installed'),
     );
     expect(
-      h.provider.requests.first.systemPrompt,
-      isNot(contains('private.blocked')),
+      (await h.recordsByCall())['apps']!.result,
+      contains('com.android.settings'),
     );
     expect(h.provider.requests.first.systemPrompt, contains('list_apps'));
-    expect(
-      executionScopePrompt(
-        const ExecutionScope(
-          appPolicy: ApplicationAccessPolicy(whitelist: {'hidden.excluded'}),
-        ),
-        applicationOperations: true,
-      ),
-      isNot(contains('hidden.excluded')),
+    final prompt = executionScopePrompt(
+      const ExecutionScope(),
+      applicationOperations: true,
     );
+    expect(prompt, contains('list_apps'));
+    expect(prompt, isNot(contains('名单')));
   });
 }

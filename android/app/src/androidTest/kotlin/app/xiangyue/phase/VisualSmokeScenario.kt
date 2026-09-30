@@ -78,8 +78,7 @@ class VisualSmokeScenario(private val instrumentation: Instrumentation, private 
             val caps = withContext(Dispatchers.Main) { coordinator.queryCapabilities() }
             report.putBoolean("phase_notifications", caps.notificationsAllowed)
             report.putBoolean("phase_accessibility", caps.accessibilityConnected)
-            val policy = ApplicationPolicy(ApplicationListMode.BLACKLIST, emptyList(), emptyList(), emptyList())
-            val reply = withContext(Dispatchers.Main) { coordinator.startRun(ExecutionSession(run, true, emptyList(), policy, policy)) }
+            val reply = withContext(Dispatchers.Main) { coordinator.startRun(ExecutionSession(run, true, emptyList())) }
             report.putString("phase_host_error", reply.error?.name ?: "none")
             check(reply.error == null)
             withTimeout(5000) { while (!withContext(Dispatchers.Main) { button.isShown && button.width > 0 }) delay(20) }
