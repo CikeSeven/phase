@@ -208,7 +208,7 @@ class _ActivityCardGroupState extends State<ActivityCardGroup>
   }
 }
 
-/// 主体先展开，最后一段再拉开间距；只改变卡片之间的空间，不重建卡片。
+/// 主体先展开，再拉开间距；只改变卡片之间的空间，不重建卡片。
 class _ActivityCardContents extends StatefulWidget {
   const _ActivityCardContents({
     required this.expanded,

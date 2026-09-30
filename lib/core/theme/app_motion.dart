@@ -11,7 +11,7 @@ abstract final class AppMotion {
   static const expansionClose = Duration(milliseconds: 180);
   static const expansionCurve = Curves.easeOutCubic;
   static const expansionSpacingCurve = Interval(
-    0.6,
+    0.4,
     1,
     curve: Curves.easeOutCubic,
   );
@@ -22,9 +22,9 @@ abstract final class AppMotion {
     ratio: 0.6,
   );
 
+  // Android 无障碍控件读取也会开启 accessibleNavigation，并不代表减少动画。
   static bool reduce(BuildContext context) =>
-      MediaQuery.disableAnimationsOf(context) ||
-      MediaQuery.accessibleNavigationOf(context);
+      MediaQuery.disableAnimationsOf(context);
 }
 
 /// SDK 按钮的 Material 形状动画不自行读取减少动画偏好，在装配处统一适配。
