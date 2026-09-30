@@ -30,6 +30,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     private var launching = false
     private var overlaySuppressed = false
     private val panel = TaskPanelSession()
+    private data class PanelSubmission(val sourceRunId: String, var nextRunId: String? = null, var cancelled: Boolean = false)
+    private var panelSubmission: PanelSubmission? = null
     private val fileActions = setOf(ExecutionAction.READ_FILE, ExecutionAction.WRITE_FILE, ExecutionAction.LIST_FILES)
     private val visualActions = setOf(ExecutionAction.CAPTURE_SCREEN, ExecutionAction.PERFORM_GESTURES)
     private val tasks: NativeExecutionTasks = NativeExecutionTasks(scope, ExecutionAction.entries.associateWith { action ->
@@ -85,10 +87,22 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         val existing = this.session
         if (runId.isBlank() || (tasks.runId != null && tasks.runId != runId) ||
             (existing != null && existing.fileUris != session.fileUris)) return HostReply(ChannelError.INVALID_ARGUMENTS)
-        if (existing == null) { this.session = session; tasks.begin(runId); panel.clear(); refreshOverlay() }
+        val fromPanel = panelSubmission?.takeIf {
+            !it.cancelled && it.nextRunId == null && it.sourceRunId == panel.runId && panel.finished
+        }
+        if (session.deviceTask && !deviceActive) {
+            if (!resumed && fromPanel == null) return HostReply(ChannelError.UNAVAILABLE)
+            if (context.getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
+                !queryCapabilities().notificationsAllowed || PhaseAccessibilityService.instance == null)
+                return HostReply(ChannelError.PERMISSION_REQUIRED)
+        }
+        if (fromPanel != null) fromPanel.nextRunId = runId
+        if (existing == null) {
+            this.session = session; tasks.begin(runId)
+            if (fromPanel == null) panel.clear()
+            refreshOverlay()
+        }
         if (!session.deviceTask || deviceActive) return HostReply()
-        if (!resumed) return HostReply(ChannelError.UNAVAILABLE)
-        if (!queryCapabilities().notificationsAllowed || PhaseAccessibilityService.instance == null) return HostReply(ChannelError.PERMISSION_REQUIRED)
         val ready = CompletableDeferred<HostReply>()
         starting = ready
         return try {
@@ -96,6 +110,9 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
             if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
             val reply = withTimeout(5000) { ready.await() }
             if (reply.error != null) { endRun(runId); return reply }
+            if (fromPanel?.cancelled == true || tasks.runId != runId) {
+                endRun(runId); return HostReply(ChannelError.CANCELLED)
+            }
             deviceActive = true
             panel.begin(runId)
             refreshOverlay()
@@ -142,6 +159,9 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
 
     /** Latch native stop before notifying Dart, so a late dispatch cannot escape cancellation. */
     fun stopFromSystem(runId: String, reason: String? = null) {
+        val submission = panelSubmission
+        if (reason != "panelMessage" && submission != null &&
+            runId in setOf(submission.sourceRunId, submission.nextRunId)) cancelPanelSubmission()
         if (tasks.runId != runId) return
         shizuku.endOwner(runId)
         tasks.stop(runId)
@@ -193,6 +213,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     private suspend fun executeUi(request: ExecutionRequest, progress: suspend (ProgressKind, String) -> Unit): ExecutionResult = deviceQueue.withLock {
         virtualDeviceActive = false
         val accessibility = PhaseAccessibilityService.instance
+        accessibility?.overlay?.awaitInputIdle()
+        currentCoroutineContext().ensureActive()
         if (request.action == ExecutionAction.CAPTURE_SCREEN && (!deviceActive || accessibility == null))
             return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.PERMISSION_REQUIRED)
         val target = try { resolveUiTarget(request) { accessibility?.driver?.activePackage() } }
@@ -288,6 +310,50 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         }
     }
 
+    private fun submitFromPanel(runId: String, text: String) {
+        val accessibility = PhaseAccessibilityService.instance ?: return
+        if (resumed || panel.runId != runId || panelSubmission != null ||
+            context.getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
+            text.isBlank() || text.length > 16000) {
+            accessibility.overlay.inputFinished(text, "当前无法发送，请返回相月重试")
+            return
+        }
+        val submission = PanelSubmission(runId)
+        panelSubmission = submission
+        if (tasks.runId == runId) stopFromSystem(runId, "panelMessage")
+        refreshOverlay()
+        scope.launch {
+            val error = try {
+                withTimeout(60000) { flutter.messageRequested(runId, text) }
+            } catch (_: TimeoutCancellationException) {
+                cancelPanelSubmission()
+                "发送超时，请返回相月查看"
+            } catch (_: Exception) {
+                cancelPanelSubmission()
+                "任务通道暂不可用，请返回相月重试"
+            }
+            if (panelSubmission !== submission) return@launch
+            panelSubmission = null
+            // An accepted message remains accepted even if its new run was immediately stopped.
+            accessibility.overlay.inputFinished(text, error)
+            refreshOverlay()
+        }
+    }
+
+    private fun cancelPanelSubmission() {
+        val submission = panelSubmission ?: return
+        if (submission.cancelled) return
+        submission.cancelled = true
+        send { flutter.stopRequested(submission.sourceRunId, "panelMessageCancelled") }
+        submission.nextRunId?.let { if (tasks.runId == it) stopFromSystem(it) }
+    }
+
+    private fun stopFromPanel(runId: String) {
+        cancelPanelSubmission()
+        stopFromSystem(runId)
+        refreshOverlay()
+    }
+
     fun refreshOverlay() {
         val service = PhaseAccessibilityService.instance ?: return
         val id = panel.runId
@@ -298,18 +364,20 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         val pending = confirmation
         try {
             service.overlay.show(
-                id, panel.snapshot, pending, panel.finished, panel.continuing,
+                id, panel.snapshot, pending, panel.finished, panel.continuing, panelSubmission != null,
                 decide = { decision -> if (pending != null) decide(id, pending.toolCallId, decision) },
-                stop = { stopFromSystem(id) },
+                stop = { stopFromPanel(id) },
                 resume = { callId -> continueFromPanel(id, callId) },
+                send = { text -> submitFromPanel(id, text) },
                 open = {
-                    if (panel.dismiss(id)) {
-                        service.overlay.hide()
+                    if (panel.runId == id) {
+                        if (panel.finished && panelSubmission == null && panel.dismiss(id)) service.overlay.dismiss()
+                        else service.overlay.hide()
                         context.startActivity(Intent(context, MainActivity::class.java).addFlags(
                             Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP))
                     }
                 },
-                close = { if (panel.dismiss(id)) service.overlay.hide() },
+                close = { if (panelSubmission == null && panel.dismiss(id)) service.overlay.dismiss() },
             )
         } catch (_: Exception) {
             service.overlay.hide()
@@ -318,7 +386,11 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     }
 
     fun accessibilityChanged() { send { flutter.capabilityChanged(queryCapabilities()) } }
-    fun interruptDevice(reason: String) { if (deviceActive && !virtualDeviceActive) tasks.runId?.let { stopFromSystem(it, reason) }; refreshOverlay() }
+    fun interruptDevice(reason: String) {
+        cancelPanelSubmission()
+        if (deviceActive && !virtualDeviceActive) tasks.runId?.let { stopFromSystem(it, reason) }
+        refreshOverlay()
+    }
     fun windowChanged(packageName: String?) {
         // Navigation invalidates old node identities, not the logical agent run.
         PhaseAccessibilityService.instance?.driver?.invalidateForeground(packageName)

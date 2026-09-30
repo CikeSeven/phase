@@ -38,6 +38,20 @@ final class NativeContinue extends NativeExecutionEvent {
   final String toolCallId;
 }
 
+final class NativePanelMessage extends NativeExecutionEvent {
+  NativePanelMessage(this.runId, this.text);
+  final String runId;
+  final String text;
+  final cancellation = RunCancellation();
+  final _reply = Completer<String?>();
+
+  Future<String?> get reply => _reply.future;
+
+  void complete(String? error) {
+    if (!_reply.isCompleted) _reply.complete(error);
+  }
+}
+
 abstract interface class ChannelDriver {
   Stream<NativeExecutionEvent> get events;
   Map<String, Object?>? get latestSnapshot;
@@ -76,6 +90,7 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   final _events = StreamController<NativeExecutionEvent>.broadcast(sync: true);
   final _pending = <String, _PendingExecution>{};
   final _seen = <String>{};
+  final _panelMessages = <NativePanelMessage>{};
   String? _runId;
   Map<String, Object?>? _latestSnapshot;
   bool _disposed = false;
@@ -340,6 +355,22 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
     if (!_disposed) _events.add(NativeContinue(runId, toolCallId));
   }
 
+  @override
+  Future<String?> messageRequested(String runId, String text) async {
+    if (_disposed || !_events.hasListener) return '任务通道暂不可用，请返回相月重试';
+    if (runId.isEmpty || text.trim().isEmpty || text.length > 16000) {
+      return '消息为空或过长';
+    }
+    final request = NativePanelMessage(runId, text);
+    _panelMessages.add(request);
+    _events.add(request);
+    try {
+      return await request.reply;
+    } finally {
+      _panelMessages.remove(request);
+    }
+  }
+
   Future<void> _bestEffort(Future<void> Function() action) async {
     try {
       await action().timeout(cancelGrace);
@@ -353,6 +384,10 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
     if (_disposed) return;
     _disposed = true;
     ExecutionFlutterApi.setUp(null, binaryMessenger: _messenger);
+    for (final request in _panelMessages) {
+      request.cancellation.cancel();
+      request.complete('任务通道已关闭，请返回相月重试');
+    }
     for (final pending in _pending.values.toList()) {
       pending.complete(
         _result(pending.id, ExecutionStatus.cancelled, ChannelError.cancelled),

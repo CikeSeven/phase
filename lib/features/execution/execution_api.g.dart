@@ -894,6 +894,7 @@ class TaskPanelSnapshot {
     required this.messages,
     this.waitingToolCallId,
     this.userPrompt,
+    this.darkTheme,
   });
 
   String runId;
@@ -908,6 +909,8 @@ class TaskPanelSnapshot {
 
   String? userPrompt;
 
+  bool? darkTheme;
+
   List<Object?> _toList() {
     return <Object?>[
       runId,
@@ -916,6 +919,7 @@ class TaskPanelSnapshot {
       messages,
       waitingToolCallId,
       userPrompt,
+      darkTheme,
     ];
   }
 
@@ -932,6 +936,7 @@ class TaskPanelSnapshot {
       messages: (result[3]! as List<Object?>).cast<TaskPanelMessage>(),
       waitingToolCallId: result[4] as String?,
       userPrompt: result[5] as String?,
+      darkTheme: result[6] as bool?,
     );
   }
 
@@ -949,7 +954,8 @@ class TaskPanelSnapshot {
         _deepEquals(status, other.status) &&
         _deepEquals(messages, other.messages) &&
         _deepEquals(waitingToolCallId, other.waitingToolCallId) &&
-        _deepEquals(userPrompt, other.userPrompt);
+        _deepEquals(userPrompt, other.userPrompt) &&
+        _deepEquals(darkTheme, other.darkTheme);
   }
 
   @override
@@ -958,7 +964,7 @@ class TaskPanelSnapshot {
 
   @override
   String toString() {
-    return 'TaskPanelSnapshot(runId: $runId, phase: $phase, status: $status, messages: $messages, waitingToolCallId: $waitingToolCallId, userPrompt: $userPrompt)';
+    return 'TaskPanelSnapshot(runId: $runId, phase: $phase, status: $status, messages: $messages, waitingToolCallId: $waitingToolCallId, userPrompt: $userPrompt, darkTheme: $darkTheme)';
   }
 }
 
@@ -1629,6 +1635,8 @@ abstract class ExecutionFlutterApi {
 
   void continueRequested(String runId, String toolCallId);
 
+  Future<String?> messageRequested(String runId, String text);
+
   static void setUp(
     ExecutionFlutterApi? api, {
     BinaryMessenger? binaryMessenger,
@@ -1758,6 +1766,35 @@ abstract class ExecutionFlutterApi {
           try {
             api.continueRequested(arg_runId, arg_toolCallId);
             return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          } catch (e) {
+            return wrapResponse(
+              error: PlatformException(code: 'error', message: e.toString()),
+            );
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+        'dev.flutter.pigeon.phase.ExecutionFlutterApi.messageRequested$messageChannelSuffix',
+        pigeonChannelCodec,
+        binaryMessenger: binaryMessenger,
+      );
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final String arg_runId = args[0]! as String;
+          final String arg_text = args[1]! as String;
+          try {
+            final String? output = await api.messageRequested(
+              arg_runId,
+              arg_text,
+            );
+            return wrapResponse(result: output);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);
           } catch (e) {

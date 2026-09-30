@@ -227,6 +227,7 @@ class TaskPanelSnapshot {
     required this.messages,
     this.waitingToolCallId,
     this.userPrompt,
+    this.darkTheme,
   });
   String runId;
   TaskPanelPhase phase;
@@ -234,6 +235,7 @@ class TaskPanelSnapshot {
   List<TaskPanelMessage> messages;
   String? waitingToolCallId;
   String? userPrompt;
+  bool? darkTheme;
 }
 
 class HostReply {
@@ -305,4 +307,6 @@ abstract class ExecutionFlutterApi {
   );
   void stopRequested(String runId, String? reason);
   void continueRequested(String runId, String toolCallId);
+  @async
+  String? messageRequested(String runId, String text);
 }

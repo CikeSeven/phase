@@ -41,6 +41,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
@@ -235,6 +236,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   RunFinishReason? _turnFailure;
   bool _runFinished = false;
   bool _busy = false;
+  String? _busyRunId;
+  Completer<void>? _idleCompleter;
   bool _submittedPlan = false;
   int _viewRevision = 0;
   bool _responseComplete = false;
@@ -250,6 +253,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _cancellation?.cancel();
       _acceptingChunks = false;
       _completeRequest();
+      final idle = _idleCompleter;
+      if (idle != null && !idle.isCompleted) idle.complete();
     });
     return const ChatState();
   }
@@ -447,13 +452,98 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
       await _send(text, attachments: attachments);
     } finally {
-      _busy = false;
+      _releaseBusy();
+    }
+  }
+
+  void _releaseBusy() {
+    _busy = false;
+    _busyRunId = null;
+    final idle = _idleCompleter;
+    _idleCompleter = null;
+    if (idle != null && !idle.isCompleted) idle.complete();
+  }
+
+  void _checkPanelCancellation(RunCancellation? cancellation) {
+    if (!ref.mounted || cancellation?.isCancelled == true) {
+      throw const CancelledFailure('悬浮面板发送已取消');
+    }
+  }
+
+  /// 面板消息绑定来源会话；旧运行完全收尾后才创建新的独立运行。
+  Future<void> _sendFromPanel(
+    String sourceRunId,
+    String conversationId,
+    String text,
+    RunCancellation cancellation,
+  ) async {
+    _checkPanelCancellation(cancellation);
+    if (_busy) {
+      if (_run?.id != sourceRunId && _busyRunId != sourceRunId) {
+        throw const OperationFailure('已有其他操作，请返回相月处理');
+      }
+      final idle = _idleCompleter ??= Completer<void>();
+      ref.read(executionControllerProvider.notifier).stopRun(sourceRunId);
+      stop();
+      await Future.any([idle.future, cancellation.whenCancelled]);
+    }
+    _checkPanelCancellation(cancellation);
+    if (_busy || state.isGenerating || state.savingPermissionMode) {
+      throw const OperationFailure('当前操作尚未结束，请稍后重试');
+    }
+    _busy = true;
+    final accepted = Completer<void>();
+    unawaited(_sendPanelMessage(conversationId, text, cancellation, accepted));
+    await accepted.future;
+  }
+
+  Future<void> _sendPanelMessage(
+    String conversationId,
+    String text,
+    RunCancellation cancellation,
+    Completer<void> accepted,
+  ) async {
+    try {
+      await ref.read(runRecoveryControllerProvider.notifier).initialize();
+      _checkPanelCancellation(cancellation);
+      await openConversation(conversationId);
+      _checkPanelCancellation(cancellation);
+      if (ref.read(activeConversationProvider).conversationId !=
+          conversationId) {
+        throw const OperationFailure('原会话已不可用，请返回相月处理');
+      }
+      await _send(
+        text,
+        panelCancellation: cancellation,
+        onPanelAccepted: () {
+          if (!accepted.isCompleted) accepted.complete();
+        },
+      );
+      if (!accepted.isCompleted) {
+        throw const OperationFailure('消息未发送，请稍后重试');
+      }
+    } catch (error, stackTrace) {
+      final failure = error is Failure
+          ? error
+          : const OperationFailure('发送失败，请稍后重试');
+      if (!accepted.isCompleted) {
+        accepted.completeError(failure, stackTrace);
+      } else if (ref.mounted) {
+        ref
+            .read(executionControllerProvider.notifier)
+            .reportPanelFailure(failure);
+      }
+      if (error is! Failure) AppLogger.warning('悬浮面板运行异常');
+    } finally {
+      _releaseBusy();
     }
   }
 
   Future<void> _send(
     String text, {
     List<Attachment> attachments = const [],
+    RunCancellation? panelCancellation,
+    void Function()? onPanelAccepted,
   }) async {
     final trimmed = text.trim();
     if ((trimmed.isEmpty && attachments.isEmpty) || state.isGenerating) {
@@ -535,6 +625,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     }
 
     final parentId = thread.currentMessageId;
+    if (panelCancellation != null) _checkPanelCancellation(panelCancellation);
     final userMessage = ChatMessage(
       id: generateId(),
       conversationId: conversationId,
@@ -561,6 +652,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       assistant: assistant,
       mode: permissions.mode,
       planExecutionMode: permissions.lastExecutionMode,
+      panelCancellation: panelCancellation,
+      onPanelAccepted: onPanelAccepted,
     );
   }
 
@@ -576,7 +669,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
       await _regenerate();
     } finally {
-      _busy = false;
+      _releaseBusy();
     }
   }
 
@@ -708,7 +801,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         planExecutionMode: source.configuration.planExecutionMode,
       );
     } finally {
-      _busy = false;
+      _releaseBusy();
     }
   }
 
@@ -973,7 +1066,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     } finally {
       cancellation.cancel();
       _cancellation = null;
-      _busy = false;
+      _releaseBusy();
       if (ref.mounted) {
         state = state.copyWith(isGenerating: false, clearRun: true);
       }
@@ -993,6 +1086,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     required PermissionMode mode,
     required PermissionMode planExecutionMode,
     AgentPlan? approvedPlan,
+    RunCancellation? panelCancellation,
+    void Function()? onPanelAccepted,
   }) async {
     final runs = await ref.read(agentRunRepositoryProvider.future);
     final modelConfig = selection.profile.models
@@ -1182,13 +1277,20 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         ),
         createdAt: DateTime.now(),
       );
+      if (panelCancellation != null) _checkPanelCancellation(panelCancellation);
       final run = approvedPlan == null
           ? await runs.create(candidate)
           : await (await ref.read(planRepositoryProvider.future))
                 .approveAndCreate(approvedPlan, candidate);
 
       try {
-        await _driveRun(run, repository, selection);
+        await _driveRun(
+          run,
+          repository,
+          selection,
+          panelCancellation: panelCancellation,
+          onPanelAccepted: onPanelAccepted,
+        );
       } on Failure {
         final stored = await runs.getById(run.id);
         if (stored?.status == RunStatus.running && stored?.turnCount == 0) {
@@ -1211,7 +1313,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     ConversationRepository repository,
     ChatModelSelection selection, {
     bool resuming = false,
+    RunCancellation? panelCancellation,
+    void Function()? onPanelAccepted,
   }) async {
+    _busyRunId = run.id;
     final runs = await ref.read(agentRunRepositoryProvider.future);
     final toolCalls = await ref.read(toolCallRepositoryProvider.future);
     final storage = await ref.read(artifactStorageProvider.future);
@@ -1422,6 +1527,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         run.id,
         stop: stop,
         scope: run.configuration.executionScope,
+        darkTheme: switch (ref.read(settingsStorageProvider).readThemeMode()) {
+          ThemeMode.light => false,
+          ThemeMode.dark => true,
+          ThemeMode.system => null,
+        },
+        onPanelMessage: (text, cancellation) =>
+            _sendFromPanel(run.id, run.conversationId, text, cancellation),
       );
       _runAttachments = await _attachmentIndex(run.conversationId, const []);
       state = state.copyWith(
@@ -1435,6 +1547,21 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             ? _runAttachments
             : null,
       );
+
+      if (onPanelAccepted != null) {
+        if (panelCancellation?.isCancelled == true) execution.stopRun(run.id);
+        _checkPanelCancellation(panelCancellation);
+        unawaited(
+          panelCancellation!.whenCancelled.then((_) {
+            if (ref.mounted && _run?.id == run.id) {
+              execution.stopRun(run.id);
+            }
+          }),
+        );
+        await execution.ensureDeviceHost(run.id);
+        _checkPanelCancellation(panelCancellation);
+        onPanelAccepted();
+      }
 
       if (resuming && !await _restorePendingTools()) return;
       if (_submittedPlan) {
@@ -1625,7 +1752,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         resuming: true,
       );
     } finally {
-      _busy = false;
+      _releaseBusy();
     }
   }
 

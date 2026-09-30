@@ -215,6 +215,13 @@
 - 随后按用户要求，在设备 `1b8418ca`（2211133C）用 `adb install -r` 覆盖安装二次调整后的 Profile 包（66.6 MB，SHA-256 `61a127e528875e7ce789ccf15552249441d7780cbc7b419d610b425cfd6f4316`）：安装 `Success`、启动 `Status: ok`，进程存活、无障碍服务重新挂接，首次安装时间不变。未卸载或清数据；仅验证安装与启动，未触发模型任务或将动画效果计为验收通过。记录在忽略的 `build/task-panel-v2-install/`。
 - 后续修正收起态正文展示：直接取最新正文原文，按实际宽度/字号显示末尾两行，流式增量与完成快照原位替换，不逐段重复切换动画；确认、用户交接和工具结果仍按实际阶段显示。仅调整原生展示与 UI 契约，`:app:testDebugUnitTest` 43 项及 diff 检查通过；此次未重新装机，原生换行与流式观感尚待真机验证。
 
+2026-10-01 按用户要求调整为底部悬浮输入框（替代上述侧边面板）：
+
+- `TaskOverlay.kt` 固定底部居中，沿用主页 16dp 水平留白、4dp 底部留白、28dp 圆角、月色半透明高光表面；上方两行最新正文/公开思考原文，下方输入与同位打断/发送，保留确认、继续、返回和终态关闭。根据真机反馈明确降低透背景程度，用户进一步指定深浅主题底色均约 95% 不透明（约 5% 透感）；之前降低 alpha 的调整方向不正确，打断/发送复用同一个 56dp 布局和 40dp 色面，运行时打断、空闲时发送；输入法回车为换行。流式原位替换，草稿及最新片段临时隐藏后保留；系统字号、短屏滚动、键盘避让与减少动画按新 DESIGN 契约实现。
+- Pigeon 增加带接受/失败回执的面板消息通道和主题覆盖值。`ExecutionCoordinator` 仅为当前面板的显式发送开放一次后台宿主接续；`ExecutionController` / `ChatController` 绑定来源会话，取消旧运行并等待清理后创建独立运行，宿主接管后才清空草稿；不继承本轮应用操作批准，不自动重发动作。输入聚焦时待派发的主屏动作等待，不与用户争抢键盘。
+- 已执行 Pigeon/Riverpod 生成、应用源码格式检查、`flutter analyze lib pigeons`、`git diff --check` 与 Profile 构建。全量检查仍有既有测试问题：`schema8_fixture.dart` 格式、`chat_page_layout_test.dart` / `shell_tool_test.dart` 接口覆盖及 `permission_mode_upgrade_test.dart` 引号 lint；未新增、修改或运行测试。
+- 此前 90% 不透明版本已在设备 `1b8418ca` 用 `adb install -r` 覆盖安装，安装 `Success`、启动 `Status: ok`，进程存活、首次安装时间不变，未卸载、清数据或更改 schema；记录在忽略的 `build/bottom-task-panel-90-install/`。本次按用户指定改为 95% 不透明并成功构建 Profile，但 ADB 当前无在线设备，尚未安装此版本。已被动查看此前实际悬浮框截图，确认透背景程度的调整方向；当前深浅主题、中文输入/键盘、确认/继续、发送取消边界与跨应用操作仍待真机验收，不以构建或启动代替。
+
 ## 7. E5：Agent 上下文与计划
 
 设计入口：[扩展设计 §8](./agent_extensions_design.md#extensions-planning)。

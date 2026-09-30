@@ -910,7 +910,8 @@ data class TaskPanelSnapshot (
   val status: String,
   val messages: List<TaskPanelMessage>,
   val waitingToolCallId: String? = null,
-  val userPrompt: String? = null
+  val userPrompt: String? = null,
+  val darkTheme: Boolean? = null
 )
  {
   companion object {
@@ -921,7 +922,8 @@ data class TaskPanelSnapshot (
       val messages = pigeonVar_list[3] as List<TaskPanelMessage>
       val waitingToolCallId = pigeonVar_list[4] as String?
       val userPrompt = pigeonVar_list[5] as String?
-      return TaskPanelSnapshot(runId, phase, status, messages, waitingToolCallId, userPrompt)
+      val darkTheme = pigeonVar_list[6] as Boolean?
+      return TaskPanelSnapshot(runId, phase, status, messages, waitingToolCallId, userPrompt, darkTheme)
     }
   }
   fun toList(): List<Any?> {
@@ -932,6 +934,7 @@ data class TaskPanelSnapshot (
       messages,
       waitingToolCallId,
       userPrompt,
+      darkTheme,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -942,7 +945,7 @@ data class TaskPanelSnapshot (
       return true
     }
     val other = other as TaskPanelSnapshot
-    return ExecutionApiPigeonUtils.deepEquals(this.runId, other.runId) && ExecutionApiPigeonUtils.deepEquals(this.phase, other.phase) && ExecutionApiPigeonUtils.deepEquals(this.status, other.status) && ExecutionApiPigeonUtils.deepEquals(this.messages, other.messages) && ExecutionApiPigeonUtils.deepEquals(this.waitingToolCallId, other.waitingToolCallId) && ExecutionApiPigeonUtils.deepEquals(this.userPrompt, other.userPrompt)
+    return ExecutionApiPigeonUtils.deepEquals(this.runId, other.runId) && ExecutionApiPigeonUtils.deepEquals(this.phase, other.phase) && ExecutionApiPigeonUtils.deepEquals(this.status, other.status) && ExecutionApiPigeonUtils.deepEquals(this.messages, other.messages) && ExecutionApiPigeonUtils.deepEquals(this.waitingToolCallId, other.waitingToolCallId) && ExecutionApiPigeonUtils.deepEquals(this.userPrompt, other.userPrompt) && ExecutionApiPigeonUtils.deepEquals(this.darkTheme, other.darkTheme)
   }
 
   override fun hashCode(): Int {
@@ -953,10 +956,11 @@ data class TaskPanelSnapshot (
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.messages)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.waitingToolCallId)
     result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.userPrompt)
+    result = 31 * result + ExecutionApiPigeonUtils.deepHash(this.darkTheme)
     return result
   }
   override fun toString(): String {
-    return "TaskPanelSnapshot(runId=$runId, phase=$phase, status=$status, messages=$messages, waitingToolCallId=$waitingToolCallId, userPrompt=$userPrompt)"
+    return "TaskPanelSnapshot(runId=$runId, phase=$phase, status=$status, messages=$messages, waitingToolCallId=$waitingToolCallId, userPrompt=$userPrompt, darkTheme=$darkTheme)"
   }
 }
 
@@ -1728,6 +1732,26 @@ class ExecutionFlutterApi(private val binaryMessenger: BinaryMessenger, private 
             continuation.resumeWithException(FlutterError(it[0] as String, it[1] as String, it[2] as String?))
           } else {
             continuation.resume(Unit)
+          }
+        } else {
+          continuation.resumeWithException(ExecutionApiPigeonUtils.createConnectionError(channelName))
+        }
+      }
+    }
+  }
+  suspend fun messageRequested(runIdArg: String, textArg: String): String?
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    return suspendCancellableCoroutine { continuation ->
+      val channelName = "dev.flutter.pigeon.phase.ExecutionFlutterApi.messageRequested$separatedMessageChannelSuffix"
+      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+      channel.send(listOf(runIdArg, textArg)) {
+        if (it is List<*>) {
+          if (it.size > 1) {
+            continuation.resumeWithException(FlutterError(it[0] as String, it[1] as String, it[2] as String?))
+          } else {
+            val output = it[0] as String?
+            continuation.resume(output)
           }
         } else {
           continuation.resumeWithException(ExecutionApiPigeonUtils.createConnectionError(channelName))

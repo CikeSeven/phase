@@ -1,6 +1,7 @@
 package app.xiangyue.phase.accessibility
 
 import android.animation.ValueAnimator
+import android.content.Context
 import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
@@ -13,341 +14,389 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.Editable
+import android.text.InputFilter
+import android.text.InputType
+import android.text.TextWatcher
+import android.util.DisplayMetrics
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
-import android.view.ViewConfiguration
-import android.view.ViewTreeObserver
 import android.view.WindowInsets
+import android.view.WindowInsetsAnimation
 import android.view.WindowManager
 import android.view.animation.AlphaAnimation
 import android.view.animation.AnimationSet
 import android.view.animation.PathInterpolator
 import android.view.animation.TranslateAnimation
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
 import android.widget.*
 import app.xiangyue.phase.R
 import app.xiangyue.phase.bridge.*
+import kotlinx.coroutines.CompletableDeferred
 import org.json.JSONObject
-import kotlin.math.abs
 
-/** A single, bounded window: morph its bounds rather than remove/re-add it on every state change. */
+/** A bottom composer with a bounded touch region; never cover the rest of the display. */
 class TaskOverlay(private val service: PhaseAccessibilityService) {
     private val manager = service.getSystemService(WindowManager::class.java)
+    private val keyboard = service.getSystemService(InputMethodManager::class.java)
     private val handler = Handler(Looper.getMainLooper())
-    private val position = TaskPanelPosition()
     private val easing = PathInterpolator(0.2f, 0f, 0f, 1f)
     private var view: FrameLayout? = null
     private var params: WindowManager.LayoutParams? = null
     private var motion: ValueAnimator? = null
     private var targetFrame: TaskPanelFrame? = null
     private var run: String? = null
-    private var expanded = false
     private var finished = false
+    private var submitting = false
     private var snapshot: TaskPanelSnapshot? = null
     private var confirmation: ExecutionConfirmation? = null
     private var continuing = false
+    private var darkOverride: Boolean? = null
     private var column: LinearLayout? = null
-    private var header: LinearLayout? = null
     private var title: TaskPanelTextView? = null
     private var displayedHeadline: TaskPanelHeadline? = null
-    private var chevron: ImageView? = null
-    private var primary: ImageButton? = null
-    private var stopButton: ImageButton? = null
-    private var footer: LinearLayout? = null
-    private var terminal: LinearLayout? = null
-    private var scroll: ScrollView? = null
-    private var feed: LinearLayout? = null
-    private val rows = linkedMapOf<String, MessageRow>()
-    private var scrollY = 0
-    private var followTail = true
-    private var reading = false
-    private var followOnLayout: ViewTreeObserver.OnPreDrawListener? = null
+    private var lastAiHeadline: TaskPanelHeadline? = null
+    private var continueButton: ImageButton? = null
+    private var closeButton: ImageButton? = null
+    private var primaryButton: PanelButton? = null
+    private var editor: OverlayEditText? = null
+    private var errorView: TextView? = null
+    private var approval: LinearLayout? = null
+    private var approvalLabel: TextView? = null
+    private var approvalBody: TextView? = null
+    private var allowButton: TextView? = null
     private var countdown: Runnable? = null
+    private var draft = ""
+    private var selectionStart = 0
+    private var selectionEnd = 0
+    private var inputError: String? = null
+    private var editing: CompletableDeferred<Unit>? = null
+    private var imeBottom = 0
+    private var imeVisible = false
+    private var detaching = false
+    private var surfaceKey: Int? = null
     private var decide: (ConfirmationDecision) -> Unit = {}
     private var stop: () -> Unit = {}
     private var resume: (String) -> Unit = {}
+    private var send: (String) -> Unit = {}
     private var open: () -> Unit = {}
     private var close: () -> Unit = {}
-    private var dragX = 0f
-    private var dragY = 0f
-    private var originX = 0
-    private var originY = 0
-    private var dragging = false
-    private val dark get() = service.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
-    private val ink get() = color(if (dark) "#E5EBF7" else "#17243D")
-    private val muted get() = color(if (dark) "#BBC6DC" else "#4C5E7C")
+    private val dark get() = darkOverride ?: (service.resources.configuration.uiMode and
+        Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES)
+    private val ink get() = color(if (dark) "#E4EAF7" else "#182338")
+    private val muted get() = color(if (dark) "#BAC6DC" else "#475469")
     private val accent get() = color(if (dark) "#BACBFF" else "#3D5A98")
+    private val onAccent get() = color(if (dark) "#1C2E52" else "#FFFFFF")
     private val error get() = color(if (dark) "#FFB4AB" else "#B3261E")
-    private val surface get() = color(if (dark) "#F019263D" else "#F7F5F7FC")
-    private val waiting get() = snapshot?.waitingToolCallId != null
+    private val waiting get() = !finished && snapshot?.waitingToolCallId != null
 
-    /** Capture and lifecycle hides are immediate; no animation may leak into a tool screenshot. */
+    /** A user editing the panel owns keyboard focus; queued device actions wait before dispatch. */
+    suspend fun awaitInputIdle() { while (editing != null) editing?.await() }
+
+    /** Capture, locking and lifecycle hides are immediate. Only a draft and two-line preview survive. */
     fun hide() {
+        detaching = true
+        editor?.let {
+            draft = it.text.toString()
+            selectionStart = it.selectionStart.coerceAtLeast(0)
+            selectionEnd = it.selectionEnd.coerceAtLeast(0)
+        }
+        finishEditing()
         countdown?.let(handler::removeCallbacks); countdown = null
         motion?.cancel(); motion = null; targetFrame = null
-        scroll?.let { scrollY = it.scrollY; followTail = !it.canScrollVertically(1) }
         title?.clearAnimation()
-        rows.values.forEach { it.container.animate().cancel() }
-        followOnLayout?.let { listener ->
-            view?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnPreDrawListener(listener)
-        }
-        followOnLayout = null
+        primaryButton?.face?.animate()?.cancel()
         view?.let { try { manager.removeView(it) } catch (_: IllegalArgumentException) {} }
-        view = null; params = null; column = null; header = null; title = null
-        chevron = null; primary = null; stopButton = null; footer = null; terminal = null
-        scroll = null; feed = null; rows.clear(); displayedHeadline = null; reading = false
-        decide = {}; stop = {}; resume = {}; open = {}; close = {}
+        view = null; params = null; column = null; title = null; displayedHeadline = null
+        continueButton = null; closeButton = null; primaryButton = null
+        editor = null; errorView = null; approval = null; approvalLabel = null; approvalBody = null; allowButton = null
+        imeBottom = 0; imeVisible = false
+        decide = {}; stop = {}; resume = {}; send = {}; open = {}; close = {}
+        detaching = false
     }
 
     fun show(
         runId: String, value: TaskPanelSnapshot?, pending: ExecutionConfirmation?, finished: Boolean,
-        isContinuing: Boolean, decide: (ConfirmationDecision) -> Unit, stop: () -> Unit,
-        resume: (String) -> Unit, open: () -> Unit, close: () -> Unit,
+        isContinuing: Boolean, isSubmitting: Boolean, decide: (ConfirmationDecision) -> Unit,
+        stop: () -> Unit, resume: (String) -> Unit, send: (String) -> Unit,
+        open: () -> Unit, close: () -> Unit,
     ) {
+        val wasDark = dark
         if (run != runId) {
-            hide(); run = runId; expanded = false; scrollY = 0; followTail = true
+            hide(); run = runId; lastAiHeadline = null
+            if (!isSubmitting) { draft = ""; selectionStart = 0; selectionEnd = 0; inputError = null; darkOverride = null }
         }
-        val newConfirmation = pending != null && confirmation?.toolCallId != pending.toolCallId
-        if (newConfirmation) expanded = true
-        snapshot = value; confirmation = pending; continuing = isContinuing; this.finished = finished
-        this.decide = decide; this.stop = stop; this.resume = resume; this.open = open; this.close = close
+        if (value != null) darkOverride = value.darkTheme
+        if (view != null && wasDark != dark) hide()
+        snapshot = value; confirmation = pending; continuing = isContinuing
+        this.finished = finished; submitting = isSubmitting
+        this.decide = decide; this.stop = stop; this.resume = resume
+        this.send = send; this.open = open; this.close = close
         if (view == null) attach() else render(animate = true)
         countdown?.let(handler::removeCallbacks); countdown = null
         if (pending != null) {
             countdown = object : Runnable {
-                override fun run() { render(animate = true); handler.postDelayed(this, 1000) }
+                override fun run() { render(animate = false); handler.postDelayed(this, 1000) }
             }.also { handler.postDelayed(it, 1000) }
         }
     }
 
+    fun inputFinished(text: String, error: String?) {
+        submitting = false
+        inputError = error
+        if (error == null && draft == text) {
+            draft = ""; selectionStart = 0; selectionEnd = 0
+            editor?.setText("")
+        }
+        render(animate = true)
+    }
+
+    fun dismiss() {
+        hide(); run = null; snapshot = null; confirmation = null; lastAiHeadline = null
+        draft = ""; selectionStart = 0; selectionEnd = 0; inputError = null; darkOverride = null
+    }
+
     private fun attach() {
         val root = FrameLayout(service).apply {
-            background = shape(surface, 24).apply { setStroke(dp(1), color(if (dark) "#425472" else "#D8E1F3")) }
-            elevation = dp(6).toFloat()
-            clipToOutline = true
-        }
-        view = root
-        column = LinearLayout(service).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(4), dp(4), dp(4), dp(4))
-        }
-        val row = LinearLayout(service).apply { gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(56) }
-        header = row
-        column!!.addView(row)
-        val toggle = LinearLayout(service).apply {
-            gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(56)
-            setPadding(dp(8), 0, 0, 0); background = ripple(Color.TRANSPARENT)
-            setOnClickListener { expanded = !expanded; render(animate = true) }
-        }
-        title = TaskPanelTextView(service).apply { textSize = 14f; setTextColor(accent) }
-        toggle.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
-        chevron = ImageView(service).apply {
-            setImageResource(R.drawable.ic_task_expand); imageTintList = ColorStateList.valueOf(muted)
-            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-        }
-        toggle.addView(chevron, LinearLayout.LayoutParams(dp(16), dp(24)))
-        draggable(toggle)
-        row.addView(toggle, LinearLayout.LayoutParams(0, -2, 1f))
-        primary = icon(R.drawable.ic_task_stop, "停止任务", error) {
-            val callId = snapshot?.waitingToolCallId
-            if (callId != null) { if (!continuing) resume(callId) } else stop()
-        }
-        row.addView(primary)
-        stopButton = icon(R.drawable.ic_task_stop, "停止任务", error) { stop() }
-        row.addView(stopButton)
-        feed = LinearLayout(service).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), 0, dp(12), dp(8))
-        }
-        scroll = ScrollView(service).apply {
-            isFillViewport = false; addView(feed)
+            setPadding(dp(12), dp(12), dp(12), dp(4))
+            elevation = dp(6).toFloat(); clipToOutline = true
             setOnTouchListener { _, event ->
-                reading = event.actionMasked != MotionEvent.ACTION_UP && event.actionMasked != MotionEvent.ACTION_CANCEL
-                followTail = !canScrollVertically(1); this@TaskOverlay.scrollY = this.scrollY
+                if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) finishEditing()
                 false
             }
         }
-        column!!.addView(scroll, LinearLayout.LayoutParams(-1, dp(136)))
-        footer = LinearLayout(service).apply { gravity = Gravity.END }
-        footer!!.addView(icon(R.drawable.ic_task_close, "拒绝本次动作", muted) { decide(ConfirmationDecision.REJECT) })
-        footer!!.addView(icon(R.drawable.ic_task_check, "允许本次动作", accent) { decide(ConfirmationDecision.APPROVE) })
-        column!!.addView(footer)
-        root.addView(column, FrameLayout.LayoutParams(-1, -2))
-        terminal = LinearLayout(service).apply {
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(4), dp(4), dp(4)); minimumHeight = dp(64)
-            addView(icon(R.drawable.ic_task_return, "返回相月", accent) { open() }.also(::draggable))
-            addView(icon(R.drawable.ic_task_close, "关闭悬浮窗", muted) { close() }.also(::draggable))
+        view = root
+        val content = LinearLayout(service).apply { orientation = LinearLayout.VERTICAL }
+        column = content
+        val preview = LinearLayout(service).apply { gravity = Gravity.CENTER_VERTICAL }
+        title = TaskPanelTextView(service).apply {
+            textSize = 14f; minLines = 2; minimumHeight = dp(48)
+            setLineSpacing(0f, 1.5f); setPadding(dp(4), 0, dp(4), 0)
+            setOnClickListener { finishEditing(); open() }
         }
-        root.addView(terminal, FrameLayout.LayoutParams(-1, -2))
+        preview.addView(title, LinearLayout.LayoutParams(0, -2, 1f))
+        continueButton = icon(R.drawable.ic_task_play, "继续，让 AI 接管", accent) {
+            snapshot?.waitingToolCallId?.let { if (!continuing) { finishEditing(); resume(it) } }
+        }
+        preview.addView(continueButton)
+        preview.addView(icon(R.drawable.ic_task_return, "返回相月", muted) { finishEditing(); open() })
+        closeButton = icon(R.drawable.ic_task_close, "关闭悬浮窗", muted) { finishEditing(); close() }
+        preview.addView(closeButton)
+        content.addView(preview)
+        approval = LinearLayout(service).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(4), dp(8), dp(4), dp(4))
+        }
+        approvalLabel = text(12f, accent)
+        approvalBody = text(14f, ink).apply { setPadding(0, dp(4), 0, dp(4)); setTextIsSelectable(true) }
+        approval!!.addView(approvalLabel)
+        approval!!.addView(ScrollView(service).apply { addView(approvalBody) }, LinearLayout.LayoutParams(-1, dp(136)))
+        val decisions = LinearLayout(service).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL }
+        decisions.addView(action("拒绝", muted, Color.TRANSPARENT) { decide(ConfirmationDecision.REJECT) },
+            LinearLayout.LayoutParams(0, -2, 1f))
+        allowButton = action("允许一次", onAccent, accent) { decide(ConfirmationDecision.APPROVE) }
+        decisions.addView(allowButton, LinearLayout.LayoutParams(0, -2, 2f))
+        approval!!.addView(decisions)
+        content.addView(approval)
+        val inputRow = LinearLayout(service).apply {
+            gravity = Gravity.CENTER_VERTICAL; minimumHeight = dp(56)
+        }
+        editor = OverlayEditText(service) { finishEditing() }.apply {
+            textSize = 16f; setTextColor(ink); setHintTextColor(muted)
+            highlightColor = Color.argb(if (dark) 71 else 46, Color.red(accent), Color.green(accent), Color.blue(accent))
+            if (Build.VERSION.SDK_INT >= 29) textCursorDrawable = GradientDrawable().apply {
+                setColor(accent); setSize(dp(2), lineHeight); cornerRadius = dp(1).toFloat()
+            }
+            hint = "输入消息…"; background = null
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+            imeOptions = EditorInfo.IME_ACTION_NONE or EditorInfo.IME_FLAG_NO_EXTRACT_UI
+            minLines = 1; maxLines = 2; minimumHeight = dp(48)
+            setLineSpacing(0f, 1.5f); setPadding(dp(4), dp(4), dp(4), dp(4))
+            filters = arrayOf(InputFilter.LengthFilter(16000))
+            setText(draft)
+            setSelection(selectionStart.coerceIn(0, text.length), selectionEnd.coerceIn(0, text.length))
+            setOnTouchListener { _, event -> if (event.actionMasked == MotionEvent.ACTION_DOWN) startEditing(); false }
+            onFocusChangeListener = View.OnFocusChangeListener { _, focused ->
+                if (focused) startEditing() else finishEditing()
+            }
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    draft = s?.toString().orEmpty(); inputError = null
+                    render(animate = true)
+                }
+                override fun afterTextChanged(s: Editable?) {}
+            })
+        }
+        inputRow.addView(editor, LinearLayout.LayoutParams(0, -2, 1f))
+        primaryButton = panelButton(R.drawable.ic_task_send, "发送", onAccent, accent) {
+            if (!finished || submitting) { stop(); finishEditing() } else submit()
+        }
+        inputRow.addView(primaryButton!!.container)
+        content.addView(inputRow)
+        errorView = text(12f, error).apply { setPadding(dp(4), 0, dp(4), dp(8)); accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
+        content.addView(errorView)
+        // Short landscape/large-font layouts scroll instead of reducing text or action touch targets.
+        root.addView(ScrollView(service).apply { isFillViewport = false; addView(content) }, FrameLayout.LayoutParams(-1, -2))
         params = WindowManager.LayoutParams(
-            dp(168), dp(64), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            dp(328), dp(124), WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
             PixelFormat.TRANSLUCENT,
-        ).apply { gravity = Gravity.TOP or Gravity.LEFT }
+        ).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            softInputMode = if (Build.VERSION.SDK_INT >= 30) WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING
+                else WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
+            if (Build.VERSION.SDK_INT >= 30) setFitInsetsTypes(0)
+        }
+        if (Build.VERSION.SDK_INT >= 30) {
+            root.setOnApplyWindowInsetsListener { _, insets -> updateInsets(insets); insets }
+            root.setWindowInsetsAnimationCallback(object : WindowInsetsAnimation.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+                override fun onProgress(insets: WindowInsets, runningAnimations: MutableList<WindowInsetsAnimation>): WindowInsets {
+                    updateInsets(insets)
+                    return insets
+                }
+            })
+        } else {
+            root.viewTreeObserver.addOnGlobalLayoutListener {
+                if (view !== root) return@addOnGlobalLayoutListener
+                val visibleFrame = Rect().also(root::getWindowVisibleDisplayFrame)
+                val metrics = DisplayMetrics().also { manager.defaultDisplay.getRealMetrics(it) }
+                val covered = (metrics.heightPixels - visibleFrame.bottom).coerceAtLeast(0)
+                updateKeyboardInset(if (covered > dp(120)) covered else 0, covered > dp(120))
+            }
+        }
         render(animate = false)
         manager.addView(root, params)
+        root.requestApplyInsets()
     }
 
     private fun render(animate: Boolean) {
-        val root = view ?: return
-        val pending = confirmation
-        val headline = if (finished) displayedHeadline ?: TaskPanelHeadline("") else
-            TaskPanelHeadline.from(snapshot, expanded, pending != null, continuing)
+        if (view == null) return
+        val latest = snapshot?.messages?.lastOrNull { it.kind != TaskPanelMessageKind.TOOL && it.text.isNotBlank() }
+        if (latest != null) lastAiHeadline = TaskPanelHeadline(latest.text, latest.id)
+        val headline = when {
+            waiting -> TaskPanelHeadline(snapshot?.userPrompt ?: "等待你操作", "user/${snapshot?.waitingToolCallId}")
+            lastAiHeadline != null -> lastAiHeadline!!
+            submitting -> TaskPanelHeadline("正在发送消息")
+            finished -> TaskPanelHeadline("任务已结束")
+            else -> TaskPanelHeadline(snapshot?.status ?: "正在处理")
+        }
         if (displayedHeadline != headline) {
-            // Stream increments replace text in place; only a new message/stage animates.
             val sameResponse = headline.responseId != null && headline.responseId == displayedHeadline?.responseId
-            val duration = if (animate && displayedHeadline != null && !sameResponse) motionDuration(150) else 0L
             title?.apply {
-                setTypeface(Typeface.DEFAULT, if (headline.responseId == null) Typeface.BOLD else Typeface.NORMAL)
-                setTextColor(if (headline.responseId == null) accent else ink)
+                setTypeface(Typeface.DEFAULT, Typeface.NORMAL)
+                setTextColor(if (headline.responseId == null) muted else ink)
                 showHeadline(headline)
+                contentDescription = "${headline.text}。返回相月"
                 if (!sameResponse) {
                     clearAnimation()
+                    val duration = if (animate && displayedHeadline != null) motionDuration(150) else 0L
                     if (duration > 0) startAnimation(textMotion(duration))
                 }
             }
             displayedHeadline = headline
         }
-        (header?.getChildAt(0))?.contentDescription = "${headline.text}。${if (expanded) "收起" else "展开"}任务面板；可拖动到屏幕两侧"
-        primary?.apply {
-            setImageResource(if (waiting) R.drawable.ic_task_play else R.drawable.ic_task_stop)
-            imageTintList = ColorStateList.valueOf(if (waiting) accent else error)
-            contentDescription = if (waiting) "继续，让 AI 接管" else "停止任务"
-            if (Build.VERSION.SDK_INT >= 26) tooltipText = contentDescription
-            isEnabled = !waiting || !continuing
+        continueButton?.apply {
+            visibility = if (waiting) View.VISIBLE else View.GONE
+            isEnabled = !continuing && !submitting
             alpha = if (isEnabled) 1f else 0.4f
         }
-        // A single action in the narrow capsule. Expanded handoff keeps both Continue and Stop.
-        stopButton?.visibility = if (waiting && expanded) View.VISIBLE else View.GONE
-        footer?.visibility = if (pending != null) View.VISIBLE else View.GONE
-        footer?.getChildAt(1)?.apply {
-            contentDescription = if (pending?.applicationOperationsForRun == true)
-                "允许本轮操作应用" else "允许本次动作"
-            if (Build.VERSION.SDK_INT >= 26) tooltipText = contentDescription
+        closeButton?.visibility = if (finished && !submitting) View.VISIBLE else View.GONE
+        val active = !finished || submitting
+        primaryButton?.apply {
+            val resource = if (active) R.drawable.ic_task_stop else R.drawable.ic_task_send
+            if (image.tag != resource) { image.setImageResource(resource); image.tag = resource }
+            val label = if (active) "打断任务" else "发送"
+            container.contentDescription = label
+            if (Build.VERSION.SDK_INT >= 26) container.tooltipText = label
+            setEnabled(active || draft.isNotBlank())
         }
-        column?.visibility = View.VISIBLE
-        column?.importantForAccessibility = if (finished) View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
-        terminal?.visibility = if (finished) View.VISIBLE else View.GONE
-        scroll?.importantForAccessibility = if (expanded && !finished) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        footer?.importantForAccessibility = if (expanded && !finished) View.IMPORTANT_FOR_ACCESSIBILITY_AUTO else View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-        updateMessages(animate && expanded && !finished)
-        val area = safeArea()
-        val width = minOf(dp(if (finished) 104 else if (expanded) 264 else 168), area.width())
-        header!!.measure(exact(width - dp(8)), View.MeasureSpec.makeMeasureSpec(area.height(), View.MeasureSpec.AT_MOST))
-        val headingHeight = header!!.measuredHeight + dp(8)
-        val footerHeight = if (pending != null) dp(48) else 0
-        val bodyHeight = minOf(dp(136), (area.height() - headingHeight - footerHeight).coerceAtLeast(0))
-        scroll?.layoutParams = LinearLayout.LayoutParams(-1, bodyHeight)
-        val height = if (finished) dp(64) else headingHeight + if (expanded) bodyHeight + footerHeight else 0
-        val (x, y) = position.place(area.width(), area.height(), width, height)
-        val target = TaskPanelFrame(area.left + x, area.top + y, width, height)
-        if (!dragging && (target != targetFrame || !animate)) moveTo(target, animate)
-        followAfterLayout(root)
-    }
-
-    private fun followAfterLayout(root: View) {
-        if (followOnLayout != null) return
-        val listener = object : ViewTreeObserver.OnPreDrawListener {
-            override fun onPreDraw(): Boolean {
-                if (root.viewTreeObserver.isAlive) root.viewTreeObserver.removeOnPreDrawListener(this)
-                followOnLayout = null
-                val viewport = scroll
-                if (view === root && viewport != null && !reading) {
-                    // Wait for text reflow; scrolling before layout can mistake new content for manual review.
-                    val y = if (followTail) ((feed?.height ?: 0) - viewport.height).coerceAtLeast(0) else scrollY
-                    viewport.scrollTo(0, y)
-                }
-                return true
-            }
-        }
-        followOnLayout = listener
-        root.viewTreeObserver.addOnPreDrawListener(listener)
-        root.invalidate()
-    }
-
-    private fun updateMessages(animate: Boolean) {
-        val list = feed ?: return
-        val viewport = scroll ?: return
-        if (viewport.isLaidOut && !reading && followOnLayout == null) {
-            followTail = !viewport.canScrollVertically(1)
-            scrollY = viewport.scrollY
-        }
-        val messages = if (finished) emptyList() else snapshot?.messages.orEmpty()
-        val items = messages.toMutableList()
+        editor?.isEnabled = !submitting
+        errorView?.apply { text = inputError; visibility = if (inputError == null) View.GONE else View.VISIBLE }
         val pending = confirmation
+        approval?.visibility = if (pending != null && !finished) View.VISIBLE else View.GONE
         if (pending != null) {
             val seconds = ((pending.expiresAtMs - System.currentTimeMillis()) / 1000).coerceAtLeast(0)
             val scope = if (pending.applicationOperationsForRun) "本轮应用操作" else "本次动作"
-            items.add(TaskPanelMessage("confirmation/${pending.toolCallId}", TaskPanelMessageKind.TOOL,
-                "确认$scope · $seconds 秒", "${pending.summary}\n目标：${pending.targetLabel ?: "选定 App"}\n执行通道：Android\n${JSONObject(pending.arguments).toString(2)}"))
-        } else if (waiting) {
-            val id = "tool/${snapshot?.waitingToolCallId}"
-            val request = TaskPanelMessage(id, TaskPanelMessageKind.TOOL, "请你操作",
-                "${snapshot?.userPrompt}\n完成后点击继续，AI 再接管。")
-            val index = items.indexOfFirst { it.id == id }
-            if (index < 0) items.add(request) else items[index] = request
+            approvalLabel?.text = "确认$scope · $seconds 秒"
+            val detail = "${pending.summary}\n目标：${pending.targetLabel ?: "选定 App"}\n执行通道：Android\n${JSONObject(pending.arguments).toString(2)}"
+            if (approvalBody?.text?.toString() != detail) approvalBody?.text = detail
+            allowButton?.text = if (pending.applicationOperationsForRun) "允许本轮操作应用" else "允许一次"
         }
-        if (items.size > 6) items.subList(0, items.size - 6).clear()
-        val keep = items.map { it.id }.toSet()
-        for (id in rows.keys.toList()) {
-            if (id in keep) continue
-            val removed = rows.remove(id)!!
-            if (!followTail && removed.container.top < viewport.scrollY) scrollY = (scrollY - removed.container.height).coerceAtLeast(0)
-            removed.container.animate().cancel(); list.removeView(removed.container)
-        }
-        for ((index, item) in items.withIndex()) {
-            val isNew = !rows.containsKey(item.id)
-            val row = rows.getOrPut(item.id) { messageRow() }
-            if (row.label.text.toString() != item.label) row.label.text = item.label
-            if (row.body.text.toString() != item.text) row.body.text = item.text
-            row.label.setTextColor(if (item.kind == TaskPanelMessageKind.REASONING) color(if (dark) "#D6C8F0" else "#655184") else muted)
-            row.body.typeface = if (item.kind == TaskPanelMessageKind.TOOL && item.text.startsWith("$ ")) Typeface.MONOSPACE else Typeface.DEFAULT
-            if (list.indexOfChild(row.container) != index) {
-                list.removeView(row.container); list.addView(row.container, index)
-            }
-            if (isNew && animate && motionDuration(170) > 0) {
-                row.container.alpha = 0f; row.container.translationY = dp(6).toFloat()
-                row.container.animate().alpha(1f).translationY(0f).setDuration(170).setInterpolator(easing).start()
-            }
-        }
+        updateSurface()
+        place(animate)
     }
 
-    private fun messageRow(): MessageRow {
-        val container = LinearLayout(service).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(0, dp(6), 0, dp(6))
+    private fun submit() {
+        if (!finished || submitting || draft.isBlank()) return
+        val text = draft
+        inputError = null
+        // Native cancellation is latched before releasing focus to any queued device action.
+        send(text)
+        finishEditing()
+    }
+
+    private fun startEditing() {
+        val input = editor ?: return
+        val root = view ?: return
+        val layout = params ?: return
+        if (submitting || editing != null || detaching) return
+        editing = CompletableDeferred()
+        layout.flags = layout.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+        if (root.isAttachedToWindow) manager.updateViewLayout(root, layout)
+        input.requestFocus()
+        input.post { if (editor === input && editing != null) keyboard.showSoftInput(input, InputMethodManager.SHOW_IMPLICIT) }
+        updateSurface()
+    }
+
+    private fun finishEditing() {
+        val pending = editing ?: return
+        editing = null
+        editor?.let { keyboard.hideSoftInputFromWindow(it.windowToken, 0); it.clearFocus() }
+        params?.let { layout ->
+            layout.flags = layout.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+            view?.takeIf { it.isAttachedToWindow }?.let { manager.updateViewLayout(it, layout) }
         }
-        val label = text(12f, muted)
-        val body = text(14f, ink).apply { setPadding(0, dp(2), 0, 0) }
-        container.addView(label); container.addView(body)
-        return MessageRow(container, label, body)
+        pending.complete(Unit)
+        if (!detaching) updateSurface()
+    }
+
+    private fun updateInsets(insets: WindowInsets) {
+        if (Build.VERSION.SDK_INT < 30) return
+        val bottom = insets.getInsets(WindowInsets.Type.ime()).bottom
+        val visible = insets.isVisible(WindowInsets.Type.ime())
+        updateKeyboardInset(bottom, visible)
+    }
+
+    private fun updateKeyboardInset(bottom: Int, visible: Boolean) {
+        val dismissed = imeVisible && !visible
+        imeVisible = visible
+        if (bottom != imeBottom) { imeBottom = bottom; place(animate = false) }
+        if (dismissed) finishEditing()
+    }
+
+    private fun place(animate: Boolean) {
+        val area = safeArea()
+        val width = minOf(dp(840), area.width()).coerceAtLeast(1)
+        val content = column ?: return
+        content.measure(exact((width - dp(24)).coerceAtLeast(1)), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+        val height = (content.measuredHeight + dp(16)).coerceAtMost(area.height()).coerceAtLeast(1)
+        val target = TaskPanelFrame(area.left + (area.width() - width) / 2, area.bottom - height, width, height)
+        if (target != targetFrame || !animate) moveTo(target, animate)
     }
 
     private fun moveTo(target: TaskPanelFrame, animate: Boolean) {
         val root = view ?: return
         val layout = params ?: return
-        motion?.cancel(); motion = null
-        targetFrame = target
+        motion?.cancel(); motion = null; targetFrame = target
         val start = TaskPanelFrame(layout.x, layout.y, layout.width, layout.height)
-        val bodyStart = scroll!!.alpha
-        val activeStart = column!!.alpha
-        val terminalStart = terminal!!.alpha
-        val rotationStart = chevron!!.rotation
-        val bodyEnd = if (expanded && !finished) 1f else 0f
-        val activeEnd = if (finished) 0f else 1f
-        val terminalEnd = if (finished) 1f else 0f
-        val rotationEnd = if (expanded) 180f else 0f
         fun apply(progress: Float) {
             if (view !== root) return
             val frame = start.towards(target, progress)
             layout.x = frame.x; layout.y = frame.y; layout.width = frame.width; layout.height = frame.height
-            fun mix(a: Float, b: Float) = a + (b - a) * progress
-            scroll!!.alpha = mix(bodyStart, bodyEnd)
-            footer!!.alpha = scroll!!.alpha
-            column!!.alpha = mix(activeStart, activeEnd)
-            terminal!!.alpha = mix(terminalStart, terminalEnd)
-            chevron!!.rotation = mix(rotationStart, rotationEnd)
             if (root.isAttachedToWindow) manager.updateViewLayout(root, layout)
         }
         val duration = if (animate) motionDuration(220) else 0L
@@ -359,52 +408,20 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
         }
     }
 
-    private fun draggable(target: View) {
-        val slop = ViewConfiguration.get(service).scaledTouchSlop
-        target.setOnTouchListener { _, event ->
-            val layout = params ?: return@setOnTouchListener false
-            val root = view ?: return@setOnTouchListener false
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    dragX = event.rawX; dragY = event.rawY; originX = layout.x; originY = layout.y; dragging = false
-                    false
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    val dx = event.rawX - dragX; val dy = event.rawY - dragY
-                    if (abs(dx) > slop || abs(dy) > slop) dragging = true
-                    if (dragging) {
-                        motion?.cancel(); motion = null; targetFrame = null
-                        val area = safeArea()
-                        layout.x = (originX + dx.toInt()).coerceIn(area.left, (area.right - root.width).coerceAtLeast(area.left))
-                        layout.y = (originY + dy.toInt()).coerceIn(area.top, (area.bottom - root.height).coerceAtLeast(area.top))
-                        manager.updateViewLayout(root, layout); target.isPressed = false
-                    }
-                    dragging
-                }
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (!dragging) false else {
-                        val area = safeArea()
-                        position.dock(layout.x - area.left, layout.y - area.top, area.width(), area.height(), root.width, root.height)
-                        dragging = false; target.isPressed = false
-                        render(animate = true)
-                        true
-                    }
-                }
-                else -> false
-            }
+    private fun updateSurface() {
+        val root = view ?: return
+        val reduced = motionDuration(1) == 0L
+        val key = (if (dark) 1 else 0) or (if (editing != null) 2 else 0) or (if (reduced) 4 else 0)
+        if (root.background != null && surfaceKey == key) return
+        surfaceKey = key
+        root.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, when {
+            reduced -> intArrayOf(color(if (dark) "#101B2B" else "#F5F7FC"), color(if (dark) "#101B2B" else "#F5F7FC"))
+            dark -> intArrayOf(color("#F2101B2B"), color("#F219263D"))
+            else -> intArrayOf(color("#F2FFFFFF"), color("#F2F0F3FA"))
+        }).apply {
+            cornerRadius = dp(28).toFloat()
+            setStroke(dp(1), if (editing != null) accent else color(if (dark) "#29E4EAF7" else "#A3FFFFFF"))
         }
-    }
-
-    private fun motionDuration(value: Long): Long {
-        val enabled = if (Build.VERSION.SDK_INT >= 26) ValueAnimator.areAnimatorsEnabled()
-        else Settings.Global.getFloat(service.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
-        return if (enabled) value else 0L
-    }
-
-    private fun textMotion(duration: Long) = AnimationSet(false).apply {
-        addAnimation(AlphaAnimation(0f, 1f))
-        addAnimation(TranslateAnimation(0f, 0f, dp(4).toFloat(), 0f))
-        this.duration = duration; interpolator = easing
     }
 
     private fun safeArea(): Rect {
@@ -412,15 +429,47 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
             val metrics = manager.currentWindowMetrics
             val insets = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
             return Rect(metrics.bounds).apply {
-                left += insets.left + dp(8); top += insets.top + dp(8)
-                right -= insets.right + dp(8); bottom -= insets.bottom + dp(8)
+                left += insets.left + dp(16); top += insets.top + dp(8)
+                right -= insets.right + dp(16); bottom -= maxOf(insets.bottom, imeBottom) + dp(4)
+                bottom = bottom.coerceAtLeast(top + 1)
             }
         }
-        val metrics = service.resources.displayMetrics
-        return Rect(dp(8), dp(32), metrics.widthPixels - dp(8), metrics.heightPixels - dp(56))
+        val metrics = DisplayMetrics().also { manager.defaultDisplay.getRealMetrics(it) }
+        return Rect(dp(16), dp(32), metrics.widthPixels - dp(16),
+            (metrics.heightPixels - maxOf(dp(48), imeBottom) - dp(4)).coerceAtLeast(dp(32) + 1))
     }
 
-    private fun text(size: Float, ink: Int) = TextView(service).apply { textSize = size; setTextColor(ink) }
+    private fun panelButton(resource: Int, label: String, ink: Int, fill: Int, action: () -> Unit): PanelButton {
+        val container = FrameLayout(service).apply {
+            layoutParams = LinearLayout.LayoutParams(dp(56), dp(56))
+            contentDescription = label; isFocusable = true
+            if (Build.VERSION.SDK_INT >= 26) tooltipText = label
+            setOnClickListener { action() }
+        }
+        val image = ImageView(service).apply { setImageResource(resource); imageTintList = ColorStateList.valueOf(ink); tag = resource }
+        val face = FrameLayout(service).apply {
+            background = ripple(fill); isDuplicateParentStateEnabled = true
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
+            addView(image, FrameLayout.LayoutParams(dp(24), dp(24), Gravity.CENTER))
+        }
+        container.addView(face, FrameLayout.LayoutParams(dp(40), dp(40), Gravity.CENTER))
+        container.setOnTouchListener { _, event ->
+            if (container.isEnabled && motionDuration(120) > 0) {
+                val scale = if (event.actionMasked == MotionEvent.ACTION_DOWN) 0.92f else 1f
+                if (event.actionMasked in setOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL))
+                    face.animate().scaleX(scale).scaleY(scale).setDuration(120).setInterpolator(easing).start()
+            }
+            false
+        }
+        return PanelButton(container, face, image)
+    }
+
+    private fun action(label: String, ink: Int, fill: Int, action: () -> Unit) = text(14f, ink).apply {
+        text = label; gravity = Gravity.CENTER; minimumHeight = dp(48)
+        setPadding(dp(16), 0, dp(16), 0); background = ripple(fill)
+        isFocusable = true; setOnClickListener { action() }
+    }
+
     private fun icon(resource: Int, label: String, ink: Int, action: () -> Unit) = ImageButton(service).apply {
         setImageResource(resource); imageTintList = ColorStateList.valueOf(ink)
         setPadding(dp(12), dp(12), dp(12), dp(12)); background = ripple(Color.TRANSPARENT)
@@ -429,10 +478,34 @@ class TaskOverlay(private val service: PhaseAccessibilityService) {
         layoutParams = LinearLayout.LayoutParams(dp(48), dp(48))
         setOnClickListener { action() }
     }
+    private fun motionDuration(value: Long): Long {
+        val enabled = if (Build.VERSION.SDK_INT >= 26) ValueAnimator.areAnimatorsEnabled()
+        else Settings.Global.getFloat(service.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f) > 0f
+        return if (enabled) value else 0L
+    }
+    private fun textMotion(duration: Long) = AnimationSet(false).apply {
+        addAnimation(AlphaAnimation(0f, 1f)); addAnimation(TranslateAnimation(0f, 0f, dp(4).toFloat(), 0f))
+        this.duration = duration; interpolator = easing
+    }
+    private fun text(size: Float, ink: Int) = TextView(service).apply { textSize = size; setTextColor(ink) }
     private fun exact(value: Int) = View.MeasureSpec.makeMeasureSpec(value, View.MeasureSpec.EXACTLY)
-    private fun ripple(fill: Int) = RippleDrawable(ColorStateList.valueOf(color(if (dark) "#334F6BA5" else "#223D5A98")), shape(fill, 20), shape(Color.WHITE, 20))
-    private fun shape(fill: Int, radius: Int) = GradientDrawable().apply { setColor(fill); cornerRadius = dp(radius).toFloat() }
+    private fun ripple(fill: Int) = RippleDrawable(ColorStateList.valueOf(color(if (dark) "#334F6BA5" else "#223D5A98")), shape(fill), shape(Color.WHITE))
+    private fun shape(fill: Int) = GradientDrawable().apply { setColor(fill); cornerRadius = dp(20).toFloat() }
     private fun dp(value: Int) = (value * service.resources.displayMetrics.density).toInt()
     private fun color(value: String) = Color.parseColor(value)
-    private data class MessageRow(val container: LinearLayout, val label: TextView, val body: TextView)
+    private data class PanelButton(val container: FrameLayout, val face: FrameLayout, val image: ImageView) {
+        fun setEnabled(value: Boolean) {
+            container.isEnabled = value; container.alpha = if (value) 1f else 0.38f
+            if (!value) { face.animate().cancel(); face.scaleX = 1f; face.scaleY = 1f }
+        }
+    }
+    private class OverlayEditText(context: Context, private val dismiss: () -> Unit) : EditText(context) {
+        override fun onKeyPreIme(keyCode: Int, event: KeyEvent?): Boolean {
+            if (keyCode == KeyEvent.KEYCODE_BACK && hasFocus()) {
+                if (event?.action == KeyEvent.ACTION_UP && !event.isCanceled) dismiss()
+                return true
+            }
+            return super.onKeyPreIme(keyCode, event)
+        }
+    }
 }

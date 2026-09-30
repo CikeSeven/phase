@@ -63,6 +63,11 @@ class ExecutionController extends _$ExecutionController {
   Completer<bool>? _continue;
   Timer? _panelTimer;
   bool _panelQueued = false;
+  bool? _darkTheme;
+  Future<void> Function(String, RunCancellation)? _runMessageHandler;
+  Future<void> Function(String, RunCancellation)? _panelMessageHandler;
+  String? _panelRunId;
+  NativePanelMessage? _pendingPanelMessage;
 
   @override
   ExecutionState build() {
@@ -72,6 +77,8 @@ class ExecutionController extends _$ExecutionController {
       _completeContinue(false);
       _stop?.call();
       _complete(ToolDecision.expired);
+      _pendingPanelMessage?.cancellation.cancel();
+      _pendingPanelMessage?.complete('任务已结束，请返回相月重试');
       unawaited(_nativeSubscription?.cancel());
     });
     return const ExecutionState();
@@ -81,6 +88,8 @@ class ExecutionController extends _$ExecutionController {
     String runId, {
     required void Function() stop,
     ExecutionScope scope = const ExecutionScope(),
+    bool? darkTheme,
+    Future<void> Function(String, RunCancellation)? onPanelMessage,
   }) {
     if (state.runId != null) throw const OperationFailure('已有运行中的任务');
     _stop = stop;
@@ -88,6 +97,8 @@ class ExecutionController extends _$ExecutionController {
     _deviceTask = false;
     _nativeTask = false;
     _scope = scope;
+    _darkTheme = darkTheme;
+    _runMessageHandler = onPanelMessage;
     state = ExecutionState(runId: runId, foreground: state.foreground);
   }
 
@@ -107,6 +118,10 @@ class ExecutionController extends _$ExecutionController {
       }
       _nativeTask = true;
       _deviceTask = _deviceTask || deviceTask;
+      if (deviceTask) {
+        _panelRunId = runId;
+        _panelMessageHandler = _runMessageHandler;
+      }
       _syncPanel();
     } on Failure catch (failure) {
       // 准备失败尚未派发动作，交给工具结果回填；明确的 NativeStop 仍停止根任务。
@@ -152,6 +167,8 @@ class ExecutionController extends _$ExecutionController {
     if (state.runId != runId) return;
     _panelTimer?.cancel();
     _panelTimer = null;
+    // 终态面板保留最后的公开文本，收口前提交尚未跨平台刷新的快照。
+    _syncPanel();
     _completeContinue(false);
     _complete(ToolDecision.expired);
     _stop = null;
@@ -254,6 +271,11 @@ class ExecutionController extends _$ExecutionController {
   void _onNativeEvent(NativeExecutionEvent event) {
     switch (event) {
       case NativeStop(:final runId, :final reason):
+        final pendingMessage = _pendingPanelMessage;
+        if (reason != 'panelMessage' &&
+            (pendingMessage?.runId == runId || state.runId == runId)) {
+          pendingMessage?.cancellation.cancel();
+        }
         final message = switch (reason) {
           'locked' => '设备已锁定，自动操作已停止',
           'permissionRequired' => '无障碍授权已关闭，自动操作已停止',
@@ -293,10 +315,40 @@ class ExecutionController extends _$ExecutionController {
       case NativeContinue(:final runId, :final toolCallId):
         // 原生已在点击时检查前后台；Activity 紧接着切回不能丢掉这个决定。
         continueRun(runId, toolCallId);
+      case NativePanelMessage():
+        unawaited(_receivePanelMessage(event));
       case NativeCapabilities():
         // 能力变更不授予工具权限，也不自动继续已停止的任务。
         break;
     }
+  }
+
+  Future<void> _receivePanelMessage(NativePanelMessage request) async {
+    final handler = _panelMessageHandler;
+    if (request.runId != _panelRunId || handler == null) {
+      request.complete('任务面板已失效，请返回相月重试');
+      return;
+    }
+    if (_pendingPanelMessage != null) {
+      request.complete('消息正在发送，请稍后重试');
+      return;
+    }
+    _pendingPanelMessage = request;
+    try {
+      await handler(request.text, request.cancellation);
+      request.complete(null);
+    } on Failure catch (failure) {
+      request.complete(failure.userMessage);
+    } catch (_) {
+      AppLogger.warning('悬浮面板消息发送失败');
+      request.complete('发送失败，请稍后重试');
+    } finally {
+      if (identical(_pendingPanelMessage, request)) _pendingPanelMessage = null;
+    }
+  }
+
+  void reportPanelFailure(Failure failure) {
+    if (ref.mounted) state = state.copyWith(failure: failure);
   }
 
   void updateActivity(String runId, TaskActivity activity) {
@@ -384,6 +436,7 @@ class ExecutionController extends _$ExecutionController {
                     .toList(),
                 waitingToolCallId: userAction?.toolCallId,
                 userPrompt: userAction?.prompt,
+                darkTheme: _darkTheme,
               ),
             );
       } on Failure catch (failure) {
