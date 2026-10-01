@@ -657,10 +657,10 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     );
   }
 
-  /// 重新生成当前分支的最后一条回答。
+  /// 从最近一条用户消息重新生成整轮回答。
   ///
-  /// 新建一条回答挂在同一条用户消息下，旧回答保留在消息树里不覆盖；
-  /// 有工具执行历史时不自动重做动作（S3 起生效）。
+  /// 原运行的所有回答、思考、调用与结果退出当前分支，保留在历史消息树；
+  /// 新运行不继承这些内容，也不重放旧调用，工具仍由模型重新提出并授权。
   Future<void> regenerate() async {
     _checkPermissionSave();
     if (_busy) return;
@@ -700,17 +700,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
     if (revision != _viewRevision) throw const OperationFailure('会话已切换，请重新生成');
 
-    // 只重做最后的模型回答；已有动作与结果留在新分支的上下文中。
-    // 即使停止时缺少结果消息，也保留调用，由上下文装配补齐实际错误。
-    final toolHistory = thread.branch
-        .skip(index + 1)
-        .where(
-          (message) => message.parts.any(
-            (part) => part is ToolCallPart || part is ToolResultPart,
-          ),
-        );
-    final parentId = toolHistory.lastOrNull?.id ?? userMessage.id;
-    await repository.setCurrentMessage(conversationId, parentId);
+    // 回到整轮的原始输入，不把其中任一工具轮留在新运行上下文中。
+    await repository.setCurrentMessage(conversationId, userMessage.id);
 
     await _startRun(
       repository: repository,

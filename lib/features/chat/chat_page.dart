@@ -415,7 +415,7 @@ class _ConversationMessages extends ConsumerWidget {
   final double topPadding;
   final double bottomPadding;
 
-  /// 重新生成最后一条回答；失败按统一文案提示，不改动已有回答。
+  /// 重新生成最后一整轮回答；失败按统一文案提示，旧记录留在历史分支。
   Future<void> _regenerate(BuildContext context, WidgetRef ref) async {
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -447,8 +447,10 @@ class _ConversationMessages extends ConsumerWidget {
           conversationId: conversationId,
           messages: messages,
           attachments: state.attachments,
-          isGenerating: state.isGenerating,
-          onRegenerate: state.savingPermissionMode
+          isGenerating:
+              state.isGenerating &&
+              state.runningConversationId == conversationId,
+          onRegenerate: state.savingPermissionMode || state.isGenerating
               ? null
               : () => _regenerate(context, ref),
           topPadding: topPadding,

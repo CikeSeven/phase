@@ -16,6 +16,7 @@ class _BubbleEntry {
   const _BubbleEntry({
     required this.message,
     required this.attachments,
+    required this.isRunning,
     required this.canRegenerate,
     required this.onRegenerate,
     required this.widget,
@@ -23,6 +24,7 @@ class _BubbleEntry {
 
   final ChatMessage message;
   final Map<String, Attachment> attachments;
+  final bool isRunning;
   final bool canRegenerate;
   final Future<void> Function()? onRegenerate;
   final Widget widget;
@@ -47,9 +49,10 @@ class ChatTranscript extends StatefulWidget {
   /// 会话附件索引，随消息的 Part 引用还原成文件。
   final Map<String, Attachment> attachments;
 
-  /// 重新生成最后一条回答；生成中时不提供。
+  /// 从原用户消息重新生成最后一整轮回答；生成中时不提供。
   final Future<void> Function()? onRegenerate;
 
+  /// 当前会话的整轮运行仍活动；工具轮收口或请求间隙不代表运行已结束。
   final bool isGenerating;
 
   /// 顶栏与固定运行提示的高度；留白随消息滚动，视口延伸至顶栏后方。
@@ -131,6 +134,8 @@ class _ChatTranscriptState extends State<ChatTranscript> {
 
   Widget _bubble(int index) {
     final message = widget.messages[index];
+    final isRunning =
+        widget.isGenerating && index == widget.messages.length - 1;
     // 只有分支最后一条回答可以重新生成。
     final canRegenerate =
         widget.onRegenerate != null &&
@@ -140,6 +145,7 @@ class _ChatTranscriptState extends State<ChatTranscript> {
     if (cached != null &&
         identical(cached.message, message) &&
         identical(cached.attachments, widget.attachments) &&
+        cached.isRunning == isRunning &&
         cached.canRegenerate == canRegenerate &&
         cached.onRegenerate == widget.onRegenerate) {
       return cached.widget;
@@ -152,11 +158,13 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       key: ValueKey(message.id),
       message: message,
       attachments: widget.attachments,
+      isRunning: isRunning,
       onRegenerate: canRegenerate ? widget.onRegenerate : null,
     );
     _bubbles[message.id] = _BubbleEntry(
       message: message,
       attachments: widget.attachments,
+      isRunning: isRunning,
       canRegenerate: canRegenerate,
       onRegenerate: widget.onRegenerate,
       widget: widget_,

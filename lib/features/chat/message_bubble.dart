@@ -13,10 +13,8 @@ import '../../../data/models/message_part.dart';
 import 'activity_card_group.dart';
 import 'attachment_chips.dart';
 import 'chat_markdown.dart';
-import 'message_actions_sheet.dart';
 import 'thinking_panel.dart';
 import 'tool_call_card.dart';
-import 'usage/usage_panel.dart';
 
 /// 用户消息保留右侧色面，AI 正文使用完整的阅读宽度。
 class MessageBubble extends StatelessWidget {
@@ -24,6 +22,7 @@ class MessageBubble extends StatelessWidget {
     required this.message,
     this.attachments = const {},
     this.onRegenerate,
+    this.isRunning = false,
     super.key,
   });
 
@@ -32,11 +31,17 @@ class MessageBubble extends StatelessWidget {
   /// 当前会话的附件索引，用于把 Part 里的附件引用还原成文件。
   final Map<String, Attachment> attachments;
 
-  /// 重新生成本条回答；仅当前分支最后一条回答会传入。
+  /// 从原用户消息重新生成整轮回答；仅当前分支最后一条回答会传入。
   final Future<void> Function()? onRegenerate;
 
-  /// 面板里是否提供「重新生成」。
-  bool get canRegenerate => onRegenerate != null && !_isUser;
+  /// 整轮运行尚未收尾，包括工具执行与等待，不等同于单次模型流式响应。
+  final bool isRunning;
+
+  bool get canRegenerate =>
+      onRegenerate != null &&
+      !isRunning &&
+      message.role == ChatRole.assistant &&
+      message.status != MessageStatus.streaming;
 
   bool get _isUser => message.role == ChatRole.user;
 
@@ -226,74 +231,80 @@ class MessageBubble extends StatelessWidget {
       color: textColor,
       height: 1.5,
     );
+    final actionStyle = IconButton.styleFrom(
+      minimumSize: const Size.square(48),
+      padding: const EdgeInsets.all(AppSpacing.s),
+    );
 
     return SizeChangedLayoutNotifier(
       child: Semantics(
         customSemanticsActions: message.text.isEmpty
             ? null
             : {CustomSemanticsAction(label: '复制消息'): () => _copy(context)},
-        child: GestureDetector(
-          onLongPress: () => _showActions(context),
-          child: Padding(
-            // 同一问答紧凑排列，下一条用户消息仍保留分组留白。
-            padding: EdgeInsets.only(
-              left: AppSpacing.l,
-              top: _isUser ? AppSpacing.m : AppSpacing.xs,
-              right: AppSpacing.l,
-              bottom: _isUser ? AppSpacing.xs : AppSpacing.m,
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                if (_isUser) {
-                  return Align(
-                    alignment: Alignment.centerRight,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: constraints.maxWidth * 0.88,
+        child: Padding(
+          // 同一问答紧凑排列，下一条用户消息仍保留分组留白。
+          padding: EdgeInsets.only(
+            left: AppSpacing.l,
+            top: _isUser ? AppSpacing.m : AppSpacing.xs,
+            right: AppSpacing.l,
+            bottom: _isUser ? AppSpacing.xs : AppSpacing.m,
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              if (_isUser) {
+                return Align(
+                  alignment: Alignment.centerRight,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: constraints.maxWidth * 0.88,
+                    ),
+                    child: Material(
+                      color:
+                          (isError
+                                  ? colors.errorContainer
+                                  : colors.primaryContainer)
+                              .withValues(alpha: 0.82),
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(AppRadius.large),
+                        topRight: Radius.circular(AppRadius.large),
+                        bottomLeft: Radius.circular(AppRadius.large),
+                        bottomRight: Radius.circular(AppRadius.small),
                       ),
-                      child: Material(
-                        color:
-                            (isError
-                                    ? colors.errorContainer
-                                    : colors.primaryContainer)
-                                .withValues(alpha: 0.82),
-                        borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(AppRadius.large),
-                          topRight: Radius.circular(AppRadius.large),
-                          bottomLeft: Radius.circular(AppRadius.large),
-                          bottomRight: Radius.circular(AppRadius.small),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.l,
+                          vertical: AppSpacing.m,
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.l,
-                            vertical: AppSpacing.m,
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (_messageAttachments.isNotEmpty) ...[
-                                MessageAttachments(
-                                  attachments: _messageAttachments,
-                                ),
-                                if (message.text.isNotEmpty)
-                                  const SizedBox(height: AppSpacing.s),
-                              ],
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_messageAttachments.isNotEmpty) ...[
+                              MessageAttachments(
+                                attachments: _messageAttachments,
+                              ),
                               if (message.text.isNotEmpty)
-                                Text(message.text, style: textStyle),
+                                const SizedBox(height: AppSpacing.s),
                             ],
-                          ),
+                            if (message.text.isNotEmpty)
+                              SelectionArea(
+                                child: Text(message.text, style: textStyle),
+                              ),
+                          ],
                         ),
                       ),
                     ),
-                  );
-                }
-                final segments = _contentSegments();
-                return Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Row(
+                  ),
+                );
+              }
+              final segments = _contentSegments();
+              return Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    child: Row(
                       children: [
                         const AppIconBadge(
                           icon: Symbols.auto_awesome,
@@ -312,14 +323,11 @@ class MessageBubble extends StatelessWidget {
                             ),
                           ),
                         ),
-                        IconButton(
-                          tooltip: '消息操作',
-                          onPressed: () => _showActions(context),
-                          icon: const Icon(Symbols.more_horiz),
-                        ),
                       ],
                     ),
-                    Container(
+                  ),
+                  SelectionArea(
+                    child: Container(
                       key: const ValueKey('message-body'),
                       padding: isError
                           ? const EdgeInsets.all(AppSpacing.l)
@@ -368,48 +376,53 @@ class MessageBubble extends StatelessWidget {
                         ],
                       ),
                     ),
-                    if (streaming)
-                      Align(
-                        key: const ValueKey('generation-cursor'),
-                        alignment: Alignment.centerLeft,
-                        child: _GenerationCursor(
-                          style: textStyle?.copyWith(
-                            color: colors.onSurfaceVariant,
-                          ),
+                  ),
+                  if (streaming)
+                    Align(
+                      key: const ValueKey('generation-cursor'),
+                      alignment: Alignment.centerLeft,
+                      child: _GenerationCursor(
+                        style: textStyle?.copyWith(
+                          color: colors.onSurfaceVariant,
                         ),
                       ),
-                  ],
-                );
-              },
-            ),
+                    ),
+                  if (!isRunning && !streaming)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
+                      child: Row(
+                        children: [
+                          IconButton(
+                            key: const ValueKey('copy-message'),
+                            tooltip: '复制全文',
+                            style: actionStyle.copyWith(
+                              alignment: Alignment.centerRight,
+                            ),
+                            onPressed: message.text.isEmpty
+                                ? null
+                                : () => _copy(context),
+                            icon: const Icon(Symbols.content_copy, size: 20),
+                          ),
+                          if (canRegenerate)
+                            IconButton(
+                              key: const ValueKey('regenerate-message'),
+                              tooltip: '重新生成',
+                              style: actionStyle.copyWith(
+                                alignment: Alignment.centerLeft,
+                              ),
+                              onPressed: onRegenerate,
+                              icon: const Icon(Symbols.refresh, size: 20),
+                            ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
           ),
         ),
       ),
     );
-  }
-
-  Future<void> _showActions(BuildContext context) async {
-    final action = await showMessageActionsSheet(
-      context,
-      canCopy: message.text.isNotEmpty,
-      canRegenerate: canRegenerate,
-      canViewUsage: message.role == ChatRole.assistant && message.runId != null,
-    );
-    if (!context.mounted) return;
-    switch (action) {
-      case MessageAction.copy:
-        await _copy(context);
-      case MessageAction.regenerate:
-        await onRegenerate?.call();
-      case MessageAction.usage:
-        await showUsageSheet(
-          context,
-          conversationId: message.conversationId,
-          runId: message.runId!,
-        );
-      case null:
-        break;
-    }
   }
 
   Future<void> _copy(BuildContext context) async {
