@@ -1,6 +1,6 @@
 # 上下文管理、Token 用量与缓存统计开发方案
 
-更新：2026-09-27｜状态：E5.1 已接入，验收边界见 §15–16｜范围：Android / Flutter，延续现有 Dart AgentLoop
+更新：2026-10-02｜状态：E5.1 已接入，验收边界见 §15–16｜范围：Android / Flutter，延续现有 Dart AgentLoop
 
 本文承接 E5，记录统一 Token 计量、请求事实、缓存统计、滚动摘要和单次长任务压缩的契约与实施范围。源码实现、本机可控验证、真实摘要质量和设备验收分开记录；本文不授权安装、清数据、数据库覆盖升级、提交或推送。
 
@@ -44,7 +44,7 @@
 
 - [TokenUsage](../lib/data/models/token_usage.dart)、[请求记录](../lib/data/models/model_request_record.dart)、[请求仓储](../lib/data/repositories/model_request_repository.dart)。
 - [请求规划](../lib/providers/request_plan.dart)、[ContextMeter](../lib/features/chat/context/context_meter.dart)、[整理协调器](../lib/features/chat/context/compaction_coordinator.dart)。
-- [ContextBuilder](../lib/features/chat/context/context_builder.dart)、[摘要请求](../lib/features/chat/context/summary_request.dart)、[ChatController](../lib/features/chat/chat_controller.dart)。
+- [ContextBuilder](../lib/features/chat/context/context_builder.dart)、[摘要请求](../lib/features/chat/context/summary_request.dart)、[上下文接线](../lib/features/chat/context/chat_context_coordinator.dart)、[模型轮](../lib/features/chat/runtime/model_turn_runner.dart)、[运行驱动](../lib/features/chat/runtime/chat_run_driver.dart)。
 - [摘要模型](../lib/data/models/context_summary.dart)、[摘要仓储](../lib/data/repositories/agent_context_repository.dart)、[数据库](../lib/data/datasources/local/app_database.dart)。
 - [上下文圆环与浮层](../lib/features/chat/context/context_usage_indicator.dart)、[用量面板](../lib/features/chat/usage/usage_panel.dart)、[模型参数编辑](../lib/features/providers_config/provider_model_editor.dart)。
 
@@ -247,7 +247,7 @@ nextInputEstimate = max(0, P0 + E1 - E0)
 - OpenAI Completions 沿用配置的 system/developer 角色，Responses 使用原位 developer；Anthropic/Google 不把此类状态提升到顶层系统字段，而在原位发送带明确宿主标记的 user 文本。未新增 DeepSeek 专用的历史内 system/tool_addition 扩展，不根据模型名、域名或失败猜测支持。普通 system 消息仍按原协议规则处理。
 - 固定提示词及工具定义不变时，模式更新属于历史追加，有效 usage 基准可继续用于增量估算。更换模型、工具版本/范围、编辑助手提示词或压缩仍可能改变前缀；此改动也会使升级前的旧配置基准失效，后续有效请求重新校准。缓存命中以服务端报告为准，不承诺切换后必然命中或占用数字不变。
 
-入口：`context_configuration.dart`、`ChatController` 的请求入口、`ConversationRepository.appendMessage`、`HistoryResolver`、`ContextBuilder` 与 `ToolRegistry.definitionsFor`。不修改数据库表或 schema 10，不迁移/重写旧记录。参考本地 Codex `ee6814bfa4` 的状态追加与 DeepSeek Harness `477b4f4205` 的定义/执行分离；不照搬其模型专用能力或较弱的计划执行限制。
+入口：`context_configuration.dart`、`ChatRunDriver` 的运行入口、`ConversationRepository.appendMessage`、`HistoryResolver`、`ContextBuilder` 与 `ToolRegistry.definitionsFor`。不修改数据库表或 schema 10，不迁移/重写旧记录。参考本地 Codex `ee6814bfa4` 的状态追加与 DeepSeek Harness `477b4f4205` 的定义/执行分离；不照搬其模型专用能力或较弱的计划执行限制。
 
 ## 9. 预算与压缩触发
 
@@ -426,7 +426,7 @@ W 的解析顺序为用户手填 > models.dev 目录 > 本地默认 128000，M =
   → 回到同一 AgentLoop 的下一模型轮
 ```
 
-不新增第二套 AgentLoop，不把压缩放到页面 build，不让 Provider 调工具。Controller 只编排，预算、分组、摘要候选和统计计算拆到职责明确的模块。
+不新增第二套 AgentLoop，不把压缩放到页面 build，不让 Provider 调工具。Controller 保留操作入口和展示投影；Driver 推进运行，ModelTurnRunner 管理主请求与重试，ChatContextCoordinator 为运行、空闲测量和手动整理接线既有预算、分组、摘要和统计模块。请求及结果收口直接等待仓储提交，展示更新不能成为新的事实来源。
 
 ### 11.2 普通重试与超窗恢复不同
 

@@ -2,16 +2,12 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../data/datasources/local/model_catalog_cache.dart';
-import '../../../data/repositories/agent_context_repository.dart';
-import '../../../data/repositories/model_request_repository.dart';
 import '../../../data/repositories/skill_repository.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
-import '../../../providers/provider_factory.dart';
 import '../../tools/tool.dart';
 import '../../workspace/workspace_controller.dart';
 import '../chat_controller.dart';
 import '../model_selection.dart';
-import 'compaction_coordinator.dart';
 import 'context_builder.dart';
 
 part 'context_preview.g.dart';
@@ -71,26 +67,7 @@ Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
   if (!ref.mounted || prepared == null) return null;
   final cancellation = RunCancellation();
   ref.onDispose(cancellation.cancel);
-  final summaries = ref.watch(agentContextRepositoryProvider.future);
-  final requests = ref.watch(modelRequestRepositoryProvider.future);
-  final provider = ref.read(aiProviderFactoryProvider)(prepared.profile, '');
-  return CompactionCoordinator(
-    summaries: await summaries,
-    requests: await requests,
-  ).build(
-    conversationId: conversationId,
-    runId: null,
-    branchHeadId: prepared.branchHeadId,
-    profile: prepared.profile,
-    provider: provider,
-    request: prepared.request,
-    cancellation: cancellation,
-    protectedIds: prepared.protectedIds,
-    canReadHistory: prepared.canReadHistory,
-    contextWindow: prepared.configuration.contextWindow,
-    windowSource: prepared.configuration.resolvedWindowSource,
-    catalogMaxOutputTokens: prepared.configuration.catalogMaxOutputTokens,
-    policy: prepared.configuration.contextPolicy,
-    measureOnly: true,
-  );
+  final contexts = await ref.watch(chatContextCoordinatorProvider.future);
+  if (!ref.mounted || cancellation.isCancelled) return null;
+  return contexts.measure(prepared, cancellation);
 }

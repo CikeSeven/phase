@@ -1,6 +1,6 @@
 # 相月开发实施计划
 
-更新：2026-09-24｜阶段：未发布的初版建设
+更新：2026-10-02｜阶段：未发布的初版建设
 
 本计划从当前代码继续建设扩展能力。已实现功能的入口与必须延续的行为见 [产品设计](./product_and_technical_design.md)，新增接口、数据和生命周期见 [Agent 与扩展设计](./agent_extensions_design.md)，工程与 UI 要求分别见 [AGENTS.md](../AGENTS.md)、[DESIGN.md](../DESIGN.md)。
 
@@ -30,6 +30,13 @@
 - 助手只选择 MCP/Skills 和记忆范围；预览、模型定义、执行及扩展派发复检统一使用模式。空白页只保存草稿，首发建会话；批准计划原子恢复来源执行档。底部改为向上小菜单，模式保存与发送互斥，运行不串改其他会话。
 - 初版 schema 9 移除助手策略 JSON，加入 MCP 启用集合及会话模式字段；最初未接入旧库转换。随后用户要求修复并安装，授权仅本次 v8 → v9 保数据迁移，范围见 AGENTS 第 5 节；不清理手机数据，不扩展历史升级链。历史 v7 → v8 升级实现/用例留在 Git 历史。
 - 验证入口：`permission_mode_flow_test.dart`、`permission_mode_policy_test.dart` 及现有计划、MCP、Skills、助手、布局与加密库重开测试。自动化结果在本次交付单独记录；真机菜单、预测返回、读屏和性能尚未验收。
+
+### 1.2 Agent 代码职责拆分（2026-10-02）
+
+- `ChatController` 从 3448 行收敛为 866 行，仅保留页面入口、操作互斥及展示投影；状态、会话草稿、仓储流和回答合并分别独立。`runtime/` 的 `ChatRunDriver`、`ModelTurnRunner`、`ChatToolRuntime`、`ChatRunFactory` 承担循环宿主、模型 IO、工具资源和固定配置，`ChatContextCoordinator` 接线既有历史、计量与摘要模块。参考本地 pi 的运行/会话/资源分层，不引入 pi 依赖、并行工具、队列或插件钩子。
+- 发送和空闲预览复用配置及目录规则；可选工作区、Skill 和 MCP 仓储按需加载，不把目录初始化或进程桥作为未启用能力的前置。运行展示通过带身份的同步快照投影，业务记录仍直接等待既有仓储事务；停止、重试、恢复、确认及租约收尾契约不变。数据模型/schema、四协议、原生桥、依赖和测试文件均未改动。
+- 已生成 Riverpod 代码，`dart format --output=none --set-exit-if-changed lib`、`flutter analyze lib` 和 `git diff --check` 通过。全量格式检查仍报告未改动的 `test/support/schema8_fixture.dart`；全量分析与拆分前一致，保留两条测试 fake 的 `invalid_override` 和两条单引号 lint，未为此修改测试。未新增或运行 Flutter/JVM 测试，停止时序、真实网关、工具闭环、真机 UI 和性能未复验。
+- Profile 构建成功，已在授权设备 `1b8418ca` 使用 `adb install -r` 覆盖安装并启动，安装 `Success`、启动 `Status: ok`。未卸载、清数据或变更 schema；构建与启动不代表上述行为验收完成。日志与原始源码副本位于忽略的 `build/chat_refactor/`。
 
 ## 2. 顺序与依赖
 

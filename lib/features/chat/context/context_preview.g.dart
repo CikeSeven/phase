@@ -56,7 +56,11 @@ final class ContextPreviewProvider
       ChatControllerProvider.$allTransitiveDependencies10;
   static final $allTransitiveDependencies12 =
       ChatControllerProvider.$allTransitiveDependencies11;
-  static final $allTransitiveDependencies13 = conversationPermissionsProvider;
+  static final $allTransitiveDependencies13 =
+      ChatControllerProvider.$allTransitiveDependencies12;
+  static final $allTransitiveDependencies14 =
+      ChatControllerProvider.$allTransitiveDependencies13;
+  static final $allTransitiveDependencies15 = conversationPermissionsProvider;
 
   @override
   String debugGetCreateSourceHash() => _$contextPreviewHash();
@@ -91,7 +95,7 @@ final class ContextPreviewProvider
   }
 }
 
-String _$contextPreviewHash() => r'd19fdc20e012dda7b34708b221843fef3761593c';
+String _$contextPreviewHash() => r'5a213720d02bd3fe63a79385c36e8d332de696dc';
 
 final class ContextPreviewFamily extends $Family
     with $FunctionalFamilyOverride<FutureOr<ContextBuild?>, String> {
@@ -123,6 +127,8 @@ final class ContextPreviewFamily extends $Family
           ContextPreviewProvider.$allTransitiveDependencies11,
           ContextPreviewProvider.$allTransitiveDependencies12,
           ContextPreviewProvider.$allTransitiveDependencies13,
+          ContextPreviewProvider.$allTransitiveDependencies14,
+          ContextPreviewProvider.$allTransitiveDependencies15,
         },
         isAutoDispose: true,
       );

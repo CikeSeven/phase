@@ -1,6 +1,6 @@
 # 相月 Agent 与扩展设计
 
-更新：2026-09-22｜状态：E1–E5 已接入；自动化、真机和真实服务验证范围以实施计划为准
+更新：2026-10-02｜状态：E1–E5 已接入；自动化、真机和真实服务验证范围以实施计划为准
 
 本文件细化扩展目标；E1 远程 MCP、E2 Skills、E3 工作区与命令、E4 本地 MCP 与依赖、E5 上下文/计划/记忆已接入，实际支持范围与验证缺口以实施计划第 3–7 节为准，其余章节仍是待实现设计。现状与基础契约见 [产品设计](./product_and_technical_design.md)，实施顺序与交付清单见 [实施计划](./implementation_plan.md)。数据结构名称是设计名称，实现时与当前模型统一，不预建空表、空页面或第二套运行框架。
 
@@ -10,7 +10,7 @@
 
 | 层次 | 选型 | 边界 |
 |---|---|---|
-| 主循环 | Dart `AgentLoop` + 现有 Controller/Repository | 模型轮次、工具派发和运行终态只有一处决策 |
+| 主循环 | Dart `AgentLoop` + `ChatRunDriver` / Repository | 循环顺序、工具授权和运行终态各有唯一入口 |
 | 工具接入 | `ToolRegistry` / `ToolExecutor` | 内置、MCP、进程与插件工具走相同策略和结果保存 |
 | 通用生态 | MCP Streamable HTTP + stdio；Skills | 通信标准和指导格式不绑定某个 Agent 框架 |
 | 本地环境 | 按需下载 Ubuntu 24.04 ARM64 rootfs + PRoot | 程序运行环境，不承载另一套 Agent 内核 |
@@ -59,8 +59,9 @@ flowchart TD
 
 | 职责 | 目标位置 | 说明 |
 |---|---|---|
-| 轮次、策略、结果与预算 | `lib/features/tools/` | 延续现有 AgentLoop/ToolExecutor |
-| 上下文装配、摘要 | `lib/features/chat/` | 根据扩展需求从 Controller 提取，不移动 Provider 业务边界 |
+| 循环顺序与工具授权 | `lib/features/tools/` | 延续现有 AgentLoop/ToolExecutor |
+| 运行编排、模型流与工具资源 | `lib/features/chat/runtime/` | Driver、ModelTurnRunner、ToolRuntime 独立持有状态，不依赖页面或 Ref |
+| 上下文装配、摘要 | `lib/features/chat/context/` | Coordinator 接线既有计量、分组和摘要模块，不移动 Provider 业务边界 |
 | MCP 连接、目录与配置界面 | `lib/features/mcp/` | MCP 协议是工具接入，不放进模型 `lib/providers/` |
 | Skill 安装、索引与按需读取 | `lib/features/skills/` | 文件和指导管理，执行仍调用注册工具 |
 | 环境、工作区、命令和终端 | `lib/features/workspace/` | 调用原生进程契约，不直接从页面发命令 |
@@ -82,7 +83,7 @@ flowchart TD
 
 保持产品设计中的 ToolCallRecord 状态机。安装、连接、进程事件是各自生命周期，不增设“执行结果待用户核验”。工具结果包含文本/结构化内容、isError、产物和必要的截断信息；Provider 仅做协议编码。
 
-运行互斥、取消域、终态提交标记与完整收尾信号归属 `lib/features/chat/chat_operation.dart`，循环 IO 仍由 `ChatController` 实现 `AgentLoopHost`。模型流、待完成写入、MCP、命令/设备宿主、监听与租约分别收尾；一个清理异常不跳过其他资源，内存状态释放由最外层保证。操作完成信号在全部收尾之后发布，悬浮面板交接仍等待旧操作结束后创建新运行。工具准备、最新策略复检和实际派发边界核对取消；进度回调只在当前调用执行期间有效，停止或收口后丢弃迟到更新。
+运行互斥、取消域、终态提交标记与完整收尾信号归属 `lib/features/chat/chat_operation.dart`；`ChatController` 是操作入口和展示投影，`runtime/chat_run_driver.dart` 实现 `AgentLoopHost`。`model_turn_runner.dart` 持有模型流、请求记录与待完成写入，`chat_tool_runtime.dart` 持有执行器、MCP、命令通道与停止监听，`chat_run_factory.dart` 取得的新运行租约覆盖驱动和完整收尾。各项清理独立执行，一个异常不跳过其他资源；展示更新携带运行/会话身份，不通过异步监听提交业务记录。操作完成信号在全部收尾之后发布，悬浮面板交接仍等待旧操作结束后创建新运行。工具准备、最新策略复检和实际派发边界核对取消；进度回调只在当前调用执行期间有效，停止或收口后丢弃迟到更新。
 
 模型重试与工具执行分开。任何通道断连都不能自动重发已派发调用。无未决业务调用时可以重建连接；有未决调用时先按连接失败保存已有信息，不能以重连掩盖失败或重放历史操作。
 

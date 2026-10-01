@@ -1,6 +1,6 @@
 # 相月（Phase）产品与技术设计
 
-更新：2026-09-22｜阶段：未发布的初版建设｜平台：Android
+更新：2026-10-02｜阶段：未发布的初版建设｜平台：Android
 
 相月是 Android 多模型聊天与设备执行应用，工程名 `phase`，应用 ID `app.xiangyue.phase`。用户自带模型服务；Flutter/Dart 负责界面、模型请求与 Agent 循环，Kotlin 负责 Android 能力。
 
@@ -113,7 +113,7 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 ## 1. 职责
 
-`AgentLoop` 只推进轮次；当前 `ChatController` 提供流式请求、历史解析、工具执行与持久化宿主，`ContextBuilder` 负责预算与摘要选择；摘要请求独立计量，仍受根运行停止控制。不为迁移到框架重写现有聊天路径。Provider 不调工具，原生进程不调用模型，插件不拥有另一份会话事实来源。
+`AgentLoop` 只推进轮次；`ChatController` 保留页面入口、操作互斥与展示投影，`ChatRunDriver` 实现 `AgentLoopHost` 并推进运行位置、工具结果与终态。`ModelTurnRunner` 持有模型流、请求计量和有限重试，`ChatToolRuntime` 装配执行器与通道资源，`ChatRunFactory` 为发送和空闲预览复用配置及目录规则。`ChatContextCoordinator` 接线既有历史解析、计量和摘要模块，不新增另一套预算算法；摘要请求独立计量，仍受根运行停止控制。运行组件通过构造参数注入依赖，不持有页面或 `Ref`；展示更新不代替仓储事务，操作在驱动及租约完整收尾后才结束。Provider 不调工具，原生进程不调用模型，插件不拥有另一份会话事实来源。
 
 ## 2. 运行快照
 

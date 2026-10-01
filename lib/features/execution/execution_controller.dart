@@ -51,6 +51,9 @@ class ExecutionState {
 /// 根任务的用户控制，与页面/Activity 的挂接无关。决定由 ToolExecutor 落库。
 @Riverpod(keepAlive: true)
 class ExecutionController extends _$ExecutionController {
+  TaskActivity get activity =>
+      ref.mounted ? state.activity : const TaskActivity();
+
   Completer<ToolDecision>? _decision;
   void Function()? _stop;
   Timer? _expiry;

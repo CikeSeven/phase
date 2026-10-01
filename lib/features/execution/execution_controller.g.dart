@@ -45,7 +45,7 @@ final class ExecutionControllerProvider
 }
 
 String _$executionControllerHash() =>
-    r'ee75644a6447013ca3393a028d0a743af51a84cd';
+    r'f63b146f297652f3604c23ccfd96c1761e46b6f9';
 
 /// 根任务的用户控制，与页面/Activity 的挂接无关。决定由 ToolExecutor 落库。
 

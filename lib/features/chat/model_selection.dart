@@ -1,41 +1,19 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
-import '../../../data/datasources/local/settings_storage.dart';
-import '../../../data/models/model_selection.dart' as model;
-import '../../../data/models/provider_profile.dart';
-import '../../../data/models/reasoning_effort.dart';
-import '../../../data/repositories/conversation_repository.dart';
-import '../../../data/repositories/provider_profile_repository.dart';
-import 'chat_controller.dart';
+import '../../data/datasources/local/settings_storage.dart';
+import '../../data/models/model_selection.dart' as model;
+import '../../data/models/provider_profile.dart';
+import '../../data/models/reasoning_effort.dart';
+import '../../data/repositories/conversation_repository.dart';
+import '../../data/repositories/provider_profile_repository.dart';
+import 'active_conversation.dart';
+import 'chat_model_selection.dart';
+import 'chat_providers.dart';
+import 'conversation_providers.dart';
+export 'chat_model_selection.dart';
 
 part 'model_selection.g.dart';
-
-/// 当前生效的「服务商 × 模型 × 推理等级」组合。
-class ChatModelSelection {
-  const ChatModelSelection({
-    required this.profile,
-    required this.model,
-    required this.supportsReasoning,
-    required this.supportsImages,
-    required this.supportsTools,
-    required this.effort,
-  });
-
-  final ProviderProfile profile;
-  final String model;
-
-  /// 当前模型是否声明支持推理；false 时 effort 不下发。
-  final bool supportsReasoning;
-
-  /// 当前模型是否声明支持工具调用；false 时不下发工具定义。
-  final bool supportsTools;
-
-  /// 当前模型是否声明支持图片输入；false 时附件入口拦截图片。
-  final bool supportsImages;
-
-  final ReasoningEffort effort;
-}
 
 /// 模型选择：会话显式覆盖优先于助手默认，再取「最近使用」，
 /// 否则回退到第一个服务商的默认模型 / 候选模型第一个。
