@@ -114,7 +114,7 @@ class ToolOutcome {
   final bool cancelled;
 }
 
-/// 工具执行中可选的进度上报（章节、字节等）。
+/// 本次工具执行中的同步进度上报；执行收口或取消后丢弃迟到更新。
 typedef ToolProgress = void Function(String message);
 
 /// 一个可被模型调用的工具。

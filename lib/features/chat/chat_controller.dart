@@ -86,11 +86,13 @@ import '../tools/run_recovery_controller.dart';
 import '../tools/tool.dart';
 import '../tools/tool_executor.dart';
 import '../tools/tool_registry.dart';
+import '../tools/tool_result_projection.dart';
 import '../execution/execution_controller.dart';
 import '../../../data/datasources/local/settings_storage.dart';
 import '../execution/channel_driver.dart';
 import 'model_selection.dart';
 import 'model_retry.dart';
+import 'chat_operation.dart';
 
 part 'chat_controller.g.dart';
 
@@ -216,7 +218,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   ArtifactStorage? _storage;
   ToolRegistry? _registry;
   ToolExecutor? _executor;
-  RunCancellation? _cancellation;
+  RunCancellation? get _cancellation => _operation?.cancellation;
 
   /// 本轮助手的最终内容块；工具引用在响应收口时与整轮记录一起保存。
   List<MessagePart> _turnParts = const [];
@@ -234,10 +236,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
 
   /// 本轮以错误或空回复收场时，运行结束原因取它。
   RunFinishReason? _turnFailure;
-  bool _runFinished = false;
-  bool _busy = false;
-  String? _busyRunId;
-  Completer<void>? _idleCompleter;
+  ChatOperation? _operation;
+  bool get _busy => _operation != null;
+  bool get _runFinished => _operation?.runFinished ?? false;
   bool _submittedPlan = false;
   int _viewRevision = 0;
   bool _responseComplete = false;
@@ -250,11 +251,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     ref.onDispose(() {
       _flushTimer?.cancel();
       _publishTimer?.cancel();
-      _cancellation?.cancel();
+      _operation?.cancel();
       _acceptingChunks = false;
       _completeRequest();
-      final idle = _idleCompleter;
-      if (idle != null && !idle.isCompleted) idle.complete();
     });
     return const ChatState();
   }
@@ -447,21 +446,31 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   }) async {
     _checkPermissionSave();
     if (_busy) return;
-    _busy = true;
+    final operation = ChatOperation();
+    _operation = operation;
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
       await _send(text, attachments: attachments);
     } finally {
-      _releaseBusy();
+      _releaseOperation(operation);
     }
   }
 
-  void _releaseBusy() {
-    _busy = false;
-    _busyRunId = null;
-    final idle = _idleCompleter;
-    _idleCompleter = null;
-    if (idle != null && !idle.isCompleted) idle.complete();
+  void _releaseOperation(ChatOperation operation) {
+    try {
+      if (identical(_operation, operation)) {
+        _operation = null;
+        if (ref.mounted) {
+          state = state.copyWith(
+            isGenerating: false,
+            clearStreaming: true,
+            clearRun: true,
+          );
+        }
+      }
+    } finally {
+      operation.settle();
+    }
   }
 
   void _checkPanelCancellation(RunCancellation? cancellation) {
@@ -478,22 +487,30 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     RunCancellation cancellation,
   ) async {
     _checkPanelCancellation(cancellation);
-    if (_busy) {
-      if (_run?.id != sourceRunId && _busyRunId != sourceRunId) {
+    if (_operation case final operation?) {
+      if (operation.runId != sourceRunId) {
         throw const OperationFailure('已有其他操作，请返回相月处理');
       }
-      final idle = _idleCompleter ??= Completer<void>();
       ref.read(executionControllerProvider.notifier).stopRun(sourceRunId);
       stop();
-      await Future.any([idle.future, cancellation.whenCancelled]);
+      await Future.any([operation.whenSettled, cancellation.whenCancelled]);
     }
     _checkPanelCancellation(cancellation);
     if (_busy || state.isGenerating || state.savingPermissionMode) {
       throw const OperationFailure('当前操作尚未结束，请稍后重试');
     }
-    _busy = true;
+    final operation = ChatOperation();
+    _operation = operation;
     final accepted = Completer<void>();
-    unawaited(_sendPanelMessage(conversationId, text, cancellation, accepted));
+    unawaited(
+      _sendPanelMessage(
+        conversationId,
+        text,
+        cancellation,
+        accepted,
+        operation,
+      ),
+    );
     await accepted.future;
   }
 
@@ -502,6 +519,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     String text,
     RunCancellation cancellation,
     Completer<void> accepted,
+    ChatOperation operation,
   ) async {
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
@@ -535,7 +553,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       }
       if (error is! Failure) AppLogger.warning('悬浮面板运行异常');
     } finally {
-      _releaseBusy();
+      _releaseOperation(operation);
     }
   }
 
@@ -664,12 +682,13 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   Future<void> regenerate() async {
     _checkPermissionSave();
     if (_busy) return;
-    _busy = true;
+    final operation = ChatOperation();
+    _operation = operation;
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
       await _regenerate();
     } finally {
-      _releaseBusy();
+      _releaseOperation(operation);
     }
   }
 
@@ -753,7 +772,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   Future<void> approvePlan(AgentPlan plan) async {
     _checkPermissionSave();
     if (_busy || state.isGenerating) throw const OperationFailure('请先结束当前任务');
-    _busy = true;
+    final operation = ChatOperation();
+    _operation = operation;
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
       _checkRecoveredConversation(plan.conversationId);
@@ -792,7 +812,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         planExecutionMode: source.configuration.planExecutionMode,
       );
     } finally {
-      _releaseBusy();
+      _releaseOperation(operation);
     }
   }
 
@@ -994,9 +1014,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   Future<String> compactContext(String conversationId) async {
     _checkPermissionSave();
     if (_busy || state.isGenerating) throw const OperationFailure('请先结束当前任务');
-    _busy = true;
-    final cancellation = RunCancellation();
-    _cancellation = cancellation;
+    final operation = ChatOperation();
+    _operation = operation;
+    final cancellation = operation.beginCancellation();
     final revision = _viewRevision;
     state = state.copyWith(
       isGenerating: true,
@@ -1056,11 +1076,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           : result.compactionNotice ?? '上下文整理完成';
     } finally {
       cancellation.cancel();
-      _cancellation = null;
-      _releaseBusy();
-      if (ref.mounted) {
-        state = state.copyWith(isGenerating: false, clearRun: true);
-      }
+      _releaseOperation(operation);
     }
   }
 
@@ -1080,6 +1096,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     RunCancellation? panelCancellation,
     void Function()? onPanelAccepted,
   }) async {
+    final operation = _operation!;
     final runs = await ref.read(agentRunRepositoryProvider.future);
     final modelConfig = selection.profile.models
         .where((m) => m.id == selection.model)
@@ -1282,21 +1299,40 @@ class ChatController extends _$ChatController implements AgentLoopHost {
           panelCancellation: panelCancellation,
           onPanelAccepted: onPanelAccepted,
         );
-      } on Failure {
-        final stored = await runs.getById(run.id);
-        if (stored?.status == RunStatus.running && stored?.turnCount == 0) {
-          await runs.finish(
-            run.id,
-            status: RunStatus.failed,
-            finishReason: RunFinishReason.storageError,
-          );
-        }
-        rethrow;
+      } catch (error, stackTrace) {
+        // 初始化尚未进入循环也要保存终态；记录失败不能覆盖原始异常。
+        await operation.cleanup(() async {
+          final stored = await runs.getById(run.id);
+          if (stored?.status == RunStatus.running && stored?.turnCount == 0) {
+            final cancelled =
+                error is CancelledFailure ||
+                panelCancellation?.isCancelled == true;
+            await runs.finish(
+              run.id,
+              status: cancelled ? RunStatus.stopped : RunStatus.failed,
+              finishReason: cancelled
+                  ? RunFinishReason.cancelled
+                  : error is StorageFailure
+                  ? RunFinishReason.storageError
+                  : RunFinishReason.executionError,
+            );
+          }
+        }, failureMessage: '运行初始化终态未能保存，启动时需核对');
+        if (error is Failure) rethrow;
+        AppLogger.error('运行初始化异常：${error.runtimeType}', null, stackTrace);
+        throw UnknownFailure('运行初始化失败', cause: error);
       }
     } finally {
-      workspaceLease?.close();
-      await skillLease?.close();
+      await operation.cleanup(
+        () => workspaceLease?.close(),
+        failureMessage: '会话工作区租约未能释放',
+      );
+      await operation.cleanup(
+        () async => skillLease?.close(),
+        failureMessage: 'Skill 租约未能释放',
+      );
     }
+    operation.throwIfCleanupFailed();
   }
 
   Future<void> _driveRun(
@@ -1307,10 +1343,12 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     RunCancellation? panelCancellation,
     void Function()? onPanelAccepted,
   }) async {
-    _busyRunId = run.id;
+    final operation = _operation!;
+    operation.bindRun(run.id);
     final runs = await ref.read(agentRunRepositoryProvider.future);
     final toolCalls = await ref.read(toolCallRepositoryProvider.future);
     final storage = await ref.read(artifactStorageProvider.future);
+    final requests = await ref.read(modelRequestRepositoryProvider.future);
     final recovery = ref.read(runRecoveryControllerProvider.notifier);
 
     final mcp = run.configuration.mcpServers.isEmpty
@@ -1486,28 +1524,30 @@ class ChatController extends _$ChatController implements AgentLoopHost {
     );
     executor.onConfirmationRequired = _confirmToolCall;
 
+    if (!ref.mounted) throw const CancelledFailure('启动运行前已退出');
     _run = run;
     _selection = selection;
     _repository = repository;
     _runs = runs;
-    _requests = await ref.read(modelRequestRepositoryProvider.future);
+    _requests = requests;
     _storage = storage;
     _registry = registry;
     _executor = executor;
-    _cancellation = RunCancellation();
-    _runFinished = false;
+    operation.beginCancellation();
     _submittedPlan = false;
     _turnFailure = null;
     _turnTailId = null;
-    recovery.runStarted(run.id);
     WorkspaceLease? resumedWorkspace;
-    final commandStops = commandDriver?.stops.listen((owner) {
-      if (owner == run.id) stop();
-    });
-    final processStops = processDriver?.stops.listen((owner) {
-      if (owner == run.id) stop();
-    });
+    StreamSubscription<String>? commandStops;
+    StreamSubscription<String>? processStops;
     try {
+      recovery.runStarted(run.id);
+      commandStops = commandDriver?.stops.listen((owner) {
+        if (_operation == operation && owner == run.id) stop();
+      });
+      processStops = processDriver?.stops.listen((owner) {
+        if (_operation == operation && owner == run.id) stop();
+      });
       if (resuming && binding != null) {
         resumedWorkspace = await workspaceRepository!.acquire(
           binding.id,
@@ -1592,16 +1632,16 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         maxTurns: run.maxTurns == 0 ? null : run.maxTurns - run.turnCount,
       ).run();
     } on StorageFailure {
-      await _requests!.interruptPending(
-        runId: run.id,
-        errorCode: 'storageError',
+      await operation.cleanup(
+        () =>
+            requests.interruptPending(runId: run.id, errorCode: 'storageError'),
+        failureMessage: '存储故障后的请求终态未能保存',
       );
       // 落库失败：运行按存储失败收口后再交给界面提示，不留永远 running 的运行。
-      try {
-        await _finishRun(RunStatus.failed, RunFinishReason.storageError);
-      } on Failure {
-        AppLogger.error('运行终态未能保存，启动时需核对');
-      }
+      await operation.cleanup(
+        () => _finishRun(RunStatus.failed, RunFinishReason.storageError),
+        failureMessage: '运行终态未能保存，启动时需核对',
+      );
       rethrow;
     } on Failure {
       await _finishUnexpectedRun();
@@ -1617,53 +1657,70 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       _publishTimer?.cancel();
       _publishTimer = null;
       _streamingMessageId = null;
-      _cancellation?.cancel();
-      await mcp?.close();
+      operation.cancel();
       try {
-        await commandDriver?.endOwner(run.id);
-      } on Failure {
-        AppLogger.warning('系统命令任务未收到完整结束回执');
-      }
-      await commandStops?.cancel();
-      try {
-        if (processDriver != null) await processDriver.endTask(run.id);
-      } on Failure {
-        AppLogger.warning('Linux 任务服务未确认结束');
-      }
-      await processStops?.cancel();
-      resumedWorkspace?.close();
-      try {
-        await execution.endRun(run.id);
-      } on Failure {
-        // 控制器保留可见错误；不让服务清理失败跳过本地资源与运行收尾。
-        AppLogger.warning('Android 任务服务未确认结束');
-      }
-      await _subscription?.cancel();
-      _subscription = null;
-      _doneCompleter = null;
-      Failure? cleanupFailure;
-      try {
-        await _requests!.interruptPending(runId: run.id);
-      } on Failure catch (error) {
-        cleanupFailure = error;
-      }
-      _requestId = null;
-      _run = null;
-      _selection = null;
-      _cancellation = null;
-      _executor = null;
-      if (ref.mounted) {
-        // 清理与恢复索引刷新完成后才解锁发送，避免两个根任务交错写入。
-        await recovery.runFinished().catchError((Object _) {});
-      }
-      if (ref.mounted) {
-        state = state.copyWith(
-          isGenerating: false,
-          clearStreaming: true,
-          clearRun: true,
+        await operation.cleanup(
+          () async => _subscription?.cancel(),
+          failureMessage: '模型流未能完整关闭',
         );
+        await operation.cleanup(
+          () => _pendingFlush,
+          failureMessage: '流式内容写入未能收口',
+        );
+        await operation.cleanup(
+          () async => mcp?.close(),
+          failureMessage: 'MCP 连接未能完整关闭',
+        );
+        await operation.cleanup(
+          () async => commandDriver?.endOwner(run.id),
+          failureMessage: '系统命令任务未收到完整结束回执',
+        );
+        await operation.cleanup(
+          () async => commandStops?.cancel(),
+          failureMessage: '系统命令停止监听未能释放',
+        );
+        await operation.cleanup(
+          () async => processDriver?.endTask(run.id),
+          failureMessage: 'Linux 任务服务未确认结束',
+        );
+        await operation.cleanup(
+          () async => processStops?.cancel(),
+          failureMessage: 'Linux 停止监听未能释放',
+        );
+        await operation.cleanup(
+          () => resumedWorkspace?.close(),
+          failureMessage: '恢复运行的工作区租约未能释放',
+        );
+        await operation.cleanup(
+          () => execution.endRun(run.id),
+          failureMessage: 'Android 任务服务未确认结束',
+        );
+        await operation.cleanup(
+          () => requests.interruptPending(runId: run.id),
+          failureMessage: '请求终态未能保存，启动时需核对',
+        );
+        if (ref.mounted) {
+          await operation.cleanup(
+            recovery.runFinished,
+            failureMessage: '中断任务索引未能刷新',
+          );
+        }
+      } finally {
+        _subscription = null;
+        _doneCompleter = null;
+        _pendingFlush = Future.value();
+        _requestId = null;
+        _run = null;
+        _selection = null;
+        _executor = null;
+        _registry = null;
+        _repository = null;
+        _runs = null;
+        _requests = null;
+        _storage = null;
+        _runAttachments = const {};
+        _liveParts.clear();
       }
-      if (cleanupFailure != null) throw cleanupFailure;
     }
   }
 
@@ -1675,7 +1732,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
             ? RunFinishReason.cancelled
             : RunFinishReason.executionError,
       );
-    } on Failure {
+    } on Object {
       AppLogger.error('运行终态未能保存，启动时需核对');
     }
   }
@@ -1692,7 +1749,8 @@ class ChatController extends _$ChatController implements AgentLoopHost {
   /// 用户主动继续已保存的位置；配置取运行快照，不重新执行已知结果。
   Future<void> resumeRun(String runId) async {
     if (_busy) return;
-    _busy = true;
+    final operation = ChatOperation();
+    _operation = operation;
     try {
       final recovery = ref.read(runRecoveryControllerProvider.notifier);
       await recovery.refresh();
@@ -1742,8 +1800,9 @@ class ChatController extends _$ChatController implements AgentLoopHost {
         ),
         resuming: true,
       );
+      operation.throwIfCleanupFailed();
     } finally {
-      _releaseBusy();
+      _releaseOperation(operation);
     }
   }
 
@@ -2260,7 +2319,7 @@ class ChatController extends _$ChatController implements AgentLoopHost {
       finishReason: finishReason,
       currentMessageId: _turnTailId,
     );
-    _runFinished = true;
+    _operation!.markRunFinished();
   }
 
   /// 请求用户确认：等待期间运行记 awaitingConfirmation 与待确认调用。

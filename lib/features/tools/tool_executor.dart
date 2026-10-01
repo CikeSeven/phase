@@ -235,22 +235,32 @@ class ToolExecutor {
       tool,
       status: ToolCallStatus.prepared,
     );
-    if (!cancellation.isCancelled) {
-      try {
-        await prepareChannel?.call(tool, arguments);
-      } on StorageFailure {
-        rethrow;
-      } on Failure catch (failure) {
-        final outcome = _failureOutcome(failure);
-        final failed = await toolCalls.markFailed(
-          record.id,
-          result: failure.userMessage,
-          errorCode: failure is ExecutionFailure
-              ? failure.code.name
-              : 'channelUnavailable',
-        );
-        return ToolExecutionResult(record: failed, outcome: outcome);
-      }
+    if (cancellation.isCancelled) {
+      return ToolExecutionResult(
+        record: await toolCalls.markCancelled(record.id),
+        outcome: null,
+      );
+    }
+    try {
+      await prepareChannel?.call(tool, arguments);
+    } on StorageFailure {
+      rethrow;
+    } on Failure catch (failure) {
+      final outcome = _failureOutcome(failure);
+      final failed = await toolCalls.markFailed(
+        record.id,
+        result: failure.userMessage,
+        errorCode: failure is ExecutionFailure
+            ? failure.code.name
+            : 'channelUnavailable',
+      );
+      return ToolExecutionResult(record: failed, outcome: outcome);
+    }
+    if (cancellation.isCancelled) {
+      return ToolExecutionResult(
+        record: await toolCalls.markCancelled(record.id),
+        outcome: null,
+      );
     }
     final applicationOperationsForRun =
         tool.source.kind == ToolSourceKind.builtIn &&
@@ -313,9 +323,15 @@ class ToolExecutor {
       );
     }
 
+    if (cancellation.isCancelled) {
+      return ToolExecutionResult(
+        record: await toolCalls.markCancelled(record.id),
+        outcome: null,
+      );
+    }
+
     // 先记录 executing 再派发：外部动作可能已经开始。
     await toolCalls.markExecuting(record.id);
-    onExecuting?.call(tool, arguments, record.id);
 
     final context = ToolContext(
       conversationId: request.conversationId,
@@ -329,13 +345,27 @@ class ToolExecutor {
     );
 
     ToolOutcome outcome;
+    var acceptingProgress = true;
     try {
-      outcome = await tool.execute(
-        arguments,
-        context,
-        cancellation,
-        onProgress: onProgress,
-      );
+      try {
+        cancellation.throwIfCancelled();
+        onExecuting?.call(tool, arguments, record.id);
+        cancellation.throwIfCancelled();
+        outcome = await tool.execute(
+          arguments,
+          context,
+          cancellation,
+          onProgress: onProgress == null
+              ? null
+              : (message) {
+                  if (acceptingProgress && !cancellation.isCancelled) {
+                    onProgress(message);
+                  }
+                },
+        );
+      } finally {
+        acceptingProgress = false;
+      }
     } on ToolCancelled {
       outcome = const ToolOutcome.cancelled('本次动作在明确的取消点停止。');
     } on StorageFailure {

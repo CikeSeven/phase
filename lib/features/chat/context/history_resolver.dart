@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:io';
 
 import '../../../data/models/agent_run.dart';
@@ -15,6 +14,7 @@ import '../../../data/repositories/agent_run_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import '../../../providers/tool_result_images.dart';
 import '../../tools/tool.dart';
+import '../../tools/tool_result_projection.dart';
 import 'read_history_tool.dart';
 
 class HistoryResolver {
@@ -40,7 +40,7 @@ class HistoryResolver {
   }) async {
     final records = await historyRecords(repository, messages);
     final sourceRuns = <String, AgentRun?>{};
-    // 结果文本以结果消息为准：拒绝等状态只写进结果消息，记录里可能没有。
+    // 原始结果从工具记录统一投影；没有结果正文时沿用已保存的结果消息。
     final results = <String, ResolvedToolResult>{};
     for (final message in messages) {
       for (final part in message.parts) {
@@ -97,11 +97,9 @@ class HistoryResolver {
               : const [],
           content:
               environmentPrefix +
-              truncateToolResult(
-                message.text.isNotEmpty
-                    ? message.text
-                    : (record.result ?? toolStatusText(record.status)),
-                limit: toolResultLimit(record),
+              toolResultText(
+                record,
+                fallback: message.text.isNotEmpty ? message.text : null,
               ),
           artifactIds: record.artifacts,
           isError: record.status != ToolCallStatus.succeeded,
@@ -221,10 +219,7 @@ class HistoryResolver {
                   }.contains(entry.value.status),
                   callId: entry.key.callId,
                   artifactIds: entry.value.artifacts,
-                  content: truncateToolResult(
-                    entry.value.result ?? _noResultText,
-                    limit: toolResultLimit(entry.value),
-                  ),
+                  content: toolResultText(entry.value, fallback: _noResultText),
                   isError: entry.value.status != ToolCallStatus.succeeded,
                 ),
             ],
@@ -265,42 +260,6 @@ class HistoryResolver {
       return '【附件「${attachment.name}」不是可读取的 UTF-8 文本】';
     }
   }
-}
-
-const _maxToolResultBytes = 8 * 1024;
-
-/// 回填给模型与结果消息的文本；记录里没有结果时按状态给出说明。
-String toolResultText(ToolCallRecord record) => truncateToolResult(
-  record.result ?? toolStatusText(record.status),
-  limit: toolResultLimit(record),
-);
-
-int toolResultLimit(ToolCallRecord record) =>
-    const {'read_file', 'list_files'}.contains(record.toolName)
-    ? 128 * 1024
-    : record.toolName == 'read_memory'
-    ? 16 * 1024
-    : record.channel == ExecutionChannel.accessibility ||
-          record.toolName == 'list_apps'
-    ? 64 * 1024
-    : _maxToolResultBytes;
-
-String toolStatusText(ToolCallStatus status) => switch (status) {
-  ToolCallStatus.rejected => '用户拒绝了本次动作，没有执行。',
-  ToolCallStatus.cancelled => '本次调用已取消，没有取得结果。',
-  ToolCallStatus.prepared ||
-  ToolCallStatus.awaitingConfirmation ||
-  ToolCallStatus.executing => '本次调用没有返回内容。',
-  ToolCallStatus.succeeded => '工具执行完成，但没有返回内容。',
-  ToolCallStatus.failed => '工具执行失败，没有返回内容。',
-};
-
-/// 结果按上限截断：超出时附截断标记，不把整段输出塞进上下文。
-String truncateToolResult(String text, {int limit = _maxToolResultBytes}) {
-  final bytes = utf8.encode(text);
-  if (bytes.length <= limit) return text;
-  final head = utf8.decode(bytes.sublist(0, limit), allowMalformed: true);
-  return '$head\n【结果已截断：超过 ${limit ~/ 1024}KB】';
 }
 
 /// 分支里引用到的工具记录：消息只存记录 id，参数与结果按 id 读回。
