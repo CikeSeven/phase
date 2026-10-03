@@ -232,8 +232,12 @@ class MessageBubble extends StatelessWidget {
       height: 1.5,
     );
     final actionStyle = IconButton.styleFrom(
-      minimumSize: const Size.square(48),
-      padding: const EdgeInsets.all(AppSpacing.s),
+      minimumSize: const Size(32, 48),
+      fixedSize: const Size(32, 48),
+      maximumSize: const Size(32, 48),
+      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: EdgeInsets.zero,
+      alignment: Alignment.center,
     );
 
     return SizeChangedLayoutNotifier(
@@ -270,27 +274,36 @@ class MessageBubble extends StatelessWidget {
                         bottomLeft: Radius.circular(AppRadius.large),
                         bottomRight: Radius.circular(AppRadius.small),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.l,
-                          vertical: AppSpacing.m,
+                      child: InkWell(
+                        onLongPress: message.text.isEmpty
+                            ? null
+                            : () => _copy(context),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(AppRadius.large),
+                          topRight: Radius.circular(AppRadius.large),
+                          bottomLeft: Radius.circular(AppRadius.large),
+                          bottomRight: Radius.circular(AppRadius.small),
                         ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (_messageAttachments.isNotEmpty) ...[
-                              MessageAttachments(
-                                attachments: _messageAttachments,
-                              ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppSpacing.l,
+                            vertical: AppSpacing.m,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_messageAttachments.isNotEmpty) ...[
+                                MessageAttachments(
+                                  attachments: _messageAttachments,
+                                ),
+                                if (message.text.isNotEmpty)
+                                  const SizedBox(height: AppSpacing.s),
+                              ],
                               if (message.text.isNotEmpty)
-                                const SizedBox(height: AppSpacing.s),
+                                Text(message.text, style: textStyle),
                             ],
-                            if (message.text.isNotEmpty)
-                              SelectionArea(
-                                child: Text(message.text, style: textStyle),
-                              ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -388,32 +401,31 @@ class MessageBubble extends StatelessWidget {
                       ),
                     ),
                   if (!isRunning && !streaming)
-                    Padding(
-                      padding: const EdgeInsets.only(top: AppSpacing.xs),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            key: const ValueKey('copy-message'),
-                            tooltip: '复制全文',
-                            style: actionStyle.copyWith(
-                              alignment: Alignment.centerRight,
-                            ),
-                            onPressed: message.text.isEmpty
-                                ? null
-                                : () => _copy(context),
-                            icon: const Icon(Symbols.content_copy, size: 20),
-                          ),
-                          if (canRegenerate)
+                    Transform.translate(
+                      offset: const Offset(-4, 0),
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xs),
+                        child: Row(
+                          children: [
                             IconButton(
-                              key: const ValueKey('regenerate-message'),
-                              tooltip: '重新生成',
-                              style: actionStyle.copyWith(
-                                alignment: Alignment.centerLeft,
-                              ),
-                              onPressed: onRegenerate,
-                              icon: const Icon(Symbols.refresh, size: 20),
+                              key: const ValueKey('copy-message'),
+                              tooltip: '复制全文',
+                              style: actionStyle,
+                              onPressed: message.text.isEmpty
+                                  ? null
+                                  : () => _copy(context),
+                              icon: const Icon(Symbols.content_copy, size: 24),
                             ),
-                        ],
+                            if (canRegenerate)
+                              IconButton(
+                                key: const ValueKey('regenerate-message'),
+                                tooltip: '重新生成',
+                                style: actionStyle,
+                                onPressed: onRegenerate,
+                                icon: const Icon(Symbols.refresh, size: 24),
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                 ],
