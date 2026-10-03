@@ -42,4 +42,18 @@
   git diff --check
   ```
 
+- 除非用户主动明确要求，否则不编写、不修改、不运行测试；不得因代码改动自行补测或执行回归测试。格式化、静态分析、代码生成、构建和安装不属于测试，仍按本规范执行。
 - 测试范围遵循任务要求，验证结果只陈述实际执行的内容；不把静态检查、构建或生成代码等同于运行时验收。
+
+## Android 真机安装
+
+- 先用 `adb devices -l` 确认授权的 USB Android 设备，并将目标 ID 明确传给 `adb -s`。代码修改完成、适用检查通过且设备目标明确后，直接构建 Profile 包、覆盖安装并启动，无需再次询问；纯文档修改除外。
+
+  ```bash
+  flutter build apk --profile
+  adb -s "$DEVICE" install -r build/app/outputs/flutter-apk/app-profile.apk
+  adb -s "$DEVICE" shell am start -W -n app.xiangyue.phase/.MainActivity
+  ```
+
+- 更新已有安装只用 `adb install -r`；禁止 `flutter install`、卸载重装和清数据。不得通过修改应用 ID、签名或破坏性操作绕过安装错误。
+- 多台 USB Android 设备时不得猜测目标；安装失败时报告实际错误，不将构建成功当作安装成功。Debug 包仅用于调试，不作为真机 UI/性能验收包。

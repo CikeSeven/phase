@@ -415,7 +415,7 @@ class MessageBubble extends StatelessWidget {
                               onPressed: message.text.isEmpty
                                   ? null
                                   : () => _copy(context),
-                              icon: const Icon(LucideIcons.copy, size: 24),
+                              icon: const Icon(LucideIcons.copy, size: 20),
                             ),
                             if (canRegenerate) ...[
                               const SizedBox(width: AppSpacing.s),
@@ -426,7 +426,7 @@ class MessageBubble extends StatelessWidget {
                                 onPressed: onRegenerate,
                                 icon: const Icon(
                                   LucideIcons.rotateCw,
-                                  size: 24,
+                                  size: 20,
                                 ),
                               ),
                             ],
