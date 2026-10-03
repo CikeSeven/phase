@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
+import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
@@ -98,6 +99,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                             ),
                             const SizedBox(height: AppSpacing.m),
                             FilledButton.icon(
+                              style: AppControlStyle.compact,
                               onPressed: () {
                                 FocusScope.of(context).unfocus();
                                 ref
@@ -236,7 +238,10 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
               ),
               const Divider(height: 1),
               Padding(
-                padding: const EdgeInsets.all(AppSpacing.s),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.s,
+                  vertical: AppSpacing.xs,
+                ),
                 child: AppInteractiveSurface(
                   onTap: () {
                     // 侧栏保持打开，从设置返回后停留在原状。
@@ -244,7 +249,10 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                     GoRouter.of(context).push('/settings');
                   },
                   child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.s),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s,
+                      vertical: AppSpacing.xs,
+                    ),
                     child: Row(
                       children: [
                         const AppIconBadge(
