@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -35,10 +36,12 @@ void main() {
         await fixture.database.close();
         await fixture.directory.delete(recursive: true);
       });
+      await Directory('${repository.filesystem.layout.rootfs}/tmp')
+          .create(recursive: true);
       await repository.saveEnvironment(
-        const RuntimeEnvironment(
+        RuntimeEnvironment(
           phase: EnvironmentPhase.ready,
-          rootPath: 'fixture-root',
+          rootPath: repository.filesystem.layout.rootfs,
           revision: 'fixture',
         ),
       );

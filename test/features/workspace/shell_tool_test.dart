@@ -43,7 +43,7 @@ void main() {
         id: workspace.id,
         name: workspace.name,
         rootPath: workspace.rootPath,
-        environmentRoot: '/fixture',
+        environmentRoot: repository.filesystem.layout.rootfs,
         environmentRevision: 'fixture',
       );
       final attachments = <Attachment>[];
@@ -69,6 +69,7 @@ void main() {
         storage: storage,
         attachments: attachments,
       );
+      await Directory('${binding.environmentRoot}/tmp').create();
       await driver.beginTask('r', 'test');
       final pending = tool.execute(
         {
@@ -151,6 +152,21 @@ void main() {
       }
     });
   }
+  test('process bridge round-trip carries only rootfs and guest cwd, without a workspace bind', () {
+    final spec = LinuxProcessSpec(
+      ownerId: 'owner',
+      processId: 'call',
+      rootfs: '/managed/environments/ubuntu/rootfs',
+      executable: '/bin/sh',
+      argv: ['-c', 'cd /tmp && pwd'],
+      cwd: '/sessions/a',
+      environment: {},
+    );
+    expect((spec.encode() as List), hasLength(9));
+    expect(LinuxProcessSpec.decode(spec.encode()), spec);
+    expect(spec.toString(), isNot(contains('workspace:')));
+  });
+
   test(
     'raw stdin and byte chunks retain multibyte UTF-8 until decoding',
     () async {
@@ -166,11 +182,10 @@ void main() {
         LinuxProcessSpec(
           ownerId: 'owner',
           processId: 'pipes',
-          rootfs: '/fixture',
-          workspace: directory.path,
+          rootfs: directory.path,
           executable: '/bin/sh',
           argv: ['-c', 'cat'],
-          cwd: '/workspace',
+          cwd: '/',
           environment: {},
           outputLimitBytes: 10000,
         ),
@@ -193,8 +208,12 @@ class _CancelDuringPreparation extends WorkspaceFiles {
   _CancelDuringPreparation(super.repository, this.cancellation);
   final RunCancellation cancellation;
   @override
-  Future<Map<String, String>> outputs(WorkspaceSnapshot workspace) async {
-    cancellation.cancel();
+  Future<Map<String, String>> outputs(
+    WorkspaceSnapshot workspace, {
+    String? ownerId,
+    RunCancellation? cancellation,
+  }) async {
+    this.cancellation.cancel();
     return {};
   }
 }

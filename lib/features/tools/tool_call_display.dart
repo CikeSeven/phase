@@ -106,10 +106,7 @@ class ToolCallDisplay {
         case 'shell':
         case 'termux_shell':
           if (args['command'] case final String command) {
-            final metadata = [
-              if (args['cwd'] case final String cwd when cwd != '/workspace')
-                cwd,
-            ];
+            final metadata = [if (args['cwd'] case final String cwd) cwd];
             return ToolCallDisplay(
               call: '\$ $command',
               metadata: metadata.isEmpty ? null : metadata.join(' · '),

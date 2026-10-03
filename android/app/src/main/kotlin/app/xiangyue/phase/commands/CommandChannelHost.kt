@@ -1,5 +1,7 @@
 package app.xiangyue.phase.commands
 
+import app.xiangyue.phase.workspace.UbuntuFilesystemLayout
+
 import android.app.Activity
 import android.content.*
 import android.net.Uri
@@ -295,10 +297,8 @@ class CommandChannelHost(
     }
     override suspend fun transfer(spec: ChannelTransferSpec) {
         validate(spec.ownerId, spec.callId, spec.channel, spec.revision, spec.uid)
-        val root = File(spec.localRoot).canonicalFile
-        val allowed = File(context.noBackupFilesDir, "linux/workspaces").canonicalPath + "/"
-        val staging = File(context.noBackupFilesDir, "linux/staging").canonicalPath + "/workspace-"
-        require((root.path.startsWith(allowed) || root.path.startsWith(staging)) && root.isDirectory && spec.path.isNotBlank() && !spec.path.startsWith('/') && spec.path.split('/').none { it == ".." } && '\u0000' !in spec.path && '\\' !in spec.path)
+        val root = UbuntuFilesystemLayout.managedTransferRoot(File(context.noBackupFilesDir, "linux").canonicalFile, spec.localRoot)
+        require(spec.path.isNotBlank() && !spec.path.startsWith('/') && spec.path.split('/').none { it == ".." } && '\u0000' !in spec.path && '\\' !in spec.path)
         val local = File(root, spec.path.split('/').filter { it.isNotEmpty() && it != "." }.joinToString("/"))
         require(local.canonicalPath == root.path || local.canonicalPath.startsWith(root.path + "/"))
         require(spec.remotePath.startsWith('/') && '\u0000' !in spec.remotePath && spec.fileLimitBytes in 1..(64L*1024*1024) && spec.totalLimitBytes in 1..(256L*1024*1024) && spec.entryLimit in 1..1000)

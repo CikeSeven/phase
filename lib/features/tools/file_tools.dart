@@ -58,9 +58,7 @@ class ReadFileTool extends Tool {
   }) => _fileOperation(() async {
     final path = ToolArguments(arguments, name).string('path');
     cancellation.throwIfCancelled();
-    final relative = path.startsWith('attachment:')
-        ? null
-        : _relative(path, context);
+    final relative = path.startsWith('attachment:') ? null : _relative(path);
     final access = _access(context);
     final page =
         relative != null &&
@@ -173,7 +171,7 @@ class EditFileTool extends Tool {
     final path = ToolArguments(arguments, name).string('path');
     cancellation.throwIfCancelled();
     final access = _access(context);
-    final relative = _relative(path, context);
+    final relative = _relative(path);
     final original = await access.readText(relative, cancellation);
     if (original.contains('\u0000')) {
       throw const FileToolException('notText', '不能编辑二进制文件');
@@ -247,7 +245,7 @@ class ListFilesTool extends Tool {
   }) => _fileOperation(() async {
     final path = arguments['path'] as String? ?? '.';
     cancellation.throwIfCancelled();
-    final relative = _relative(path, context, directory: true);
+    final relative = _relative(path, directory: true);
     final entries = <Map<String, Object?>>[
       for (final entry in await _access(context).list(relative, cancellation))
         {'path': entry.path, 'type': entry.type},
@@ -309,14 +307,8 @@ WorkspaceFileAccess _access(ToolContext context) {
   );
 }
 
-String _relative(String path, ToolContext context, {bool directory = false}) {
-  final ubuntu =
-      context.fileAccess?.binding.primaryEnvironment !=
-      PrimaryEnvironment.termux;
-  final relative =
-      ubuntu && (path == '/workspace' || path.startsWith('/workspace/'))
-      ? (path == '/workspace' ? '.' : path.substring(11))
-      : path;
+String _relative(String path, {bool directory = false}) {
+  final relative = path;
   if (relative.startsWith('attachment:')) {
     throw const FileToolException('readOnlyAttachment', '附件只读；请写到新的文件路径');
   }
@@ -356,9 +348,8 @@ Future<ToolOutcome> _write(
   RunCancellation cancellation, {
   String? original,
 }) async {
-  await _access(
-    context,
-  ).write(_relative(path, context), content, cancellation, original: original);
+  await _access(context)
+      .write(_relative(path), content, cancellation, original: original);
   return ToolOutcome.success(
     '已写入「$path」（${utf8.encode(content).length} bytes）',
   );

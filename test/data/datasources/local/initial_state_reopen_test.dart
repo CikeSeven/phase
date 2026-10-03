@@ -103,7 +103,7 @@ void main() {
         profileId: profile.id,
         modelId: 'fixture-model',
       ),
-      mcpToolNames: {tool.name},
+      mcpServerIds: {server.id},
     );
     await assistants.save(assistant);
     final conversations = ConversationRepository(
@@ -257,7 +257,7 @@ void main() {
         (await AgentRunRepository(db).getById('run'))!.configuration.mode,
         PermissionMode.basic,
       );
-      expect(restored.mcpToolNames, {tool.name});
+      expect(restored.mcpServerIds, {server.id});
       expect(
         (await ConversationRepository(
           db,

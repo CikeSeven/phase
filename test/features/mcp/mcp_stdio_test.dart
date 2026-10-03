@@ -48,16 +48,13 @@ void main() {
     });
     repository = WorkspaceRepository(fixture.database, fixture.directory);
     await repository.saveEnvironment(
-      const RuntimeEnvironment(
+      RuntimeEnvironment(
         phase: EnvironmentPhase.ready,
-        rootPath: 'fixture-root',
+        rootPath: repository.filesystem.layout.rootfs,
         revision: 'fixture',
       ),
     );
-    workspace = Directory(
-      p.join(fixture.directory.path, 'workspaces', 'mcp', 'stdio-1'),
-    );
-    await workspace.create(recursive: true);
+    workspace = await repository.filesystem.ensureMcpService('stdio-1');
     await File(p.join(fixtures.path, 'mcp_stdio_server.py'))
         .copy(p.join(workspace.path, 'server.py'));
     await File(p.join(fixtures.path, 'mcp_stdio_server.mjs'))
@@ -81,9 +78,9 @@ void main() {
       executable: runtime == 'node' ? '/usr/bin/node' : '/usr/bin/python3',
       args: [
         if (runtime == 'node')
-          '/workspace/server.mjs'
+          '/services/mcp/stdio-1/server.mjs'
         else
-          '/workspace/server.py',
+          '/services/mcp/stdio-1/server.py',
       ],
       environment: {
         'FIXTURE_MODE': mode,
@@ -102,8 +99,7 @@ void main() {
   McpStdioClient build(McpServerProfile value) => McpStdioClient(
     value,
     driver: driver,
-    rootfs: 'fixture-root',
-    workspace: workspace.path,
+    rootfs: repository.filesystem.layout.rootfs,
     environment: value.command!.environment,
   );
 
@@ -132,6 +128,32 @@ void main() {
     await client.close();
     expect(driver.active, isEmpty);
     expect(driver.owners, isEmpty);
+  });
+
+  test('stdio defaults to its real service directory and accepts explicit global cwd', () async {
+    final launcher = McpStdioLauncher(
+      openDriver: () => driver,
+      openRepository: () async => repository,
+    );
+    final value = profile();
+    final client = await launcher.create(value, value.command!.environment);
+    await client.connect(RunCancellation());
+    expect(driver.calls.last.rootfs, repository.filesystem.layout.rootfs);
+    expect(driver.calls.last.cwd, '/services/mcp/${value.id}');
+    expect(workspace.path, repository.filesystem.layout.mcpDirectory(value.id));
+    await client.close();
+    await Directory('${repository.filesystem.layout.rootfs}/root').create();
+    final explicit = value.copyWith(
+      command: value.command!.copyWith(cwd: '/root'),
+    );
+    final other = await launcher.create(
+      explicit,
+      explicit.command!.environment,
+    );
+    await other.connect(RunCancellation());
+    expect(driver.calls.last.cwd, '/root');
+    await other.close();
+    expect(repository.busy, isFalse);
   });
 
   test('分块 UTF-8 输出完整回填', () async {
@@ -412,14 +434,16 @@ void main() {
       'phase_stdio_loop',
     );
     addTearDown(() => loopWorkspace.delete(recursive: true));
+    final service = await Directory(
+      p.join(loopWorkspace.path, 'services', 'mcp', value.id),
+    ).create(recursive: true);
     await File(p.join(fixtures.path, 'mcp_stdio_server.py'))
-        .copy(p.join(loopWorkspace.path, 'server.py'));
+        .copy(p.join(service.path, 'server.py'));
     final connections = McpConnections(
       createStdioClient: (profile, environment) async => McpStdioClient(
         profile,
         driver: driver,
-        rootfs: 'fixture-root',
-        workspace: loopWorkspace.path,
+        rootfs: loopWorkspace.path,
         environment: environment,
       ),
     );
@@ -443,9 +467,7 @@ void main() {
       assistantRepositoryProvider.future,
     );
     final assistant = await assistants.ensureDefault();
-    await assistants.save(
-      assistant.copyWith(mcpToolNames: {tools.single.name}),
-    );
+    await assistants.save(assistant.copyWith(mcpServerIds: {saved.id}));
     h.provider.turns.add(
       toolTurn(
         callId: 'call_1',

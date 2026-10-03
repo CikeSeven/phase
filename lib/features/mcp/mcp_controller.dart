@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
-import '../../../core/utils/logger.dart';
 import '../../../data/models/mcp_server_profile.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
 import '../../../data/repositories/workspace_repository.dart';
@@ -94,8 +91,18 @@ class McpController extends _$McpController {
     }
     await ref.read(mcpConnectionsProvider).closeServer(id);
     try {
-      await repository.delete(id);
-      await _cleanStdioDirectory(id);
+      if (entry.profile.transport == McpTransport.stdio) {
+        final workspaces = await ref.read(workspaceRepositoryProvider.future);
+        final release = workspaces.retainEnvironment();
+        try {
+          await workspaces.filesystem.deleteMcpService(id);
+          await repository.delete(id);
+        } finally {
+          release();
+        }
+      } else {
+        await repository.delete(id);
+      }
       if (ref.mounted) state = const AsyncData(null);
     } catch (_) {
       final pending = await repository.get(id);
@@ -103,21 +110,6 @@ class McpController extends _$McpController {
       rethrow;
     }
   });
-
-  /// stdio 服务的专属目录不在数据库登记；删除成功后尽力清理，失败只记录。
-  Future<void> _cleanStdioDirectory(String id) async {
-    try {
-      final workspaces = await ref.read(workspaceRepositoryProvider.future);
-      final directory = Directory(
-        McpStdioLauncher.serverDirectory(workspaces, id),
-      );
-      if (await directory.exists()) {
-        await directory.delete(recursive: true);
-      }
-    } on Object catch (error) {
-      AppLogger.warning('MCP 服务目录清理失败，残留目录不影响使用：${error.runtimeType}');
-    }
-  }
 
   Future<void> _operate(Future<void> Function() action) async {
     if (_working) throw const OperationFailure('请等待当前操作完成');

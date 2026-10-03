@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import '../../../core/error/failure.dart';
 import '../../../core/utils/id.dart';
+import '../../../data/models/ubuntu_filesystem_layout.dart';
 import '../tools/tool.dart';
 import '../workspace/process_api.g.dart';
 import '../workspace/process_driver.dart';
@@ -17,7 +18,6 @@ class McpStdioClient extends McpClient {
     super.profile, {
     required this.driver,
     required this.rootfs,
-    required this.workspace,
     this.environment = const {},
     this.releaseEnvironment,
   });
@@ -29,9 +29,6 @@ class McpStdioClient extends McpClient {
 
   /// 宿主侧 rootfs 路径；来自当前就绪的 Ubuntu 环境记录。
   final String rootfs;
-
-  /// 服务专属工作目录（宿主路径，绑定到 guest /workspace）。
-  final String workspace;
 
   /// 明文与解密后敏感环境变量的合并结果；基础 PATH/HOME 由宿主提供。
   final Map<String, String> environment;
@@ -148,10 +145,9 @@ class McpStdioClient extends McpClient {
           ownerId: owner,
           processId: generateId(),
           rootfs: rootfs,
-          workspace: workspace,
           executable: command.executable,
           argv: command.args,
-          cwd: command.cwd,
+          cwd: command.cwd ?? UbuntuFilesystemLayout.mcpGuestPath(profile.id),
           environment: environment,
           // 长连接不设累计时限与总输出上限；帧级限制由本客户端执行。
         ),
@@ -189,8 +185,7 @@ class McpStdioClient extends McpClient {
       if (!completer.isCompleted) completer.completeError(failure);
     }
     _pending.clear();
-    unawaited(_releaseOwner());
-    _releaseLease();
+    unawaited(_releaseOwner().whenComplete(_releaseLease));
   }
 
   McpFailure _exitFailure() {

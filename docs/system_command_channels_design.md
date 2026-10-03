@@ -4,6 +4,8 @@
 
 ## 范围与参考
 
+Ubuntu 已使用共享 rootfs 内真实 `/sessions/<session_id>`，不再绑定为 `/workspace`；实现及验收边界见 [共享文件系统与会话目录方案](./ubuntu_session_filesystem_design.md)（2026-10-04，Profile 已覆盖安装，完整行为验收未完成）。Termux 身份／类型化文件桥与 Shizuku 设备后端不因该调整改为共享 Ubuntu 执行。
+
 Ubuntu / Termux 在环境设置中全局单选；新会话首次发送绑定已保存的环境，之后不可切换。shell、文件与 Skill 使用相同后端，两侧目录独立，显式复制不自动同步。Shizuku 不是主环境，不参与普通 shell、文件工具或工作区传输。
 
 本地参考版本：Aether `4723e81`、Operit `b2c76100`、Kelivo `25876c21`、RikkaHub `288a034c`。本次参考 Aether 的 VirtualDisplay、定向输入与 ImageReader 观察链路，不复制 GPL 源码、不引入 Pi/Node Agent、不降低 targetSdk。Aether 的应用级共享显示屏、任意命令、按键模拟文字和无权限沙箱插件契约不作为相月契约。
@@ -13,7 +15,7 @@ Ubuntu / Termux 在环境设置中全局单选；新会话首次发送绑定已�
 ## 通用命令与文件
 
 - `shell(command, cwd?)` 仅派发至会话固定的 Ubuntu/Termux；不提供后端参数，也不并列注入 `termux_shell`。`install_packages` 仅在 Ubuntu 就绪时开放。每次独立非交互执行，不加载 rc，不保留变量与 cd，不设命令总时限。
-- Termux 使用真实应用 UID、固定 Bash、默认 `HOME/.phase/workspaces/<workspaceId>`；不是 Ubuntu `/workspace`，没有路径级强隔离承诺。环境未就绪不自动切换、不阻塞普通聊天。
+- Termux 使用真实应用 UID、固定 Bash、默认 `HOME/.phase/workspaces/<session_id>`；不是 Ubuntu 会话目录，没有路径级强隔离承诺。环境未就绪不自动切换、不阻塞普通聊天。
 - `termux_transfer(path, remotePath, direction)` 显式导入/导出文件或目录。`path` 是当前会话工作区相对路径，`remotePath` 是 Termux 身份下的绝对路径；导出附件可使用 `attachment:<ID>`，先按已有契约落入工作区。
 - 不注册 `shizuku_shell` / `shizuku_transfer`，原生命令及传输入口同样拒绝 Shizuku；旧命令 UserService 与 AIDL 已移除，不留下可通过原生桥调用的通用入口。
 - 命令与外部传输共用命令策略：计划 deny、基础 ask、全权限 allow。系统许可独立检查；准备通知不依赖无障碍，实际执行和写入在确认之后。

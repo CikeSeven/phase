@@ -4,19 +4,19 @@ import 'tool_source.dart';
 /// E1 开放 Streamable HTTP；E4 在原始进程管道上开放本地 stdio。
 enum McpTransport { streamableHttp, stdio }
 
-/// stdio 启动命令：executable + argv 与固定 guest cwd，不拼接 shell 命令。
+/// stdio 启动命令：executable + argv；cwd 未指定时使用 guest 服务目录，不拼接 shell 命令。
 /// environment 为明文变量；environmentSecretRefs 只保存安全存储引用。
 class McpStdioCommand {
   const McpStdioCommand({
     required this.executable,
     this.args = const [],
-    this.cwd = '/workspace',
+    this.cwd,
     this.environment = const {},
     this.environmentSecretRefs = const {},
   });
   final String executable;
   final List<String> args;
-  final String cwd;
+  final String? cwd;
   final Map<String, String> environment;
   final Map<String, String> environmentSecretRefs;
 
@@ -24,12 +24,13 @@ class McpStdioCommand {
     String? executable,
     List<String>? args,
     String? cwd,
+    bool clearCwd = false,
     Map<String, String>? environment,
     Map<String, String>? environmentSecretRefs,
   }) => McpStdioCommand(
     executable: executable ?? this.executable,
     args: args ?? this.args,
-    cwd: cwd ?? this.cwd,
+    cwd: clearCwd ? null : (cwd ?? this.cwd),
     environment: environment ?? this.environment,
     environmentSecretRefs: environmentSecretRefs ?? this.environmentSecretRefs,
   );
@@ -57,7 +58,7 @@ class McpStdioCommand {
         args: List<String>.unmodifiable(
           (json['args'] as List? ?? const []).cast<String>(),
         ),
-        cwd: json['cwd'] as String? ?? '/workspace',
+        cwd: json['cwd'] as String?,
         environment: Map<String, String>.unmodifiable(
           (json['environment'] as Map? ?? const {}).cast<String, String>(),
         ),
@@ -143,9 +144,9 @@ class McpServerProfile {
         command.args.any((arg) => arg.contains('\u0000'))) {
       throw const OperationFailure('启动参数过长或包含无效字符');
     }
-    if (!command.cwd.startsWith('/') ||
-        command.cwd.contains('\u0000') ||
-        command.cwd.length > 4096) {
+    final cwd = command.cwd;
+    if (cwd != null &&
+        (!cwd.startsWith('/') || cwd.contains('\u0000') || cwd.length > 4096)) {
       throw const OperationFailure('guest 工作目录应为以 / 开头的路径');
     }
     if (command.environment.length > 32 ||

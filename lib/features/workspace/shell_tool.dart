@@ -47,7 +47,8 @@ class ShellTool extends Tool {
   String get description =>
       workspace?.primaryEnvironment == PrimaryEnvironment.termux
       ? '在 Termux 会话工作区执行独立非交互 Bash 命令。默认目录 ${workspace!.executionRoot}；变量与 cd 不跨调用保留。依赖由用户管理，不自动安装。返回 stdout/stderr、退出结果与产物。'
-      : '在 Ubuntu 工作区执行非交互 shell 命令，返回 stdout/stderr、退出码与产物。'
+      : '在共享 Ubuntu 中执行独立非交互 shell 命令，返回 stdout/stderr、退出码与产物。'
+            '默认目录 ${workspace?.executionRoot ?? '所属会话目录'}；可访问其他会话和 Ubuntu 全局目录。'
             '每次调用的环境变量与 cd 不保留。环境为最小安装：安装软件用 '
             'apt update && apt install -y，已安装内容跨会话持久保留；apt 被中断后'
             '先运行 dpkg --configure -a 恢复再重试。命令不设超时。';
@@ -71,15 +72,17 @@ class ShellTool extends Tool {
   ToolPolicy get defaultPolicy => ToolPolicy.ask;
   @override
   String describeAction(Map<String, dynamic> arguments) =>
-      '${workspace?.primaryEnvironment.label ?? 'Ubuntu'} · ${workspace?.name ?? "会话工作区"}\n目录：${arguments['cwd'] ?? workspace?.executionRoot ?? '/workspace'}\n${arguments['command']}';
+      '${workspace?.primaryEnvironment.label ?? 'Ubuntu'} · ${workspace?.name ?? "会话工作区"}\n目录：${arguments['cwd'] ?? workspace?.executionRoot ?? '所属会话目录'}\n${arguments['command']}';
   @override
   String? validateArguments(Map<String, dynamic> arguments) {
     final command = arguments['command'] as String? ?? '';
-    final cwd = arguments['cwd'] as String? ?? '/workspace';
+    final cwd = arguments['cwd'] as String?;
     return command.contains('\u0000') ||
             utf8.encode(command).length > 120 * 1024 ||
-            !cwd.startsWith('/') ||
-            cwd.contains('\u0000')
+            (cwd != null &&
+                (!cwd.startsWith('/') ||
+                    cwd.contains('\u0000') ||
+                    utf8.encode(cwd).length > 4096))
         ? '命令或 guest 工作目录无效'
         : null;
   }
@@ -274,10 +277,9 @@ class ShellTool extends Tool {
           ownerId: context.runId,
           processId: context.toolCallId,
           rootfs: binding.environmentRoot!,
-          workspace: binding.rootPath,
           executable: '/bin/sh',
           argv: ['-c', arguments['command'] as String],
-          cwd: arguments['cwd'] as String? ?? '/workspace',
+          cwd: arguments['cwd'] as String? ?? binding.executionRoot,
           environment: {},
           outputLimitBytes: ShellLimits.outputBytes,
         ),
@@ -386,7 +388,7 @@ class ShellTool extends Tool {
     final result = jsonEncode({
       'environment': binding.environmentRevision,
       'workspace': binding.name,
-      'cwd': arguments['cwd'] ?? '/workspace',
+      'cwd': arguments['cwd'] ?? binding.executionRoot,
       'exitCode': exit?.exitCode,
       'signal': exit?.signal,
       'cancelled': stopped,
@@ -402,7 +404,7 @@ class ShellTool extends Tool {
       'warning': ?artifactWarning,
       if (fileError != null || exit?.error != null)
         'error': fileError ?? '命令进程未返回完整结果',
-      'knownEffects': '已收集输出；工作区中的文件变化保留，失败或停止不代表撤销',
+      'knownEffects': '已收集当前会话产物；会话及 Ubuntu 全局文件的变化保留，失败或停止不代表撤销',
     });
     return ToolOutcome(
       ok: ok,

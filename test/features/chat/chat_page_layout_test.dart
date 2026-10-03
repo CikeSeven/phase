@@ -1,3 +1,4 @@
+import 'package:phase/data/models/workspace.dart';
 import 'package:phase/data/models/permission_mode.dart';
 
 import 'dart:async';
@@ -307,6 +308,7 @@ class _MemoryConversations implements ConversationRepository {
   @override
   Future<Conversation> createConversation({
     String title = '新会话',
+    PrimaryEnvironment primaryEnvironment = PrimaryEnvironment.ubuntu,
     PermissionSelection permissions = const PermissionSelection(),
     String? assistantId,
     model.ModelSelection? modelSelectionOverride,
@@ -317,6 +319,7 @@ class _MemoryConversations implements ConversationRepository {
     final conversation = Conversation(
       id: 'created-$createCalls',
       title: title,
+      primaryEnvironment: primaryEnvironment,
       permissions: permissions,
       assistantId: assistantId,
       modelSelectionOverride: modelSelectionOverride,

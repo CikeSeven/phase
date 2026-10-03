@@ -104,7 +104,7 @@ void main() {
             body: StatefulBuilder(
               builder: (context, setState) => SingleChildScrollView(
                 child: AssistantMcpSection(
-                  names: names,
+                  serverIds: names,
                   onChanged: (value) => setState(() => names = value),
                 ),
               ),
@@ -117,14 +117,14 @@ void main() {
     expect(
       tester
           .widget<SwitchListTile>(
-            find.byKey(ValueKey('mcp-enable-${tool.name}')),
+            find.byKey(ValueKey('mcp-enable-${profile.id}')),
           )
           .value,
       isFalse,
     );
-    await tester.tap(find.byKey(ValueKey('mcp-enable-${tool.name}')));
+    await tester.tap(find.byKey(ValueKey('mcp-enable-${profile.id}')));
     await tester.pumpAndSettle();
-    expect(names, {tool.name});
+    expect(names, {profile.id});
     expect(find.text('执行策略'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

@@ -584,18 +584,14 @@ void main() {
         id: 'as1',
         name: '扩展助手',
         systemPrompt: '',
-        mcpToolNames: const {'mcp_server_read', 'mcp_server_write'},
+        mcpServerIds: const {'server-read', 'server-write'},
         createdAt: DateTime.now(),
       ),
     );
     final restored = (await assistants.getById('as1'))!;
-    expect(restored.mcpToolNames, {'mcp_server_read', 'mcp_server_write'});
-    await assistants.save(
-      restored.copyWith(mcpToolNames: {'mcp_server_write'}),
-    );
-    expect((await assistants.getById('as1'))!.mcpToolNames, {
-      'mcp_server_write',
-    });
+    expect(restored.mcpServerIds, {'server-read', 'server-write'});
+    await assistants.save(restored.copyWith(mcpServerIds: {'server-write'}));
+    expect((await assistants.getById('as1'))!.mcpServerIds, {'server-write'});
   });
 
   test('服务商模型按 id 合并，手动能力设置优先', () async {

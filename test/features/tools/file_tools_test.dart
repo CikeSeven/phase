@@ -55,9 +55,9 @@ void main() {
         context,
         cancellation,
       );
-  File artifact(String path) => File(p.join(context.artifactsDirectory, path));
+  File workspaceFile(String path) => File(p.join(workspace.path, path));
 
-  test('exact paths, empty and whitespace content, nested parents and metadata refresh', () async {
+  test('exact paths, empty and whitespace content, nested parents and no implicit artifacts', () async {
     for (final path in [
       'README',
       '.env',
@@ -66,22 +66,21 @@ void main() {
       '..config',
     ]) {
       expect((await write(path, '')).ok, isTrue);
-      expect(await artifact(path).readAsString(), '');
-      expect(await artifact('$path.txt').exists(), isFalse);
+      expect(await workspaceFile(path).readAsString(), '');
+      expect(await workspaceFile('$path.txt').exists(), isFalse);
       expect((await read(path)).ok, isTrue);
     }
-    final old = attachments.values.singleWhere((a) => a.name == 'README');
     final result = await write('README', '月色\n');
-    expect(result.artifacts, [old.id]);
-    expect(attachments[old.id]!.size, utf8.encode('月色\n').length);
-    expect(attachments, hasLength(5));
+    expect(result.artifacts, isEmpty);
+    expect(await workspaceFile('README').length(), utf8.encode('月色\n').length);
+    expect(attachments, isEmpty);
     expect((await write('.env', ' \n\t')).ok, isTrue);
-    expect(await artifact('.env').readAsString(), ' \n\t');
+    expect(await workspaceFile('.env').readAsString(), ' \n\t');
     expect(
       (await write('large', '月' * (maxFileWriteBytes ~/ 3 + 1))).errorCode,
       'contentTooLarge',
     );
-    expect(await artifact('large').exists(), isFalse);
+    expect(await workspaceFile('large').exists(), isFalse);
   });
 
   test('multi edits match original file, preserve BOM and CRLF, and allow deletion', () async {
@@ -92,11 +91,11 @@ void main() {
     ]);
     expect(result.ok, isTrue);
     expect(
-      await artifact('code').readAsBytes(),
+      await workspaceFile('code').readAsBytes(),
       utf8.encode('\ufeffbeta\r\nnew\r\n'),
     );
     expect(
-      attachments.values.single.size,
+      await workspaceFile('code').length(),
       utf8.encode('\ufeffbeta\r\nnew\r\n').length,
     );
   });
@@ -127,7 +126,7 @@ void main() {
       ),
     ]) {
       expect((await edit('code', edits)).errorCode, error);
-      expect(await artifact('code').readAsString(), original);
+      expect(await workspaceFile('code').readAsString(), original);
     }
     await write('overlap', 'aaa');
     expect(
@@ -149,7 +148,7 @@ void main() {
       expect((await read('data', offset: 3)).content, '第三行\n\n[第 3–3 行；已到结尾]');
       expect((await read('data', offset: 4)).errorCode, 'offsetOutOfRange');
       await write('data', List.filled(20, '月' * 1000).join('\n'));
-      final page = await readFilePage(artifact('data'), {}, cancellation);
+      final page = await readFilePage(workspaceFile('data'), {}, cancellation);
       expect(page.text.split('\n'), hasLength(5));
       expect(page.toJson()['nextOffset'], 6);
       expect(page.text, isNot(contains('\ufffd')));
@@ -169,7 +168,7 @@ void main() {
         output.writeln('$i ${'x' * 1000}');
       }
       await output.close();
-      final result = await read('/workspace/large.log', offset: 4501, limit: 2);
+      final result = await read('large.log', offset: 4501, limit: 2);
       expect(result.ok, isTrue);
       expect(result.content, startsWith('4500 '));
       expect(result.content, contains('offset=4503'));
@@ -180,36 +179,40 @@ void main() {
     await write('long', '月' * maxFileReadBytes);
     expect((await read('long')).errorCode, 'lineTooLong');
     await write('boundary', '${'x' * maxFileReadBytes}\n');
-    final boundary = await readFilePage(artifact('boundary'), {}, cancellation);
+    final boundary = await readFilePage(
+      workspaceFile('boundary'),
+      {},
+      cancellation,
+    );
     expect(utf8.encode(boundary.text), hasLength(maxFileReadBytes));
     expect(boundary.toJson()['nextOffset'], 2);
     expect((await read('boundary', offset: 2)).ok, isTrue);
-    await artifact('binary').writeAsBytes([0xff, 0xfe]);
+    await workspaceFile('binary').writeAsBytes([0xff, 0xfe]);
     expect((await read('binary')).errorCode, 'notText');
-    await artifact('binary').writeAsBytes([65, 0, 66]);
+    await workspaceFile('binary').writeAsBytes([65, 0, 66]);
     expect((await read('binary')).errorCode, 'notText');
   });
 
   test('workspace paths agree with shell, list supports directories and pagination', () async {
-    await write('/workspace/src/.env', 'TOKEN=fixture');
+    await write('src/.env', 'TOKEN=fixture');
     expect(
       await File(p.join(workspace.path, 'src/.env')).readAsString(),
       'TOKEN=fixture',
     );
     expect(attachments, isEmpty);
     expect(
-      (await edit('/workspace/src/.env', [
+      (await edit('src/.env', [
         {'oldText': 'fixture', 'newText': 'test'},
       ])).ok,
       isTrue,
     );
     final listing = await const ListFilesTool().execute(
-      {'path': '/workspace/src'},
+      {'path': 'src'},
       context,
       cancellation,
     );
     expect(jsonDecode(listing.content)['files'], [
-      {'path': '/workspace/src/.env', 'type': 'file'},
+      {'path': 'src/.env', 'type': 'file'},
     ]);
     await write('a', 'a');
     await write('b', 'b');
@@ -230,8 +233,8 @@ void main() {
       )).content,
     );
     expect(next['files'], [
-      {'path': 'b', 'type': 'file'},
       {'path': 'dir', 'type': 'directory'},
+      {'path': 'src', 'type': 'directory'},
     ]);
   });
 
@@ -239,15 +242,17 @@ void main() {
     await write('inside', 'safe');
     final outside = await File(p.join(root.path, 'outside'))
         .writeAsString('original');
-    await Link(p.join(context.artifactsDirectory, 'link')).create(outside.path);
-    await Link(p.join(context.artifactsDirectory, 'dirlink'))
-        .create(workspace.path);
+    await Link(p.join(workspace.path, 'link')).create(outside.path);
+    await Link(p.join(workspace.path, 'dirlink')).create(root.path);
     for (final path in [
       '../outside',
       outside.path,
       'link',
       'dirlink/new',
       '/workspace/../outside',
+      '/workspace/inside',
+      '/sessions/c/inside',
+      '/root/global',
     ]) {
       expect((await write(path, 'changed')).errorCode, 'invalidPath');
       expect((await read(path)).errorCode, 'invalidPath');
@@ -267,6 +272,6 @@ void main() {
       ]),
       throwsA(isA<ToolCancelled>()),
     );
-    expect(await artifact('data').readAsString(), 'before');
+    expect(await workspaceFile('data').readAsString(), 'before');
   });
 }

@@ -29,7 +29,6 @@ void main() {
       ),
       driver: driver,
       rootfs: '/fixture/root',
-      workspace: '/fixture/workspace',
     );
     addTearDown(client.close);
   });
@@ -105,6 +104,29 @@ void main() {
     },
   );
 
+  test(
+    'environment lease waits for process-owner cleanup after exit',
+    () async {
+      await client.close();
+      var released = 0;
+      client = McpStdioClient(
+        client.profile,
+        driver: driver,
+        rootfs: '/fixture/root',
+        releaseEnvironment: () => released++,
+      );
+      driver.allowEnd = Completer<void>();
+      await client.connect(RunCancellation());
+      await driver.process.cancel();
+      await driver.endEntered.future;
+      expect(released, 0);
+      driver.allowEnd!.complete();
+      await client.close();
+      expect(released, 1);
+      expect(driver.owners, isEmpty);
+    },
+  );
+
   test('timeout completes even while stdin write is blocked', () async {
     await client.connect(RunCancellation());
     driver.process.allowWrite = Completer<void>();
@@ -126,6 +148,8 @@ class _Driver implements ProcessDriver {
   final owners = <String>{};
   final startEntered = Completer<void>();
   Completer<void>? allowStart;
+  Completer<void>? allowEnd;
+  final endEntered = Completer<void>();
   late _Process process;
   @override
   Stream<String> get stops => const Stream.empty();
@@ -134,6 +158,8 @@ class _Driver implements ProcessDriver {
   @override
   Future<void> endTask(String owner) async {
     await process.cancel();
+    if (!endEntered.isCompleted) endEntered.complete();
+    await allowEnd?.future;
     owners.remove(owner);
   }
 

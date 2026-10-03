@@ -24,7 +24,7 @@ void main() {
       toolTurn(
         callId: 'first-file',
         toolName: 'write_file',
-        arguments: '{"path":"/workspace/note","content":"first"}',
+        arguments: '{"path":"note","content":"first"}',
       ),
       textTurn('saved'),
     ]);
@@ -32,6 +32,15 @@ void main() {
     final firstRun = await h.latestRun();
     expect(firstRun.configuration.workspace, isNotNull);
     expect(firstRun.configuration.workspace!.linuxAvailable, isFalse);
+    expect(firstRun.configuration.workspace!.id, h.conversationId());
+    expect(
+      firstRun.configuration.workspace!.rootPath,
+      '${workspaces.filesystem.layout.rootfs}/sessions/${h.conversationId()}',
+    );
+    expect(
+      firstRun.configuration.workspace!.executionRoot,
+      '/sessions/${h.conversationId()}',
+    );
     expect(firstRun.configuration.enabledTools, isNot(contains('shell')));
     final firstFile = File(
       '${firstRun.configuration.workspace!.rootPath}/note',
@@ -49,7 +58,7 @@ void main() {
       toolTurn(
         callId: 'second-file',
         toolName: 'write_file',
-        arguments: '{"path":"/workspace/note","content":"second"}',
+        arguments: '{"path":"note","content":"second"}',
       ),
       textTurn('saved'),
     ]);
@@ -88,9 +97,9 @@ void main() {
           workspaceRepositoryProvider.future,
         );
         await workspaces.saveEnvironment(
-          const RuntimeEnvironment(
+          RuntimeEnvironment(
             phase: EnvironmentPhase.ready,
-            rootPath: '/fixture',
+            rootPath: workspaces.filesystem.layout.rootfs,
             revision: 'fixture',
           ),
         );

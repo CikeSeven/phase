@@ -34,10 +34,12 @@ void main() {
       await fixture.database.close();
       await fixture.directory.delete(recursive: true);
     });
+    await Directory('${repository.filesystem.layout.rootfs}/tmp')
+        .create(recursive: true);
     await repository.saveEnvironment(
-      const RuntimeEnvironment(
+      RuntimeEnvironment(
         phase: EnvironmentPhase.ready,
-        rootPath: 'fixture-root',
+        rootPath: repository.filesystem.layout.rootfs,
         revision: 'fixture',
       ),
     );
@@ -46,44 +48,54 @@ void main() {
     Map<DependencyStep, String> scripts = const {},
   }) => ScriptedDependencyInstaller(repository, driver, scripts);
 
-  test('successful run records all groups and cleans staging', () async {
-    final steps = <DependencyStep>[];
-    final records =
-        await installer(
-          scripts: {
-            DependencyStep.repairing: 'printf repairing',
-            DependencyStep.updating: 'printf updating',
-            DependencyStep.installing: 'printf installing',
-            DependencyStep.verifying: 'printf "tool 1.2.3\\nextra"',
-          },
-        ).install(RunCancellation(), (step, line) {
-          steps.add(step);
-        });
-    final env = await repository.environment();
-    expect(env.installedDependencies.keys, [
-      for (final profile in DependencyProfile.all) profile.id,
-    ]);
-    for (final profile in DependencyProfile.all) {
-      expect(records[profile.id]?.version, 'tool 1.2.3');
-      expect(env.installedDependencies[profile.id]?.version, 'tool 1.2.3');
-    }
-    expect(
-      steps,
-      containsAllInOrder([
-        DependencyStep.repairing,
-        DependencyStep.updating,
-        DependencyStep.installing,
-        DependencyStep.verifying,
-      ]),
-    );
-    expect(driver.calls.first.rootfs, 'fixture-root');
-    expect(driver.calls.first.cwd, '/workspace');
-    final staging = Directory('${fixture.directory.path}/staging');
-    expect(
-      await staging.exists() ? await staging.list().isEmpty : true,
-      isTrue,
-    );
-  });
+  test(
+    'successful run records all groups and cleans only guest scratch',
+    () async {
+      final steps = <DependencyStep>[];
+      final records =
+          await installer(
+            scripts: {
+              DependencyStep.repairing: 'printf repairing',
+              DependencyStep.updating: 'printf updating',
+              DependencyStep.installing: 'printf installing',
+              DependencyStep.verifying: 'printf "tool 1.2.3\\nextra"',
+            },
+          ).install(RunCancellation(), (step, line) {
+            steps.add(step);
+          });
+      final env = await repository.environment();
+      expect(env.installedDependencies.keys, [
+        for (final profile in DependencyProfile.all) profile.id,
+      ]);
+      for (final profile in DependencyProfile.all) {
+        expect(records[profile.id]?.version, 'tool 1.2.3');
+        expect(env.installedDependencies[profile.id]?.version, 'tool 1.2.3');
+      }
+      expect(
+        steps,
+        containsAllInOrder([
+          DependencyStep.repairing,
+          DependencyStep.updating,
+          DependencyStep.installing,
+          DependencyStep.verifying,
+        ]),
+      );
+      expect(driver.calls.first.rootfs, repository.filesystem.layout.rootfs);
+      expect(driver.calls.first.cwd, startsWith('/tmp/phase-deps-'));
+      expect(driver.calls.map((call) => call.cwd).toSet(), hasLength(1));
+      expect(
+        await Directory('${repository.filesystem.layout.rootfs}/tmp')
+            .list()
+            .isEmpty,
+        isTrue,
+      );
+      final staging = Directory('${fixture.directory.path}/staging');
+      expect(
+        await staging.exists() ? await staging.list().isEmpty : true,
+        isTrue,
+      );
+    },
+  );
 
   test(
     'merged install issues one apt command and one verify process per group',

@@ -1,25 +1,68 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:archive/archive_io.dart';
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phase/core/error/failure.dart';
+import 'package:phase/data/datasources/local/app_database.dart';
 import 'package:phase/data/models/workspace.dart';
 import 'package:phase/data/repositories/workspace_repository.dart';
 import 'package:phase/features/tools/tool.dart';
 import 'package:phase/features/workspace/linux_installer.dart';
+import 'package:phase/features/workspace/process_api.g.dart';
+import 'package:phase/features/workspace/process_driver.dart';
 
 import '../../support/test_database.dart';
 import 'local_process_driver.dart';
 
+// LocalProcessDriver proves the filesystem/IO lifecycle, not Android/PRoot execution.
 void main() {
-  test('real HTTP, checksum, staging, shell check and uninstall preserve workspace', () async {
-    final fixture = createTestDatabase();
-    final driver = LocalProcessDriver();
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final dio = Dio();
+  late ({AppDatabase database, Directory directory}) fixture;
+  late WorkspaceRepository repository;
+  late _CheckingDriver driver;
+  late HttpServer server;
+  late Dio dio;
+  late List<int> bytes;
+  late Workspace session;
+  late Directory service;
+  late List<String> requests;
+  String? idleRequest;
+  Completer<void>? waiting;
+
+  setUp(() async {
+    fixture = createTestDatabase();
+    repository = WorkspaceRepository(fixture.database, fixture.directory);
+    driver = _CheckingDriver(repository.filesystem.layout.rootfs);
+    server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    dio = Dio();
+    requests = [];
+    idleRequest = null;
+    waiting = null;
+    bytes = gzip.encode(
+      TarEncoder().encode(
+        Archive()..add(ArchiveFile.string('etc/os-release', 'fixture')),
+      ),
+    );
+    server.listen((request) async {
+      requests.add(request.uri.path);
+      if (idleRequest == request.uri.path) {
+        request.response.write('x');
+        await request.response.flush();
+        waiting?.complete();
+        return;
+      }
+      if (request.uri.path == '/trace') {
+        request.response.write('fl=fixture\nloc=CN\n');
+      } else if (request.uri.path == '/trace-missing') {
+        request.response.statusCode = HttpStatus.notFound;
+      } else {
+        request.response.add(bytes);
+      }
+      await request.response.close();
+    });
     addTearDown(() async {
       dio.close(force: true);
       await server.close(force: true);
@@ -27,53 +70,45 @@ void main() {
       await fixture.database.close();
       await fixture.directory.delete(recursive: true);
     });
-    final archive = Archive()
-      ..add(ArchiveFile.string('etc/os-release', 'fixture'));
-    final bytes = gzip.encode(TarEncoder().encode(archive));
-    server.listen((request) async {
-      if (request.uri.path == '/trace') {
-        request.response.write('fl=fixture\nloc=CN\n');
-      } else {
-        request.response.add(bytes);
-      }
-      await request.response.close();
-    });
-    final image = LinuxImage(
+    session = await repository.create('keep', id: 'keep-session');
+    service = await repository.filesystem.ensureMcpService('keep-server');
+    await File('${session.rootPath}/keep.txt').writeAsString('session');
+    await File('${service.path}/keep.txt').writeAsString('service');
+  });
+
+  LinuxInstaller installer({
+    String? digest,
+    bool missingMirror = false,
+  }) => LinuxInstaller(
+    repository,
+    driver,
+    dio,
+    image: LinuxImage(
       revision: 'fixture',
       url: 'http://127.0.0.1:${server.port}/rootfs',
-      digest: sha256.convert(bytes).toString(),
+      digest: digest ?? sha256.convert(bytes).toString(),
       downloadBytes: bytes.length,
+    ),
+    traceUrl:
+        'http://127.0.0.1:${server.port}/${missingMirror ? 'trace-missing' : 'trace'}',
+  );
+
+  Future<void> expectPersistentFiles() async {
+    expect(
+      await File('${session.rootPath}/keep.txt').readAsString(),
+      'session',
     );
-    final repository = WorkspaceRepository(fixture.database, fixture.directory);
-    // A previous ready environment with recorded dependencies is replaced.
-    final oldRoot = await Directory('${fixture.directory.path}/old-root')
-        .create(recursive: true);
-    await repository.saveEnvironment(
-      RuntimeEnvironment(
-        phase: EnvironmentPhase.ready,
-        rootPath: oldRoot.path,
-        revision: 'old',
-        installedDependencies: {
-          'python': InstalledDependency(
-            installedAt: DateTime.fromMillisecondsSinceEpoch(0),
-            version: 'Python 3.12.3',
-          ),
-        },
-      ),
-    );
-    final workspace = await repository.create('keep');
-    await File('${workspace.rootPath}/keep.txt').writeAsString('keep');
-    final installer = LinuxInstaller(
-      repository,
-      driver,
-      dio,
-      image: image,
-      traceUrl: 'http://127.0.0.1:${server.port}/trace',
-    );
+    expect(await File('${service.path}/keep.txt').readAsString(), 'service');
+    expect((await repository.get(session.id))!.rootPath, session.rootPath);
+  }
+
+  test('first install commits to the fixed root, both probes run without binds and uninstall keeps subtrees', () async {
     final phases = <EnvironmentPhase>[];
     final downloads = <(int, int?)>[];
     final extracted = <int>[];
-    await installer.install(RunCancellation(), (phase, received, total) {
+    expect((await repository.environment()).ready, isFalse);
+    expect((await repository.snapshot(session.id)).linuxAvailable, isFalse);
+    await installer().install(RunCancellation(), (phase, received, total) {
       phases.add(phase);
       if (phase == EnvironmentPhase.downloading) {
         downloads.add((received, total));
@@ -84,10 +119,14 @@ void main() {
     expect(downloads.last, (bytes.length, bytes.length));
     expect(extracted, orderedEquals([...extracted]..sort()));
     expect(extracted.last, 'fixture'.length);
-    expect((await repository.environment()).ready, isTrue);
-    // A successful replacement clears recorded dependencies with the rootfs.
-    expect((await repository.environment()).installedDependencies, isEmpty);
     final installed = await repository.environment();
+    expect(installed.ready, isTrue);
+    expect(installed.rootPath, repository.filesystem.layout.rootfs);
+    expect(
+      (await repository.snapshot(session.id)).executionRoot,
+      '/sessions/${session.id}',
+    );
+    expect(installed.installedDependencies, isEmpty);
     expect(
       await File('${installed.rootPath}/etc/apt/sources.list.d/ubuntu.sources')
           .readAsString(),
@@ -104,194 +143,212 @@ void main() {
         EnvironmentPhase.ready,
       ]),
     );
+    expect(driver.calls, hasLength(2));
+    expect(
+      driver.calls.first.rootfs,
+      startsWith(repository.filesystem.layout.staging),
+    );
+    expect(driver.calls.last.rootfs, repository.filesystem.layout.rootfs);
+    expect(driver.calls.every((call) => call.cwd == '/tmp'), isTrue);
+    expect(
+      driver.calls.every((call) => !call.argv.join(' ').contains('/workspace')),
+      isTrue,
+    );
     expect(driver.active, isEmpty);
-    await installer.uninstall();
+    await expectPersistentFiles();
+    await File('${installed.rootPath}/root/global').writeAsString('global');
+    await installer().uninstall();
     expect(
       (await repository.environment()).phase,
       EnvironmentPhase.notInstalled,
     );
-    expect(await File('${workspace.rootPath}/keep.txt').readAsString(), 'keep');
+    await expectPersistentFiles();
+    expect(await File('${installed.rootPath}/root/global').exists(), isFalse);
+    expect(await Directory(installed.rootPath!).exists(), isTrue);
+    await installer().install(RunCancellation(), (_, _, _) {});
+    expect((await repository.environment()).rootPath, installed.rootPath);
+    await expectPersistentFiles();
   });
-  for (final waitingFor in ['download', 'mirror']) {
-    test('cancels an idle $waitingFor request and removes staging', () async {
-      final fixture = createTestDatabase();
-      final repository = WorkspaceRepository(
-        fixture.database,
-        fixture.directory,
-      );
-      final driver = LocalProcessDriver();
-      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-      final dio = Dio();
-      addTearDown(() async {
-        dio.close(force: true);
-        await server.close(force: true);
-        await driver.dispose();
-        await fixture.database.close();
-        await fixture.directory.delete(recursive: true);
-      });
-      final bytes = gzip.encode(
-        TarEncoder().encode(
-          Archive()..add(ArchiveFile.string('etc/os-release', 'fixture')),
-        ),
-      );
-      final waiting = Completer<void>();
-      server.listen((request) async {
-        if (waitingFor == 'mirror' && request.uri.path == '/rootfs') {
-          request.response.add(bytes);
-          await request.response.close();
-        } else {
-          request.response.add(bytes.sublist(0, 1));
-          await request.response.flush();
-          waiting.complete();
-        }
-      });
-      final cancellation = RunCancellation();
-      final installer = LinuxInstaller(
-        repository,
-        driver,
-        dio,
-        image: LinuxImage(
-          revision: 'fixture',
-          url: 'http://127.0.0.1:${server.port}/rootfs',
-          digest: sha256.convert(bytes).toString(),
-          downloadBytes: bytes.length,
-        ),
-        traceUrl: 'http://127.0.0.1:${server.port}/trace',
-      );
-      final pending = installer.install(cancellation, (_, _, _) {});
-      await waiting.future;
-      final result = expectLater(pending, throwsA(isA<ToolCancelled>()));
-      cancellation.cancel();
-      await result.timeout(const Duration(seconds: 2));
-      expect(
-        (await repository.environment()).phase,
-        EnvironmentPhase.cancelled,
-      );
-      expect(repository.busy, isFalse);
-      expect(driver.owners, isEmpty);
-      expect(
-        await Directory('${fixture.directory.path}/staging').list().isEmpty,
-        isTrue,
-      );
-    });
-  }
-  test('apt mirror falls back to upstream when the probe fails', () async {
-    final fixture = createTestDatabase();
-    final driver = LocalProcessDriver();
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-    final dio = Dio();
-    addTearDown(() async {
-      dio.close(force: true);
-      await server.close(force: true);
-      await driver.dispose();
-      await fixture.database.close();
-      await fixture.directory.delete(recursive: true);
-    });
-    final archive = Archive()
-      ..add(ArchiveFile.string('etc/os-release', 'fixture'));
-    final bytes = gzip.encode(TarEncoder().encode(archive));
-    server.listen((request) async {
-      if (request.uri.path == '/trace') {
-        request.response.statusCode = HttpStatus.notFound;
-      } else {
-        request.response.add(bytes);
-      }
-      await request.response.close();
-    });
-    final repository = WorkspaceRepository(fixture.database, fixture.directory);
-    final installer = LinuxInstaller(
-      repository,
-      driver,
-      dio,
-      image: LinuxImage(
-        revision: 'fixture',
-        url: 'http://127.0.0.1:${server.port}/rootfs',
-        digest: sha256.convert(bytes).toString(),
-        downloadBytes: bytes.length,
+
+  test('a ready environment is never implicitly replaced or loses its dependencies', () async {
+    await installer().install(RunCancellation(), (_, _, _) {});
+    final before = (await repository.environment()).withDependencies(
+      'python',
+      InstalledDependency(
+        installedAt: DateTime(2026),
+        version: 'fixture-python',
       ),
-      traceUrl: 'http://127.0.0.1:${server.port}/trace',
     );
-    await installer.install(RunCancellation(), (_, _, _) {});
-    final installed = await repository.environment();
+    await repository.saveEnvironment(before);
+    await File('${before.rootPath}/root/global').writeAsString('global');
+    final requestCount = requests.length;
+    final processCount = driver.calls.length;
+    await expectLater(
+      installer().install(RunCancellation(), (_, _, _) {}),
+      throwsA(isA<OperationFailure>()),
+    );
+    expect((await repository.environment()).toJson(), before.toJson());
+    expect(requests.length, requestCount);
+    expect(driver.calls.length, processCount);
     expect(
-      await File('${installed.rootPath}/etc/apt/sources.list.d/ubuntu.sources')
-          .readAsString(),
-      contains(UbuntuImage.upstreamAptMirror),
+      await File('${before.rootPath}/root/global').readAsString(),
+      'global',
     );
+    expect(repository.busy, isFalse);
+    await expectPersistentFiles();
   });
-  for (final stop in [false, true]) {
+
+  for (final path in ['/rootfs', '/trace']) {
     test(
-      '${stop ? 'cancelled' : 'corrupt'} replacement retains ready environment and files',
+      'cancelling idle $path does not delete sessions or mark the skeleton ready',
       () async {
-        final fixture = createTestDatabase();
-        final driver = LocalProcessDriver();
-        final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
-        final dio = Dio();
-        addTearDown(() async {
-          dio.close(force: true);
-          await server.close(force: true);
-          await driver.dispose();
-          await fixture.database.close();
-          await fixture.directory.delete(recursive: true);
-        });
-        server.listen((request) async {
-          request.response.add([1, 2, 3]);
-          await request.response.close();
-        });
-        final repository = WorkspaceRepository(
-          fixture.database,
-          fixture.directory,
-        );
-        final old = await Directory(
-          '${fixture.directory.path}/environments/old',
-        ).create(recursive: true);
-        await File('${old.path}/keep').writeAsString('old');
-        await repository.saveEnvironment(
-          RuntimeEnvironment(
-            phase: EnvironmentPhase.ready,
-            rootPath: old.path,
-            revision: 'old',
-            installedDependencies: {
-              'node': InstalledDependency(
-                installedAt: DateTime.fromMillisecondsSinceEpoch(0),
-                version: 'v18.20.4',
-              ),
-            },
-          ),
-        );
+        idleRequest = path;
+        waiting = Completer<void>();
         final cancellation = RunCancellation();
-        final installer = LinuxInstaller(
-          repository,
-          driver,
-          dio,
-          image: LinuxImage(
-            revision: 'new',
-            url: 'http://127.0.0.1:${server.port}/rootfs',
-            digest: 'wrong',
-            downloadBytes: 3,
-          ),
-        );
-        await expectLater(
-          installer.install(cancellation, (phase, _, _) {
-            if (stop && phase == EnvironmentPhase.verifying) {
-              cancellation.cancel();
-            }
-          }),
-          throwsA(stop ? isA<ToolCancelled>() : isA<WorkspaceFailure>()),
-        );
+        final pending = installer().install(cancellation, (_, _, _) {});
+        await waiting!.future.timeout(const Duration(seconds: 2));
+        final result = expectLater(pending, throwsA(isA<ToolCancelled>()));
+        cancellation.cancel();
+        await result.timeout(const Duration(seconds: 2));
         final env = await repository.environment();
-        expect(env.ready, isTrue);
-        expect(env.revision, 'old');
-        // A failed replacement keeps the recorded dependencies.
-        expect(env.installedDependencies['node']?.version, 'v18.20.4');
-        expect(await File('${old.path}/keep').readAsString(), 'old');
+        expect(env.phase, EnvironmentPhase.cancelled);
+        expect(env.ready, isFalse);
+        expect((await repository.snapshot(session.id)).linuxAvailable, isFalse);
         expect(repository.busy, isFalse);
         expect(driver.owners, isEmpty);
         expect(
-          await Directory('${fixture.directory.path}/staging').list().isEmpty,
+          await Directory(repository.filesystem.layout.staging).list().isEmpty,
           isTrue,
         );
+        await expectPersistentFiles();
       },
     );
+  }
+
+  test('checksum failure leaves no executable environment and keeps persistent files', () async {
+    await expectLater(
+      installer(digest: 'wrong').install(RunCancellation(), (_, _, _) {}),
+      throwsA(
+        isA<WorkspaceFailure>().having((e) => e.code, 'code', 'digestMismatch'),
+      ),
+    );
+    expect((await repository.environment()).phase, EnvironmentPhase.failed);
+    expect((await repository.snapshot(session.id)).linuxAvailable, isFalse);
+    expect(driver.calls, isEmpty);
+    expect(repository.busy, isFalse);
+    await expectPersistentFiles();
+  });
+
+  test('mirror probe failure keeps the upstream default', () async {
+    await installer(missingMirror: true)
+        .install(RunCancellation(), (_, _, _) {});
+    expect(
+      await File(
+        '${repository.filesystem.layout.rootfs}/etc/apt/sources.list.d/ubuntu.sources',
+      ).readAsString(),
+      contains(UbuntuImage.upstreamAptMirror),
+    );
+    await expectPersistentFiles();
+  });
+
+  for (final reserved in ['sessions', 'services']) {
+    test('archive cannot override reserved $reserved content', () async {
+      bytes = gzip.encode(
+        TarEncoder().encode(
+          Archive()
+            ..add(ArchiveFile.string('etc/os-release', 'fixture'))
+            ..add(ArchiveFile.string('./$reserved/override', 'forbidden')),
+        ),
+      );
+      await expectLater(
+        installer().install(RunCancellation(), (_, _, _) {}),
+        throwsA(
+          isA<WorkspaceFailure>().having((e) => e.code, 'code', 'archivePath'),
+        ),
+      );
+      expect((await repository.environment()).ready, isFalse);
+      expect(driver.calls, isEmpty);
+      await expectPersistentFiles();
+    });
+  }
+
+  for (final cancelled in [false, true]) {
+    test(
+      '${cancelled ? 'cancelled' : 'failed'} final check leaves partial system unavailable and retries in place',
+      () async {
+        final cancellation = RunCancellation();
+        driver.onInstalledStart = (_) {
+          if (cancelled) {
+            cancellation.cancel();
+          } else {
+            throw const WorkspaceFailure(
+              'checkFailed',
+              'Fixture final check failure',
+            );
+          }
+        };
+        await expectLater(
+          installer().install(cancellation, (_, _, _) {}),
+          throwsA(cancelled ? isA<ToolCancelled>() : isA<WorkspaceFailure>()),
+        );
+        final env = await repository.environment();
+        expect(env.ready, isFalse);
+        expect(
+          env.phase,
+          cancelled ? EnvironmentPhase.cancelled : EnvironmentPhase.failed,
+        );
+        expect(env.rootPath, repository.filesystem.layout.rootfs);
+        expect((await repository.snapshot(session.id)).linuxAvailable, isFalse);
+        expect(await File('${env.rootPath}/etc/os-release').exists(), isTrue);
+        await expectPersistentFiles();
+        driver.onInstalledStart = null;
+        await installer().install(RunCancellation(), (_, _, _) {});
+        expect((await repository.environment()).ready, isTrue);
+        expect((await repository.environment()).rootPath, env.rootPath);
+        expect(repository.busy, isFalse);
+        await expectPersistentFiles();
+      },
+    );
+  }
+
+  test(
+    'uninstall is excluded by sessions, services and dependency installation',
+    () async {
+      await installer().install(RunCancellation(), (_, _, _) {});
+      final lease = await repository.acquire(session.id);
+      await expectLater(
+        installer().uninstall(),
+        throwsA(isA<OperationFailure>()),
+      );
+      lease.close();
+      final release = repository.retainEnvironment();
+      await expectLater(
+        installer().uninstall(),
+        throwsA(isA<OperationFailure>()),
+      );
+      release();
+      repository.beginDependencyChange();
+      await expectLater(
+        installer().uninstall(),
+        throwsA(isA<OperationFailure>()),
+      );
+      repository.endDependencyChange();
+      expect((await repository.environment()).ready, isTrue);
+      await expectPersistentFiles();
+    },
+  );
+}
+
+class _CheckingDriver extends LocalProcessDriver {
+  _CheckingDriver(this.installedRoot);
+  final String installedRoot;
+  void Function(LinuxProcessSpec)? onInstalledStart;
+  @override
+  Future<LinuxProcess> start(
+    LinuxProcessSpec spec,
+    Future<void> Function(bool, Uint8List) onBytes,
+  ) {
+    if (spec.rootfs == installedRoot) onInstalledStart?.call(spec);
+    return super.start(spec, onBytes);
   }
 }

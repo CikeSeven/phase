@@ -54,7 +54,6 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
             platform.value?.available == true
         ? () => _confirmEnvironmentInstall(
             replacesEnvironment: replacesEnvironment,
-            ready: environment.value?.ready == true,
           )
         : null;
     final environmentActionStyle = IconButton.styleFrom(
@@ -107,12 +106,13 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                         ? const []
                         : [
                             if (replacesEnvironment) ...[
-                              IconButton(
-                                tooltip: '重新安装 Ubuntu',
-                                style: environmentActionStyle,
-                                onPressed: onInstallEnvironment,
-                                icon: const Icon(LucideIcons.rotateCw),
-                              ),
+                              if (environment.value?.ready != true)
+                                IconButton(
+                                  tooltip: '重试安装 Ubuntu',
+                                  style: environmentActionStyle,
+                                  onPressed: onInstallEnvironment,
+                                  icon: const Icon(LucideIcons.rotateCw),
+                                ),
                               IconButton(
                                 tooltip: '卸载 Ubuntu',
                                 style: environmentActionStyle,
@@ -303,19 +303,18 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
 
   Future<void> _confirmEnvironmentInstall({
     required bool replacesEnvironment,
-    required bool ready,
   }) async {
     final colors = Theme.of(context).colorScheme;
     final allowed = await showDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
-        title: ready ? '重新安装 Ubuntu？' : '安装 Ubuntu？',
+        title: replacesEnvironment ? '重试安装 Ubuntu？' : '安装 Ubuntu？',
         icon: replacesEnvironment ? LucideIcons.triangleAlert : null,
         tone: replacesEnvironment ? AppTone.error : AppTone.primary,
         content: Text(
           '安装 Ubuntu ${UbuntuImage.revision}，并自动安装 Python、Node.js、Git 与 ripgrep。'
           '基础环境需至少 605 MiB 可用空间，依赖安装另需空间。'
-          '${ready ? '替换原环境及其依赖，工作区文件保留。' : '工作区程序以相月应用身份运行，请只执行信任的程序。'}',
+          '保留会话和服务文件；程序以相月应用身份运行。',
         ),
         actions: [
           TextButton(
@@ -348,7 +347,9 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
         title: '卸载 Ubuntu 环境？',
         icon: LucideIcons.trash2,
         tone: AppTone.error,
-        content: const Text('删除环境和已安装依赖，保留全部工作区文件。正在使用时不能卸载。'),
+        content: const Text(
+          '保留会话和 MCP 服务文件；删除已安装软件及 /root 等其他 Ubuntu 内容。正在使用时不能卸载。',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),

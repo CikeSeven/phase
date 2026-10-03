@@ -62,6 +62,16 @@ class ConversationRepository {
   /// 复制和删除会话时管理附件文件；纯数据测试可不注入。
   final AttachmentStorage? attachments;
 
+  Future<T> _guardWorkspace<T>(String message, Future<T> Function() action) =>
+      _guard(message, () async {
+        final release = workspaces.retainEnvironment();
+        try {
+          return await action();
+        } finally {
+          release();
+        }
+      });
+
   // --- 会话 ---
 
   Stream<List<Conversation>> watchConversations() {
@@ -92,11 +102,12 @@ class ConversationRepository {
     String? assistantId,
     ModelSelection? modelSelectionOverride,
   }) async {
-    return _guard('创建会话失败', () async {
+    return _guardWorkspace('创建会话失败', () async {
       final now = DateTime.now();
-      final workspace = await workspaces.create('会话工作区');
+      final sessionId = generateId();
+      final workspace = await workspaces.create('会话工作区', id: sessionId);
       final conversation = Conversation(
-        id: generateId(),
+        id: sessionId,
         title: title,
         permissions: permissions,
         primaryEnvironment: primaryEnvironment,
@@ -228,7 +239,7 @@ class ConversationRepository {
   ///
   /// 副本拥有独立附件文件；消息父指针和所有分支中的附件引用一起重映射。
   Future<Conversation> duplicateConversation(String id) {
-    return _guard('复制会话失败', () async {
+    return _guardWorkspace('复制会话失败', () async {
       final source = await getThread(id);
       if (source == null) {
         throw const UnknownFailure('会话不存在或已删除');
@@ -255,13 +266,14 @@ class ConversationRepository {
       )..where((t) => t.runId.isIn(runIds.keys))).get();
       final callIds = {for (final call in callRows) call.id: generateId()};
       final now = DateTime.now();
+      final sessionId = generateId();
       final copy = Conversation(
-        id: generateId(),
+        id: sessionId,
         title: '${source.conversation.title}（副本）',
         assistantId: source.conversation.assistantId,
         permissions: source.conversation.permissions,
         primaryEnvironment: source.conversation.primaryEnvironment,
-        workspaceId: generateId(),
+        workspaceId: sessionId,
         modelSelectionOverride: source.conversation.modelSelectionOverride,
         createdAt: now,
         updatedAt: now,

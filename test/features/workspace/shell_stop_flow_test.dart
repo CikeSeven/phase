@@ -21,9 +21,9 @@ void main() {
       workspaceRepositoryProvider.future,
     );
     await repository.saveEnvironment(
-      const RuntimeEnvironment(
+      RuntimeEnvironment(
         phase: EnvironmentPhase.ready,
-        rootPath: '/fixture',
+        rootPath: repository.filesystem.layout.rootfs,
         revision: 'fixture',
       ),
     );
@@ -42,7 +42,7 @@ void main() {
         callId: 'shell-stop',
         toolName: 'shell',
         arguments: jsonEncode({
-          'command': 'mkdir -p /workspace/output; printf saved > /workspace/output/saved.txt; printf partial; touch /workspace/started; sleep 60',
+          'command': 'mkdir -p output; printf saved > output/saved.txt; printf partial; touch started; sleep 60',
         }),
       ),
     );

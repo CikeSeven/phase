@@ -177,7 +177,7 @@ void main() {
       final before = schemaFixtureSnapshot(original);
       final schemaBefore = original
           .select(
-            "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name",
+            'SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name',
           )
           .map((r) => r.values.single)
           .toList();
@@ -196,7 +196,7 @@ void main() {
       expect(
         after
             .select(
-              "SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name",
+              'SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name',
             )
             .map((r) => r.values.single)
             .toList(),

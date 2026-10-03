@@ -1,5 +1,7 @@
 package app.xiangyue.phase.execution
 
+import app.xiangyue.phase.workspace.UbuntuFilesystemLayout
+
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
@@ -72,9 +74,12 @@ class ExecutionSetup(private val context: Context, private val files: AppFileDri
     }
 
     override suspend fun exportWorkspaceFile(path: String, name: String, mimeType: String): Boolean {
-        val root = File(context.noBackupFilesDir, "linux/workspaces").canonicalPath + File.separator
-        val source = File(path).canonicalFile
-        if (!source.path.startsWith(root) || !source.isFile || source.length() > 64L * 1024 * 1024)
+        val source = try {
+            UbuntuFilesystemLayout.managedFile(File(context.noBackupFilesDir, "linux").canonicalFile, path)
+        } catch (_: IllegalArgumentException) {
+            throw FlutterError("invalidArguments", "会话文件路径无效", null)
+        }
+        if (!source.isFile || source.length() > 64L * 1024 * 1024)
             throw FlutterError("invalidArguments", "文件路径无效或超过 64 MiB 导出上限", null)
         val uri = pick(directory = false, persist = false, exportName = File(name).name, exportMime = mimeType) ?: return false
         try {

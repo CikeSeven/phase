@@ -37,7 +37,7 @@ void main() {
                     protocol,
                     'shell',
                     arguments: {
-                      'command': 'mkdir -p /workspace/output; printf "月相记录" > /workspace/output/report.txt; printf "公开输出"; printf "诊断输出" >&2; exit 7',
+                      'command': 'mkdir -p output; printf "月相记录" > output/report.txt; printf "公开输出"; printf "诊断输出" >&2; exit 7',
                     },
                   )
                 : mcpAnswerSse(protocol),
@@ -59,9 +59,9 @@ void main() {
         );
         final repo = await h.container.read(workspaceRepositoryProvider.future);
         await repo.saveEnvironment(
-          const RuntimeEnvironment(
+          RuntimeEnvironment(
             phase: EnvironmentPhase.ready,
-            rootPath: '/fixture/environment',
+            rootPath: repo.filesystem.layout.rootfs,
             revision: '24.04-fixture',
           ),
         );
@@ -79,7 +79,7 @@ void main() {
         final chat = (await chats.getThread(h.conversationId()!))!.conversation;
         final workspace = (await repo.get(chat.workspaceId!))!;
         expect(jsonEncode(requests.first), contains('shell'));
-        expect(jsonEncode(requests.first), contains('/workspace'));
+        expect(jsonEncode(requests.first), contains('/sessions/${chat.id}'));
         expect((await h.latestRun()).configuration.workspace!.id, workspace.id);
         final records = await (await h.toolCalls()).getByRun(
           (await h.latestRun()).id,

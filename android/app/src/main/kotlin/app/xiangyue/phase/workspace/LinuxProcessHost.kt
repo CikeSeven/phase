@@ -18,6 +18,20 @@ import kotlinx.coroutines.sync.withLock
 
 /** Runtime handles only. Dart owns persisted runs and all tool policy decisions. */
 class LinuxProcessHost(private val context: Context, private val flutter: LinuxProcessFlutterApi, private val onOwnerStopped: (String) -> Unit = {}) : LinuxProcessHostApi {
+    companion object {
+        /** Shared with native acceptance fixtures; no session/service bind or shell rewriting. */
+        fun commandArguments(nativeDir: File, resultFile: File, rootfs: File, spec: LinuxProcessSpec): List<String> {
+            return listOf(File(nativeDir, "libphase_exec.so").path, resultFile.path,
+                    // --link2symlink: the Termux PRoot fork turns hard links into
+                    // symlinks; dpkg's link(status, status-old) fails without it.
+                    File(nativeDir, "libphase_proot.so").path, "--kill-on-exit", "--link2symlink", "-0", "-r", rootfs.path,
+                    "-b", "/dev", "-b", "/proc", "-w", spec.cwd,
+                    // PRoot may fall back when -w is invalid; env -C must fail before dispatch.
+                    "/usr/bin/env", "-i", "-C", spec.cwd, "HOME=/root", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "TMPDIR=/tmp") +
+                    spec.environment.map { (key, value) -> "$key=$value" } + listOf(spec.executable) + spec.argv
+        }
+    }
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val owners = ConcurrentHashMap<String, CompletableDeferred<Unit>>()
     private val tasks = ConcurrentHashMap<String, Running>()
@@ -85,25 +99,19 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
         owned.forEach { it.done.await() }
         withContext(Dispatchers.Main) { service?.finishProcess(ownerId) }
     }
-    private fun managedPath(path: String, section: String): File {
-        val file = File(path).canonicalFile
-        val base = File(root, section).canonicalFile
-        require(file.path.startsWith(base.path + File.separator) && file.isDirectory)
-        return file
-    }
     override suspend fun start(spec: LinuxProcessSpec) {
-        require(owners[spec.ownerId]?.isCompleted == true && idPattern.matches(spec.processId))
+        require(idPattern.matches(spec.ownerId) && owners[spec.ownerId]?.isCompleted == true && idPattern.matches(spec.processId))
         require(platformInfo().available)
-        // Only installer staging and installed environments can become a guest root.
-        val rootfs = try { managedPath(spec.rootfs, "environments") } catch (_: IllegalArgumentException) { managedPath(spec.rootfs, "staging") }
-        val workspace = try { managedPath(spec.workspace, "workspaces") } catch (_: IllegalArgumentException) { managedPath(spec.workspace, "staging") }
-        require(spec.executable.startsWith("/") && spec.cwd.startsWith("/") && !spec.executable.contains('\u0000'))
+        // Only the fixed Ubuntu root or an installer staging root can execute.
+        val rootfs = UbuntuFilesystemLayout.managedRootfs(root, spec.rootfs)
+        require(spec.executable.startsWith("/") && spec.executable.length <= 4096 && !spec.executable.contains('\u0000'))
+        require(spec.cwd.startsWith("/") && spec.cwd.length <= 4096 && !spec.cwd.contains('\u0000'))
         require(spec.timeoutMs == null || spec.timeoutMs!! >= 1)
         require(spec.outputLimitBytes == null || spec.outputLimitBytes!! in 1..(64L * 1024 * 1024))
         require(spec.argv.size <= 128 && spec.argv.sumOf { it.length } <= 131072 && spec.argv.none { it.contains('\u0000') })
         require(spec.environment.size <= 64 && spec.environment.all { (key, value) -> key.matches(Regex("[A-Za-z_][A-Za-z0-9_]*")) && !value.contains('\u0000') && value.length <= 32768 })
         require(seen.add(spec.processId)) { "processIdAlreadyUsed" }
-        val running = Running(spec, rootfs, workspace)
+        val running = Running(spec, rootfs)
         tasks[spec.processId] = running
         scope.launch { running.run() }
     }
@@ -124,7 +132,7 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
         running.done.await()
     }
 
-    private inner class Running(val spec: LinuxProcessSpec, val rootfs: File, val workspace: File) {
+    private inner class Running(val spec: LinuxProcessSpec, val rootfs: File) {
         val done = CompletableDeferred<Unit>()
         private val inputMutex = Mutex()
         private val eventMutex = Mutex()
@@ -195,13 +203,7 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
             var signal: Long? = null
             try {
                 if (terminating) return
-                val args = listOf(File(nativeDir, "libphase_exec.so").path, resultFile.path,
-                    // --link2symlink: the Termux PRoot fork turns hard links into
-                    // symlinks; dpkg's link(status, status-old) fails without it.
-                    File(nativeDir, "libphase_proot.so").path, "--kill-on-exit", "--link2symlink", "-0", "-r", rootfs.path,
-                    "-b", "/dev", "-b", "/proc", "-b", "${workspace.path}:/workspace", "-w", spec.cwd,
-                    "/usr/bin/env", "-i", "HOME=/root", "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin", "LANG=C.UTF-8", "TMPDIR=/tmp") +
-                    spec.environment.map { (key, value) -> "$key=$value" } + listOf(spec.executable) + spec.argv
+                val args = commandArguments(nativeDir, resultFile, rootfs, spec)
                 val builder = ProcessBuilder(args).directory(rootfs)
                 builder.environment().apply {
                     clear()

@@ -280,10 +280,12 @@ class WorkspaceFiles {
 
 String workspacePrompt(WorkspaceSnapshot? workspace) {
   if (workspace == null) return '';
-  return '\n\n本会话主环境：${workspace.primaryEnvironment.label}，独立工作区 ${jsonEncode(workspace.name)}。'
-      '文件工具使用相对路径；shell 默认目录 ${workspace.executionRoot}。'
+  return '\n\n本会话主环境：${workspace.primaryEnvironment.label}，会话目录 ${jsonEncode(workspace.name)}。'
+      '文件工具以当前会话目录为相对路径根；shell 默认目录 ${workspace.executionRoot}。'
+      'shell 每次是独立非交互进程，cd 和变量不跨调用保留。'
+      '${workspace.primaryEnvironment == PrimaryEnvironment.ubuntu ? '所有 Ubuntu 会话共用系统文件和已安装软件；shell 可访问其他会话目录和全局目录，会话目录不是访问边界。' : ''}'
       'Ubuntu 与 Termux 的会话文件各自保存，workspace_transfer 显式复制，不自动同步。'
       '${workspace.executable ? '附件在执行前复制到 imports/<附件ID>/<原文件名>。' : '所选命令环境未就绪，不要更换身份重试。'}'
       '${workspace.primaryEnvironment == PrimaryEnvironment.termux ? 'Termux 依赖由用户管理，缺失解释器需如实报告。' : ''}'
-      '本地 MCP stdio 始终使用 Ubuntu 的服务专属目录，不自动共享本会话文件。';
+      '本地 MCP stdio 默认使用 Ubuntu 的 /services/mcp/<服务ID>，不自动附加本会话文件。';
 }

@@ -268,7 +268,6 @@ data class LinuxProcessSpec (
   val ownerId: String,
   val processId: String,
   val rootfs: String,
-  val workspace: String,
   val executable: String,
   val argv: List<String>,
   val cwd: String,
@@ -286,14 +285,13 @@ data class LinuxProcessSpec (
       val ownerId = pigeonVar_list[0] as String
       val processId = pigeonVar_list[1] as String
       val rootfs = pigeonVar_list[2] as String
-      val workspace = pigeonVar_list[3] as String
-      val executable = pigeonVar_list[4] as String
-      val argv = pigeonVar_list[5] as List<String>
-      val cwd = pigeonVar_list[6] as String
-      val environment = pigeonVar_list[7] as Map<String, String>
-      val timeoutMs = pigeonVar_list[8] as Long?
-      val outputLimitBytes = pigeonVar_list[9] as Long?
-      return LinuxProcessSpec(ownerId, processId, rootfs, workspace, executable, argv, cwd, environment, timeoutMs, outputLimitBytes)
+      val executable = pigeonVar_list[3] as String
+      val argv = pigeonVar_list[4] as List<String>
+      val cwd = pigeonVar_list[5] as String
+      val environment = pigeonVar_list[6] as Map<String, String>
+      val timeoutMs = pigeonVar_list[7] as Long?
+      val outputLimitBytes = pigeonVar_list[8] as Long?
+      return LinuxProcessSpec(ownerId, processId, rootfs, executable, argv, cwd, environment, timeoutMs, outputLimitBytes)
     }
   }
   fun toList(): List<Any?> {
@@ -301,7 +299,6 @@ data class LinuxProcessSpec (
       ownerId,
       processId,
       rootfs,
-      workspace,
       executable,
       argv,
       cwd,
@@ -318,7 +315,7 @@ data class LinuxProcessSpec (
       return true
     }
     val other = other as LinuxProcessSpec
-    return ProcessApiPigeonUtils.deepEquals(this.ownerId, other.ownerId) && ProcessApiPigeonUtils.deepEquals(this.processId, other.processId) && ProcessApiPigeonUtils.deepEquals(this.rootfs, other.rootfs) && ProcessApiPigeonUtils.deepEquals(this.workspace, other.workspace) && ProcessApiPigeonUtils.deepEquals(this.executable, other.executable) && ProcessApiPigeonUtils.deepEquals(this.argv, other.argv) && ProcessApiPigeonUtils.deepEquals(this.cwd, other.cwd) && ProcessApiPigeonUtils.deepEquals(this.environment, other.environment) && ProcessApiPigeonUtils.deepEquals(this.timeoutMs, other.timeoutMs) && ProcessApiPigeonUtils.deepEquals(this.outputLimitBytes, other.outputLimitBytes)
+    return ProcessApiPigeonUtils.deepEquals(this.ownerId, other.ownerId) && ProcessApiPigeonUtils.deepEquals(this.processId, other.processId) && ProcessApiPigeonUtils.deepEquals(this.rootfs, other.rootfs) && ProcessApiPigeonUtils.deepEquals(this.executable, other.executable) && ProcessApiPigeonUtils.deepEquals(this.argv, other.argv) && ProcessApiPigeonUtils.deepEquals(this.cwd, other.cwd) && ProcessApiPigeonUtils.deepEquals(this.environment, other.environment) && ProcessApiPigeonUtils.deepEquals(this.timeoutMs, other.timeoutMs) && ProcessApiPigeonUtils.deepEquals(this.outputLimitBytes, other.outputLimitBytes)
   }
 
   override fun hashCode(): Int {
@@ -326,7 +323,6 @@ data class LinuxProcessSpec (
     result = 31 * result + ProcessApiPigeonUtils.deepHash(this.ownerId)
     result = 31 * result + ProcessApiPigeonUtils.deepHash(this.processId)
     result = 31 * result + ProcessApiPigeonUtils.deepHash(this.rootfs)
-    result = 31 * result + ProcessApiPigeonUtils.deepHash(this.workspace)
     result = 31 * result + ProcessApiPigeonUtils.deepHash(this.executable)
     result = 31 * result + ProcessApiPigeonUtils.deepHash(this.argv)
     result = 31 * result + ProcessApiPigeonUtils.deepHash(this.cwd)
@@ -336,7 +332,7 @@ data class LinuxProcessSpec (
     return result
   }
   override fun toString(): String {
-    return "LinuxProcessSpec(ownerId=$ownerId, processId=$processId, rootfs=$rootfs, workspace=$workspace, executable=$executable, argv=$argv, cwd=$cwd, environment=$environment, timeoutMs=$timeoutMs, outputLimitBytes=$outputLimitBytes)"
+    return "LinuxProcessSpec(ownerId=$ownerId, processId=$processId, rootfs=$rootfs, executable=$executable, argv=$argv, cwd=$cwd, environment=$environment, timeoutMs=$timeoutMs, outputLimitBytes=$outputLimitBytes)"
   }
 }
 

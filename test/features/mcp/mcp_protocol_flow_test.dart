@@ -84,7 +84,7 @@ void main() {
           assistantRepositoryProvider.future,
         );
         final assistant = await assistants.ensureDefault();
-        await assistants.save(assistant.copyWith(mcpToolNames: {toolName}));
+        await assistants.save(assistant.copyWith(mcpServerIds: {saved.id}));
         var confirmations = 0;
         h.onConfirmation = (request) async {
           confirmations++;
@@ -158,7 +158,7 @@ void main() {
         assistantRepositoryProvider.future,
       );
       final assistant = await assistants.ensureDefault();
-      await assistants.save(assistant.copyWith(mcpToolNames: {name}));
+      await assistants.save(assistant.copyWith(mcpServerIds: {profile.id}));
       h.onConfirmation = (_) async => ToolDecision.approved;
       h.provider.turns.add(
         toolTurn(callId: 'sample', toolName: name, arguments: '{}'),

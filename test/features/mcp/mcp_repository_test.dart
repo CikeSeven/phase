@@ -136,7 +136,7 @@ void main() {
         command ??
         const McpStdioCommand(
           executable: '/usr/bin/node',
-          args: ['/workspace/server.js'],
+          args: ['/services/mcp/stdio-1/server.js'],
           environment: {'DEBUG': '1'},
         ),
     definitionRevision: 'r1',
@@ -160,7 +160,7 @@ void main() {
     );
     expect(roundtrip.transport, McpTransport.stdio);
     expect(roundtrip.command?.executable, '/usr/bin/node');
-    expect(roundtrip.command?.cwd, '/workspace');
+    expect(roundtrip.command?.cwd, isNull);
     final cleared = await repository.save(saved, environmentSecrets: const {});
     expect(cleared.command?.environmentSecretRefs, isEmpty);
     // 旧引用与请求头轮换语义一致：保留到服务删除时统一清理。
@@ -174,7 +174,9 @@ void main() {
     await repository.saveCatalog(first, [tool], '2025-06-18');
     final edited = await repository.save(
       first.copyWith(
-        command: first.command?.copyWith(args: ['/workspace/other.js']),
+        command: first.command?.copyWith(
+          args: ['/services/mcp/stdio-1/other.js'],
+        ),
       ),
     );
     expect(edited.definitionRevision, isNot(first.definitionRevision));
@@ -192,6 +194,21 @@ void main() {
     expect(switched.command, isNull);
     final stored = (await repository.get(http.id))!.profile;
     expect(stored.command, isNull);
+  });
+
+  test('stdio cwd can be explicit or reset to the service default, with revision changes', () async {
+    final initial = await repository.save(stdioProfile());
+    final explicit = await repository.save(
+      initial.copyWith(command: initial.command!.copyWith(cwd: '/root')),
+    );
+    expect(explicit.command!.cwd, '/root');
+    expect(explicit.definitionRevision, isNot(initial.definitionRevision));
+    final reset = await repository.save(
+      explicit.copyWith(command: explicit.command!.copyWith(clearCwd: true)),
+    );
+    expect(reset.command!.cwd, isNull);
+    expect(reset.definitionRevision, isNot(explicit.definitionRevision));
+    expect(McpServerProfile.fromJson(reset.toJson()).command!.cwd, isNull);
   });
 
   test('stdio 校验拒绝相对路径、非法环境名与同名双份变量', () async {

@@ -26,32 +26,28 @@ void main() {
   late ({AppDatabase database, Directory directory}) fixture;
   late LocalProcessDriver driver;
   late WorkspaceRepository repository;
-  setUpAll(() {
+  late WorkspaceSnapshot binding;
+  setUp(() async {
+    fixture = createTestDatabase();
+    driver = LocalProcessDriver();
+    repository = WorkspaceRepository(fixture.database, fixture.directory);
     addTearDown(() async {
       await driver.dispose();
       await fixture.database.close();
       await fixture.directory.delete(recursive: true);
     });
-  });
-  setUp(() async {
-    fixture = createTestDatabase();
-    driver = LocalProcessDriver();
-    repository = WorkspaceRepository(fixture.database, fixture.directory);
+    await Directory('${repository.filesystem.layout.rootfs}/tmp')
+        .create(recursive: true);
     await repository.saveEnvironment(
-      const RuntimeEnvironment(
+      RuntimeEnvironment(
         phase: EnvironmentPhase.ready,
-        rootPath: 'fixture-root',
+        rootPath: repository.filesystem.layout.rootfs,
         revision: 'fixture',
       ),
     );
+    final workspace = await repository.create('会话工作区', id: 'w');
+    binding = await repository.snapshot(workspace.id);
   });
-  const binding = WorkspaceSnapshot(
-    id: 'w',
-    name: '会话工作区',
-    rootPath: '/fixture/workspace',
-    environmentRoot: 'fixture-root',
-    environmentRevision: 'fixture',
-  );
   InstallTool tool({Map<DependencyStep, String> scripts = const {}}) =>
       InstallTool(
         workspace: binding,

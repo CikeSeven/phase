@@ -177,7 +177,6 @@ class LinuxProcessSpec {
     required this.ownerId,
     required this.processId,
     required this.rootfs,
-    required this.workspace,
     required this.executable,
     required this.argv,
     required this.cwd,
@@ -191,8 +190,6 @@ class LinuxProcessSpec {
   String processId;
 
   String rootfs;
-
-  String workspace;
 
   String executable;
 
@@ -213,7 +210,6 @@ class LinuxProcessSpec {
       ownerId,
       processId,
       rootfs,
-      workspace,
       executable,
       argv,
       cwd,
@@ -233,13 +229,12 @@ class LinuxProcessSpec {
       ownerId: result[0]! as String,
       processId: result[1]! as String,
       rootfs: result[2]! as String,
-      workspace: result[3]! as String,
-      executable: result[4]! as String,
-      argv: (result[5]! as List<Object?>).cast<String>(),
-      cwd: result[6]! as String,
-      environment: (result[7]! as Map<Object?, Object?>).cast<String, String>(),
-      timeoutMs: result[8] as int?,
-      outputLimitBytes: result[9] as int?,
+      executable: result[3]! as String,
+      argv: (result[4]! as List<Object?>).cast<String>(),
+      cwd: result[5]! as String,
+      environment: (result[6]! as Map<Object?, Object?>).cast<String, String>(),
+      timeoutMs: result[7] as int?,
+      outputLimitBytes: result[8] as int?,
     );
   }
 
@@ -255,7 +250,6 @@ class LinuxProcessSpec {
     return _deepEquals(ownerId, other.ownerId) &&
         _deepEquals(processId, other.processId) &&
         _deepEquals(rootfs, other.rootfs) &&
-        _deepEquals(workspace, other.workspace) &&
         _deepEquals(executable, other.executable) &&
         _deepEquals(argv, other.argv) &&
         _deepEquals(cwd, other.cwd) &&
@@ -270,7 +264,7 @@ class LinuxProcessSpec {
 
   @override
   String toString() {
-    return 'LinuxProcessSpec(ownerId: $ownerId, processId: $processId, rootfs: $rootfs, workspace: $workspace, executable: $executable, argv: $argv, cwd: $cwd, environment: $environment, timeoutMs: $timeoutMs, outputLimitBytes: $outputLimitBytes)';
+    return 'LinuxProcessSpec(ownerId: $ownerId, processId: $processId, rootfs: $rootfs, executable: $executable, argv: $argv, cwd: $cwd, environment: $environment, timeoutMs: $timeoutMs, outputLimitBytes: $outputLimitBytes)';
   }
 }
 

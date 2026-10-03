@@ -51,28 +51,31 @@ class DependencyInstaller {
     final profiles = DependencyProfile.all;
     repository.beginDependencyChange();
     final owner = taskOwner ?? 'deps-${generateId()}';
-    // The host only accepts guest workspaces under managed paths; staging
-    // holds a scratch directory for the duration of the run.
-    final scratch = Directory(
-      p.join(repository.root.path, 'staging', 'deps-${generateId()}'),
-    );
+    final cwd = '/tmp/phase-deps-${generateId()}';
+    Directory? scratch;
     final stops = driver.stops.listen((id) {
       if (id == owner) cancellation.cancel();
     });
     try {
       cancellation.throwIfCancelled();
       final env = await repository.environment();
-      if (!env.ready || env.rootPath == null) {
+      if (!repository.environmentReady(env)) {
         throw const WorkspaceFailure('environmentMissing', '请先安装 Ubuntu 环境');
       }
-      await scratch.create(recursive: true);
+      final temporaryRoot = Directory(p.join(env.rootPath!, 'tmp'));
+      if (!await temporaryRoot.exists() ||
+          await temporaryRoot.resolveSymbolicLinks() != temporaryRoot.path) {
+        throw const WorkspaceFailure('invalidPath', 'Ubuntu 临时目录已改变，请检查环境');
+      }
+      scratch = Directory(p.join(temporaryRoot.path, p.posix.basename(cwd)));
+      await scratch.create();
       await driver.beginTask(owner, '安装开发依赖');
       for (final step in DependencyStep.values.take(3)) {
         cancellation.throwIfCancelled();
         await _run(
           owner,
           env.rootPath!,
-          scratch.path,
+          cwd,
           step,
           profiles,
           cancellation,
@@ -93,7 +96,7 @@ class DependencyInstaller {
         final version = await _run(
           owner,
           env.rootPath!,
-          scratch.path,
+          cwd,
           DependencyStep.verifying,
           [profile],
           cancellation,
@@ -113,7 +116,24 @@ class DependencyInstaller {
     } finally {
       try {
         await driver.endTask(owner);
-        if (await scratch.exists()) await scratch.delete(recursive: true);
+        if (scratch != null) {
+          if (await scratch.parent.resolveSymbolicLinks() !=
+              scratch.parent.path) {
+            throw const WorkspaceFailure(
+              'invalidPath',
+              'Ubuntu 临时目录已改变，本次暂存文件未清理',
+            );
+          }
+          final type = await FileSystemEntity.type(
+            scratch.path,
+            followLinks: false,
+          );
+          if (type == FileSystemEntityType.link) {
+            await Link(scratch.path).delete();
+          } else if (type == FileSystemEntityType.directory) {
+            await scratch.delete(recursive: true);
+          }
+        }
       } finally {
         await stops.cancel();
         repository.endDependencyChange();
@@ -125,7 +145,7 @@ class DependencyInstaller {
   Future<String> _run(
     String owner,
     String rootfs,
-    String workspace,
+    String cwd,
     DependencyStep step,
     List<DependencyProfile> profiles,
     RunCancellation cancellation,
@@ -182,10 +202,9 @@ class DependencyInstaller {
         ownerId: owner,
         processId: generateId(),
         rootfs: rootfs,
-        workspace: workspace,
         executable: '/bin/sh',
         argv: ['-c', commandFor(step, profiles)],
-        cwd: '/workspace',
+        cwd: cwd,
         environment: {'DEBIAN_FRONTEND': 'noninteractive'},
         outputLimitBytes: DependencyInstaller.outputLimitBytes,
       ),

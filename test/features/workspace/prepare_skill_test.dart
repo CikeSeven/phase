@@ -45,7 +45,7 @@ void main() {
       },
     );
     final copied = File(
-      '${workspace.rootPath}${path.substring('/workspace'.length)}/scripts/run.sh',
+      '${workspace.rootPath}${path.substring(snapshot.executionRoot.length)}/scripts/run.sh',
     );
     expect(await copied.readAsString(), 'printf old');
     await copied.writeAsString('changed');
@@ -58,7 +58,7 @@ void main() {
         .select(fixture.database.workspaceCopies)
         .get();
     expect(copies.single.sourceJson, contains(skill.snapshot.revision));
-    expect(checks, 2);
+    expect(checks, 3);
   });
   test('permission tightening during copy prevents publication', () async {
     final fixture = SkillFixture();

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path/path.dart' as p;
+import 'package:phase/core/error/failure.dart';
 import 'package:phase/features/workspace/process_api.g.dart';
 import 'package:phase/features/workspace/process_driver.dart';
 
@@ -46,21 +48,39 @@ class LocalProcessDriver implements ProcessDriver {
       throw StateError('owner not registered');
     }
     calls.add(spec);
-    final process = await Process.start(
-      '/usr/bin/setsid',
-      [
-        spec.executable,
-        ...spec.argv.map((s) => s.replaceAll('/workspace', spec.workspace)),
-      ],
-      workingDirectory: spec.cwd.replaceAll('/workspace', spec.workspace),
-      environment: {'PATH': '/usr/bin:/bin', ...spec.environment},
-      includeParentEnvironment: false,
-    );
+    late final Process process;
+    try {
+      process = await Process.start(
+        '/usr/bin/setsid',
+        [
+          spec.executable,
+          ...spec.argv.map(
+            (argument) => _guestArguments(argument, spec.rootfs),
+          ),
+        ],
+        workingDirectory: p.join(spec.rootfs, spec.cwd.substring(1)),
+        environment: {'PATH': '/usr/bin:/bin', ...spec.environment},
+        includeParentEnvironment: false,
+      );
+    } on ProcessException {
+      throw const WorkspaceFailure(
+        'processStart',
+        'Fixture process could not start in the requested cwd',
+      );
+    }
     final handle = LocalProcess(spec, process, onBytes);
     active[spec.processId] = handle;
     unawaited(handle.run().whenComplete(() => active.remove(spec.processId)));
     return handle;
   }
+
+  String _guestArguments(String argument, String rootfs) =>
+      argument.replaceAllMapped(
+        RegExp(
+          r'''/(?:sessions|services|root|tmp)(?:/[^\s;\"'<>|&)]*)?(?=[\s;\"'<>|&)]|$)''',
+        ),
+        (match) => p.join(rootfs, match[0]!.substring(1)),
+      );
 
   Future<void> dispose() async {
     for (final owner in owners.toList()) {

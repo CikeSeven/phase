@@ -16,6 +16,7 @@ import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/mcp_server_profile.dart';
 import '../../../data/models/tool_source.dart';
+import '../../../data/models/ubuntu_filesystem_layout.dart';
 import '../chat/chat_controller.dart';
 import '../tools/tool.dart';
 import 'mcp_controller.dart';
@@ -103,7 +104,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
           final command = entry.profile.command;
           _executable.text = command?.executable ?? '';
           _arguments.text = command?.args.join('\n') ?? '';
-          _guestCwd.text = command?.cwd ?? '/workspace';
+          _guestCwd.text = command?.cwd ?? '';
           _environment.text = command == null || command.environment.isEmpty
               ? ''
               : jsonEncode(command.environment);
@@ -178,7 +179,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                           if (line.trim().isNotEmpty) line.trim(),
                       ],
                       cwd: _guestCwd.text.trim().isEmpty
-                          ? '/workspace'
+                          ? null
                           : _guestCwd.text.trim(),
                       environment: environment ?? const {},
                     ),
@@ -426,9 +427,9 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                         controller: _guestCwd,
                         enabled: !_busy && !deleting,
                         onChanged: _changed,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'guest 工作目录（可选）',
-                          hintText: '/workspace',
+                          hintText: UbuntuFilesystemLayout.mcpGuestPath(_id),
                         ),
                         validator: (value) =>
                             value != null &&

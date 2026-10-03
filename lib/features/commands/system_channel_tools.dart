@@ -50,7 +50,7 @@ class ExternalShellTool extends SystemChannelTool {
   @override
   String get description =>
       '以 $channelName 身份（UID ${binding.uid}）执行独立非交互命令，返回分离的 stdout/stderr 与真实退出结果。'
-      '默认目录 ${binding.home}，不是 Ubuntu /workspace；cd 和变量不跨调用保留，不加载启动脚本，不设命令总时限。'
+      '默认目录 ${binding.home}，不是 Ubuntu 会话目录；cd 和变量不跨调用保留，不加载启动脚本，不设命令总时限。'
       '文件通过 ${channel.name}_transfer 显式传输。失败或停止不撤销已发生的效果，不要直接重发已派发动作。';
   @override
   Map<String, dynamic> get inputSchema => const {

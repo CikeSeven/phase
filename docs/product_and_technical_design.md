@@ -1,10 +1,12 @@
 # 相月（Phase）产品与技术设计
 
-更新：2026-10-02｜阶段：未发布的初版建设｜平台：Android
+更新：2026-10-04｜阶段：未发布的初版建设｜平台：Android
 
 相月是 Android 多模型聊天与设备执行应用，工程名 `phase`，应用 ID `app.xiangyue.phase`。用户自带模型服务；Flutter/Dart 负责界面、模型请求与 Agent 循环，Kotlin 负责 Android 能力。
 
 本文保留产品边界、当前实现入口和必须延续的契约，已实现功能不再逐项重写建设步骤。新增功能详见 [Agent 与扩展设计](./agent_extensions_design.md)，任务顺序和验收缺口见 [实施计划](./implementation_plan.md)。工程规则见 [AGENTS.md](../AGENTS.md)，视觉与交互见 [DESIGN.md](../DESIGN.md)。
+
+2026-10-04 已实现共享 rootfs、真实 `/sessions/<session_id>` 和独立 shell，不新增沙箱、不做旧数据迁移。已覆盖安装 Profile，完整行为验收未完成；契约及交付边界见 [共享文件系统与会话目录方案](./ubuntu_session_filesystem_design.md)。
 
 “已有实现”指当前代码中存在对应链路，并列出可检查的测试入口；不表示本次执行了测试，也不表示已完成真实网关、真机或发行验收。项目仍不维护开发期接口与数据库的向后兼容，调整数据契约不授权清理设备数据。
 
@@ -185,7 +187,7 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 主环境只在环境设置中全局选择 Ubuntu / Termux，默认 Ubuntu；新会话首次发送时绑定保存值，创建后不可切换，修改全局选择不影响已有会话。聊天输入框不提供环境入口。普通文件工具、文件页、shell 和 Skill 工作副本共用固定绑定。两侧文件独立保留，`workspace_transfer(path, direction)` 与文件页显式复制到另一环境的相同相对路径。Termux 使用其 HOME 下会话专属目录，依赖自行管理，不再设独立使用开关；未获系统命令授权时禁选，保存前再次检查授权，运行仍检查实际就绪状态。Shizuku 保留独立启用开关。本地 MCP stdio 仍固定 Ubuntu 服务专属目录，不自动共享会话文件。详细生命周期与未验收范围见 [系统命令专项设计](./system_command_channels_design.md)。
 
-文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径直接基于当前会话独占的工作区根目录，如 `a.txt`、`test/a.txt`；Linux 内部仍挂载为 `/workspace`。附件可用 `attachment:<ID>` 或唯一文件名读取，导入原件只读。目录列表返回工作区相对路径，支持子目录与分页，检查路径和符号链接目标不越界。
+文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径直接基于当前会话目录，如 `a.txt`、`test/a.txt`；Ubuntu 文件实际位于共享 rootfs 的 `/sessions/<session_id>`，不再提供 `/workspace` 别名。shell 可访问其他会话和全局目录，文件工具仍使用当前会话相对路径。附件可用 `attachment:<ID>` 或唯一文件名读取，导入原件只读。目录列表返回工作区相对路径，支持子目录与分页，检查路径和符号链接目标不越界。
 
 - `read_file(path, offset?, limit?)`：UTF-8 文本或文档已抽取文本，行号从 1 开始；按流读取，最多 2000 行或 16 KiB 完整行，返回明确续读位置。超长单行、越过结尾、非文本均返回具体错误，不让 AI 重复请求同一无效页。
 - `write_file(path, content, directory?)`：内容原样写入，创建或完整覆盖，自动创建父目录；允许空文件、空白内容、隐藏文件和无扩展名文件。字节上限按 UTF-8 计；工作区为 2 MiB，SAF 为 128 KiB。

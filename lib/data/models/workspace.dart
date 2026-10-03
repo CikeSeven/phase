@@ -1,4 +1,5 @@
 import 'command_channel.dart';
+import 'ubuntu_filesystem_layout.dart';
 
 enum PrimaryEnvironment { ubuntu, termux }
 
@@ -150,7 +151,7 @@ class WorkspaceSnapshot {
   final PrimaryEnvironment primaryEnvironment;
   final CommandChannelSnapshot? termux;
   String get executionRoot => primaryEnvironment == PrimaryEnvironment.ubuntu
-      ? '/workspace'
+      ? UbuntuFilesystemLayout.sessionGuestPath(id)
       : '${termux?.home ?? "/data/data/com.termux/files/home"}/.phase/workspaces/$id';
   bool get executable => primaryEnvironment == PrimaryEnvironment.ubuntu
       ? linuxAvailable

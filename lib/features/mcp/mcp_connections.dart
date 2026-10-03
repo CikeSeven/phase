@@ -1,6 +1,3 @@
-import 'dart:io';
-
-import 'package:path/path.dart' as p;
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
@@ -13,7 +10,7 @@ import 'mcp_stdio_client.dart';
 part 'mcp_connections.g.dart';
 
 /// stdio 服务的定位：环境 rootfs 与服务专属工作目录。
-/// 目录不在数据库登记，删除服务时由控制器尽力清理。
+/// 文件实际保存在共享 rootfs 内，连接持有环境租约至进程完整收尾。
 /// 驱动与仓储都惰性获取，避免普通测试环境初始化平台通道。
 class McpStdioLauncher {
   McpStdioLauncher({required this.openDriver, required this.openRepository});
@@ -29,25 +26,17 @@ class McpStdioLauncher {
     final release = repository.retainEnvironment();
     try {
       final env = await repository.environment();
-      if (!env.ready || env.rootPath == null) {
+      if (!repository.environmentReady(env)) {
         throw const WorkspaceFailure(
           'environmentMissing',
           '请先在设置中安装 Ubuntu 环境',
         );
       }
-      final directory = Directory(serverDirectory(repository, profile.id));
-      if (!await directory.exists()) {
-        try {
-          await directory.create(recursive: true);
-        } on FileSystemException {
-          throw const OperationFailure('无法创建 MCP 服务目录，请检查可用空间');
-        }
-      }
+      await repository.filesystem.ensureMcpService(profile.id);
       return McpStdioClient(
         profile,
         driver: openDriver(),
         rootfs: env.rootPath!,
-        workspace: directory.path,
         environment: environment,
         releaseEnvironment: release,
       );
@@ -56,11 +45,6 @@ class McpStdioLauncher {
       rethrow;
     }
   }
-
-  static String serverDirectory(
-    WorkspaceRepository repository,
-    String serverId,
-  ) => p.join(repository.root.path, 'workspaces', 'mcp', serverId);
 }
 
 /// 仅管理活连接的清理归属，不跨运行共享协议状态。

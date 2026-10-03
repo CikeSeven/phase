@@ -19,6 +19,7 @@ class RootfsArchive {
     RunCancellation cancellation, {
     required Future<void> Function(List<String>, List<int>) setModes,
     required void Function(int bytes) progress,
+    Set<String> reservedRootNames = const {},
   }) async {
     final tar = File('${destination.path}.tar');
     var inflated = 0;
@@ -117,6 +118,9 @@ class RootfsArchive {
         nextName = null;
         nextLink = null;
         if (name == '.') continue;
+        if (reservedRootNames.contains(p.posix.split(name).first)) {
+          throw const WorkspaceFailure('archivePath', '环境镜像不能覆盖会话或服务目录');
+        }
         if (!seen.add(name) ||
             seen.length > maxEntries ||
             entry.fileSize > maxFileBytes ||

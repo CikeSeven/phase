@@ -1,13 +1,21 @@
 import 'package:pigeon/pigeon.dart';
 
-@ConfigurePigeon(PigeonOptions(
-  dartOut: 'lib/features/workspace/process_api.g.dart',
-  kotlinOut: 'android/app/src/main/kotlin/app/xiangyue/phase/bridge/ProcessApi.g.kt',
-  kotlinOptions: KotlinOptions(package: 'app.xiangyue.phase.bridge.process'),
-  dartPackageName: 'phase',
-))
+@ConfigurePigeon(
+  PigeonOptions(
+    dartOut: 'lib/features/workspace/process_api.g.dart',
+    kotlinOut:
+        'android/app/src/main/kotlin/app/xiangyue/phase/bridge/ProcessApi.g.kt',
+    kotlinOptions: KotlinOptions(package: 'app.xiangyue.phase.bridge.process'),
+    dartPackageName: 'phase',
+  ),
+)
 class LinuxPlatformInfo {
-  LinuxPlatformInfo({required this.rootDirectory, required this.abi, required this.available, required this.freeBytes});
+  LinuxPlatformInfo({
+    required this.rootDirectory,
+    required this.abi,
+    required this.available,
+    required this.freeBytes,
+  });
   String rootDirectory;
   String abi;
   bool available;
@@ -15,11 +23,20 @@ class LinuxPlatformInfo {
 }
 
 class LinuxProcessSpec {
-  LinuxProcessSpec({required this.ownerId, required this.processId, required this.rootfs, required this.workspace, required this.executable, required this.argv, required this.cwd, required this.environment, required this.timeoutMs, required this.outputLimitBytes});
+  LinuxProcessSpec({
+    required this.ownerId,
+    required this.processId,
+    required this.rootfs,
+    required this.executable,
+    required this.argv,
+    required this.cwd,
+    required this.environment,
+    required this.timeoutMs,
+    required this.outputLimitBytes,
+  });
   String ownerId;
   String processId;
   String rootfs;
-  String workspace;
   String executable;
   List<String> argv;
   String cwd;
@@ -32,8 +49,21 @@ class LinuxProcessSpec {
 }
 
 enum LinuxEventKind { started, stdout, stderr, exited }
+
 class LinuxProcessEvent {
-  LinuxProcessEvent({required this.ownerId, required this.processId, required this.sequence, required this.kind, this.bytes, this.exitCode, this.signal, this.error, this.cancelled = false, this.timedOut = false, this.outputLimitExceeded = false});
+  LinuxProcessEvent({
+    required this.ownerId,
+    required this.processId,
+    required this.sequence,
+    required this.kind,
+    this.bytes,
+    this.exitCode,
+    this.signal,
+    this.error,
+    this.cancelled = false,
+    this.timedOut = false,
+    this.outputLimitExceeded = false,
+  });
   String ownerId;
   String processId;
   int sequence;

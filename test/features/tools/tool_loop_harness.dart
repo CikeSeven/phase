@@ -244,6 +244,7 @@ class ToolLoopHarness {
       baseDelay: Duration.zero,
     ),
   }) async {
+    TestWidgetsFlutterBinding.ensureInitialized();
     SharedPreferences.setMockInitialValues({});
     final preferences = await SharedPreferences.getInstance();
     final tempDir = Directory.systemTemp.createTempSync('phase_tool_loop');

@@ -1,6 +1,7 @@
 import '../models/command_channel.dart';
 import '../models/tool_call_record.dart';
 import '../datasources/local/settings_storage.dart';
+import '../datasources/local/ubuntu_filesystem.dart';
 import '../../features/commands/command_channel_driver.dart';
 import '../../features/workspace/workspace_file_access.dart';
 import '../../features/tools/tool.dart';
@@ -34,7 +35,8 @@ class WorkspaceLease {
 }
 
 class WorkspaceRepository {
-  WorkspaceRepository(this.db, this.root, {this.loadTermux, this.remoteAccess});
+  WorkspaceRepository(this.db, this.root, {this.loadTermux, this.remoteAccess})
+    : filesystem = UbuntuFilesystem(root);
   final Future<CommandChannelSnapshot?> Function()? loadTermux;
   final WorkspaceFileAccess Function(
     WorkspaceSnapshot binding,
@@ -72,6 +74,7 @@ class WorkspaceRepository {
   });
   final AppDatabase db;
   final Directory root;
+  final UbuntuFilesystem filesystem;
   final Set<String> _leases = {};
   bool _mutatingEnvironment = false;
   bool _installingDependencies = false;
@@ -79,6 +82,8 @@ class WorkspaceRepository {
   bool get busy =>
       _mutatingEnvironment || _leases.isNotEmpty || _environmentUsers > 0;
   bool inUse(String id) => _leases.contains(id);
+  bool environmentReady(RuntimeEnvironment environment) =>
+      environment.ready && environment.rootPath == filesystem.layout.rootfs;
   static const environmentId = 'ubuntu-arm64';
 
   Future<T> _records<T>(Future<T> Function() action) async {
@@ -135,7 +140,7 @@ class WorkspaceRepository {
   }) => Workspace(
     id: row.id,
     name: name ?? row.name,
-    rootPath: p.join(root.path, 'workspaces', row.id),
+    rootPath: filesystem.layout.sessionDirectory(row.id),
     createdAt: row.createdAt,
     deleting: row.deleting,
     primaryEnvironment: primaryEnvironment,
@@ -183,18 +188,24 @@ class WorkspaceRepository {
     );
   });
   Future<Workspace> create(String name, {String? id}) async {
-    final trimmed = name.trim();
-    if (trimmed.isEmpty || trimmed.length > 100) {
-      throw const OperationFailure('工作区名称需为 1–100 个字符');
-    }
-    final workspaceId = id ?? generateId();
-    final directory = Directory(p.join(root.path, 'workspaces', workspaceId));
+    final release = retainEnvironment();
+    Directory? directory;
+    String? creatingId;
+    var saved = false;
     try {
-      await directory.create(recursive: true);
-    } on FileSystemException {
-      throw const OperationFailure('无法创建工作区目录，请检查可用空间');
-    }
-    try {
+      final trimmed = name.trim();
+      if (trimmed.isEmpty || trimmed.length > 100) {
+        throw const OperationFailure('工作区名称需为 1–100 个字符');
+      }
+      final workspaceId = id ?? generateId();
+      if (!_leases.add(workspaceId)) {
+        throw const OperationFailure('此会话工作区正在创建或使用');
+      }
+      creatingId = workspaceId;
+      if (await get(workspaceId) != null) {
+        throw const OperationFailure('会话工作区已存在');
+      }
+      directory = await filesystem.createSession(workspaceId);
       final now = DateTime.now();
       await _records(
         () => db
@@ -208,30 +219,50 @@ class WorkspaceRepository {
               ),
             ),
       );
+      saved = true;
       return Workspace(
         id: workspaceId,
         name: trimmed,
         rootPath: directory.path,
         createdAt: now,
       );
-    } catch (_) {
-      await directory.delete(recursive: true);
-      rethrow;
+    } finally {
+      try {
+        if (!saved && directory != null) {
+          await filesystem.deleteSession(creatingId!);
+        }
+      } on FileSystemException {
+        throw const OperationFailure('未完成会话的目录清理失败，请重试');
+      } finally {
+        if (creatingId != null) _leases.remove(creatingId);
+        release();
+      }
     }
   }
 
   /// 复制会话文件，副本目录与来源记录均独立；不复制共享 Ubuntu 环境。
   Future<void> copyFiles(String sourceId, Workspace target) async {
+    final release = retainEnvironment();
     if (!_leases.add(sourceId)) {
+      release();
       throw const OperationFailure('工作区正在使用，请先结束任务再复制会话');
+    }
+    if (sourceId == target.id || !_leases.add(target.id)) {
+      _leases.remove(sourceId);
+      release();
+      throw const OperationFailure('目标工作区正在使用，无法复制');
     }
     try {
       final source = await get(sourceId);
       if (source == null || source.deleting) {
         throw const OperationFailure('原会话工作区不可用，无法复制');
       }
-      final directory = Directory(source.rootPath);
-      if (await directory.exists()) {
+      if (target.rootPath != filesystem.layout.sessionDirectory(target.id) ||
+          await filesystem.session(target.id) == null) {
+        throw const OperationFailure('目标会话目录不可用');
+      }
+      final directory = await filesystem.session(sourceId);
+      if (directory != null) {
         await for (final entry in directory.list(
           recursive: true,
           followLinks: false,
@@ -297,12 +328,18 @@ class WorkspaceRepository {
       throw const OperationFailure('会话工作区文件复制失败，请检查可用空间');
     } finally {
       _leases.remove(sourceId);
+      _leases.remove(target.id);
+      release();
     }
   }
 
   /// 删除先撤销新使用，再处理文件。失败保留 deleting 行供显式重试。
   Future<void> delete(String id, {Future<void> Function()? deleteOwner}) async {
-    if (!_leases.add(id)) throw const OperationFailure('工作区正在使用，请先停止所属任务');
+    final release = retainEnvironment();
+    if (!_leases.add(id)) {
+      release();
+      throw const OperationFailure('工作区正在使用，请先停止所属任务');
+    }
     try {
       final workspace = await get(id);
       if (workspace == null) {
@@ -320,8 +357,7 @@ class WorkspaceRepository {
           await files(binding.select(PrimaryEnvironment.termux))
               .deleteRoot(RunCancellation());
         }
-        final directory = Directory(workspace.rootPath);
-        if (await directory.exists()) await directory.delete(recursive: true);
+        await filesystem.deleteSession(id);
       } on FileSystemException {
         throw const OperationFailure('会话工作区文件清理失败，请重试删除会话');
       }
@@ -333,6 +369,7 @@ class WorkspaceRepository {
       );
     } finally {
       _leases.remove(id);
+      release();
     }
   }
 
@@ -348,7 +385,7 @@ class WorkspaceRepository {
     _mutatingEnvironment = false;
   }
 
-  /// 本地 MCP 检查也会持有 rootfs，但没有会话工作区租约。
+  /// 覆盖整个异步存储操作或 MCP 连接，不能只在文件变更前检查一次。
   void Function() retainEnvironment() {
     if (_mutatingEnvironment) {
       throw const OperationFailure('环境正在安装或卸载，请稍候');
@@ -399,8 +436,10 @@ class WorkspaceRepository {
       rootPath: workspace.rootPath,
       primaryEnvironment: workspace.primaryEnvironment,
       termux: termux,
-      environmentRoot: !_mutatingEnvironment && env.ready ? env.rootPath : null,
-      environmentRevision: !_mutatingEnvironment && env.ready
+      environmentRoot: !_mutatingEnvironment && environmentReady(env)
+          ? env.rootPath
+          : null,
+      environmentRevision: !_mutatingEnvironment && environmentReady(env)
           ? env.revision
           : null,
     );
@@ -410,6 +449,9 @@ class WorkspaceRepository {
     String id, {
     WorkspaceSnapshot? expected,
   }) async {
+    if (_mutatingEnvironment) {
+      throw const OperationFailure('环境正在安装或卸载，请稍候');
+    }
     if (!_leases.add(id)) throw const OperationFailure('此工作区正在使用');
     var retained = false;
     try {
@@ -454,16 +496,13 @@ class WorkspaceRepository {
     }.contains(env.phase)) {
       await saveEnvironment(
         RuntimeEnvironment(
-          phase: env.rootPath == null
-              ? EnvironmentPhase.failed
-              : EnvironmentPhase.ready,
+          phase: EnvironmentPhase.failed,
           rootPath: env.rootPath,
           imageUrl: env.imageUrl,
           imageDigest: env.imageDigest,
           downloadBytes: env.downloadBytes,
           revision: env.revision,
-          installedDependencies: env.installedDependencies,
-          error: '上次安装已中断，可重试；已有工作区保留',
+          error: '上次安装已中断，请重新安装；会话和服务文件保留',
         ),
       );
     }
