@@ -46,7 +46,7 @@ List<RuntimeContextPart> contextRuntimeParts(RunConfiguration config) {
       'environment',
       '${config.workspace == null ? '当前没有会话工作区。' : workspacePrompt(config.workspace)}'
           '${config.commandChannels.any((c) => c.channel == ExecutionChannel.termux) ? '\nTermux 与 Ubuntu 文件独立，使用显式复制，不因失败更换环境重发动作。' : ''}'
-          '${config.enabledTools.contains('shizuku_display') ? '\n已开放 Shizuku 虚拟屏控制，与主屏无障碍分开；不提供 Shizuku 命令或通用文件访问。虚拟屏随本次运行结束释放；它不隔离应用账号和数据，也不具备节点级密码、验证码或支付识别，此类步骤仍交给用户。不能因失败换通道重发已派发动作。' : '\n未开放 Shizuku 虚拟屏控制。'}'
+          '${config.enabledTools.contains('shizuku_display') ? '\n已开放 Shizuku 虚拟屏控制，与主屏无障碍分开。虚拟屏随本次运行结束释放；它不隔离应用账号和数据，也不具备节点级密码、验证码或支付识别，此类步骤仍交给用户。不能因失败换通道重发已派发动作。' : '\n未开放 Shizuku 虚拟屏控制。'}'
           '${executionScopePrompt(config.executionScope, toolExecution: config.enabledTools.isNotEmpty, applicationOperations: config.enabledTools.any(applicationOperationTools.contains))}',
     ),
     section(

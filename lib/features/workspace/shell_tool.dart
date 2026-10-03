@@ -45,13 +45,8 @@ class ShellTool extends Tool {
   String get policyKey => commandExecutionPolicyKey;
   @override
   String get description =>
-      workspace?.primaryEnvironment == PrimaryEnvironment.termux
-      ? '在 Termux 会话工作区执行独立非交互 Bash 命令。默认目录 ${workspace!.executionRoot}；变量与 cd 不跨调用保留。依赖由用户管理，不自动安装。返回 stdout/stderr、退出结果与产物。'
-      : '在共享 Ubuntu 中执行独立非交互 shell 命令，返回 stdout/stderr、退出码与产物。'
-            '默认目录 ${workspace?.executionRoot ?? '所属会话目录'}；可访问其他会话和 Ubuntu 全局目录。'
-            '每次调用的环境变量与 cd 不保留。环境为最小安装：安装软件用 '
-            'apt update && apt install -y，已安装内容跨会话持久保留；apt 被中断后'
-            '先运行 dpkg --configure -a 恢复再重试。命令不设超时。';
+      '在 ${workspace?.primaryEnvironment.label ?? 'Ubuntu'} 中执行 shell 命令，返回 stdout、stderr、退出码和产物。'
+      '默认目录：${workspace?.executionRoot ?? '当前会话目录'}。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
