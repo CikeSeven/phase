@@ -11,7 +11,8 @@ import '../../../data/models/tool_policy.dart';
 import 'file_text.dart';
 import 'tool.dart';
 
-const _pathDescription = '相对于本会话工作区根目录的路径。';
+const fileToolPathDescription =
+    '当前环境内的绝对路径或相对于本会话目录的路径，支持 ~；Ubuntu 路径按 guest 文件系统解释。';
 
 class ReadFileTool extends Tool {
   const ReadFileTool();
@@ -20,14 +21,21 @@ class ReadFileTool extends Tool {
   @override
   String get description =>
       '读取 UTF-8 文本或附件已抽取的文本。'
-      '最多返回 2000 行或 16 KiB 完整行，按返回的 nextOffset/offset 继续读取。';
+      '最多返回 2000 行或 50 KiB 完整行，以先达到的上限为准。大文件使用 offset/limit，'
+      '需要完整文件时按返回的 nextOffset/offset 继续读取到结尾。';
+  @override
+  String get promptSnippet => '读取文件内容';
+  @override
+  List<String> get promptGuidelines => const [
+    '使用 read_file 查看文件，而不是通过 shell 调用 cat 或 sed；大文件按 offset 续读。',
+  ];
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
       'path': {
         'type': 'string',
-        'description': '$_pathDescription 附件可用 attachment:<ID> 或唯一文件名。',
+        'description': '$fileToolPathDescription 附件可用 attachment:<ID> 或唯一文件名。',
       },
       'offset': {'type': 'integer', 'minimum': 1, 'description': '起始行，默认 1'},
       'limit': {
@@ -80,12 +88,19 @@ class WriteFileTool extends Tool {
   String get name => 'write_file';
   @override
   String get description =>
-      '写入 UTF-8 文件，不存在则创建，存在则完整覆盖；自动创建父目录。局部修改用 edit_file。';
+      '写入 UTF-8 文件，不存在则创建，存在则完整覆盖；自动创建父目录。'
+      '当前环境单次写入上限 2 MiB。局部修改用 edit_file。';
+  @override
+  String get promptSnippet => '创建或完整覆盖文件';
+  @override
+  List<String> get promptGuidelines => const [
+    'write_file 仅用于创建新文件或完整重写；精确局部修改使用 edit_file。',
+  ];
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
-      'path': {'type': 'string', 'description': _pathDescription},
+      'path': {'type': 'string', 'description': fileToolPathDescription},
       'content': {
         'type': 'string',
         'minLength': 0,
@@ -123,12 +138,21 @@ class EditFileTool extends Tool {
   @override
   String get description =>
       '用精确文本替换编辑文件，支持多处修改一次提交；全部匹配成功才写入。'
-      '先读取文件，保留原文空格；oldText 在保证唯一匹配的前提下尽量短。';
+      '同一区块或相邻修改合并成一处，不用大段未变化原文连接远处修改。'
+      '先读取文件，保留原文空格；当前环境编辑文件上限 2 MiB，授权外部文件为 128 KiB。';
+  @override
+  String get promptSnippet => '精确替换文件文本，支持一次提交多处互不重叠的修改';
+  @override
+  List<String> get promptGuidelines => const [
+    '同文件多处独立修改使用一次 edit_file 调用的 edits[]，每处 oldText 精确匹配原文件且唯一。',
+    '所有 edits[] 匹配修改前的原文件，不允许重叠或嵌套；同区块和相邻修改合并。',
+    'oldText 在保持唯一匹配的前提下尽量短，不填入大段未变化原文。',
+  ];
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
-      'path': {'type': 'string', 'description': _pathDescription},
+      'path': {'type': 'string', 'description': fileToolPathDescription},
       'edits': {
         'type': 'array',
         'minItems': 1,
@@ -200,18 +224,24 @@ class ListFilesTool extends Tool {
   @override
   String get name => 'list_files';
   @override
-  String get description => '列出目录的直接子项，返回可直接用于文件工具的路径；支持分页。';
+  String get description =>
+      '列出目录的直接子项，按名称排序并包含隐藏文件，返回可直接用于文件工具的路径。'
+      '默认返回 500 项或 50 KiB，以先达到的上限为准；支持 limit 与 offset 分页。';
+  @override
+  String get promptSnippet => '列出目录内容';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
-      'path': {'type': 'string', 'description': '工作区内的目录路径，默认 .（工作区根目录）'},
+      'path': {
+        'type': 'string',
+        'description': '$fileToolPathDescription 默认 .（本会话目录）',
+      },
       'offset': {'type': 'integer', 'minimum': 0, 'description': '跳过的条目数，默认 0'},
       'limit': {
         'type': 'integer',
         'minimum': 1,
-        'maximum': 200,
-        'description': '返回条目数，默认 100',
+        'description': '返回条目数，默认 500；截断时增大 limit 或按 nextOffset 续读',
       },
     },
     'additionalProperties': false,
@@ -227,8 +257,8 @@ class ListFilesTool extends Tool {
     if (offset != null && (offset is! int || offset < 0)) {
       return 'offset 必须是非负整数';
     }
-    if (limit != null && (limit is! int || limit < 1 || limit > 200)) {
-      return 'limit 必须是 1–200 的整数';
+    if (limit != null && (limit is! int || limit < 1)) {
+      return 'limit 必须是正整数';
     }
     return null;
   }
@@ -269,7 +299,7 @@ class ListFilesTool extends Tool {
       (a, b) => (a['path'] as String).compareTo(b['path'] as String),
     );
     final offset = arguments['offset'] as int? ?? 0;
-    final limit = arguments['limit'] as int? ?? 100;
+    final limit = arguments['limit'] as int? ?? 500;
     final selected = <Map<String, Object?>>[];
     var bytes = 0;
     for (final entry in entries.skip(offset).take(limit)) {
@@ -291,7 +321,7 @@ class ListFilesTool extends Tool {
 }
 
 WorkspaceFileAccess _access(ToolContext context) {
-  if (context.fileAccess != null) return context.fileAccess!;
+  if (context.fileAccess != null) return context.fileAccess!.forTools();
   if (context.workspaceDirectory.isEmpty) {
     throw const FileToolException('workspaceUnavailable', '本次运行的会话工作区不可用');
   }
@@ -315,11 +345,9 @@ String _relative(String path, {bool directory = false}) {
   if (relative.isEmpty ||
       relative.contains('\u0000') ||
       relative.contains('\\') ||
-      p.posix.isAbsolute(relative) ||
-      p.posix.split(relative).contains('..') ||
       (!directory &&
           (p.posix.normalize(relative) == '.' || relative.endsWith('/')))) {
-    throw const FileToolException('invalidPath', '路径不合法：请使用工作区内的相对路径');
+    throw const FileToolException('invalidPath', '路径不合法：请使用当前环境中的文件路径');
   }
   return p.posix.normalize(relative);
 }

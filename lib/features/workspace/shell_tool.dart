@@ -1,23 +1,22 @@
 import '../commands/command_channel_driver.dart';
 import '../commands/system_channel_tools.dart';
+import '../commands/command_output_collector.dart';
 import '../../../data/models/tool_call_record.dart';
 
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
-
-import 'package:path/path.dart' as p;
 
 import '../../../core/error/failure.dart';
 import '../../../data/models/tool_policy.dart';
 import '../../../data/models/workspace.dart';
 import '../tools/tool.dart';
+import '../tools/tool_output_limits.dart';
 import 'process_api.g.dart';
 import 'process_driver.dart';
 import 'workspace_files.dart';
 
 abstract final class ShellLimits {
-  static const previewBytes = 64 * 1024;
+  static const previewBytes = ToolOutputLimits.maxBytes;
   static const outputBytes = 8 * 1024 * 1024;
 }
 
@@ -46,13 +45,29 @@ class ShellTool extends Tool {
   @override
   String get description =>
       '在 ${workspace?.primaryEnvironment.label ?? 'Ubuntu'} 中执行 shell 命令，返回 stdout、stderr、退出码和产物。'
-      '默认目录：${workspace?.executionRoot ?? '当前会话目录'}。';
+      '支持当前环境中的绝对文件路径和绝对 cwd；默认目录：${workspace?.executionRoot ?? '当前会话目录'}。'
+      '输出预览保留最后 2000 行或 50 KiB，以先达到的上限为准；截断时已收完整输出保存为附件。'
+      'timeout 可指定秒级超时，默认没有命令总时限。';
+  @override
+  String get promptSnippet => '在当前环境执行 shell 命令';
+  @override
+  List<String> get promptGuidelines => const [
+    '文件查看、搜索、定位和局部修改优先使用 read_file、grep、find、list_files、edit_file；shell 用于执行程序或组合操作。',
+    'shell 支持当前环境绝对路径，cwd 仅影响本次命令；默认无超时，需要时设置 timeout（秒）。',
+    '命令预览保留尾部，完整输出附件使用 read_file 的 attachment:<ID> 按页读取。',
+    '模型结果带 sourceId 的进一步裁剪可用 read_history 续读原始记录，不重跑有副作用命令来取日志。',
+  ];
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
       'command': {'type': 'string', 'description': '完整 shell 命令'},
       'cwd': {'type': 'string', 'description': '所选环境中的绝对工作目录，默认当前会话工作区'},
+      'timeout': {
+        'type': 'number',
+        'exclusiveMinimum': 0,
+        'description': '超时秒数，可选；默认不设总时限',
+      },
     },
     'required': ['command'],
     'additionalProperties': false,
@@ -70,6 +85,14 @@ class ShellTool extends Tool {
       '${workspace?.primaryEnvironment.label ?? 'Ubuntu'} · ${workspace?.name ?? "会话工作区"}\n目录：${arguments['cwd'] ?? workspace?.executionRoot ?? '所属会话目录'}\n${arguments['command']}';
   @override
   String? validateArguments(Map<String, dynamic> arguments) {
+    final timeout = arguments['timeout'];
+    if (timeout != null &&
+        (timeout is! num ||
+            !timeout.isFinite ||
+            timeout <= 0 ||
+            timeout * 1000 > 2147483647)) {
+      return 'timeout 必须是有限的正数秒，最多 2147483.647 秒';
+    }
     final command = arguments['command'] as String? ?? '';
     final cwd = arguments['cwd'] as String?;
     return command.contains('\u0000') ||
@@ -218,18 +241,7 @@ class ShellTool extends Tool {
         errorCode: 'environmentMissing',
       );
     }
-    final previews = [BytesBuilder(copy: false), BytesBuilder(copy: false)];
-    final sizes = [0, 0];
-    final outputFiles = [
-      for (final stream in ['stdout', 'stderr'])
-        File(
-          p.join(
-            context.artifactsDirectory,
-            '${context.toolCallId}-$stream.txt',
-          ),
-        ),
-    ];
-    final handles = List<RandomAccessFile?>.filled(2, null);
+    final output = CommandOutputCollector(context);
     final artifacts = <String>[];
     LinuxProcessEvent? exit;
     LinuxProcess? process;
@@ -276,41 +288,12 @@ class ShellTool extends Tool {
           argv: ['-c', arguments['command'] as String],
           cwd: arguments['cwd'] as String? ?? binding.executionRoot,
           environment: {},
+          timeoutMs: arguments['timeout'] == null
+              ? null
+              : ((arguments['timeout'] as num) * 1000).ceil(),
           outputLimitBytes: ShellLimits.outputBytes,
         ),
-        (stderr, bytes) async {
-          final index = stderr ? 1 : 0;
-          final previousPreviewLength = previews[index].length;
-          final previewRemaining =
-              ShellLimits.previewBytes - previousPreviewLength;
-          sizes[index] += bytes.length;
-          if (previewRemaining > 0) {
-            previews[index].add(
-              bytes.sublist(0, bytes.length.clamp(0, previewRemaining)),
-            );
-          }
-          try {
-            // 普通输出只保留在结果里；超过预览上限才保存完整日志。
-            if (sizes[index] > ShellLimits.previewBytes) {
-              var handle = handles[index];
-              if (handle == null) {
-                await outputFiles[index].parent.create(recursive: true);
-                handle = await outputFiles[index].open(mode: FileMode.write);
-                handles[index] = handle;
-                await handle.writeFrom(previews[index].toBytes());
-                final overflowStart = previewRemaining.clamp(0, bytes.length);
-                if (overflowStart < bytes.length) {
-                  await handle.writeFrom(bytes.sublist(overflowStart));
-                }
-              } else {
-                await handle.writeFrom(bytes);
-              }
-            }
-          } on FileSystemException {
-            fileError = '命令输出文件保存失败';
-            rethrow;
-          }
-        },
+        output.add,
       );
       try {
         await process.closeInput();
@@ -322,20 +305,8 @@ class ShellTool extends Tool {
         }
       }
       exit = await waitForProcess(process, cancellation);
-      for (var i = 0; i < handles.length; i++) {
-        await handles[i]?.close();
-        handles[i] = null;
-      }
-      // Output/known file effects survive a stop. This does not rerun the command.
-      for (var i = 0; i < 2; i++) {
-        if (sizes[i] <= ShellLimits.previewBytes) continue;
-        final attachment = await context.storage.registerArtifact(
-          conversationId: context.conversationId,
-          path: outputFiles[i].path,
-          name: p.basename(outputFiles[i].path),
-        );
-        artifacts.add(attachment.id);
-      }
+      await output.finish();
+      artifacts.addAll(output.artifacts);
       if (before != null) {
         final after = await collectOutputs();
         if (after != null) {
@@ -367,8 +338,10 @@ class ShellTool extends Tool {
           fileError ??= '命令停止未收到完整回执，已有输出保留';
         }
       }
-      for (final handle in handles) {
-        await handle?.close();
+      try {
+        await output.close();
+      } on CommandChannelFailure catch (error) {
+        fileError ??= error.userMessage;
       }
     }
     final stopped = exit?.cancelled == true || cancellation.isCancelled;
@@ -389,11 +362,7 @@ class ShellTool extends Tool {
       'cancelled': stopped,
       'timedOut': exit?.timedOut ?? false,
       'outputLimitExceeded': exit?.outputLimitExceeded ?? false,
-      'stdout': utf8.decode(previews[0].takeBytes(), allowMalformed: true),
-      'stderr': utf8.decode(previews[1].takeBytes(), allowMalformed: true),
-      'stdoutBytes': sizes[0],
-      'stderrBytes': sizes[1],
-      'previewTruncated': sizes.any((s) => s > ShellLimits.previewBytes),
+      ...output.result,
       'artifactIds': artifacts,
       'importedFiles': imported,
       'warning': ?artifactWarning,

@@ -14,7 +14,7 @@ Ubuntu / Termux 在环境设置中全局单选；新会话首次发送绑定已�
 
 ## 通用命令与文件
 
-- `shell(command, cwd?)` 仅派发至会话固定的 Ubuntu/Termux；不提供后端参数，也不并列注入 `termux_shell`。`install_packages` 仅在 Ubuntu 就绪时开放。每次独立非交互执行，不加载 rc，不保留变量与 cd，不设命令总时限。
+- `shell(command, cwd?, timeout?)` 仅派发至会话固定的 Ubuntu/Termux；不提供后端参数，也不并列注入 `termux_shell`。`install_packages` 仅在 Ubuntu 就绪时开放。每次独立非交互执行，不加载 rc，不保留变量与 cd；可指定 timeout 秒数，默认不设命令总时限。grep/find 使用同环境的已有 rg，按只读工具执行。
 - Termux 使用真实应用 UID、固定 Bash、默认 `HOME/.phase/workspaces/<session_id>`；不是 Ubuntu 会话目录，没有路径级强隔离承诺。环境未就绪不自动切换、不阻塞普通聊天。
 - `termux_transfer(path, remotePath, direction)` 显式导入/导出文件或目录。`path` 是当前会话工作区相对路径，`remotePath` 是 Termux 身份下的绝对路径；导出附件可使用 `attachment:<ID>`，先按已有契约落入工作区。
 - 不注册 `shizuku_shell` / `shizuku_transfer`，原生命令及传输入口同样拒绝 Shizuku；旧命令 UserService 与 AIDL 已移除，不留下可通过原生桥调用的通用入口。
@@ -56,8 +56,8 @@ Ubuntu / Termux 在环境设置中全局单选；新会话首次发送绑定已�
 
 `WorkspaceFileAccess` 统一本地与 Termux 文件访问，普通文件工具、文件页、Skill 副本和 shell 使用同一绑定。附件原件、抽取文本、Skill 安装库及历史产物由相月保存，预览按需生成临时副本；MCP stdio 固定 Ubuntu 服务专属目录，不随主环境变化。
 
-- `WorkspaceFileRequest` 只接受宿主定义操作、工作区 ID 和相对路径；runner 直接 exec 类型化 helper，不依赖模型 shell 文本或 Python/Node。大文件走有鉴权短命字节通道，不能用 Intent 承载完整内容。
-- 保持完整行分页（2000 行 / 16 KiB）、2 MiB 写入与编辑、空内容覆盖和原文唯一匹配。编辑由宿主计算替换，提交前比较摘要再原子替换；不把摘要变成 AI 参数。Termux helper 拒绝链接路径，但不隔离同 UID 任意脚本。
+- `WorkspaceFileRequest` 接受宿主定义操作、工作区 ID 和路径；宿主工具视图用内部 `environmentPaths` 标记开放当前 Termux 环境绝对路径，生命周期、删除与跨环境复制仍只用相对路径。runner 直接 exec 类型化 helper，不依赖模型 shell 文本或 Python/Node。大文件走有鉴权短命字节通道，不能用 Intent 承载完整内容。
+- 完整行分页为 2000 行 / 50 KiB，保持 2 MiB 写入与编辑、空内容覆盖和原文唯一匹配。编辑由宿主计算替换，提交前比较摘要与目标路径再原子替换；不把摘要变成 AI 参数。Termux 工具绝对路径跟随当前身份可访问的链接，工作区生命周期及传输仍拒绝链接，不隔离同 UID 任意脚本。
 - 计划档只执行类型化读取和列目录，不能初始化 helper、准备 Skill 或安装依赖。首次写入前记录目录归属，每次核对授权与身份。
 - `workspace_transfer(path, direction=to_other|from_other)` 与文件菜单仅在两个托管目录的同一相对路径显式复制：同名覆盖、目录合并、保留目标额外文件。部分失败回填已收到的提交项，不自动重试或回滚已提交文件。
 - 复制会话复制两侧已创建目录；删除清理两侧托管文件，Termux 不可达或清理失败保留重试。任意外部导出目标不随会话删除。
@@ -68,7 +68,7 @@ Ubuntu / Termux 在环境设置中全局单选；新会话首次发送绑定已�
 
 Termux 使用显式 RUN_COMMAND、non-exported receiver 和 one-shot mutable PendingIntent。用户自行安装、授权与开启 allow-external-apps；初始化只部署并校验版本化原生 runner，不安装 Python/Node、不修改 rc。回调校验注册 ID、result bundle 与截断长度；大输出保存于 Termux 私有目录，16 KiB 以内分块读取。
 
-`tool/native/command_runner.cpp` 保留独立会话/进程组、subreaper、父死亡信号和真实 wait 状态。30 秒本地租约由活跃控制轮询续租；失联期限不是无输出超时。TERM 后 800 ms 转 KILL，回收受管理后代与 FD；不按旧 PID 盲杀，不保证清理任意逃逸进程。stdout/stderr 各预览 64 KiB、合计 8 MiB 达限停止；仅超出预览时登记完整日志。没有终止回执不宣称已停止，重启不恢复句柄或重放命令。
+`tool/native/command_runner.cpp` 保留独立会话/进程组、subreaper、父死亡信号和真实 wait 状态。30 秒本地租约由活跃控制轮询续租；失联期限不是无输出超时。TERM 后 800 ms 转 KILL，回收受管理后代与 FD；不按旧 PID 盲杀，不保证清理任意逃逸进程。命令模型预览使用尾部 2000 行 / 50 KiB，底层仍在 stdout/stderr 合计 8 MiB 时停止；超出预览时登记已收完整日志。可选 timeout 到期取消当前调用并返回超时状态，不取消整轮或换通道重发。没有终止回执不宣称已停止，重启不恢复句柄或重放命令。
 
 递归传输仅监听 `127.0.0.1` 的短命 socket，随机 256-bit 令牌只准入本次操作，不进入模型、记录或日志。端点不接受请求方选择相月任意路径。wire format 保持网络字节序：项数 u32；逐项 type u8、UTF-8 路径长度 u32/字节、大小 u64，随后文件字节和 32-byte SHA-256，ready/commit/成功回执。
 

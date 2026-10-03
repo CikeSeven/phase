@@ -523,6 +523,7 @@ class WorkspaceFileRequest {
     this.limit = 2000,
     this.localPath,
     this.expectedDigest,
+    this.environmentPaths = false,
   });
 
   String ownerId;
@@ -547,6 +548,8 @@ class WorkspaceFileRequest {
 
   String? expectedDigest;
 
+  bool environmentPaths;
+
   List<Object?> _toList() {
     return <Object?>[
       ownerId,
@@ -560,6 +563,7 @@ class WorkspaceFileRequest {
       limit,
       localPath,
       expectedDigest,
+      environmentPaths,
     ];
   }
 
@@ -581,6 +585,7 @@ class WorkspaceFileRequest {
       limit: result[8]! as int,
       localPath: result[9] as String?,
       expectedDigest: result[10] as String?,
+      environmentPaths: result[11]! as bool,
     );
   }
 
@@ -603,7 +608,8 @@ class WorkspaceFileRequest {
         _deepEquals(offset, other.offset) &&
         _deepEquals(limit, other.limit) &&
         _deepEquals(localPath, other.localPath) &&
-        _deepEquals(expectedDigest, other.expectedDigest);
+        _deepEquals(expectedDigest, other.expectedDigest) &&
+        _deepEquals(environmentPaths, other.environmentPaths);
   }
 
   @override
@@ -612,7 +618,7 @@ class WorkspaceFileRequest {
 
   @override
   String toString() {
-    return 'WorkspaceFileRequest(ownerId: $ownerId, callId: $callId, workspaceId: $workspaceId, revision: $revision, uid: $uid, operation: $operation, path: $path, offset: $offset, limit: $limit, localPath: $localPath, expectedDigest: $expectedDigest)';
+    return 'WorkspaceFileRequest(ownerId: $ownerId, callId: $callId, workspaceId: $workspaceId, revision: $revision, uid: $uid, operation: $operation, path: $path, offset: $offset, limit: $limit, localPath: $localPath, expectedDigest: $expectedDigest, environmentPaths: $environmentPaths)';
   }
 }
 

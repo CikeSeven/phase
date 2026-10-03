@@ -29,7 +29,8 @@ class HttpRequestTool extends Tool {
   String get description =>
       '发起 HTTP 请求并返回响应文本。'
       '不要在 url、headers 或 body 里放密钥或用户隐私（会被记录）。'
-      '响应正文超过 ${_maxBytesLabel}KB 会被截断。';
+      '响应正文最多保留 $_maxBytesLabel KiB；模型结果预览最多 50 KiB，'
+      '预览截断后可用 sourceId 调用 read_history 续读已保存结果。';
 
   String get _maxBytesLabel => '${maxBytes ~/ 1024}';
 

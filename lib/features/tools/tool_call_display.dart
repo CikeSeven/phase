@@ -63,6 +63,8 @@ class ToolCallDisplay {
       'edit_file' ||
       'read_file' => args['path'] is String ? args['path'] as String : null,
       'list_files' => args['path'] is String ? args['path'] as String : '.',
+      'grep' ||
+      'find' => args['pattern'] is String ? args['pattern'] as String : null,
       'read_skill' =>
         '${args['skillId']} / ${args['relativePath'] ?? 'SKILL.md'}',
       'prepare_skill' =>
@@ -106,7 +108,10 @@ class ToolCallDisplay {
         case 'shell':
         case 'termux_shell':
           if (args['command'] case final String command) {
-            final metadata = [if (args['cwd'] case final String cwd) cwd];
+            final metadata = [
+              if (args['cwd'] case final String cwd) cwd,
+              if (args['timeout'] case final num seconds) '超时 ${seconds}s',
+            ];
             return ToolCallDisplay(
               call: '\$ $command',
               metadata: metadata.isEmpty ? null : metadata.join(' · '),
@@ -155,6 +160,23 @@ class ToolCallDisplay {
         case 'read_skill':
         case 'prepare_skill':
           return ToolCallDisplay(output: output);
+        case 'grep':
+        case 'find':
+          return ToolCallDisplay(
+            metadata: [
+              args['path'] is String ? args['path'] as String : '.',
+              if (args['glob'] case final String glob) glob,
+              if (args['ignoreCase'] == true) '忽略大小写',
+              if (args['literal'] == true) '字面匹配',
+              if (args['context'] case final int context) '前后文 $context 行',
+              if (args['limit'] case final int limit) '最多 $limit 项',
+            ].join(' · '),
+            copyText: args['pattern'] is String
+                ? args['pattern'] as String
+                : null,
+            copyLabel: '复制搜索模式',
+            output: output,
+          );
         case 'http_request':
           final body = args['body'];
           return ToolCallDisplay(

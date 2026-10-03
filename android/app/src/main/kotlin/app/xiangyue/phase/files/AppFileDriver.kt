@@ -52,14 +52,14 @@ class AppFileDriver(private val context: Context) {
                 ExecutionAction.LIST_FILES -> {
                     require(Docs.isTreeUri(root))
                     val offset = (request.arguments["offset"] as? Number)?.toInt() ?: 0
-                    val limit = (request.arguments["limit"] as? Number)?.toInt() ?: 100
-                    require(offset >= 0 && limit in 1..200)
+                    val limit = (request.arguments["limit"] as? Number)?.toInt() ?: 500
+                    require(offset >= 0 && limit >= 1)
                     val children = children(root, signal).sortedBy { it["name"] as String }
                     val page = mutableListOf<Map<String, Any?>>()
                     var pageBytes = 0
                     for (child in children.drop(offset).take(limit)) {
                         val size = (child["path"].toString() + child["name"].toString()).toByteArray(Charsets.UTF_8).size
-                        if (page.isNotEmpty() && pageBytes + size > 16 * 1024) break
+                        if (page.isNotEmpty() && pageBytes + size > 50 * 1024) break
                         page.add(child)
                         pageBytes += size
                     }

@@ -23,6 +23,31 @@ static string ws_path(const string &root, const string &relative) {
   }
   return path;
 }
+static string ws_environment_path(const string &absolute) {
+  require(!absolute.empty() && absolute[0] == '/' &&
+      absolute.find('\0') == string::npos && absolute.find('\\') == string::npos,
+      "invalidPath");
+  string path = "/";
+  size_t start = 1;
+  while (start <= absolute.size()) {
+    auto end = absolute.find('/', start);
+    string part = absolute.substr(start, end == string::npos ? end : end - start);
+    require(part != "..", "invalidPath");
+    if (!part.empty() && part != ".") {
+      if (path != "/") path += '/';
+      path += part;
+      struct stat st{};
+      if (lstat(path.c_str(), &st) == 0) {
+        char resolved[PATH_MAX];
+        require(realpath(path.c_str(), resolved) != nullptr, "fileUnavailable");
+        path = resolved;
+      } else require(errno == ENOENT, "fileUnavailable");
+    }
+    if (end == string::npos) break;
+    start = end + 1;
+  }
+  return path;
+}
 static void ws_mkdir(const string &path) {
   if (exists(path)) {
     struct stat s{};
@@ -79,7 +104,7 @@ static string ws_page(const string &path, int64_t offset, int64_t limit) {
   bool more = false, finished = false;
   auto accept = [&]() {
     if (line < offset) return true;
-    if (count >= limit || body.size() + current.size() + (count ? 1 : 0) > 16384) return false;
+    if (count >= limit || body.size() + current.size() + (count ? 1 : 0) > 50 * 1024) return false;
     require(current.find('\0') == string::npos, "notText");
     if (!current.empty() && current.back() == '\r') current.pop_back();
     if (count++) body += '\n';
@@ -94,7 +119,7 @@ static string ws_page(const string &path, int64_t offset, int64_t limit) {
         ++line;
       } else if (line >= offset) {
         if (count == limit) { more = finished = true; break; }
-        if (body.size() + current.size() + (count ? 1 : 0) + 1 > 16384) {
+        if (body.size() + current.size() + (count ? 1 : 0) + 1 > 50 * 1024) {
           require(count > 0, "lineTooLong"); more = finished = true; break;
         }
         current += bytes[i];
@@ -108,10 +133,14 @@ static string ws_page(const string &path, int64_t offset, int64_t limit) {
       ",\"hasMore\":" + (more ? "true" : "false") + "}";
 }
 static string workspace_operation(int argc, char **v) {
-  require(argc == 10 && id_ok(v[3]), "invalidArguments");
+  require(argc == 11 && id_ok(v[3]), "invalidArguments");
   string base = v[2], root = base + "/" + v[3], op = v[4];
   require(base == "/data/data/com.termux/files/home/.phase/workspaces", "invalidPath");
-  string path = ws_path(root, v[5]);
+  require(string(v[10]) == "0" || string(v[10]) == "1", "invalidArguments");
+  bool environment_paths = string(v[10]) == "1";
+  require(!environment_paths || (op != "ensure" && op != "deleteRoot" && op != "stage" && op != "discard"), "invalidArguments");
+  auto target_path = [&]() { return environment_paths ? ws_environment_path(v[5]) : ws_path(root, v[5]); };
+  string path = target_path();
   const string stage_root = base + "/.staging/" + v[3];
   if (op == "ensure") { ws_mkdir(path); return "{\"version\":1,\"ok\":true}"; }
   if (op == "stage") {
@@ -138,7 +167,7 @@ static string workspace_operation(int argc, char **v) {
           current.st_size <= 2 * 1024 * 1024 && file_digest(path) == expected, "fileChanged");
     }
     ws_mkdir(path.substr(0, path.rfind('/')));
-    ws_path(root, v[5]);
+    require(target_path() == path, "fileChanged");
     require(rename(stage.c_str(), path.c_str()) == 0, "commitFailed");
     return "{\"version\":1,\"ok\":true}";
   }

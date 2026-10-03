@@ -70,6 +70,10 @@ class ScopedFileTool extends Tool {
   @override
   String get name => local.name;
   @override
+  String? get promptSnippet => local.promptSnippet;
+  @override
+  List<String> get promptGuidelines => local.promptGuidelines;
+  @override
   String get description =>
       '${local.description} 外部文件的 path 使用授权的 content:// URI。'
       '${name == 'write_file' ? '外部单次写入上限 128 KiB。' : ''}';
@@ -78,6 +82,13 @@ class ScopedFileTool extends Tool {
     ...local.inputSchema,
     'properties': {
       ...Map<String, dynamic>.from(local.inputSchema['properties'] as Map),
+      'path': {
+        ...Map<String, dynamic>.from(
+          (local.inputSchema['properties'] as Map)['path'] as Map,
+        ),
+        'description':
+            '${((local.inputSchema['properties'] as Map)['path'] as Map)['description']} 外部文件使用已授权的 content:// URI。',
+      },
       if (name == 'write_file')
         'directory': {
           'type': 'string',

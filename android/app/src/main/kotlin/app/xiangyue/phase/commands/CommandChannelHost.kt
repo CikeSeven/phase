@@ -176,16 +176,20 @@ class CommandChannelHost(
     override suspend fun workspaceFile(request: WorkspaceFileRequest) {
         validate(request.ownerId, request.callId, "termux", request.revision, request.uid)
         require(idPattern.matches(request.workspaceId))
-        require(request.path.isNotBlank() && !request.path.startsWith('/') &&
+        require(request.path.isNotBlank() && (request.environmentPaths || !request.path.startsWith('/')) &&
             request.path.split('/').none { it == ".." } && '\u0000' !in request.path && '\\' !in request.path)
+        if (request.environmentPaths) {
+            require(request.path.startsWith('/') && request.operation !in setOf(WorkspaceFileOperation.ENSURE, WorkspaceFileOperation.DELETE_ROOT))
+        }
         require(request.offset >= 0 && request.limit in 1..2000)
         val base = "${TermuxTransport.HOME}/.phase/workspaces"
         val root = "$base/${request.workspaceId}"
         val relative = request.path.split('/').filter { it.isNotEmpty() && it != "." }.joinToString("/")
-        val workspacePath = if (relative.isEmpty()) root else "$root/$relative"
+        val workspacePath = if (request.environmentPaths) request.path else if (relative.isEmpty()) root else "$root/$relative"
         fun args(operation: String, path: String = request.path) = listOf(
             "workspace", base, request.workspaceId, operation, path,
-            request.offset.toString(), request.limit.toString(), request.callId, request.expectedDigest ?: "")
+            request.offset.toString(), request.limit.toString(), request.callId, request.expectedDigest ?: "",
+            if (request.environmentPaths && operation !in setOf("stage", "ensure", "discard")) "1" else "0")
         register(request.ownerId, request.callId, "termux") { op ->
             workspaceLock.withLock {
                 op.check()

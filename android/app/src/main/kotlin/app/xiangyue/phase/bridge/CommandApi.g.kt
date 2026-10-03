@@ -530,7 +530,8 @@ data class WorkspaceFileRequest (
   val offset: Long,
   val limit: Long,
   val localPath: String? = null,
-  val expectedDigest: String? = null
+  val expectedDigest: String? = null,
+  val environmentPaths: Boolean
 )
  {
   companion object {
@@ -546,7 +547,8 @@ data class WorkspaceFileRequest (
       val limit = pigeonVar_list[8] as Long
       val localPath = pigeonVar_list[9] as String?
       val expectedDigest = pigeonVar_list[10] as String?
-      return WorkspaceFileRequest(ownerId, callId, workspaceId, revision, uid, operation, path, offset, limit, localPath, expectedDigest)
+      val environmentPaths = pigeonVar_list[11] as Boolean
+      return WorkspaceFileRequest(ownerId, callId, workspaceId, revision, uid, operation, path, offset, limit, localPath, expectedDigest, environmentPaths)
     }
   }
   fun toList(): List<Any?> {
@@ -562,6 +564,7 @@ data class WorkspaceFileRequest (
       limit,
       localPath,
       expectedDigest,
+      environmentPaths,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -572,7 +575,7 @@ data class WorkspaceFileRequest (
       return true
     }
     val other = other as WorkspaceFileRequest
-    return CommandApiPigeonUtils.deepEquals(this.ownerId, other.ownerId) && CommandApiPigeonUtils.deepEquals(this.callId, other.callId) && CommandApiPigeonUtils.deepEquals(this.workspaceId, other.workspaceId) && CommandApiPigeonUtils.deepEquals(this.revision, other.revision) && CommandApiPigeonUtils.deepEquals(this.uid, other.uid) && CommandApiPigeonUtils.deepEquals(this.operation, other.operation) && CommandApiPigeonUtils.deepEquals(this.path, other.path) && CommandApiPigeonUtils.deepEquals(this.offset, other.offset) && CommandApiPigeonUtils.deepEquals(this.limit, other.limit) && CommandApiPigeonUtils.deepEquals(this.localPath, other.localPath) && CommandApiPigeonUtils.deepEquals(this.expectedDigest, other.expectedDigest)
+    return CommandApiPigeonUtils.deepEquals(this.ownerId, other.ownerId) && CommandApiPigeonUtils.deepEquals(this.callId, other.callId) && CommandApiPigeonUtils.deepEquals(this.workspaceId, other.workspaceId) && CommandApiPigeonUtils.deepEquals(this.revision, other.revision) && CommandApiPigeonUtils.deepEquals(this.uid, other.uid) && CommandApiPigeonUtils.deepEquals(this.operation, other.operation) && CommandApiPigeonUtils.deepEquals(this.path, other.path) && CommandApiPigeonUtils.deepEquals(this.offset, other.offset) && CommandApiPigeonUtils.deepEquals(this.limit, other.limit) && CommandApiPigeonUtils.deepEquals(this.localPath, other.localPath) && CommandApiPigeonUtils.deepEquals(this.expectedDigest, other.expectedDigest) && CommandApiPigeonUtils.deepEquals(this.environmentPaths, other.environmentPaths)
   }
 
   override fun hashCode(): Int {
@@ -588,10 +591,11 @@ data class WorkspaceFileRequest (
     result = 31 * result + CommandApiPigeonUtils.deepHash(this.limit)
     result = 31 * result + CommandApiPigeonUtils.deepHash(this.localPath)
     result = 31 * result + CommandApiPigeonUtils.deepHash(this.expectedDigest)
+    result = 31 * result + CommandApiPigeonUtils.deepHash(this.environmentPaths)
     return result
   }
   override fun toString(): String {
-    return "WorkspaceFileRequest(ownerId=$ownerId, callId=$callId, workspaceId=$workspaceId, revision=$revision, uid=$uid, operation=$operation, path=$path, offset=$offset, limit=$limit, localPath=$localPath, expectedDigest=$expectedDigest)"
+    return "WorkspaceFileRequest(ownerId=$ownerId, callId=$callId, workspaceId=$workspaceId, revision=$revision, uid=$uid, operation=$operation, path=$path, offset=$offset, limit=$limit, localPath=$localPath, expectedDigest=$expectedDigest, environmentPaths=$environmentPaths)"
   }
 }
 private open class CommandApiPigeonCodec : StandardMessageCodec() {

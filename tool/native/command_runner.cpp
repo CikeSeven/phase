@@ -7,11 +7,13 @@
 #include <chrono>
 #include <csignal>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
 #include <fstream>
 #include <iostream>
+#include <limits.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <stdexcept>
@@ -191,7 +193,7 @@ static int run_job(const string &job) {
         helper_args.push_back(encoded.substr(start, end - start));
         start = end + 1;
       }
-      require(helper_args.size() == 9 && helper_args[0] == "workspace", "invalidArguments");
+      require(helper_args.size() == 10 && helper_args[0] == "workspace", "invalidArguments");
     }
     int64_t limit = std::stoll(read_file(job + "/limit"));
     require(limit > 0 && limit <= 64 * 1024 * 1024, "invalidLimit");
@@ -405,7 +407,7 @@ int main(int argc, char **v) {
     require(argc >= 5, "invalidArguments");
     auto job = job_path(v);
     if (op == "prepare" || op == "prepare_workspace") {
-      require(argc == (op == "prepare" ? 11 : 20), "invalidArguments");
+      require(argc == (op == "prepare" ? 11 : 21), "invalidArguments");
       directory(v[2]);
       require(mkdir(job.c_str(), 0700) == 0, "alreadyPrepared");
       atomic_file(job + "/token", v[4]);

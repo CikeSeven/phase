@@ -2,9 +2,10 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'tool.dart';
+import 'tool_output_limits.dart';
 
-const maxFileReadBytes = 16 * 1024;
-const maxFileReadLines = 2000;
+const maxFileReadBytes = ToolOutputLimits.maxBytes;
+const maxFileReadLines = ToolOutputLimits.maxLines;
 const maxFileWriteBytes = 2 * 1024 * 1024;
 
 class FileToolException implements Exception {

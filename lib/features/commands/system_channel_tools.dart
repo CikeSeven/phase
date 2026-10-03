@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
@@ -50,13 +51,20 @@ class ExternalShellTool extends SystemChannelTool {
   @override
   String get description =>
       '以 $channelName 身份（UID ${binding.uid}）执行命令，返回 stdout、stderr 和退出结果。'
-      '默认目录：${binding.home}。';
+      '默认目录：${binding.home}；支持此环境中的绝对路径。'
+      '保留最后 2000 行或 50 KiB 输出，截断时已收完整输出保存为附件。'
+      '可设置 timeout 秒数，默认不设总时限。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',
     'properties': {
       'command': {'type': 'string', 'description': '完整命令'},
       'cwd': {'type': 'string', 'description': '此通道内的绝对工作目录'},
+      'timeout': {
+        'type': 'number',
+        'exclusiveMinimum': 0,
+        'description': '可选超时秒数，默认不设总时限',
+      },
     },
     'required': ['command'],
     'additionalProperties': false,
@@ -73,7 +81,7 @@ class ExternalShellTool extends SystemChannelTool {
             !cwd.startsWith('/') ||
             cwd.contains('\u0000')
         ? '命令或工作目录无效'
-        : null;
+        : const ShellTool().validateArguments(arguments);
   }
 
   @override
@@ -87,6 +95,8 @@ class ExternalShellTool extends SystemChannelTool {
     CommandOperation? operation;
     ExternalCommandEvent? exit;
     String? error;
+    Timer? timeoutTimer;
+    var timedOut = false;
     try {
       cancellation.throwIfCancelled();
       operation = await driver.start(
@@ -102,7 +112,23 @@ class ExternalShellTool extends SystemChannelTool {
         ),
         output.add,
       );
-      exit = await operation.wait(cancellation);
+      final timeout = Completer<void>();
+      if (arguments['timeout'] case final num seconds) {
+        timeoutTimer = Timer(
+          Duration(milliseconds: (seconds * 1000).ceil()),
+          () => timeout.complete(),
+        );
+      }
+      final reason = await Future.any<int>([
+        operation.done.future.then((_) => 0),
+        cancellation.whenCancelled.then((_) => 1),
+        timeout.future.then((_) => 2),
+      ]);
+      if (reason != 0) {
+        timedOut = reason == 2;
+        await driver.cancel(context.runId, context.toolCallId);
+      }
+      exit = await operation.done.future;
       await output.finish();
     } on StorageFailure {
       rethrow;
@@ -111,6 +137,7 @@ class ExternalShellTool extends SystemChannelTool {
     } on Failure catch (failure) {
       error = failure.userMessage;
     } finally {
+      timeoutTimer?.cancel();
       if (operation != null && exit == null) {
         await driver.cancel(context.runId, context.toolCallId);
       }
@@ -120,7 +147,8 @@ class ExternalShellTool extends SystemChannelTool {
         error ??= failure.userMessage;
       }
     }
-    final cancelled = cancellation.isCancelled || exit?.cancelled == true;
+    final cancelled =
+        cancellation.isCancelled || (exit?.cancelled == true && !timedOut);
     final successful =
         exit?.terminationAcknowledged == true &&
         exit?.exitCode == 0 &&
@@ -128,6 +156,7 @@ class ExternalShellTool extends SystemChannelTool {
         exit?.error == null &&
         exit?.outputLimitExceeded != true &&
         error == null &&
+        !timedOut &&
         !cancelled;
     return ToolOutcome(
       ok: successful,
@@ -137,6 +166,8 @@ class ExternalShellTool extends SystemChannelTool {
           ? null
           : cancelled
           ? 'cancelled'
+          : timedOut
+          ? 'timeout'
           : 'commandFailed',
       content: jsonEncode({
         'channel': channel.name,
@@ -146,6 +177,7 @@ class ExternalShellTool extends SystemChannelTool {
         'exitCode': exit?.exitCode,
         'signal': exit?.signal,
         'cancelled': cancelled,
+        'timedOut': timedOut,
         'terminationAcknowledged': exit?.terminationAcknowledged ?? false,
         'outputLimitExceeded': exit?.outputLimitExceeded ?? false,
         'outputIncomplete': exit?.error == 'outputStopped',

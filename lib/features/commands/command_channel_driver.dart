@@ -298,9 +298,9 @@ class CommandChannelDriver implements CommandChannelFlutterApi {
 
 String commandErrorText(String code) => switch (code) {
   'fileChanged' => '文件在编辑期间已改变，请重新读取后编辑',
-  'lineTooLong' => '文件单行超过 16 KiB，请用 shell 提取片段',
+  'lineTooLong' => '文件单行超过 50 KiB，请用 shell 提取片段',
   'offsetOutOfRange' => '起始行超过文件结尾',
-  'invalidPath' => '路径越出工作区或包含不支持的链接',
+  'invalidPath' => '文件路径无效或包含不支持的链接',
   'notText' => '文件不是可读取的 UTF-8 文本',
   'directoryLimit' => '目录条目超过读取上限',
   'fileOperationFailed' => '文件操作连接中断，未收到完整结果',

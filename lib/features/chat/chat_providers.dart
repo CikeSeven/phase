@@ -37,7 +37,7 @@ import 'conversation_providers.dart';
 import 'model_retry.dart';
 part 'chat_providers.g.dart';
 
-/// 内置工具集：文件工具只访问应用私有目录，HTTP 工具走独立的 Dio 实例。
+/// 内置工具集：文件路径由当前环境或授权 URI 解释，HTTP 走独立 Dio 实例。
 ///
 /// 单独开注入点是为了让测试能替换工具集（记录调用的假工具、替代网络实现），
 /// 与 [aiProviderFactoryProvider] 同样的理由。

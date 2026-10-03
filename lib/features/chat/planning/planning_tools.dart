@@ -5,6 +5,7 @@ import '../../../../data/models/tool_policy.dart';
 import '../../../../data/repositories/plan_repository.dart';
 import '../../tools/tool.dart';
 import '../../tools/file_tools.dart';
+import '../../tools/search_tools.dart';
 import '../../execution/platform_tools.dart';
 import '../../execution/execution_api.g.dart';
 import '../../skills/read_skill_tool.dart';
@@ -15,6 +16,7 @@ bool allowedInPlan(Tool tool) =>
     tool is SystemInfoTool ||
     tool is ReadFileTool ||
     tool is ListFilesTool ||
+    tool is WorkspaceSearchTool ||
     tool is ReadSkillTool ||
     tool is ReadHistoryTool ||
     tool is SubmitPlanTool ||

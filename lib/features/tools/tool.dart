@@ -57,10 +57,10 @@ class ToolContext {
 
   final ToolStorage storage;
 
-  /// 当前会话的附件；本地文件路径以会话独立工作区为根目录。
+  /// 当前会话的附件；原件引用独立于环境中的文件路径。
   final List<Attachment> attachments;
 
-  /// 当前会话允许读写的应用私有工作区根目录。
+  /// 当前会话的宿主目录；环境路径由 fileAccess 的工具视图解释。
   final String workspaceDirectory;
   final WorkspaceFileAccess? fileAccess;
 
@@ -134,6 +134,8 @@ abstract class Tool {
     description: description,
     inputSchema: inputSchema,
     source: source,
+    promptSnippet: promptSnippet,
+    promptGuidelines: promptGuidelines,
   );
 
   bool usesPlatform(Map<String, dynamic> arguments) =>
@@ -141,6 +143,8 @@ abstract class Tool {
 
   String get name;
   String get description;
+  String? get promptSnippet => null;
+  List<String> get promptGuidelines => const [];
 
   /// JSON Schema 形式的参数定义。
   Map<String, dynamic> get inputSchema;

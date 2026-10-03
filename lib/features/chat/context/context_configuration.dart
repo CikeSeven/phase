@@ -29,6 +29,7 @@ List<RuntimeContextPart> contextRuntimeParts(RunConfiguration config) {
         '$text\n</phase_runtime_context>',
   );
   return [
+    section('tools', toolUsagePrompt(config)),
     section('permissions', switch (config.mode) {
       PermissionMode.plan => planModePrompt,
       PermissionMode.basic =>
@@ -59,6 +60,24 @@ List<RuntimeContextPart> contextRuntimeParts(RunConfiguration config) {
             ),
     ),
   ];
+}
+
+String toolUsagePrompt(RunConfiguration config) {
+  final tools = [
+    for (final tool in config.toolSnapshots)
+      if (config.enabledTools.contains(tool.name)) tool,
+  ]..sort((a, b) => a.name.compareTo(b.name));
+  final snippets = [
+    for (final tool in tools)
+      if (tool.promptSnippet case final snippet?) '- ${tool.name}: $snippet',
+  ];
+  final guidelines = {for (final tool in tools) ...tool.promptGuidelines};
+  return [
+    '工具用途（可见不代表当前模式允许执行）：',
+    ...snippets,
+    if (guidelines.isNotEmpty) '\n使用指导：',
+    for (final guideline in guidelines) '- $guideline',
+  ].join('\n');
 }
 
 /// 空闲预览只投影尚未发送的状态；真正请求前才在分支末尾持久化。

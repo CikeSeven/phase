@@ -40,15 +40,17 @@ import '../../tools/tool.dart';
 import '../../tools/tool_executor.dart';
 import '../../tools/tool_permission_policy.dart';
 import '../../tools/tool_presentation.dart';
+import '../../tools/search_tools.dart';
 import '../../workspace/install_tool.dart';
 import '../../workspace/prepare_skill_tool.dart';
 import '../../workspace/process_driver.dart';
 import '../../workspace/shell_tool.dart';
 import '../../workspace/workspace_files.dart';
 import '../../workspace/workspace_transfer_tool.dart';
+import '../../workspace/workspace_search.dart';
 import '../../../data/models/chat_request.dart';
 
-const _environmentTools = {'shell', 'install_packages'};
+const _environmentTools = {'shell', 'install_packages', 'grep', 'find'};
 
 bool workspaceToolAvailable(String name, WorkspaceSnapshot? workspace) =>
     name == 'install_packages'
@@ -195,7 +197,12 @@ class ChatToolRuntimeFactory {
         ),
       if (supportsTools) ..._channelTools(channels, workspace, workspaces),
       for (final tool in builtIns.tools)
-        if (tool is ShellTool) ShellTool(workspace: workspace) else tool,
+        if (tool is ShellTool)
+          ShellTool(workspace: workspace)
+        else if (tool is WorkspaceSearchTool)
+          WorkspaceSearchTool(findFiles: tool.findFiles, workspace: workspace)
+        else
+          tool,
       ?skill,
       if (skill != null && workspace?.executable == true)
         PrepareSkillTool(skill, workspace!, WorkspaceFiles(workspaces!)),
@@ -298,6 +305,13 @@ class ChatToolRuntimeFactory {
           files: files,
           commandDriver: commandDriver,
         ),
+      if (binding?.executable == true)
+        for (final findFiles in [false, true])
+          WorkspaceSearchTool(
+            findFiles: findFiles,
+            workspace: binding,
+            search: WorkspaceSearch(binding!, processDriver, commandDriver),
+          ),
       if (binding?.primaryEnvironment == PrimaryEnvironment.ubuntu &&
           binding?.linuxAvailable == true)
         InstallTool(
@@ -369,6 +383,7 @@ class ChatToolRuntimeFactory {
           ),
         );
         if (tool is ShellTool ||
+            tool is WorkspaceSearchTool ||
             tool is SystemChannelTool ||
             tool is ShizukuDisplayTool) {
           await processDriver!.beginTask(
@@ -377,6 +392,8 @@ class ChatToolRuntimeFactory {
                 ? '虚拟屏控制'
                 : tool is ShellTool
                 ? '工作区命令'
+                : tool is WorkspaceSearchTool
+                ? '文件搜索'
                 : '系统命令',
           );
           if (tool is! ShizukuDisplayTool) {

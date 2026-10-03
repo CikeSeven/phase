@@ -132,6 +132,7 @@ class WorkspaceFileRequest {
     this.limit = 2000,
     this.localPath,
     this.expectedDigest,
+    this.environmentPaths = false,
   });
   String ownerId;
   String callId;
@@ -144,6 +145,7 @@ class WorkspaceFileRequest {
   int limit;
   String? localPath;
   String? expectedDigest;
+  bool environmentPaths;
 }
 
 @HostApi()

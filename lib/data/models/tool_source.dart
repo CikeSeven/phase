@@ -70,18 +70,25 @@ class ToolSnapshot {
     required this.description,
     required Map<String, dynamic> inputSchema,
     required this.source,
-  }) : inputSchema = freezeJson(inputSchema);
+    this.promptSnippet,
+    List<String> promptGuidelines = const [],
+  }) : inputSchema = freezeJson(inputSchema),
+       promptGuidelines = List.unmodifiable(promptGuidelines);
 
   final String name;
   final String description;
   final Map<String, dynamic> inputSchema;
   final ToolSource source;
+  final String? promptSnippet;
+  final List<String> promptGuidelines;
 
   Map<String, dynamic> toJson() => {
     'name': name,
     'description': description,
     'inputSchema': inputSchema,
     'source': source.toJson(),
+    if (promptSnippet != null) 'promptSnippet': promptSnippet,
+    if (promptGuidelines.isNotEmpty) 'promptGuidelines': promptGuidelines,
   };
 
   factory ToolSnapshot.fromJson(Map<String, dynamic> json) => ToolSnapshot(
@@ -89,5 +96,8 @@ class ToolSnapshot {
     description: json['description'] as String,
     inputSchema: json['inputSchema'] as Map<String, dynamic>,
     source: ToolSource.fromJson(json['source'] as Map<String, dynamic>),
+    promptSnippet: json['promptSnippet'] as String?,
+    promptGuidelines:
+        (json['promptGuidelines'] as List?)?.cast<String>() ?? const [],
   );
 }

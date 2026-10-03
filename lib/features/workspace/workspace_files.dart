@@ -281,6 +281,6 @@ String workspacePrompt(WorkspaceSnapshot? workspace) {
   if (workspace == null) return '';
   return '\n\n本会话主环境：${workspace.primaryEnvironment.label}。'
       'shell 默认目录：${workspace.executionRoot}。'
-      '文件工具使用当前会话目录的相对路径。'
+      '文件工具支持当前环境的绝对路径或相对于当前会话目录的路径；~ 指向当前环境 HOME。'
       '${workspace.executable ? '附件副本路径：imports/<附件ID>/<原文件名>。' : '所选命令环境未就绪。'}';
 }

@@ -3,6 +3,7 @@ import '../workspace/install_tool.dart';
 import '../workspace/shell_tool.dart';
 import 'file_tools.dart';
 import 'http_tool.dart';
+import 'search_tools.dart';
 import 'tool.dart';
 import '../execution/channel_driver.dart';
 import '../execution/execution_api.g.dart';
@@ -22,6 +23,8 @@ ToolRegistry buildBuiltInRegistry({
     const WaitForUserTool(),
     const ShellTool(),
     const InstallTool(),
+    const WorkspaceSearchTool(findFiles: false),
+    const WorkspaceSearchTool(findFiles: true),
     for (final tool in const [
       ReadFileTool(),
       WriteFileTool(),

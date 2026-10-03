@@ -22,7 +22,7 @@ class WorkspaceEntry {
   final String? digest;
 }
 
-/// Paths are workspace-relative. Remote locations never masquerade as dart:io paths.
+/// Workspace lifecycle stays relative; tool views also accept environment paths.
 abstract class WorkspaceFileAccess {
   WorkspaceFileAccess(this.binding, this.staging);
   final WorkspaceSnapshot binding;
@@ -51,6 +51,8 @@ abstract class WorkspaceFileAccess {
     String? expectedDigest,
   });
   Future<void> deleteRoot(RunCancellation cancellation);
+
+  WorkspaceFileAccess forTools() => this;
 
   String executionPath(String relative) =>
       p.posix.join(binding.executionRoot, relative);
@@ -119,9 +121,39 @@ abstract class WorkspaceFileAccess {
 }
 
 class LocalWorkspaceFileAccess extends WorkspaceFileAccess {
-  LocalWorkspaceFileAccess(super.binding, super.staging);
-  Future<String> _path(String path, {bool exists = true}) =>
-      workspacePath(binding.rootPath, path, mustExist: exists);
+  LocalWorkspaceFileAccess(
+    super.binding,
+    super.staging, {
+    this.environmentPaths = false,
+  });
+  final bool environmentPaths;
+  @override
+  WorkspaceFileAccess forTools() =>
+      LocalWorkspaceFileAccess(binding, staging, environmentPaths: true);
+
+  Future<String> _path(String path, {bool exists = true}) async {
+    if (!environmentPaths) {
+      return workspacePath(binding.rootPath, path, mustExist: exists);
+    }
+    final guest = resolveToolExecutionPath(binding, path);
+    final rootfs = binding.environmentRoot;
+    if (rootfs == null) {
+      if (!p.posix.isWithin(binding.executionRoot, guest) &&
+          guest != binding.executionRoot) {
+        throw const WorkspaceFailure(
+          'environmentMissing',
+          '当前环境未就绪，不能访问工作区以外的路径',
+        );
+      }
+      return workspacePath(
+        binding.rootPath,
+        p.posix.relative(guest, from: binding.executionRoot),
+        mustExist: exists,
+      );
+    }
+    return _ubuntuPath(rootfs, guest, mustExist: exists);
+  }
+
   @override
   Future<void> ensure(RunCancellation cancellation) async {
     cancellation.throwIfCancelled();
@@ -164,7 +196,9 @@ class LocalWorkspaceFileAccess extends WorkspaceFileAccess {
       cancellation.throwIfCancelled();
       result.add(
         WorkspaceEntry(
-          p.relative(entry.path, from: binding.rootPath),
+          environmentPaths
+              ? p.posix.normalize(p.posix.join(path, p.basename(entry.path)))
+              : p.relative(entry.path, from: binding.rootPath),
           entry is Directory
               ? 'directory'
               : entry is File
@@ -203,10 +237,18 @@ class LocalWorkspaceFileAccess extends WorkspaceFileAccess {
       target,
       cancellation,
       beforeCommit: (destination) async {
-        await _path(
-          p.relative(destination, from: binding.rootPath),
-          exists: false,
-        );
+        final checked = environmentPaths
+            ? await _path(
+                p.posix.join(path, p.relative(destination, from: target)),
+                exists: false,
+              )
+            : await _path(
+                p.relative(destination, from: binding.rootPath),
+                exists: false,
+              );
+        if (checked != destination) {
+          throw const WorkspaceFailure('fileChanged', '文件路径在编辑期间已改变，请重新读取');
+        }
         if (expectedDigest != null &&
             (await stat(path, cancellation, withDigest: true)).digest !=
                 expectedDigest) {
@@ -232,11 +274,23 @@ class TermuxWorkspaceFileAccess extends WorkspaceFileAccess {
     required this.processes,
     required this.beforeWrite,
     this.ownerId,
+    this.environmentPaths = false,
   });
   final CommandChannelDriver driver;
   final ProcessDriver processes;
   final Future<void> Function(int uid) beforeWrite;
   final String? ownerId;
+  final bool environmentPaths;
+  @override
+  WorkspaceFileAccess forTools() => TermuxWorkspaceFileAccess(
+    binding,
+    staging,
+    driver: driver,
+    processes: processes,
+    beforeWrite: beforeWrite,
+    ownerId: ownerId,
+    environmentPaths: true,
+  );
   Future<Map<String, dynamic>> _call(
     WorkspaceFileOperation operation,
     String path,
@@ -267,7 +321,10 @@ class TermuxWorkspaceFileAccess extends WorkspaceFileAccess {
           revision: identity.revision,
           uid: identity.uid,
           operation: operation,
-          path: path,
+          path: environmentPaths
+              ? resolveToolExecutionPath(binding, path)
+              : path,
+          environmentPaths: environmentPaths,
           offset: offset,
           limit: limit,
           localPath: localPath,
@@ -419,6 +476,79 @@ class TermuxWorkspaceFileAccess extends WorkspaceFileAccess {
   Future<void> deleteRoot(RunCancellation cancellation) async {
     await _call(WorkspaceFileOperation.deleteRoot, '.', cancellation);
   }
+}
+
+String resolveToolExecutionPath(WorkspaceSnapshot binding, String path) {
+  if (path.isEmpty || path.contains('\u0000') || path.contains('\\')) {
+    throw const WorkspaceFailure('invalidPath', '请使用有效的当前环境文件路径');
+  }
+  final home = binding.primaryEnvironment == PrimaryEnvironment.ubuntu
+      ? '/root'
+      : binding.termux?.home;
+  final expanded = path == '~' || path.startsWith('~/')
+      ? home == null
+            ? throw const WorkspaceFailure(
+                'environmentMissing',
+                '当前环境未提供 HOME 目录',
+              )
+            : p.posix.join(home, path == '~' ? '.' : path.substring(2))
+      : path;
+  return p.posix.normalize(
+    p.posix.isAbsolute(expanded)
+        ? expanded
+        : p.posix.join(binding.executionRoot, expanded),
+  );
+}
+
+/// Absolute symlink targets are guest paths, never Android host paths.
+Future<String> _ubuntuPath(
+  String rootfs,
+  String guest, {
+  required bool mustExist,
+}) async {
+  final root = p.normalize(p.absolute(rootfs));
+  if (await Directory(root).resolveSymbolicLinks() != root) {
+    throw const WorkspaceFailure('invalidPath', 'Ubuntu 环境目录已改变');
+  }
+  var currentGuest = guest;
+  String hostPath(String path) =>
+      const [
+        '/dev',
+        '/proc',
+      ].any((prefix) => path == prefix || p.posix.isWithin(prefix, path))
+      ? path
+      : p.join(root, path.substring(1));
+  for (var links = 0; links <= 40; links++) {
+    final components = currentGuest.substring(1).split('/');
+    var host = root;
+    var resolvedGuest = '/';
+    var followedLink = false;
+    for (var i = 0; i < components.length; i++) {
+      final part = components[i];
+      if (part.isEmpty) continue;
+      resolvedGuest = p.posix.join(resolvedGuest, part);
+      host = hostPath(resolvedGuest);
+      final type = await FileSystemEntity.type(host, followLinks: false);
+      if (type == FileSystemEntityType.link) {
+        final target = await Link(host).target();
+        currentGuest = p.posix.normalize(
+          p.posix.joinAll([
+            p.posix.isAbsolute(target)
+                ? target
+                : p.posix.join(p.posix.dirname(resolvedGuest), target),
+            ...components.skip(i + 1),
+          ]),
+        );
+        followedLink = true;
+        break;
+      }
+      if (mustExist && type == FileSystemEntityType.notFound) {
+        throw const WorkspaceFailure('fileMissing', '文件或目录已不存在');
+      }
+    }
+    if (!followedLink) return host;
+  }
+  throw const WorkspaceFailure('invalidPath', '文件链接存在循环或层级过深');
 }
 
 /// Explicit transfers merge directories, atomically replace each file, and never delete extras.
