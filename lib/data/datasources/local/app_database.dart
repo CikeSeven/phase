@@ -18,7 +18,7 @@ import '../../models/tool_policy.dart';
 import '../../models/permission_mode.dart';
 import 'database_key.dart';
 import 'key_store.dart';
-import 'primary_environment_upgrade.dart';
+import 'mcp_server_scope_upgrade.dart';
 
 part 'app_database.g.dart';
 
@@ -79,8 +79,8 @@ class Assistants extends Table {
   /// ModelSelection 的 JSON；未设置默认模型时为 null。
   TextColumn get defaultSelectionJson => text().nullable()();
 
-  /// 助手选择的 MCP 工具名集合，不包含执行策略。
-  TextColumn get mcpToolNamesJson => text().withDefault(const Constant('[]'))();
+  /// 助手选择的 MCP 服务 ID 集合，整体开放服务的工具，不包含执行策略。
+  TextColumn get mcpServerIdsJson => text().withDefault(const Constant('[]'))();
   TextColumn get memoryScope =>
       text().withDefault(const Constant('disabled'))();
   TextColumn get skillIdsJson => text().withDefault(const Constant('[]'))();
@@ -414,19 +414,19 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话主环境及分环境文件来源。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话主环境及分环境文件来源；11 MCP 按服务整体启用。
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 11;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    // 仅本次用户确认的 9 → 10 保数据安装，不扩展其他开发期升级链。
+    // 仅本次用户确认的 10 → 11 保数据安装，不扩展其他开发期升级链。
     onUpgrade: (migrator, from, to) async {
-      if (from != 9 || to != 10) {
+      if (from != 10 || to != 11) {
         throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
       }
-      await upgradePrimaryEnvironment(this, migrator);
-      AppLogger.info('数据库 9 → 10 保数据升级已提交，记录数量、文件来源与引用检查通过');
+      await upgradeMcpServerScope(this);
+      AppLogger.info('数据库 10 → 11 保数据升级已提交，MCP 服务范围与引用检查通过');
     },
     beforeOpen: _prepareDatabase,
   );

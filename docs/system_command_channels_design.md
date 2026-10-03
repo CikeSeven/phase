@@ -76,7 +76,7 @@ Termux 使用显式 RUN_COMMAND、non-exported receiver 和 one-shot mutable Pen
 
 ## 数据与验证边界
 
-schema 10 仅保留已授权的 9 → 10 保数据升级：已有会话绑定 Ubuntu、Termux 身份为空，旧来源标记 Ubuntu；其他数据与文件保留，事务失败回滚，不扩展历史链。本次不改 schema、不转换历史工具记录。
+当前 schema 11 保留已授权的 9 → 10 和本次 10 → 11 升级例外；本设计对应的 9 → 10 仅绑定 Ubuntu、Termux 身份置空并标记旧来源为 Ubuntu，MCP 整体开放的 10 → 11 规则见 AGENTS 第 5 节。其他数据与文件保留，事务失败回滚，不扩展其他历史链。
 
 此前 E6 安装记录见实施计划第 8 节：曾完成 Profile 覆盖安装及启动，但未验证真实 Shizuku/Termux 命令与传输。2026-09-26 的 UID 放开安装也不构成虚拟屏验收；旧 Shizuku 命令路径已在本次移除。
 

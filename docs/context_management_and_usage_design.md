@@ -247,7 +247,7 @@ nextInputEstimate = max(0, P0 + E1 - E0)
 - OpenAI Completions 沿用配置的 system/developer 角色，Responses 使用原位 developer；Anthropic/Google 不把此类状态提升到顶层系统字段，而在原位发送带明确宿主标记的 user 文本。未新增 DeepSeek 专用的历史内 system/tool_addition 扩展，不根据模型名、域名或失败猜测支持。普通 system 消息仍按原协议规则处理。
 - 固定提示词及工具定义不变时，模式更新属于历史追加，有效 usage 基准可继续用于增量估算。更换模型、工具版本/范围、编辑助手提示词或压缩仍可能改变前缀；此改动也会使升级前的旧配置基准失效，后续有效请求重新校准。缓存命中以服务端报告为准，不承诺切换后必然命中或占用数字不变。
 
-入口：`context_configuration.dart`、`ChatRunDriver` 的运行入口、`ConversationRepository.appendMessage`、`HistoryResolver`、`ContextBuilder` 与 `ToolRegistry.definitionsFor`。不修改数据库表或 schema 10，不迁移/重写旧记录。参考本地 Codex `ee6814bfa4` 的状态追加与 DeepSeek Harness `477b4f4205` 的定义/执行分离；不照搬其模型专用能力或较弱的计划执行限制。
+入口：`context_configuration.dart`、`ChatRunDriver` 的运行入口、`ConversationRepository.appendMessage`、`HistoryResolver`、`ContextBuilder` 与 `ToolRegistry.definitionsFor`。不修改数据库表或当前 schema，不迁移/重写旧记录。参考本地 Codex `ee6814bfa4` 的状态追加与 DeepSeek Harness `477b4f4205` 的定义/执行分离；不照搬其模型专用能力或较弱的计划执行限制。
 
 ## 9. 预算与压缩触发
 

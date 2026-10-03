@@ -15,6 +15,7 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/mcp_server_profile.dart';
+import '../../../data/models/tool_source.dart';
 import '../chat/chat_controller.dart';
 import '../tools/tool.dart';
 import 'mcp_controller.dart';
@@ -586,36 +587,130 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                         ),
                       ),
                     if (_notice != null) Text(_notice!),
-                    if (_entry?.protocolVersion case final version?) ...[
+                    if (_entry != null) ...[
                       const SizedBox(height: AppSpacing.l),
-                      Text('工具目录 · MCP $version'),
-                      const Text('添加服务不会自动向助手开放工具，请在助手编辑页选择。'),
-                      for (final tool in _entry!.tools)
-                        ExpansionTile(
-                          tilePadding: EdgeInsets.zero,
-                          title: Text(tool.source.originalName),
-                          subtitle: Text(
-                            assistants.when(
-                              data: (items) =>
-                                  '已向 ${items.where((a) => a.mcpToolNames.contains(tool.name)).length} 个助手开放',
-                              loading: () => '正在读取助手范围…',
-                              error: (_, _) => '助手范围读取失败',
-                            ),
-                          ),
-                          children: [
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: SelectableText(
-                                '${tool.description}\n\n${const JsonEncoder.withIndent("  ").convert(tool.inputSchema)}',
-                              ),
-                            ),
-                          ],
+                      Text(
+                        assistants.when(
+                          data: (items) =>
+                              '已向 ${items.where((a) => a.mcpServerIds.contains(_id)).length} 个助手开放',
+                          loading: () => '正在读取助手范围…',
+                          error: (_, _) => '助手范围读取失败',
                         ),
+                      ),
+                    ],
+                    if (_entry?.protocolVersion case final version?) ...[
+                      const SizedBox(height: AppSpacing.m),
+                      _McpToolDirectory(
+                        protocolVersion: version,
+                        tools: _entry!.tools,
+                      ),
                     ],
                   ],
                 ),
               ),
       ),
+    );
+  }
+}
+
+class _McpToolDirectory extends StatelessWidget {
+  const _McpToolDirectory({required this.protocolVersion, required this.tools});
+
+  final String protocolVersion;
+  final List<ToolSnapshot> tools;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(child: Text('工具目录', style: theme.textTheme.titleMedium)),
+            Text(
+              '${tools.length} 个 · MCP $protocolVersion',
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+        if (tools.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.l),
+            child: Text(
+              '尚未发现工具',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
+            ),
+          )
+        else ...[
+          const SizedBox(height: AppSpacing.s),
+          for (var index = 0; index < tools.length; index++) ...[
+            if (index > 0) const Divider(height: 1, indent: 44),
+            ExpansionTile(
+              key: ValueKey('mcp-tool-${tools[index].name}'),
+              tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
+              childrenPadding: const EdgeInsets.fromLTRB(
+                AppSpacing.l,
+                0,
+                AppSpacing.l,
+                AppSpacing.l,
+              ),
+              leading: Icon(Symbols.build, size: 20, color: colors.primary),
+              title: Text(
+                tools[index].source.originalName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall,
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.xs),
+                child: Text(
+                  tools[index].description.isEmpty
+                      ? '无说明'
+                      : tools[index].description,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              children: [
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s),
+                    child: Text(
+                      '输入 schema',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: colors.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.m),
+                  decoration: BoxDecoration(
+                    color: colors.surfaceContainerLow,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: SelectableText(
+                    const JsonEncoder.withIndent('  ')
+                        .convert(tools[index].inputSchema),
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      fontFamily: 'monospace',
+                      height: 1.45,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ],
     );
   }
 }

@@ -117,7 +117,7 @@ class McpRunRuntime {
     }
     try {
       final assistant = await assistants.getById(id);
-      return assistant?.mcpToolNames.contains(snapshot.name) == true
+      return assistant?.mcpServerIds.contains(snapshot.source.id) == true
           ? ToolPolicy.allow
           : ToolPolicy.deny;
     } on StorageFailure {

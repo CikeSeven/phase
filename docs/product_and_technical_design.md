@@ -75,7 +75,7 @@
 
 ### 5.2 工具策略
 
-`PermissionMode` 是会话持久化选择：计划、基础、全权限，新会话默认基础；切换助手不改模式。助手只保存 MCP 工具、Skills 的启用集合与记忆范围，不保存执行策略。`allow / ask / deny` 仍作为执行器的内部判定，由模式统一生成并固定到运行快照。
+`PermissionMode` 是会话持久化选择：计划、基础、全权限，新会话默认基础；切换助手不改模式。助手只保存 MCP 服务 ID、Skills 的启用集合与记忆范围，不保存执行策略。MCP 按服务整体开放全部工具，不提供逐工具选择；新发现工具进入下一运行，不扩大已有运行快照。`allow / ask / deny` 仍作为执行器的内部判定，由模式统一生成并固定到运行快照。
 
 | 类别 | 计划 | 基础 | 全权限 |
 |---|---|---|---|
@@ -252,7 +252,7 @@ Linux 工作区与原始进程桥已有实现，真机安装/原始进程桥通�
 
 `TextPart`、`ReasoningPart`、`ImagePart`、`DocumentPart`、`ToolCallPart`、`ToolResultPart` 等以当前封闭类型定义为准。工具 Part 引用记录 ID，不复制参数和结果。公开思考计时表示本地接收阶段，不表示服务端完整推理时间。协议状态绑定对应 Part 和来源模型。
 
-`RuntimeContextPart(section, text)` 保存宿主权限、环境、Skill 的分区状态，只在变化时追加到当前分支的 system 消息。聊天阅读区隐藏，JSON 导出和历史读取保留；不新增表或修改 schema 10，不改写既有消息。固定提示词与动态状态分离，协议映射、压缩保留和缓存边界见[上下文专项方案 §8.4](./context_management_and_usage_design.md#84-稳定前缀与运行状态追加)。
+`RuntimeContextPart(section, text)` 保存宿主权限、环境、Skill 的分区状态，只在变化时追加到当前分支的 system 消息。聊天阅读区隐藏，JSON 导出和历史读取保留；不新增表或修改当前 schema，不改写既有消息。固定提示词与动态状态分离，协议映射、压缩保留和缓存边界见[上下文专项方案 §8.4](./context_management_and_usage_design.md#84-稳定前缀与运行状态追加)。
 
 ## 3. 持久化
 

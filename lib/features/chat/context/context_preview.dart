@@ -58,7 +58,7 @@ Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
   if (assistant?.skillIds.isNotEmpty ?? false) {
     ref.watch(skillInstallationsProvider);
   }
-  if (assistant?.mcpToolNames.isNotEmpty ?? false) {
+  if (assistant?.mcpServerIds.isNotEmpty ?? false) {
     ref.watch(mcpServersProvider);
   }
   final prepared = await ref

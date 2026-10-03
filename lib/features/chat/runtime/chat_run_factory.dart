@@ -92,7 +92,7 @@ class ChatRunFactory {
       mode: mode,
       supportsTools: selection.supportsTools,
       supportsImages: selection.supportsImages,
-      mcpToolNames: assistant?.mcpToolNames ?? const {},
+      mcpServerIds: assistant?.mcpServerIds ?? const {},
       skillSnapshots: skillSnapshots,
       workspace: workspace,
       channels: channels,

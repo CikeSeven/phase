@@ -1300,12 +1300,12 @@ class $AssistantsTable extends Assistants
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
-  static const VerificationMeta _mcpToolNamesJsonMeta = const VerificationMeta(
-    'mcpToolNamesJson',
+  static const VerificationMeta _mcpServerIdsJsonMeta = const VerificationMeta(
+    'mcpServerIdsJson',
   );
   @override
-  late final GeneratedColumn<String> mcpToolNamesJson = GeneratedColumn<String>(
-    'mcp_tool_names_json',
+  late final GeneratedColumn<String> mcpServerIdsJson = GeneratedColumn<String>(
+    'mcp_server_ids_json',
     aliasedName,
     false,
     type: DriftSqlType.string,
@@ -1353,7 +1353,7 @@ class $AssistantsTable extends Assistants
     name,
     systemPrompt,
     defaultSelectionJson,
-    mcpToolNamesJson,
+    mcpServerIdsJson,
     memoryScope,
     skillIdsJson,
     createdAt,
@@ -1401,12 +1401,12 @@ class $AssistantsTable extends Assistants
         ),
       );
     }
-    if (data.containsKey('mcp_tool_names_json')) {
+    if (data.containsKey('mcp_server_ids_json')) {
       context.handle(
-        _mcpToolNamesJsonMeta,
-        mcpToolNamesJson.isAcceptableOrUnknown(
-          data['mcp_tool_names_json']!,
-          _mcpToolNamesJsonMeta,
+        _mcpServerIdsJsonMeta,
+        mcpServerIdsJson.isAcceptableOrUnknown(
+          data['mcp_server_ids_json']!,
+          _mcpServerIdsJsonMeta,
         ),
       );
     }
@@ -1461,9 +1461,9 @@ class $AssistantsTable extends Assistants
         DriftSqlType.string,
         data['${effectivePrefix}default_selection_json'],
       ),
-      mcpToolNamesJson: attachedDatabase.typeMapping.read(
+      mcpServerIdsJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
-        data['${effectivePrefix}mcp_tool_names_json'],
+        data['${effectivePrefix}mcp_server_ids_json'],
       )!,
       memoryScope: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -1494,8 +1494,8 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
   /// ModelSelection 的 JSON；未设置默认模型时为 null。
   final String? defaultSelectionJson;
 
-  /// 助手选择的 MCP 工具名集合，不包含执行策略。
-  final String mcpToolNamesJson;
+  /// 助手选择的 MCP 服务 ID 集合，整体开放服务的工具，不包含执行策略。
+  final String mcpServerIdsJson;
   final String memoryScope;
   final String skillIdsJson;
   final DateTime createdAt;
@@ -1504,7 +1504,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     required this.name,
     required this.systemPrompt,
     this.defaultSelectionJson,
-    required this.mcpToolNamesJson,
+    required this.mcpServerIdsJson,
     required this.memoryScope,
     required this.skillIdsJson,
     required this.createdAt,
@@ -1518,7 +1518,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     if (!nullToAbsent || defaultSelectionJson != null) {
       map['default_selection_json'] = Variable<String>(defaultSelectionJson);
     }
-    map['mcp_tool_names_json'] = Variable<String>(mcpToolNamesJson);
+    map['mcp_server_ids_json'] = Variable<String>(mcpServerIdsJson);
     map['memory_scope'] = Variable<String>(memoryScope);
     map['skill_ids_json'] = Variable<String>(skillIdsJson);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -1533,7 +1533,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       defaultSelectionJson: defaultSelectionJson == null && nullToAbsent
           ? const Value.absent()
           : Value(defaultSelectionJson),
-      mcpToolNamesJson: Value(mcpToolNamesJson),
+      mcpServerIdsJson: Value(mcpServerIdsJson),
       memoryScope: Value(memoryScope),
       skillIdsJson: Value(skillIdsJson),
       createdAt: Value(createdAt),
@@ -1552,7 +1552,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       defaultSelectionJson: serializer.fromJson<String?>(
         json['defaultSelectionJson'],
       ),
-      mcpToolNamesJson: serializer.fromJson<String>(json['mcpToolNamesJson']),
+      mcpServerIdsJson: serializer.fromJson<String>(json['mcpServerIdsJson']),
       memoryScope: serializer.fromJson<String>(json['memoryScope']),
       skillIdsJson: serializer.fromJson<String>(json['skillIdsJson']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -1566,7 +1566,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       'name': serializer.toJson<String>(name),
       'systemPrompt': serializer.toJson<String>(systemPrompt),
       'defaultSelectionJson': serializer.toJson<String?>(defaultSelectionJson),
-      'mcpToolNamesJson': serializer.toJson<String>(mcpToolNamesJson),
+      'mcpServerIdsJson': serializer.toJson<String>(mcpServerIdsJson),
       'memoryScope': serializer.toJson<String>(memoryScope),
       'skillIdsJson': serializer.toJson<String>(skillIdsJson),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -1578,7 +1578,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     String? name,
     String? systemPrompt,
     Value<String?> defaultSelectionJson = const Value.absent(),
-    String? mcpToolNamesJson,
+    String? mcpServerIdsJson,
     String? memoryScope,
     String? skillIdsJson,
     DateTime? createdAt,
@@ -1589,7 +1589,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     defaultSelectionJson: defaultSelectionJson.present
         ? defaultSelectionJson.value
         : this.defaultSelectionJson,
-    mcpToolNamesJson: mcpToolNamesJson ?? this.mcpToolNamesJson,
+    mcpServerIdsJson: mcpServerIdsJson ?? this.mcpServerIdsJson,
     memoryScope: memoryScope ?? this.memoryScope,
     skillIdsJson: skillIdsJson ?? this.skillIdsJson,
     createdAt: createdAt ?? this.createdAt,
@@ -1604,9 +1604,9 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
       defaultSelectionJson: data.defaultSelectionJson.present
           ? data.defaultSelectionJson.value
           : this.defaultSelectionJson,
-      mcpToolNamesJson: data.mcpToolNamesJson.present
-          ? data.mcpToolNamesJson.value
-          : this.mcpToolNamesJson,
+      mcpServerIdsJson: data.mcpServerIdsJson.present
+          ? data.mcpServerIdsJson.value
+          : this.mcpServerIdsJson,
       memoryScope: data.memoryScope.present
           ? data.memoryScope.value
           : this.memoryScope,
@@ -1624,7 +1624,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
           ..write('name: $name, ')
           ..write('systemPrompt: $systemPrompt, ')
           ..write('defaultSelectionJson: $defaultSelectionJson, ')
-          ..write('mcpToolNamesJson: $mcpToolNamesJson, ')
+          ..write('mcpServerIdsJson: $mcpServerIdsJson, ')
           ..write('memoryScope: $memoryScope, ')
           ..write('skillIdsJson: $skillIdsJson, ')
           ..write('createdAt: $createdAt')
@@ -1638,7 +1638,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
     name,
     systemPrompt,
     defaultSelectionJson,
-    mcpToolNamesJson,
+    mcpServerIdsJson,
     memoryScope,
     skillIdsJson,
     createdAt,
@@ -1651,7 +1651,7 @@ class AssistantRow extends DataClass implements Insertable<AssistantRow> {
           other.name == this.name &&
           other.systemPrompt == this.systemPrompt &&
           other.defaultSelectionJson == this.defaultSelectionJson &&
-          other.mcpToolNamesJson == this.mcpToolNamesJson &&
+          other.mcpServerIdsJson == this.mcpServerIdsJson &&
           other.memoryScope == this.memoryScope &&
           other.skillIdsJson == this.skillIdsJson &&
           other.createdAt == this.createdAt);
@@ -1662,7 +1662,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
   final Value<String> name;
   final Value<String> systemPrompt;
   final Value<String?> defaultSelectionJson;
-  final Value<String> mcpToolNamesJson;
+  final Value<String> mcpServerIdsJson;
   final Value<String> memoryScope;
   final Value<String> skillIdsJson;
   final Value<DateTime> createdAt;
@@ -1672,7 +1672,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     this.name = const Value.absent(),
     this.systemPrompt = const Value.absent(),
     this.defaultSelectionJson = const Value.absent(),
-    this.mcpToolNamesJson = const Value.absent(),
+    this.mcpServerIdsJson = const Value.absent(),
     this.memoryScope = const Value.absent(),
     this.skillIdsJson = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1683,7 +1683,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     required String name,
     this.systemPrompt = const Value.absent(),
     this.defaultSelectionJson = const Value.absent(),
-    this.mcpToolNamesJson = const Value.absent(),
+    this.mcpServerIdsJson = const Value.absent(),
     this.memoryScope = const Value.absent(),
     this.skillIdsJson = const Value.absent(),
     required DateTime createdAt,
@@ -1696,7 +1696,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     Expression<String>? name,
     Expression<String>? systemPrompt,
     Expression<String>? defaultSelectionJson,
-    Expression<String>? mcpToolNamesJson,
+    Expression<String>? mcpServerIdsJson,
     Expression<String>? memoryScope,
     Expression<String>? skillIdsJson,
     Expression<DateTime>? createdAt,
@@ -1708,7 +1708,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
       if (systemPrompt != null) 'system_prompt': systemPrompt,
       if (defaultSelectionJson != null)
         'default_selection_json': defaultSelectionJson,
-      if (mcpToolNamesJson != null) 'mcp_tool_names_json': mcpToolNamesJson,
+      if (mcpServerIdsJson != null) 'mcp_server_ids_json': mcpServerIdsJson,
       if (memoryScope != null) 'memory_scope': memoryScope,
       if (skillIdsJson != null) 'skill_ids_json': skillIdsJson,
       if (createdAt != null) 'created_at': createdAt,
@@ -1721,7 +1721,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
     Value<String>? name,
     Value<String>? systemPrompt,
     Value<String?>? defaultSelectionJson,
-    Value<String>? mcpToolNamesJson,
+    Value<String>? mcpServerIdsJson,
     Value<String>? memoryScope,
     Value<String>? skillIdsJson,
     Value<DateTime>? createdAt,
@@ -1732,7 +1732,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
       name: name ?? this.name,
       systemPrompt: systemPrompt ?? this.systemPrompt,
       defaultSelectionJson: defaultSelectionJson ?? this.defaultSelectionJson,
-      mcpToolNamesJson: mcpToolNamesJson ?? this.mcpToolNamesJson,
+      mcpServerIdsJson: mcpServerIdsJson ?? this.mcpServerIdsJson,
       memoryScope: memoryScope ?? this.memoryScope,
       skillIdsJson: skillIdsJson ?? this.skillIdsJson,
       createdAt: createdAt ?? this.createdAt,
@@ -1757,8 +1757,8 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
         defaultSelectionJson.value,
       );
     }
-    if (mcpToolNamesJson.present) {
-      map['mcp_tool_names_json'] = Variable<String>(mcpToolNamesJson.value);
+    if (mcpServerIdsJson.present) {
+      map['mcp_server_ids_json'] = Variable<String>(mcpServerIdsJson.value);
     }
     if (memoryScope.present) {
       map['memory_scope'] = Variable<String>(memoryScope.value);
@@ -1782,7 +1782,7 @@ class AssistantsCompanion extends UpdateCompanion<AssistantRow> {
           ..write('name: $name, ')
           ..write('systemPrompt: $systemPrompt, ')
           ..write('defaultSelectionJson: $defaultSelectionJson, ')
-          ..write('mcpToolNamesJson: $mcpToolNamesJson, ')
+          ..write('mcpServerIdsJson: $mcpServerIdsJson, ')
           ..write('memoryScope: $memoryScope, ')
           ..write('skillIdsJson: $skillIdsJson, ')
           ..write('createdAt: $createdAt, ')
@@ -12494,7 +12494,7 @@ typedef $$AssistantsTableCreateCompanionBuilder = AssistantsCompanion Function({
   required String name,
   Value<String> systemPrompt,
   Value<String?> defaultSelectionJson,
-  Value<String> mcpToolNamesJson,
+  Value<String> mcpServerIdsJson,
   Value<String> memoryScope,
   Value<String> skillIdsJson,
   required DateTime createdAt,
@@ -12505,7 +12505,7 @@ typedef $$AssistantsTableUpdateCompanionBuilder = AssistantsCompanion Function({
   Value<String> name,
   Value<String> systemPrompt,
   Value<String?> defaultSelectionJson,
-  Value<String> mcpToolNamesJson,
+  Value<String> mcpServerIdsJson,
   Value<String> memoryScope,
   Value<String> skillIdsJson,
   Value<DateTime> createdAt,
@@ -12541,8 +12541,8 @@ class $$AssistantsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<String> get mcpToolNamesJson => $composableBuilder(
-    column: $table.mcpToolNamesJson,
+  ColumnFilters<String> get mcpServerIdsJson => $composableBuilder(
+    column: $table.mcpServerIdsJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -12591,8 +12591,8 @@ class $$AssistantsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<String> get mcpToolNamesJson => $composableBuilder(
-    column: $table.mcpToolNamesJson,
+  ColumnOrderings<String> get mcpServerIdsJson => $composableBuilder(
+    column: $table.mcpServerIdsJson,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -12637,8 +12637,8 @@ class $$AssistantsTableAnnotationComposer
     builder: (column) => column,
   );
 
-  GeneratedColumn<String> get mcpToolNamesJson => $composableBuilder(
-    column: $table.mcpToolNamesJson,
+  GeneratedColumn<String> get mcpServerIdsJson => $composableBuilder(
+    column: $table.mcpServerIdsJson,
     builder: (column) => column,
   );
 
@@ -12691,7 +12691,7 @@ class $$AssistantsTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String> systemPrompt = const Value.absent(),
                 Value<String?> defaultSelectionJson = const Value.absent(),
-                Value<String> mcpToolNamesJson = const Value.absent(),
+                Value<String> mcpServerIdsJson = const Value.absent(),
                 Value<String> memoryScope = const Value.absent(),
                 Value<String> skillIdsJson = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -12701,7 +12701,7 @@ class $$AssistantsTableTableManager
                 name: name,
                 systemPrompt: systemPrompt,
                 defaultSelectionJson: defaultSelectionJson,
-                mcpToolNamesJson: mcpToolNamesJson,
+                mcpServerIdsJson: mcpServerIdsJson,
                 memoryScope: memoryScope,
                 skillIdsJson: skillIdsJson,
                 createdAt: createdAt,
@@ -12713,7 +12713,7 @@ class $$AssistantsTableTableManager
                 required String name,
                 Value<String> systemPrompt = const Value.absent(),
                 Value<String?> defaultSelectionJson = const Value.absent(),
-                Value<String> mcpToolNamesJson = const Value.absent(),
+                Value<String> mcpServerIdsJson = const Value.absent(),
                 Value<String> memoryScope = const Value.absent(),
                 Value<String> skillIdsJson = const Value.absent(),
                 required DateTime createdAt,
@@ -12723,7 +12723,7 @@ class $$AssistantsTableTableManager
                 name: name,
                 systemPrompt: systemPrompt,
                 defaultSelectionJson: defaultSelectionJson,
-                mcpToolNamesJson: mcpToolNamesJson,
+                mcpServerIdsJson: mcpServerIdsJson,
                 memoryScope: memoryScope,
                 skillIdsJson: skillIdsJson,
                 createdAt: createdAt,

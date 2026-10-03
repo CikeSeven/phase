@@ -39,7 +39,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
   final _promptController = TextEditingController();
 
   ModelSelection? _defaultModel;
-  Set<String> _mcpToolNames = {};
+  Set<String> _mcpServerIds = {};
   Set<String> _skillIds = {};
   MemoryScope _memoryScope = MemoryScope.disabled;
   bool _clearDefaultModel = false;
@@ -89,7 +89,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
         _nameController.text = assistant.name;
         _promptController.text = assistant.systemPrompt;
         _defaultModel = assistant.defaultModelSelection;
-        _mcpToolNames = {...assistant.mcpToolNames};
+        _mcpServerIds = {...assistant.mcpServerIds};
         _skillIds = {...assistant.skillIds};
         _memoryScope = assistant.memoryScope;
         _loading = false;
@@ -127,7 +127,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           name: _nameController.text,
           systemPrompt: _promptController.text,
           defaultModelSelection: _defaultModel,
-          mcpToolNames: _mcpToolNames,
+          mcpServerIds: _mcpServerIds,
           skillIds: _skillIds,
           memoryScope: _memoryScope,
         );
@@ -138,7 +138,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           systemPrompt: _promptController.text,
           defaultModelSelection: _defaultModel,
           clearDefaultModel: _clearDefaultModel,
-          mcpToolNames: _mcpToolNames,
+          mcpServerIds: _mcpServerIds,
           skillIds: _skillIds,
           memoryScope: _memoryScope,
         );
@@ -318,10 +318,10 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   AssistantMcpSection(
-                    names: _mcpToolNames,
+                    serverIds: _mcpServerIds,
                     onChanged: _saving
                         ? null
-                        : (names) => setState(() => _mcpToolNames = names),
+                        : (ids) => setState(() => _mcpServerIds = ids),
                   ),
                 ],
               ),

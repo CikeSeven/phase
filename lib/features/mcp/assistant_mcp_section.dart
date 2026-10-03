@@ -10,17 +10,17 @@ import '../../../data/repositories/mcp_server_repository.dart';
 class AssistantMcpSection extends ConsumerWidget {
   const AssistantMcpSection({
     super.key,
-    required this.names,
+    required this.serverIds,
     required this.onChanged,
   });
-  final Set<String> names;
+  final Set<String> serverIds;
   final ValueChanged<Set<String>>? onChanged;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text('MCP 工具', style: Theme.of(context).textTheme.labelLarge),
+      Text('MCP 服务', style: Theme.of(context).textTheme.labelLarge),
       const SizedBox(height: AppSpacing.s),
       ref
           .watch(mcpServersProvider)
@@ -28,41 +28,35 @@ class AssistantMcpSection extends ConsumerWidget {
             loading: () => const AppLoadingIndicator.small(),
             error: (_, _) => TextButton(
               onPressed: () => ref.invalidate(mcpServersProvider),
-              child: const Text('工具目录读取失败，点击重试'),
+              child: const Text('MCP 服务读取失败，点击重试'),
             ),
             data: (servers) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (servers.isEmpty) const Text('添加 MCP 服务并检查连接后，可在这里启用工具。'),
-                for (final entry in servers) ...[
-                  const SizedBox(height: AppSpacing.m),
-                  Text(
-                    '${entry.profile.name}${entry.profile.enabled ? "" : "（已禁用）"}',
-                  ),
-                  if (entry.tools.isEmpty) const Text('尚无工具，请在服务详情中检查连接。'),
-                  for (final tool in entry.tools) ...[
-                    SwitchListTile.adaptive(
-                      key: ValueKey('mcp-enable-${tool.name}'),
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(tool.source.originalName),
-                      subtitle: tool.description.isEmpty
-                          ? null
-                          : Text(
-                              tool.description,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                      value: names.contains(tool.name),
-                      onChanged: onChanged == null || entry.profile.deleting
-                          ? null
-                          : (enabled) => onChanged!({
-                              for (final name in names)
-                                if (enabled || name != tool.name) name,
-                              if (enabled) tool.name,
-                            }),
+                if (servers.isEmpty) const Text('尚未添加 MCP 服务'),
+                for (final entry in servers)
+                  SwitchListTile.adaptive(
+                    key: ValueKey('mcp-enable-${entry.profile.id}'),
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(entry.profile.name),
+                    subtitle: Text(
+                      entry.profile.deleting
+                          ? '正在删除'
+                          : !entry.profile.enabled
+                          ? '已禁用'
+                          : entry.tools.isEmpty
+                          ? '尚无工具'
+                          : '${entry.tools.length} 个工具',
                     ),
-                  ],
-                ],
+                    value: serverIds.contains(entry.profile.id),
+                    onChanged: onChanged == null || entry.profile.deleting
+                        ? null
+                        : (enabled) => onChanged!({
+                            for (final id in serverIds)
+                              if (enabled || id != entry.profile.id) id,
+                            if (enabled) entry.profile.id,
+                          }),
+                  ),
               ],
             ),
           ),

@@ -13,7 +13,7 @@ class Assistant {
     required this.name,
     required this.systemPrompt,
     this.defaultModelSelection,
-    this.mcpToolNames = const {},
+    this.mcpServerIds = const {},
     this.skillIds = const {},
     this.memoryScope = MemoryScope.disabled,
     required this.createdAt,
@@ -23,7 +23,7 @@ class Assistant {
   final String name;
   final String systemPrompt;
   final ModelSelection? defaultModelSelection;
-  final Set<String> mcpToolNames;
+  final Set<String> mcpServerIds;
   final Set<String> skillIds;
   final MemoryScope memoryScope;
   final DateTime createdAt;
@@ -32,7 +32,7 @@ class Assistant {
     String? name,
     String? systemPrompt,
     ModelSelection? defaultModelSelection,
-    Set<String>? mcpToolNames,
+    Set<String>? mcpServerIds,
     Set<String>? skillIds,
     MemoryScope? memoryScope,
   }) {
@@ -42,7 +42,7 @@ class Assistant {
       systemPrompt: systemPrompt ?? this.systemPrompt,
       defaultModelSelection:
           defaultModelSelection ?? this.defaultModelSelection,
-      mcpToolNames: mcpToolNames ?? this.mcpToolNames,
+      mcpServerIds: mcpServerIds ?? this.mcpServerIds,
       skillIds: skillIds ?? this.skillIds,
       memoryScope: memoryScope ?? this.memoryScope,
       createdAt: createdAt,

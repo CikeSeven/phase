@@ -38,6 +38,12 @@
 - 已生成 Riverpod 代码，`dart format --output=none --set-exit-if-changed lib`、`flutter analyze lib` 和 `git diff --check` 通过。全量格式检查仍报告未改动的 `test/support/schema8_fixture.dart`；全量分析与拆分前一致，保留两条测试 fake 的 `invalid_override` 和两条单引号 lint，未为此修改测试。未新增或运行 Flutter/JVM 测试，停止时序、真实网关、工具闭环、真机 UI 和性能未复验。
 - Profile 构建成功，已在授权设备 `1b8418ca` 使用 `adb install -r` 覆盖安装并启动，安装 `Success`、启动 `Status: ok`。未卸载、清数据或变更 schema；构建与启动不代表上述行为验收完成。日志与原始源码副本位于忽略的 `build/chat_refactor/`。
 
+### 1.3 MCP 服务整体开放（2026-10-03）
+
+- 助手编辑从逐 MCP 工具开关改为每服务一个开关；服务启用时，其全部当前工具加入新运行快照。运行时撤销服务范围或禁用服务会在后续派发检查中拒绝；运行快照不因目录新增而扩大。
+- 助手持久化改存 MCP 服务 ID。获授权的 schema 10 → 11 事务按持久化的 MCP 来源 ID，把曾启用至少一个工具的服务整体开放；来源仅从服务目录、工具结果或运行快照恢复，不反解别名。其他表记录数和 SQLite 完整性在迁移内校验，来源缺失则回滚；不改写历史运行快照。
+- 验证与安装结果随本次交付记录；当前初始检查发现无在线 ADB 设备。未新增或运行测试。
+
 ## 2. 顺序与依赖
 
 | 批次 | 目标 | 前置 | 当前状态 |

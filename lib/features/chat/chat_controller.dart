@@ -142,7 +142,7 @@ class ChatController extends _$ChatController {
     required String name,
     String systemPrompt = '',
     model.ModelSelection? defaultModelSelection,
-    Set<String> mcpToolNames = const {},
+    Set<String> mcpServerIds = const {},
     Set<String> skillIds = const {},
     MemoryScope memoryScope = MemoryScope.disabled,
   }) {
@@ -153,7 +153,7 @@ class ChatController extends _$ChatController {
         name: name.trim(),
         systemPrompt: systemPrompt.trim(),
         defaultModelSelection: defaultModelSelection,
-        mcpToolNames: mcpToolNames,
+        mcpServerIds: mcpServerIds,
         skillIds: skillIds,
         memoryScope: memoryScope,
         createdAt: DateTime.now(),
@@ -172,7 +172,7 @@ class ChatController extends _$ChatController {
     required String systemPrompt,
     model.ModelSelection? defaultModelSelection,
     bool clearDefaultModel = false,
-    Set<String>? mcpToolNames,
+    Set<String>? mcpServerIds,
     Set<String>? skillIds,
     MemoryScope? memoryScope,
   }) {
@@ -189,7 +189,7 @@ class ChatController extends _$ChatController {
         defaultModelSelection: clearDefaultModel
             ? null
             : (defaultModelSelection ?? existing.defaultModelSelection),
-        mcpToolNames: mcpToolNames ?? existing.mcpToolNames,
+        mcpServerIds: mcpServerIds ?? existing.mcpServerIds,
         skillIds: skillIds ?? existing.skillIds,
         memoryScope: memoryScope ?? existing.memoryScope,
         createdAt: existing.createdAt,

@@ -177,7 +177,7 @@ class ChatToolRuntimeFactory {
     required PermissionMode mode,
     required bool supportsTools,
     required bool supportsImages,
-    required Set<String> mcpToolNames,
+    required Set<String> mcpServerIds,
     required List<SkillSnapshot> skillSnapshots,
     required WorkspaceSnapshot? workspace,
     required List<CommandChannelSnapshot> channels,
@@ -201,7 +201,7 @@ class ChatToolRuntimeFactory {
         PrepareSkillTool(skill, workspace!, WorkspaceFiles(workspaces!)),
     ]);
     final enabled = supportsTools
-        ? {...registry.tools.map((tool) => tool.name), ...mcpToolNames}
+        ? {for (final tool in registry.tools) tool.name}
         : <String>{};
     enabled.removeWhere(
       (name) =>
@@ -210,16 +210,17 @@ class ChatToolRuntimeFactory {
           (!supportsImages &&
               const {'capture_screen', 'shizuku_display'}.contains(name)),
     );
-    final entries = enabled.any((name) => name.startsWith('mcp_'))
+    final entries = supportsTools && mcpServerIds.isNotEmpty
         ? await (await loadMcpServers()).list()
         : const <McpServerEntry>[];
     final snapshots = <ToolSnapshot>[
       for (final tool in registry.tools)
         if (enabled.contains(tool.name)) tool.snapshot,
       for (final entry in entries)
-        if (entry.profile.enabled && !entry.profile.deleting)
-          for (final tool in entry.tools)
-            if (enabled.contains(tool.name)) tool,
+        if (mcpServerIds.contains(entry.profile.id) &&
+            entry.profile.enabled &&
+            !entry.profile.deleting)
+          ...entry.tools,
     ];
     final fixedEnabled = {for (final snapshot in snapshots) snapshot.name};
     return ChatToolCatalog(

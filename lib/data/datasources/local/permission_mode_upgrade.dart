@@ -15,7 +15,9 @@ Future<void> upgradePermissionModes(
     db.conversations,
     db.conversations.lastExecutionMode,
   );
-  await migrator.addColumn(db.assistants, db.assistants.mcpToolNamesJson);
+  await db.customStatement(
+    "ALTER TABLE assistants ADD COLUMN mcp_tool_names_json TEXT NOT NULL DEFAULT '[]'",
+  );
 
   final assistants = await db
       .customSelect('SELECT id, tool_policy_json FROM assistants')

@@ -63,7 +63,7 @@ Assistant assistantFromRow(AssistantRow row) => Assistant(
   name: row.name,
   systemPrompt: row.systemPrompt,
   defaultModelSelection: _decodeSelection(row.defaultSelectionJson),
-  mcpToolNames: _decodeStringList(row.mcpToolNamesJson).toSet(),
+  mcpServerIds: _decodeStringList(row.mcpServerIdsJson).toSet(),
   memoryScope: MemoryScope.values.byName(row.memoryScope),
   skillIds: (jsonDecode(row.skillIdsJson) as List).cast<String>().toSet(),
   createdAt: row.createdAt,
@@ -219,7 +219,7 @@ AssistantsCompanion assistantCompanion(Assistant assistant) =>
       defaultSelectionJson: Value(
         _encodeSelection(assistant.defaultModelSelection),
       ),
-      mcpToolNamesJson: Value(jsonEncode(assistant.mcpToolNames.toList())),
+      mcpServerIdsJson: Value(jsonEncode(assistant.mcpServerIds.toList())),
       memoryScope: Value(assistant.memoryScope.name),
       skillIdsJson: Value(jsonEncode(assistant.skillIds.toList())),
       createdAt: Value(assistant.createdAt),

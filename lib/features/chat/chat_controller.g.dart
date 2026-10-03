@@ -92,7 +92,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'82a29bf28edfc481b631c43435da63bfc0b2853c';
+String _$chatControllerHash() => r'a7e878367df924182926deaebe5e2cbda2cced99';
 
 /// 页面操作入口和展示投影；循环、流缓冲及资源生命周期由本次驱动持有。
 
