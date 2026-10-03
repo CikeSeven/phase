@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_selection_surface.dart';
 import '../../../core/widgets/app_sheet.dart';
@@ -25,14 +28,32 @@ import 'chat_providers.dart';
 import 'model_selection.dart';
 
 /// 打开模型与推理等级面板；切换后自动保存，面板保持打开。
-Future<void> showModelPickerSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
+Future<void> showModelPickerSheet(BuildContext context) async {
+  final dismissed = Completer<void>();
+  final openAssistantPicker = await showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
     backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0),
-    builder: (context) => const ModelPickerSheet(),
+    builder: (context) {
+      final route = ModalRoute.of(context);
+      if (route == null) {
+        if (!dismissed.isCompleted) dismissed.complete();
+      } else {
+        unawaited(
+          route.completed.then((_) {
+            if (!dismissed.isCompleted) dismissed.complete();
+          }),
+        );
+      }
+      return const ModelPickerSheet();
+    },
   );
+  if (openAssistantPicker == true && context.mounted) {
+    await dismissed.future;
+    if (!context.mounted) return;
+    await showAssistantPickerSheet(context);
+  }
 }
 
 /// 可搜索的本地模型列表与独立于列表的推理设置。
@@ -104,38 +125,8 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final selected = _selectedEntry(entries);
 
     return AppSheet(
-      title: '选择模型',
-      titleWidget: Tooltip(
-        message: '切换助手',
-        child: InkWell(
-          key: const ValueKey('model-picker-assistant'),
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => showAssistantPickerSheet(context),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  assistantName,
-                  key: const ValueKey('model-picker-assistant-name'),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.xs),
-              Icon(
-                LucideIcons.chevronDown,
-                size: 20,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ],
-          ),
-        ),
-      ),
-      titleTrailing: _initialized && selected?.model != null
-          ? _buildSelectionTrailing(selected!)
-          : null,
+      title: assistantName,
+      titleWidget: _buildAssistantHeader(assistantName),
       footer:
           _initialized &&
               !profiles.hasError &&
@@ -165,6 +156,42 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         },
         loading: _loading,
         error: (error, _) => _buildLoadError(error),
+      ),
+    );
+  }
+
+  Widget _buildAssistantHeader(String assistantName) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    return Tooltip(
+      message: '切换助手',
+      child: AppInteractiveSurface(
+        key: const ValueKey('model-picker-assistant'),
+        selected: null,
+        onTap: () => Navigator.of(context).pop(true),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.m,
+            vertical: AppSpacing.xs,
+          ),
+          child: Row(
+            children: [
+              const AppIconBadge(icon: LucideIcons.bot, size: 32, iconSize: 18),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: Text(
+                  assistantName,
+                  key: const ValueKey('model-picker-assistant-name'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colors.onSurface,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -381,27 +408,6 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         );
       }
     });
-  }
-
-  /// 标题右侧的紧凑摘要：保存状态与所选模型 id。
-  Widget _buildSelectionTrailing(_PickerEntry selected) {
-    final theme = Theme.of(context);
-    return Row(
-      key: const ValueKey('model-selection-summary'),
-      children: [
-        AppBadge(label: _saveError != null ? '未保存' : '当前'),
-        const SizedBox(width: AppSpacing.s),
-        // 占满剩余宽度，在真实边界截断，不与标题五五分。
-        Expanded(
-          child: Text(
-            selected.model!.id,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodySmall,
-          ),
-        ),
-      ],
-    );
   }
 
   Widget _buildProviderTabs(
