@@ -23,6 +23,7 @@ import '../../../data/models/provider_profile.dart';
 import '../../../data/models/reasoning_effort.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
 import '../assistants/assistant_picker_sheet.dart';
+import '../providers_config/provider_logo.dart';
 import 'active_conversation.dart';
 import 'chat_providers.dart';
 import 'model_selection.dart';
@@ -528,6 +529,12 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
             ),
             child: Row(
               children: [
+                ProviderLogo(
+                  presetId: entry.profile.presetId,
+                  size: 40,
+                  logoSize: 22,
+                ),
+                const SizedBox(width: AppSpacing.m),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
