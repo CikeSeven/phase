@@ -18,6 +18,7 @@ class AppSheet extends StatelessWidget {
     required this.title,
     required this.child,
     super.key,
+    this.titleWidget,
     this.subtitle,
     this.titleTrailing,
     this.footer,
@@ -27,6 +28,7 @@ class AppSheet extends StatelessWidget {
   }) : assert(footerMaxHeightFactor > 0 && footerMaxHeightFactor <= 0.5);
 
   final String title;
+  final Widget? titleWidget;
   final String? subtitle;
 
   /// 标题右侧的紧凑内容（如当前值摘要），空间不足时先于标题省略。
@@ -48,12 +50,14 @@ class AppSheet extends StatelessWidget {
     final scale = math.max(1.0, (media?.textScaler.scale(14) ?? 14) / 14);
     final titleText = Semantics(
       header: true,
-      child: Text(
-        title,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: theme.textTheme.titleLarge,
-      ),
+      child:
+          titleWidget ??
+          Text(
+            title,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleLarge,
+          ),
     );
     final trailing = titleTrailing;
     final titleRow = trailing == null

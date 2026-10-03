@@ -19,6 +19,9 @@ import '../../../data/models/profile_model.dart';
 import '../../../data/models/provider_profile.dart';
 import '../../../data/models/reasoning_effort.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
+import '../assistants/assistant_picker_sheet.dart';
+import 'active_conversation.dart';
+import 'chat_providers.dart';
 import 'model_selection.dart';
 
 /// 打开模型与推理等级面板；切换后自动保存，面板保持打开。
@@ -90,11 +93,46 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   Widget build(BuildContext context) {
     final profiles = ref.watch(providerProfilesProvider);
     final selection = ref.watch(modelSelectionProvider);
+    final assistantName =
+        ref
+            .watch(
+              currentAssistantProvider(ref.watch(activeConversationProvider)),
+            )
+            ?.name ??
+        '相月';
     final entries = _entriesFor(profiles.value ?? const []);
     final selected = _selectedEntry(entries);
 
     return AppSheet(
       title: '选择模型',
+      titleWidget: Tooltip(
+        message: '切换助手',
+        child: InkWell(
+          key: const ValueKey('model-picker-assistant'),
+          borderRadius: BorderRadius.circular(8),
+          onTap: () => showAssistantPickerSheet(context),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  assistantName,
+                  key: const ValueKey('model-picker-assistant-name'),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.xs),
+              Icon(
+                Symbols.expand_more,
+                size: 20,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ],
+          ),
+        ),
+      ),
       titleTrailing: _initialized && selected?.model != null
           ? _buildSelectionTrailing(selected!)
           : null,
@@ -374,20 +412,20 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final scaler = MediaQuery.textScalerOf(context);
-    final tabHeight = (AppSpacing.s * 2 + scaler.scale(14) * 1.35).clamp(
+    final tabHeight = (AppSpacing.xs * 2 + scaler.scale(14) * 1.35).clamp(
       AppControlStyle.touchTarget,
       double.infinity,
     );
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.s),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
       child: SizedBox(
         height: tabHeight,
         child: ListView.separated(
           key: const ValueKey('provider-list'),
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.l),
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.m),
           itemCount: profiles.length,
-          separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.s),
+          separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
           itemBuilder: (context, index) {
             final profile = profiles[index];
             final selected = profile.id == selectedProfileId;
@@ -407,10 +445,9 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                       : AppMotion.effects,
                   shape: AppControlStyle.shape(compact: true, active: selected),
                   padding: const WidgetStatePropertyAll(
-                    EdgeInsets.symmetric(horizontal: AppSpacing.s),
+                    EdgeInsets.symmetric(horizontal: AppSpacing.xs),
                   ),
-                  // 色面收紧，外层按钮仍保留 48dp 触区。
-                  minimumSize: const WidgetStatePropertyAll(Size(48, 36)),
+                  minimumSize: const WidgetStatePropertyAll(Size(40, 32)),
                   backgroundColor: WidgetStateProperty.resolveWith((states) {
                     if (states.contains(WidgetState.disabled)) return null;
                     return selected
@@ -419,7 +456,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                   }),
                 ),
                 child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 200),
+                  constraints: const BoxConstraints(maxWidth: 160),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -434,7 +471,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                           ),
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.xs),
+                      const SizedBox(width: 2),
                       Text(
                         '${counts[profile.id] ?? 0}',
                         maxLines: 1,

@@ -20,7 +20,6 @@ import '../../../core/widgets/app_snack_bar.dart';
 import '../../../core/widgets/app_top_bar.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/reasoning_effort.dart';
-import '../assistants/assistant_picker_sheet.dart';
 import 'chat_controller.dart';
 import 'chat_empty_state.dart';
 import 'chat_horizontal_drag_priority.dart';
@@ -41,9 +40,8 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage> {
-  /// 顶栏默认高度；两行紧凑排布的最小行高。
+  /// 顶栏默认高度。
   static const _defaultToolbarHeight = 64.0;
-  static const _compactRowHeight = 24.0;
   static const _drawerOpenTouchSlop = 36.0;
   static const _contentMaxWidth = 840.0;
 
@@ -118,8 +116,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         : media.viewPadding.bottom;
     final contentGestureSettings = MediaQuery.gestureSettingsOf(context);
     final scaler = MediaQuery.textScalerOf(context);
-    final titleStyle = theme.textTheme.titleMedium;
-    final modelStyle = theme.textTheme.labelMedium;
+    final titleStyle = theme.textTheme.titleSmall?.copyWith(height: 1);
+    final modelStyle = theme.textTheme.labelMedium?.copyWith(height: 1);
     // 顶栏保持默认高度：两行紧凑排布，只有大字号时按文字实际高度略微增高。
     final contentHeight =
         scaler.scale(titleStyle?.fontSize ?? 16) * (titleStyle?.height ?? 1.4) +
@@ -177,24 +175,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   onPressed: _openDrawer,
                   icon: const Icon(Symbols.menu),
                 ),
-                title: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // 助手名一行：点击切换助手。
-                    Tooltip(
-                      message: '切换助手',
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: InkWell(
-                          key: const ValueKey('chat-assistant-picker'),
-                          borderRadius: AppRadius.smallAll,
-                          onTap: () => showAssistantPickerSheet(context),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minHeight: _compactRowHeight,
-                            ),
+                title: Tooltip(
+                  message: '选择助手和模型',
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: InkWell(
+                      key: const ValueKey('chat-model-picker'),
+                      borderRadius: AppRadius.smallAll,
+                      onTap: () => showModelPickerSheet(context),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 14),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -207,31 +202,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                     style: titleStyle,
                                   ),
                                 ),
-                                const SizedBox(width: AppSpacing.xs),
-                                Icon(
-                                  Symbols.expand_more,
-                                  size: 18,
-                                  color: colors.primary,
-                                ),
                               ],
                             ),
                           ),
-                        ),
-                      ),
-                    ),
-                    // 模型一行：点击选择模型。
-                    Tooltip(
-                      message: '选择模型',
-                      child: Material(
-                        type: MaterialType.transparency,
-                        child: InkWell(
-                          key: const ValueKey('chat-model-picker'),
-                          borderRadius: AppRadius.smallAll,
-                          onTap: () => showModelPickerSheet(context),
-                          child: ConstrainedBox(
-                            constraints: const BoxConstraints(
-                              minHeight: _compactRowHeight,
-                            ),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(minHeight: 16),
                             child: Row(
                               children: [
                                 Flexible(
@@ -246,9 +221,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                     ),
                                   ),
                                 ),
-                                // 推理开启时跟在模型名右侧，关闭或不支持不显示。
                                 if (current?.supportsReasoning == true &&
                                     current!.effort != ReasoningEffort.off) ...[
+                                  // 推理等级仅在当前模型支持且开启时显示。
                                   const SizedBox(width: AppSpacing.xs),
                                   Text(
                                     current.effort.label,
@@ -264,16 +239,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 const SizedBox(width: AppSpacing.xs),
                                 Icon(
                                   Symbols.expand_more,
-                                  size: 20,
+                                  size: 16,
                                   color: colors.primary,
                                 ),
                               ],
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
-                  ],
+                  ),
                 ),
                 actions: [
                   if (workspaceId != null)
