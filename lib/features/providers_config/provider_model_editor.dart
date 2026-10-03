@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -9,7 +11,6 @@ import '../../../core/widgets/app_section.dart';
 import '../../../data/datasources/local/model_catalog_cache.dart';
 import '../../../data/models/model_catalog.dart';
 import '../../../data/models/profile_model.dart';
-import 'provider_ui.dart';
 
 /// 用于 CustomScrollView 的模型管理分区，筛选后的条目惰性构建。
 ///
@@ -223,39 +224,12 @@ class _ModelCard extends StatelessWidget {
               left: AppSpacing.m,
               right: AppSpacing.s,
             ),
-            child: Wrap(
-              spacing: AppSpacing.s,
-              runSpacing: AppSpacing.xs,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                CapabilityChip(
-                  key: ValueKey('tools-${model.id}'),
-                  icon: Symbols.build,
-                  label: '工具',
-                  tooltip: '该模型是否支持工具调用',
-                  selected: model.supportsTools,
-                  onSelected: enabled
-                      ? (value) => onModelChanged(
-                          model.withSettings(supportsTools: value),
-                        )
-                      : null,
-                ),
-                CapabilityChip(
-                  key: ValueKey('images-${model.id}'),
-                  icon: Symbols.image,
-                  label: '图片',
-                  tooltip: '该模型是否支持图片输入',
-                  selected: model.supportsImages,
-                  onSelected: enabled
-                      ? (value) => onModelChanged(
-                          model.withSettings(supportsImages: value),
-                        )
-                      : null,
-                ),
-              ],
+            child: _ModelCapabilities(
+              model: model,
+              enabled: enabled,
+              onModelChanged: onModelChanged,
             ),
           ),
-          // 采样参数：留空表示不下发，由服务端默认决定。
           _ModelParameters(
             presetId: presetId,
             model: model,
@@ -268,7 +242,100 @@ class _ModelCard extends StatelessWidget {
   }
 }
 
-/// 单个模型的预算与采样参数；目录值不改变协议请求。
+enum _ModelCapability { tools, images }
+
+/// 两项能力独立选择，允许全部关闭，不把它们当作互斥选项。
+class _ModelCapabilities extends StatelessWidget {
+  const _ModelCapabilities({
+    required this.model,
+    required this.enabled,
+    required this.onModelChanged,
+  });
+
+  final ProfileModel model;
+  final bool enabled;
+  final ValueChanged<ProfileModel> onModelChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    const selectedIconSize = 14.0;
+    final style = theme.textTheme.labelMedium?.copyWith(
+      fontWeight: FontWeight.w500,
+    );
+    final painter = TextPainter(
+      text: TextSpan(text: '工具', style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final segmentWidth = math.max(
+      72.0,
+      painter.width +
+          AppSpacing.m +
+          AppSpacing.l +
+          selectedIconSize +
+          AppSpacing.s,
+    );
+    painter.dispose();
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontal = constraints.maxWidth >= segmentWidth * 2;
+        return Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: SizedBox(
+            width: horizontal
+                ? segmentWidth * 2
+                : math.min(segmentWidth, constraints.maxWidth),
+            child: SegmentedButton<_ModelCapability>(
+              key: ValueKey('capabilities-${model.id}'),
+              segments: [
+                ButtonSegment(
+                  value: _ModelCapability.tools,
+                  label: Text('工具', key: ValueKey('tools-${model.id}')),
+                  tooltip: '该模型是否支持工具调用',
+                ),
+                ButtonSegment(
+                  value: _ModelCapability.images,
+                  label: Text('图片', key: ValueKey('images-${model.id}')),
+                  tooltip: '该模型是否支持图片输入',
+                ),
+              ],
+              selected: {
+                if (model.supportsTools) _ModelCapability.tools,
+                if (model.supportsImages) _ModelCapability.images,
+              },
+              multiSelectionEnabled: true,
+              emptySelectionAllowed: true,
+              direction: horizontal ? Axis.horizontal : Axis.vertical,
+              selectedIcon: const Icon(Symbols.check, size: selectedIconSize),
+              onSelectionChanged: enabled
+                  ? (values) => onModelChanged(
+                      model.withSettings(
+                        supportsTools: values.contains(_ModelCapability.tools),
+                        supportsImages: values.contains(
+                          _ModelCapability.images,
+                        ),
+                      ),
+                    )
+                  : null,
+              style: SegmentedButton.styleFrom(
+                textStyle: style,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppSpacing.s,
+                  vertical: AppSpacing.xs,
+                ),
+                tapTargetSize: MaterialTapTargetSize.padded,
+                side: BorderSide.none,
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// 单个模型的预算参数；目录值不改变协议请求。
 ///
 /// 上下文窗口与输出上限的提示来自 models.dev 目录（命中时）或本地默认；
 /// 目录值只做提示与校验基线，绝不回写用户输入。
@@ -290,9 +357,6 @@ class _ModelParameters extends ConsumerStatefulWidget {
 }
 
 class _ModelParametersState extends ConsumerState<_ModelParameters> {
-  late final _temperatureController = TextEditingController(
-    text: widget.model.temperature?.toString() ?? '',
-  );
   late final _maxOutputController = TextEditingController(
     text: widget.model.maxOutputTokens?.toString() ?? '',
   );
@@ -305,7 +369,6 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
 
   @override
   void dispose() {
-    _temperatureController.dispose();
     _maxOutputController.dispose();
     _contextController.dispose();
     super.dispose();
@@ -328,7 +391,6 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
     if (!mounted || !widget.enabled || revision != _applyRevision) return;
     // 首次加载期间提交也按最终目录校验，不能用临时默认放行无效预算。
     final entry = _lookup(catalog);
-    final temperature = double.tryParse(_temperatureController.text.trim());
     final maxOutput = int.tryParse(_maxOutputController.text.trim());
     final rawWindow = _contextController.text.trim();
     final window = int.tryParse(rawWindow);
@@ -349,7 +411,6 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
         contextWindow: window,
         clearContextWindow: rawWindow.isEmpty,
         clearMaxOutputTokens: rawOutput.isEmpty,
-        temperature: temperature,
         maxOutputTokens: maxOutput,
       ),
     );
@@ -366,14 +427,14 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.m,
-        AppSpacing.xs,
+        AppSpacing.s,
         AppSpacing.s,
         0,
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final minimumWidth =
-              MediaQuery.textScalerOf(context).scale(96) + AppSpacing.xxl;
+              MediaQuery.textScalerOf(context).scale(80) + AppSpacing.m * 2;
           final halfWidth = (constraints.maxWidth - AppSpacing.s) / 2;
           final fieldWidth = halfWidth >= minimumWidth
               ? halfWidth
@@ -383,12 +444,13 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
             runSpacing: AppSpacing.m,
             children: [
               SizedBox(
-                width: constraints.maxWidth,
+                width: fieldWidth,
                 child: TextField(
                   key: ValueKey('context-window-${widget.model.id}'),
                   controller: _contextController,
                   enabled: widget.enabled,
                   keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.next,
                   onSubmitted: (_) => _apply(),
                   onTapOutside: (_) {
                     FocusScope.of(context).unfocus();
@@ -400,30 +462,14 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
                         '${catalogWindow ?? ModelCatalog.localDefaultWindow}',
                     errorText: _budgetError,
                     errorMaxLines: 3,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: fieldWidth,
-                child: TextField(
-                  key: ValueKey('temperature-${widget.model.id}'),
-                  controller: _temperatureController,
-                  enabled: widget.enabled,
-                  keyboardType: const TextInputType.numberWithOptions(
-                    decimal: true,
-                  ),
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) => _apply(),
-                  onTapOutside: (_) {
-                    FocusScope.of(context).unfocus();
-                    _apply();
-                  },
-                  decoration: const InputDecoration(
-                    labelText: '温度',
-                    hintText: '默认',
                     isDense: true,
+                    contentPadding: const EdgeInsets.all(AppSpacing.m),
+                    labelStyle: theme.textTheme.bodyMedium,
+                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  style: theme.textTheme.bodySmall,
+                  style: theme.textTheme.bodyMedium,
                 ),
               ),
               SizedBox(
@@ -433,6 +479,7 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
                   controller: _maxOutputController,
                   enabled: widget.enabled,
                   keyboardType: TextInputType.number,
+                  textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _apply(),
                   onTapOutside: (_) {
                     FocusScope.of(context).unfocus();
@@ -443,8 +490,13 @@ class _ModelParametersState extends ConsumerState<_ModelParameters> {
                     hintText:
                         '${catalogOutput ?? ModelCatalog.localDefaultOutputReserve}',
                     isDense: true,
+                    contentPadding: const EdgeInsets.all(AppSpacing.m),
+                    labelStyle: theme.textTheme.bodyMedium,
+                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  style: theme.textTheme.bodySmall,
+                  style: theme.textTheme.bodyMedium,
                 ),
               ),
             ],

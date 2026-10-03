@@ -178,7 +178,15 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                 : '已保存')
           : (_saving ? '保存中…' : null),
       actions: [
-        if (!_loading && _loadError == null)
+        if (!_loading && _loadError == null) ...[
+          IconButton(
+            key: const ValueKey('save-provider'),
+            tooltip: '保存',
+            onPressed: _busy || _saving ? null : _save,
+            icon: _saving
+                ? const AppLoadingIndicator.small(semanticsLabel: '正在保存配置')
+                : const Icon(Symbols.save),
+          ),
           if (_editing)
             IconButton(
               key: const ValueKey('delete-provider'),
@@ -188,16 +196,8 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
               icon: _deleting
                   ? const AppLoadingIndicator.small(semanticsLabel: '正在删除服务商')
                   : const Icon(Symbols.delete),
-            )
-          else
-            IconButton(
-              key: const ValueKey('save-provider'),
-              tooltip: '保存',
-              onPressed: _busy ? null : _save,
-              icon: _saving
-                  ? const AppLoadingIndicator.small(semanticsLabel: '正在保存配置')
-                  : const Icon(Symbols.check),
             ),
+        ],
       ],
       body: _loading
           ? const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取配置'))
@@ -641,13 +641,22 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
   }
 
   Future<void> _save() async {
-    if (_busy || _loading || _loadError != null) return;
+    if (_busy || _saving || _loading || _loadError != null) return;
     final invalidFields = _formKey.currentState!.validateGranularly();
     if (invalidFields.isNotEmpty) {
       await Scrollable.ensureVisible(invalidFields.first.context);
       return;
     }
     FocusScope.of(context).unfocus();
+    if (_editing) {
+      // 显式保存只加速同一写入队列，不与自动保存并发写入。
+      _scheduleAutoSave();
+      await _autoSaveFuture;
+      if (!mounted || _deletePending || _dirty || _saveError != null) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(buildAppSnackBar(content: const Text('已保存服务商配置')));
+      return;
+    }
     final apiKey = _apiKeyController.text.trim();
     final draft = _draft();
     setState(() {

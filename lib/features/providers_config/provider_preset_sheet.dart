@@ -3,9 +3,9 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_selection_surface.dart';
-import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_sheet.dart';
 import '../../../providers/presets/provider_preset.dart';
+import 'provider_logo.dart';
 import 'provider_ui.dart';
 
 /// 从真实预设注册表中搜索并选择服务商。
@@ -117,11 +117,10 @@ class _ProviderPresetSheetState extends State<ProviderPresetSheet> {
                     ),
                     child: Row(
                       children: [
-                        AppIconBadge(
-                          icon: ProviderUi.icon(preset.id),
-                          tone: ProviderUi.tone(preset.id),
+                        ProviderLogo(
+                          presetId: preset.id,
                           size: 32,
-                          iconSize: 18,
+                          logoSize: 22,
                         ),
                         const SizedBox(width: AppSpacing.m),
                         Expanded(

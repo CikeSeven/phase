@@ -9,6 +9,7 @@ import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_section.dart';
 import '../../../data/models/api_protocol.dart';
 import '../../../providers/presets/provider_preset.dart';
+import 'provider_logo.dart';
 import 'provider_ui.dart';
 
 String? validateProviderName(String? value) =>
@@ -82,15 +83,16 @@ class ProviderFormSections extends StatelessWidget {
           title: '服务商',
           child: AppInteractiveSurface(
             key: const ValueKey('choose-provider-preset'),
+            color: theme.colorScheme.surfaceContainer,
             onTap: enabled ? onChoosePreset : null,
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.m,
+                vertical: AppSpacing.xs,
+              ),
               child: Row(
                 children: [
-                  AppIconBadge(
-                    icon: ProviderUi.icon(preset.id),
-                    tone: AppTone.teal,
-                  ),
+                  ProviderLogo(presetId: preset.id),
                   const SizedBox(width: AppSpacing.m),
                   Expanded(
                     child: Text(
@@ -107,7 +109,7 @@ class ProviderFormSections extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.xl),
+        const SizedBox(height: AppSpacing.m),
         AppSection(
           title: '连接',
           child: Column(

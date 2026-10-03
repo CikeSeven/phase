@@ -20,6 +20,7 @@ import '../../../data/models/model_catalog.dart';
 import '../../../data/models/provider_profile.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
 import '../../../providers/presets/provider_preset.dart';
+import 'provider_logo.dart';
 import 'provider_ui.dart';
 
 /// 服务商配置总览（`/settings/providers`），仅展示本机配置中的真实数量。
@@ -347,23 +348,18 @@ class _ProfileRow extends StatelessWidget {
     return Semantics(
       button: true,
       child: AppInteractiveSurface(
-        color: theme.colorScheme.surfaceContainerLow,
+        color: theme.colorScheme.surfaceContainerHigh,
         key: ValueKey('provider-${profile.id}'),
         onTap: onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.s,
+            horizontal: AppSpacing.m,
             vertical: AppSpacing.l,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              AppIconBadge(
-                icon: ProviderUi.icon(profile.presetId),
-                tone: AppTone.teal,
-                size: 40,
-                iconSize: 22,
-              ),
+              ProviderLogo(presetId: profile.presetId, logoSize: 26),
               const SizedBox(width: AppSpacing.m),
               Expanded(
                 child: Column(
