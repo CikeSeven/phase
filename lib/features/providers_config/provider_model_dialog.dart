@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dialog.dart';
@@ -48,7 +48,7 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
   Widget build(BuildContext context) {
     return AppDialog(
       title: '添加模型',
-      icon: Symbols.add,
+      icon: LucideIcons.plus,
       tone: AppTone.teal,
       content: Form(
         key: _formKey,
@@ -82,7 +82,7 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
               children: [
                 CapabilityChip(
                   key: const ValueKey('new-model-reasoning'),
-                  icon: Symbols.psychology,
+                  icon: LucideIcons.brain,
                   label: '推理',
                   tooltip: '该模型是否支持推理（思考）',
                   selected: _supportsReasoning,
@@ -92,7 +92,7 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                 ),
                 CapabilityChip(
                   key: const ValueKey('new-model-tools'),
-                  icon: Symbols.build,
+                  icon: LucideIcons.wrench,
                   label: '工具',
                   tooltip: '该模型是否支持工具调用',
                   selected: _supportsTools,
@@ -102,7 +102,7 @@ class _ProviderModelDialogState extends State<ProviderModelDialog> {
                 ),
                 CapabilityChip(
                   key: const ValueKey('new-model-images'),
-                  icon: Symbols.image,
+                  icon: LucideIcons.image,
                   label: '图片',
                   tooltip: '该模型是否支持图片输入',
                   selected: _supportsImages,

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/app_spacing.dart';
 import '../theme/frosted_surface.dart';
@@ -102,7 +102,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       return IconButton(
         tooltip: localizations.openAppDrawerTooltip,
         onPressed: scaffold!.openDrawer,
-        icon: const Icon(Symbols.menu),
+        icon: const Icon(LucideIcons.menu),
       );
     }
     final route = ModalRoute.of(context);
@@ -113,7 +113,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
           ? localizations.closeButtonTooltip
           : localizations.backButtonTooltip,
       onPressed: () => Navigator.of(context).maybePop(),
-      icon: Icon(close ? Symbols.close : Symbols.arrow_back),
+      icon: Icon(close ? LucideIcons.x : LucideIcons.arrowLeftDir),
     );
   }
 }

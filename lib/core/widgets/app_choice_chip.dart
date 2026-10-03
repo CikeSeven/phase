@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/app_spacing.dart';
 import 'app_selection_surface.dart';
@@ -47,8 +47,7 @@ class AppChoiceChip extends StatelessWidget {
               child: selected || icon != null
                   ? ExcludeSemantics(
                       child: Icon(
-                        selected ? Symbols.check_circle : icon,
-                        fill: selected ? 1 : 0,
+                        selected ? LucideIcons.circleCheck : icon,
                         size: 20,
                         color: foreground,
                       ),

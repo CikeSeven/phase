@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/error/provider_error.dart';
@@ -122,12 +122,12 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
                   height: 20,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Icon(Symbols.sync),
+              : const Icon(LucideIcons.refreshCw),
         ),
         IconButton(
           tooltip: '新增服务商',
           onPressed: _addProvider,
-          icon: const Icon(Symbols.add),
+          icon: const Icon(LucideIcons.plus),
         ),
       ],
       bottomBar: AppBottomBar(
@@ -140,7 +140,7 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
               child: FilledButton.icon(
                 key: const ValueKey('add-provider'),
                 onPressed: _addProvider,
-                icon: const Icon(Symbols.add),
+                icon: const Icon(LucideIcons.plus),
                 label: const Text('新增服务商'),
               ),
             ),
@@ -151,7 +151,7 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
         skipLoadingOnReload: true,
         data: (profiles) => profiles.isEmpty
             ? _buildStatus(
-                icon: Symbols.hub,
+                icon: LucideIcons.network,
                 title: '暂无服务商',
                 action: _buildCatalogStatus(catalog),
               )
@@ -161,12 +161,12 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
           action: const AppLoadingIndicator(semanticsLabel: '正在读取服务商'),
         ),
         error: (error, _) => AppEmptyState(
-          icon: Symbols.cloud_off,
+          icon: LucideIcons.cloudOff,
           title: '暂时无法读取服务商',
           message: error is Failure ? error.userMessage : '加载本机配置失败，请重试。',
           action: FilledButton.tonalIcon(
             onPressed: () => ref.invalidate(providerProfilesProvider),
-            icon: const Icon(Symbols.refresh),
+            icon: const Icon(LucideIcons.rotateCw),
             label: const Text('重新加载'),
           ),
         ),
@@ -253,13 +253,13 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
                   decoration: InputDecoration(
                     labelText: '搜索服务商',
                     hintText: '名称、协议、地址或模型',
-                    prefixIcon: const Icon(Symbols.search),
+                    prefixIcon: const Icon(LucideIcons.search),
                     suffixIcon: query.isEmpty
                         ? null
                         : IconButton(
                             tooltip: '清除服务商搜索',
                             onPressed: () => setState(_searchController.clear),
-                            icon: const Icon(Symbols.close),
+                            icon: const Icon(LucideIcons.x),
                           ),
                   ),
                 ),
@@ -282,7 +282,7 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
         if (filtered.isEmpty)
           SliverToBoxAdapter(
             child: _buildStatus(
-              icon: Symbols.search_off,
+              icon: LucideIcons.searchX,
               title: '没有匹配的服务商',
               action: TextButton(
                 onPressed: () => setState(_searchController.clear),
@@ -396,7 +396,7 @@ class _ProfileRow extends StatelessWidget {
               const SizedBox(width: AppSpacing.s),
               ExcludeSemantics(
                 child: Icon(
-                  Symbols.chevron_right,
+                  LucideIcons.chevronRight,
                   color: theme.colorScheme.onSurfaceVariant,
                 ),
               ),

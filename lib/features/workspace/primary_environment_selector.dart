@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -129,7 +129,7 @@ class _EnvironmentSegments extends StatelessWidget {
                   : (values) => onSelected!(values.single),
               direction: horizontal ? Axis.horizontal : Axis.vertical,
               selectedIcon: Icon(
-                Symbols.check,
+                LucideIcons.check,
                 size: iconSize,
                 color:
                     selected == PrimaryEnvironment.termux && !termuxAuthorized

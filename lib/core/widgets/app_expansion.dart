@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/app_motion.dart';
 import '../theme/app_spacing.dart';
@@ -130,6 +130,6 @@ class AppExpansionArrow extends StatelessWidget {
         ? AppMotion.expansionOpen
         : AppMotion.expansionClose,
     curve: AppMotion.expansionCurve,
-    child: Icon(Symbols.expand_more_rounded, size: 18, color: color),
+    child: Icon(LucideIcons.chevronDown, size: 18, color: color),
   );
 }

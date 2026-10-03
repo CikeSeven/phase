@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
@@ -64,7 +64,7 @@ class _AttachmentSourceSheetState extends State<AttachmentSourceSheet> {
                   IconButton(
                     tooltip: '关闭',
                     onPressed: () => _select(null),
-                    icon: const Icon(Symbols.close_rounded),
+                    icon: const Icon(LucideIcons.x),
                   ),
                 ],
               ),
@@ -76,21 +76,9 @@ class _AttachmentSourceSheetState extends State<AttachmentSourceSheet> {
                       3 * (64 + MediaQuery.textScalerOf(context).scale(14));
                   final choices = [
                     for (final (source, label, icon) in [
-                      (
-                        AttachmentSource.camera,
-                        '拍照',
-                        Symbols.photo_camera_rounded,
-                      ),
-                      (
-                        AttachmentSource.gallery,
-                        '相册',
-                        Symbols.photo_library_rounded,
-                      ),
-                      (
-                        AttachmentSource.file,
-                        '文件',
-                        Symbols.folder_open_rounded,
-                      ),
+                      (AttachmentSource.camera, '拍照', LucideIcons.camera),
+                      (AttachmentSource.gallery, '相册', LucideIcons.images),
+                      (AttachmentSource.file, '文件', LucideIcons.folderOpen),
                     ])
                       AppInteractiveSurface(
                         key: ValueKey('attach-${source.name}'),
@@ -160,8 +148,6 @@ class _SourceIcon extends StatelessWidget {
     child: Icon(
       icon,
       size: 24,
-      fill: 1,
-      weight: 500,
       color: Theme.of(context).colorScheme.onPrimaryContainer,
     ),
   );

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -19,7 +19,7 @@ class SkillsPage extends ConsumerWidget {
     actions: [
       IconButton(
         tooltip: '导入 Skill',
-        icon: const Icon(Symbols.add),
+        icon: const Icon(LucideIcons.plus),
         onPressed: () => context.push('/settings/extensions/skills/import'),
       ),
     ],
@@ -28,7 +28,7 @@ class SkillsPage extends ConsumerWidget {
         .when(
           loading: () => const Center(child: AppLoadingIndicator()),
           error: (error, _) => AppEmptyState(
-            icon: Symbols.error,
+            icon: LucideIcons.circleAlert,
             title: '无法读取 Skills',
             message: error is Failure ? error.userMessage : '读取失败，请重试',
             action: TextButton(
@@ -38,13 +38,13 @@ class SkillsPage extends ConsumerWidget {
           ),
           data: (entries) => entries.isEmpty
               ? AppEmptyState(
-                  icon: Symbols.auto_stories,
+                  icon: LucideIcons.bookOpen,
                   title: '还没有 Skills',
                   message: '从目录或 ZIP 导入任务指导，再为助手选择使用范围。',
                   action: FilledButton.icon(
                     onPressed: () =>
                         context.push('/settings/extensions/skills/import'),
-                    icon: const Icon(Symbols.add),
+                    icon: const Icon(LucideIcons.plus),
                     label: const Text('导入 Skill'),
                   ),
                 )
@@ -67,8 +67,8 @@ class SkillsPage extends ConsumerWidget {
                         maxLines: 3,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      leading: const Icon(Symbols.auto_stories),
-                      trailing: const Icon(Symbols.chevron_right),
+                      leading: const Icon(LucideIcons.bookOpen),
+                      trailing: const Icon(LucideIcons.chevronRight),
                       onTap: () => context.push(
                         '/settings/extensions/skills/${entry.id}',
                       ),

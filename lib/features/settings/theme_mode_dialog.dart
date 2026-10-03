@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -162,9 +162,8 @@ class _ThemeModeOption extends StatelessWidget {
                 dimension: 24,
                 child: selected
                     ? Icon(
-                        Symbols.check_circle,
+                        LucideIcons.circleCheck,
                         color: theme.colorScheme.primary,
-                        fill: 1,
                       )
                     : null,
               ),

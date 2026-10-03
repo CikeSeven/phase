@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dropdown.dart';
@@ -103,7 +103,7 @@ class ProviderFormSections extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.s),
-                  const Icon(Symbols.expand_more),
+                  const Icon(LucideIcons.chevronDown),
                 ],
               ),
             ),
@@ -185,9 +185,7 @@ class ProviderFormSections extends StatelessWidget {
                       tooltip: apiKeyVisible ? '隐藏密钥' : '显示密钥',
                       onPressed: enabled ? onToggleKeyVisibility : null,
                       icon: Icon(
-                        apiKeyVisible
-                            ? Symbols.visibility_off
-                            : Symbols.visibility,
+                        apiKeyVisible ? LucideIcons.eyeOff : LucideIcons.eye,
                       ),
                     ),
                   ),
@@ -214,7 +212,7 @@ class ProviderFormSections extends StatelessWidget {
                       ? const AppLoadingIndicator.small(
                           semanticsLabel: '正在测试连接',
                         )
-                      : const Icon(Symbols.cloud_download),
+                      : const Icon(LucideIcons.cloudDownload),
                   label: Text(testing ? '获取中…' : '获取模型'),
                 ),
               ),
@@ -227,8 +225,8 @@ class ProviderFormSections extends StatelessWidget {
                     children: [
                       Icon(
                         testError == null
-                            ? Symbols.check_circle
-                            : Symbols.error,
+                            ? LucideIcons.circleCheck
+                            : LucideIcons.circleAlert,
                         size: 20,
                         color: testError == null
                             ? theme.colorScheme.primary

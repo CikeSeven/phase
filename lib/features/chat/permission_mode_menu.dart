@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_motion.dart';
@@ -217,7 +217,7 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
                 dimension: 20,
                 child: option == mode
                     ? const ExcludeSemantics(
-                        child: Icon(Symbols.check_circle, fill: 1, size: 20),
+                        child: Icon(LucideIcons.circleCheck, size: 20),
                       )
                     : null,
               ),
@@ -269,7 +269,7 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
                         18 +
                         AppSpacing.s * 3 <=
                     constraints.maxWidth) ...[
-                  const Icon(Symbols.keyboard_arrow_up, size: 18),
+                  const Icon(LucideIcons.chevronUp, size: 18),
                   const SizedBox(width: AppSpacing.s),
                 ],
                 Flexible(

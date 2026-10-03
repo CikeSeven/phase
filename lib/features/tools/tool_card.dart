@@ -3,7 +3,7 @@ import '../commands/system_channel_tools.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_motion.dart';
@@ -361,10 +361,7 @@ class _ToolCardState extends State<ToolCard>
                                     display.copyText!,
                                     display.copyLabel,
                                   ),
-                                  icon: const Icon(
-                                    Symbols.content_copy,
-                                    size: 18,
-                                  ),
+                                  icon: const Icon(LucideIcons.copy, size: 18),
                                 ),
                               ],
                             ),
@@ -404,10 +401,7 @@ class _ToolCardState extends State<ToolCard>
                                     display.copyText ?? call,
                                     display.copyLabel,
                                   ),
-                                  icon: const Icon(
-                                    Symbols.content_copy,
-                                    size: 18,
-                                  ),
+                                  icon: const Icon(LucideIcons.copy, size: 18),
                                 ),
                               ],
                             ),
@@ -420,10 +414,7 @@ class _ToolCardState extends State<ToolCard>
                                   tooltip: '复制输出',
                                   onPressed: () =>
                                       _copy(context, output, '复制输出'),
-                                  icon: const Icon(
-                                    Symbols.content_copy,
-                                    size: 18,
-                                  ),
+                                  icon: const Icon(LucideIcons.copy, size: 18),
                                 ),
                               ),
                             if (display.diff != null ||
@@ -491,8 +482,8 @@ class _ToolCardState extends State<ToolCard>
                                       ),
                                       icon: Icon(
                                         artifact.isImage
-                                            ? Symbols.image
-                                            : Symbols.attach_file,
+                                            ? LucideIcons.image
+                                            : LucideIcons.paperclip,
                                         size: 18,
                                       ),
                                       label: Text(

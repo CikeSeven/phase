@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:re_highlight/re_highlight.dart';
 
 import '../../../core/theme/app_motion.dart';
@@ -85,7 +85,7 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
     final colors = theme.colorScheme;
     final reduced = AppMotion.reduce(context);
     final copyIcon = Icon(
-      _copied ? Symbols.check : Symbols.content_copy,
+      _copied ? LucideIcons.check : LucideIcons.copy,
       key: ValueKey(_copied),
       size: 20,
       color: _copied ? context.brandColors.teal : colors.onSurfaceVariant,
@@ -138,7 +138,7 @@ class _ChatCodeBlockState extends State<ChatCodeBlock> {
                           tooltip: '预览 HTML',
                           onPressed: _previewOpen ? null : _preview,
                           icon: Icon(
-                            Symbols.visibility,
+                            LucideIcons.eye,
                             size: 20,
                             color: colors.onSurfaceVariant,
                           ),

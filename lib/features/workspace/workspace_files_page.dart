@@ -4,7 +4,7 @@ import '../../../core/widgets/app_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/widgets/app_list_tile.dart';
@@ -43,7 +43,7 @@ class WorkspaceFilesPage extends ConsumerWidget {
         IconButton(
           tooltip: '刷新',
           onPressed: () => ref.invalidate(workspaceEntriesProvider(id, path)),
-          icon: const Icon(Symbols.refresh),
+          icon: const Icon(LucideIcons.rotateCw),
         ),
         IconButton(
           tooltip: '导入文件',
@@ -51,7 +51,7 @@ class WorkspaceFilesPage extends ConsumerWidget {
               ? null
               : () =>
                     ref.read(workspaceActionsProvider.notifier).importFile(id),
-          icon: const Icon(Symbols.upload_file),
+          icon: const Icon(LucideIcons.fileUp),
         ),
       ],
       body: entries.when(
@@ -76,7 +76,7 @@ class WorkspaceFilesPage extends ConsumerWidget {
                         ? null
                         : Text('${(entry.$2 / 1024).toStringAsFixed(1)} KiB'),
                     leading: Icon(
-                      directory ? Symbols.folder : Symbols.description,
+                      directory ? LucideIcons.folder : LucideIcons.fileText,
                     ),
                     trailing: PopupMenuButton<String>(
                       enabled: !action.isLoading,

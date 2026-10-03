@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -43,7 +43,7 @@ class _AssistantPickerSheet extends ConsumerWidget {
           Navigator.of(context).pop();
           context.push('/assistants');
         },
-        icon: const Icon(Symbols.tune, size: 18),
+        icon: const Icon(LucideIcons.slidersHorizontal, size: 18),
         label: const Text('管理助手'),
       ),
       child: ListView.builder(
@@ -111,7 +111,7 @@ class _AssistantOption extends StatelessWidget {
               SizedBox.square(
                 dimension: 24,
                 child: selected
-                    ? Icon(Symbols.check_circle, color: colors.primary, fill: 1)
+                    ? Icon(LucideIcons.circleCheck, color: colors.primary)
                     : null,
               ),
               const SizedBox(width: AppSpacing.m),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -47,7 +47,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
       builder: (context) => AppDialog(
         title: '删除 Skill',
         description: '从助手范围中移除并立即停止后续读取。任务引用的版本会在任务结束后清理；已有聊天和产物保留。',
-        icon: Symbols.delete,
+        icon: LucideIcons.trash2,
         tone: AppTone.error,
         content: const SizedBox.shrink(),
         actions: [
@@ -81,7 +81,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
         .when(
           loading: () => const Center(child: AppLoadingIndicator()),
           error: (error, _) => AppEmptyState(
-            icon: Symbols.error,
+            icon: LucideIcons.circleAlert,
             title: '无法读取 Skill',
             message: error is Failure ? error.userMessage : '读取失败',
             action: TextButton(
@@ -93,7 +93,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
           data: (entry) {
             if (entry == null) {
               return const AppEmptyState(
-                icon: Symbols.auto_stories,
+                icon: LucideIcons.bookOpen,
                 title: 'Skill 已不存在',
                 message: '请返回 Skills 列表。',
               );
@@ -139,7 +139,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
                           : () => context.push(
                               '/settings/extensions/skills/${widget.id}/update',
                             ),
-                      icon: const Icon(Symbols.upgrade),
+                      icon: const Icon(LucideIcons.arrowUpCircle),
                       label: const Text('更新版本'),
                     ),
                     TextButton.icon(
@@ -147,7 +147,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
                       style: TextButton.styleFrom(
                         foregroundColor: Theme.of(context).colorScheme.error,
                       ),
-                      icon: const Icon(Symbols.delete),
+                      icon: const Icon(LucideIcons.trash2),
                       label: Text(entry.deleting ? '重试删除' : '删除'),
                     ),
                   ],
@@ -159,7 +159,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
                   AppListTile(
                     title: Text(path),
                     subtitle: Text('${skill.resources[path]!.size} 字节'),
-                    trailing: const Icon(Symbols.chevron_right),
+                    trailing: const Icon(LucideIcons.chevronRight),
                     onTap: entry.deleting
                         ? null
                         : () => context.push(

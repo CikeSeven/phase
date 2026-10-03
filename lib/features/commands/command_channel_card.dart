@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_radius.dart';
@@ -88,12 +88,13 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
   IconData _actionIcon(CommandChannelAction action) => switch (action) {
     CommandChannelAction.open =>
       widget.status?.state == 'notInstalled'
-          ? Symbols.download
-          : Symbols.open_in_new,
-    CommandChannelAction.authorize => Symbols.key,
-    CommandChannelAction.initialize => _termux ? Symbols.build : Symbols.link,
-    CommandChannelAction.copySetup => Symbols.content_copy,
-    CommandChannelAction.retry => Symbols.refresh,
+          ? LucideIcons.download
+          : LucideIcons.externalLink,
+    CommandChannelAction.authorize => LucideIcons.keyRound,
+    CommandChannelAction.initialize =>
+      _termux ? LucideIcons.wrench : LucideIcons.link,
+    CommandChannelAction.copySetup => LucideIcons.copy,
+    CommandChannelAction.retry => LucideIcons.rotateCw,
   };
 
   void _menuOpened() {
@@ -218,9 +219,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
               child: Row(
                 children: [
                   AppIconBadge(
-                    icon: _termux
-                        ? Symbols.terminal
-                        : Symbols.admin_panel_settings,
+                    icon: _termux ? LucideIcons.terminal : LucideIcons.server,
                     size: 40,
                     iconSize: 22,
                   ),
@@ -252,7 +251,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
                     placeholder: hasActions
                         ? ExcludeSemantics(
                             child: Icon(
-                              Symbols.chevron_right,
+                              LucideIcons.chevronRight,
                               size: 20,
                               color: colors.onSurfaceVariant,
                             ),

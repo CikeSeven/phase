@@ -4,7 +4,7 @@ import '../../../core/widgets/app_dropdown.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -167,7 +167,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
       builder: (context) => AppDialog(
         title: '删除助手',
         description: '确定删除此助手吗？',
-        icon: Symbols.delete,
+        icon: LucideIcons.trash2,
         tone: AppTone.error,
         content: const SizedBox.shrink(),
         actions: [
@@ -218,7 +218,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
               tooltip: '删除助手',
               onPressed: _saving ? null : _confirmDelete,
               color: theme.colorScheme.error,
-              icon: const Icon(Symbols.delete),
+              icon: const Icon(LucideIcons.trash2),
             ),
           IconButton(
             key: const ValueKey('save-assistant'),
@@ -227,7 +227,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
             color: theme.colorScheme.primary,
             icon: _saving
                 ? const AppLoadingIndicator.small(semanticsLabel: '正在保存助手')
-                : const Icon(Symbols.save),
+                : const Icon(LucideIcons.save),
           ),
         ],
       ],
@@ -235,7 +235,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
           ? const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取助手'))
           : _loadError != null
           ? AppEmptyState(
-              icon: Symbols.error,
+              icon: LucideIcons.circleAlert,
               title: '无法读取助手',
               message: '$_loadError\n读取成功前不可编辑或保存。',
               action: FilledButton.tonal(
@@ -350,7 +350,7 @@ class _DefaultModelRow extends StatelessWidget {
           child: OutlinedButton.icon(
             key: const ValueKey('pick-default-model'),
             onPressed: onPick,
-            icon: const Icon(Symbols.model_training, size: 18),
+            icon: const Icon(LucideIcons.brainCircuit, size: 18),
             label: Text(
               selection == null
                   ? '跟随当前选择'
@@ -366,7 +366,7 @@ class _DefaultModelRow extends StatelessWidget {
             key: const ValueKey('clear-default-model'),
             tooltip: '不使用默认模型',
             onPressed: onClear,
-            icon: const Icon(Symbols.close),
+            icon: const Icon(LucideIcons.x),
             color: theme.colorScheme.onSurfaceVariant,
           ),
         ],

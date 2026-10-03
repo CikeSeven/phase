@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../../core/error/failure.dart';
 import '../../../../core/theme/app_radius.dart';
@@ -103,7 +103,7 @@ class _PlanCardState extends ConsumerState<PlanCard> {
                           context: context,
                           builder: (_) => _PlanEditor(plan: p),
                         ),
-                  icon: const Icon(Symbols.edit),
+                  icon: const Icon(LucideIcons.pencil),
                   label: Text(p.status == PlanStatus.draft ? '编辑' : '创建新修订'),
                 ),
                 if (p.status == PlanStatus.draft)
@@ -207,7 +207,7 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
                         : () => setState(() {
                             _retired.add(_steps.removeAt(i));
                           }),
-                    icon: const Icon(Symbols.remove_circle_outline),
+                    icon: const Icon(LucideIcons.circleMinus),
                   ),
                 ),
               ),
@@ -216,7 +216,7 @@ class _PlanEditorState extends ConsumerState<_PlanEditor> {
             onPressed: _saving || _steps.length >= 30
                 ? null
                 : () => setState(() => _steps.add(TextEditingController())),
-            icon: const Icon(Symbols.add),
+            icon: const Icon(LucideIcons.plus),
             label: const Text('添加步骤'),
           ),
           if (_error != null)

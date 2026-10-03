@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -321,7 +321,7 @@ class MessageBubble extends StatelessWidget {
                     child: Row(
                       children: [
                         const AppIconBadge(
-                          icon: Symbols.auto_awesome,
+                          icon: LucideIcons.sparkles,
                           tone: AppTone.teal,
                           size: 32,
                           iconSize: 18,
@@ -365,7 +365,7 @@ class MessageBubble extends StatelessWidget {
                             Row(
                               children: [
                                 Icon(
-                                  Symbols.error,
+                                  LucideIcons.circleAlert,
                                   size: 18,
                                   color: colors.onErrorContainer,
                                 ),
@@ -415,7 +415,7 @@ class MessageBubble extends StatelessWidget {
                               onPressed: message.text.isEmpty
                                   ? null
                                   : () => _copy(context),
-                              icon: const Icon(Symbols.content_copy, size: 24),
+                              icon: const Icon(LucideIcons.copy, size: 24),
                             ),
                             if (canRegenerate) ...[
                               const SizedBox(width: AppSpacing.s),
@@ -424,7 +424,10 @@ class MessageBubble extends StatelessWidget {
                                 tooltip: '重新生成',
                                 style: actionStyle,
                                 onPressed: onRegenerate,
-                                icon: const Icon(Symbols.refresh, size: 24),
+                                icon: const Icon(
+                                  LucideIcons.rotateCw,
+                                  size: 24,
+                                ),
                               ),
                             ],
                           ],

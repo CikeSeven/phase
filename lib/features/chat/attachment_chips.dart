@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -66,13 +66,13 @@ class _Chip extends StatelessWidget {
               fit: BoxFit.cover,
               errorBuilder: (_, _, _) => const SizedBox.square(
                 dimension: 48,
-                child: Icon(Symbols.broken_image),
+                child: Icon(LucideIcons.imageOff),
               ),
             )
           else
             const Padding(
               padding: EdgeInsets.only(left: AppSpacing.s),
-              child: Icon(Symbols.description, size: 20),
+              child: Icon(LucideIcons.fileText, size: 20),
             ),
           if (!attachment.isImage) ...[
             const SizedBox(width: AppSpacing.xs),
@@ -91,7 +91,7 @@ class _Chip extends StatelessWidget {
               Tooltip(
                 message: attachment.extractionError!,
                 child: Icon(
-                  Symbols.warning,
+                  LucideIcons.triangleAlert,
                   key: ValueKey('attachment-warning-${attachment.id}'),
                   size: 16,
                   color: colors.error,
@@ -103,7 +103,7 @@ class _Chip extends StatelessWidget {
             tooltip: '移除附件',
             color: colors.error,
             onPressed: onRemove,
-            icon: const Icon(Symbols.close, size: 18),
+            icon: const Icon(LucideIcons.x, size: 18),
           ),
         ],
       ),
@@ -163,7 +163,7 @@ class MessageAttachments extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Symbols.description, size: 18),
+            const Icon(LucideIcons.fileText, size: 18),
             const SizedBox(width: AppSpacing.xs),
             ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 160),

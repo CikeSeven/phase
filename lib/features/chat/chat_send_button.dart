@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:material_loading_indicator/loading_indicator.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_motion.dart';
@@ -33,7 +33,7 @@ class ChatSendButton extends StatelessWidget {
         : const ButtonStyle();
     final icon = isGenerating
         ? const _GeneratingIndicator(key: ValueKey(true))
-        : const Icon(Symbols.arrow_upward, key: ValueKey(false), size: 24);
+        : const Icon(LucideIcons.arrowUp, key: ValueKey(false), size: 24);
 
     return IconButton.filled(
       tooltip: isGenerating ? '停止生成' : '发送',

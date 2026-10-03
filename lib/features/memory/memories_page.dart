@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/widgets/app_dialog.dart';
@@ -34,7 +34,7 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
       context: context,
       builder: (context) => AppDialog(
         title: '删除记忆？',
-        icon: Symbols.delete,
+        icon: LucideIcons.trash2,
         tone: AppTone.error,
         content: const Text('删除后不再参与检索，摘要不会将它重新写回。历史对话中的文字仍保留。'),
         actions: [
@@ -79,7 +79,7 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
       actions: [
         IconButton(
           tooltip: '添加记忆',
-          icon: const Icon(Symbols.add),
+          icon: const Icon(LucideIcons.plus),
           onPressed: () => showDialog<void>(
             context: context,
             builder: (_) => const MemoryEditor(),
@@ -95,7 +95,7 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
               onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
                 labelText: '搜索记忆',
-                prefixIcon: Icon(Symbols.search),
+                prefixIcon: Icon(LucideIcons.search),
               ),
             ),
           ),
@@ -161,7 +161,7 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
                                         context: context,
                                         builder: (_) => MemoryEditor(entry: e),
                                       ),
-                                icon: const Icon(Symbols.edit),
+                                icon: const Icon(LucideIcons.pencil),
                                 label: const Text('编辑'),
                               ),
                               TextButton.icon(
@@ -173,7 +173,7 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
                                       .colorScheme
                                       .error,
                                 ),
-                                icon: const Icon(Symbols.delete),
+                                icon: const Icon(LucideIcons.trash2),
                                 label: const Text('删除'),
                               ),
                             ],

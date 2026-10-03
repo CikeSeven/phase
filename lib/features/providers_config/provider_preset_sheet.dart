@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_selection_surface.dart';
@@ -61,13 +61,13 @@ class _ProviderPresetSheetState extends State<ProviderPresetSheet> {
                 decoration: InputDecoration(
                   labelText: '搜索预设',
                   hintText: '名称或地址',
-                  prefixIcon: const Icon(Symbols.search),
+                  prefixIcon: const Icon(LucideIcons.search),
                   suffixIcon: query.isEmpty
                       ? null
                       : IconButton(
                           tooltip: '清除预设搜索',
                           onPressed: () => setState(_searchController.clear),
-                          icon: const Icon(Symbols.close),
+                          icon: const Icon(LucideIcons.x),
                         ),
                 ),
               ),
@@ -152,8 +152,7 @@ class _ProviderPresetSheetState extends State<ProviderPresetSheet> {
                           dimension: 24,
                           child: selected
                               ? Icon(
-                                  Symbols.check_circle,
-                                  fill: 1,
+                                  LucideIcons.circleCheck,
                                   color: theme.colorScheme.onPrimaryContainer,
                                   semanticLabel: '当前预设',
                                 )

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
@@ -85,7 +85,7 @@ class _ChatActionSheetState<T> extends State<ChatActionSheet<T>> {
                         IconButton(
                           tooltip: '关闭',
                           onPressed: _select,
-                          icon: const Icon(Symbols.close),
+                          icon: const Icon(LucideIcons.x),
                         ),
                       ],
                     ),

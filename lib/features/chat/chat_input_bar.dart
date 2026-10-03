@@ -5,7 +5,7 @@ import 'permission_mode_menu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_control_style.dart';
@@ -124,7 +124,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       key: const ValueKey('chat-attach'),
       tooltip: '附件',
       onPressed: _submitting ? null : _showAttachmentSheet,
-      icon: const Icon(Symbols.attach_file),
+      icon: const Icon(LucideIcons.paperclip, size: 20),
     );
     final mode = needsConfiguration
         ? Align(
@@ -135,7 +135,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 foregroundColor: theme.colorScheme.onSurface,
               ),
               icon: Icon(
-                selection.hasError ? Symbols.error : Symbols.tune,
+                selection.hasError
+                    ? LucideIcons.circleAlert
+                    : LucideIcons.slidersHorizontal,
                 size: 18,
               ),
               label: Text(

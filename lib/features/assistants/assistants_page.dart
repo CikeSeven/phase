@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
@@ -32,7 +32,7 @@ class AssistantsPage extends ConsumerWidget {
         child: FilledButton.icon(
           key: const ValueKey('add-assistant'),
           onPressed: () => context.push('/assistants/new'),
-          icon: const Icon(Symbols.add),
+          icon: const Icon(LucideIcons.plus),
           label: const Text('新建助手'),
         ),
       ),
@@ -43,7 +43,7 @@ class AssistantsPage extends ConsumerWidget {
         loading: () =>
             const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取助手')),
         error: (error, _) => AppEmptyState(
-          icon: Symbols.error,
+          icon: LucideIcons.circleAlert,
           title: '暂时无法读取助手',
           message: error is Failure ? error.userMessage : '加载助手失败，请重试',
           action: FilledButton.tonal(
@@ -66,7 +66,7 @@ class _AssistantList extends StatelessWidget {
   Widget build(BuildContext context) {
     if (assistants.isEmpty) {
       return const AppEmptyState(
-        icon: Symbols.smart_toy,
+        icon: LucideIcons.bot,
         title: '还没有助手',
         message: '新建一个助手，为它写系统提示词并选定默认模型。',
       );

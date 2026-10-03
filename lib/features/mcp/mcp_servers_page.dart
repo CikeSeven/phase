@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -20,14 +20,14 @@ class McpServersPage extends ConsumerWidget {
       actions: [
         IconButton(
           tooltip: '新增 MCP 服务',
-          icon: const Icon(Symbols.add),
+          icon: const Icon(LucideIcons.plus),
           onPressed: () => context.push('/settings/extensions/mcp/new'),
         ),
       ],
       body: servers.when(
         loading: () => const Center(child: AppLoadingIndicator()),
         error: (error, _) => AppEmptyState(
-          icon: Symbols.error,
+          icon: LucideIcons.circleAlert,
           title: '无法读取 MCP 服务',
           message: error is Failure ? error.userMessage : '读取失败，请重试',
           action: FilledButton.tonal(
@@ -37,11 +37,11 @@ class McpServersPage extends ConsumerWidget {
         ),
         data: (entries) => entries.isEmpty
             ? AppEmptyState(
-                icon: Symbols.extension,
+                icon: LucideIcons.puzzle,
                 title: '还没有 MCP 服务',
                 message: '添加 Streamable HTTP 或本地 stdio 服务，发现工具后在助手中启用。',
                 action: FilledButton.icon(
-                  icon: const Icon(Symbols.add),
+                  icon: const Icon(LucideIcons.plus),
                   label: const Text('添加服务'),
                   onPressed: () => context.push('/settings/extensions/mcp/new'),
                 ),
@@ -58,8 +58,8 @@ class McpServersPage extends ConsumerWidget {
                       ),
                       leading: Icon(
                         entry.profile.enabled
-                            ? Symbols.extension
-                            : Symbols.extension_off,
+                            ? LucideIcons.puzzle
+                            : LucideIcons.ban,
                       ),
                       subtitle: Text(
                         entry.profile.deleting
@@ -67,7 +67,7 @@ class McpServersPage extends ConsumerWidget {
                             : '${entry.profile.enabled ? "已启用" : "已禁用"} · '
                                   '${entry.protocolVersion == null ? "尚未检查连接" : "已发现 ${entry.tools.length} 个工具"}',
                       ),
-                      trailing: const Icon(Symbols.chevron_right),
+                      trailing: const Icon(LucideIcons.chevronRight),
                       onTap: () => context.push(
                         '/settings/extensions/mcp/${entry.profile.id}',
                       ),

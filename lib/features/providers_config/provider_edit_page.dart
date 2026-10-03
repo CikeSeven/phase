@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -185,7 +185,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
             onPressed: _busy || _saving ? null : _save,
             icon: _saving
                 ? const AppLoadingIndicator.small(semanticsLabel: '正在保存配置')
-                : const Icon(Symbols.save),
+                : const Icon(LucideIcons.save),
           ),
           if (_editing)
             IconButton(
@@ -195,7 +195,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
               onPressed: _deleting || _modalOpen ? null : _delete,
               icon: _deleting
                   ? const AppLoadingIndicator.small(semanticsLabel: '正在删除服务商')
-                  : const Icon(Symbols.delete),
+                  : const Icon(LucideIcons.trash2),
             ),
         ],
       ],
@@ -203,12 +203,12 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
           ? const Center(child: AppLoadingIndicator(semanticsLabel: '正在读取配置'))
           : _loadError != null
           ? AppEmptyState(
-              icon: Symbols.cloud_off,
+              icon: LucideIcons.cloudOff,
               title: '无法读取服务商配置',
               message: '$_loadError\n读取成功前不可编辑或保存。',
               action: FilledButton.tonalIcon(
                 onPressed: _load,
-                icon: const Icon(Symbols.refresh),
+                icon: const Icon(LucideIcons.rotateCw),
                 label: const Text('重新加载'),
               ),
             )
@@ -249,7 +249,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
                               onPressed: _deletePending
                                   ? (_deleting ? null : _delete)
                                   : (_busy ? null : _scheduleAutoSave),
-                              icon: const Icon(Symbols.refresh),
+                              icon: const Icon(LucideIcons.rotateCw),
                               label: const Text('重试'),
                             ),
                           ],
@@ -385,7 +385,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
         builder: (context) => AppDialog(
           title: '移除模型？',
           description: _editing ? '从此配置中移除，不会删除远端模型。' : '保存后从此配置中移除，不会删除远端模型。',
-          icon: Symbols.delete,
+          icon: LucideIcons.trash2,
           tone: AppTone.error,
           content: Text(model.id),
           actions: [
@@ -585,7 +585,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
           builder: (context) => AppDialog(
             title: '删除服务商？',
             description: '将删除此服务商的配置、模型和本机保存的 API Key。',
-            icon: Symbols.delete,
+            icon: LucideIcons.trash2,
             tone: AppTone.error,
             content: Text(_nameController.text.trim()),
             actions: [

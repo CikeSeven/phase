@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_control_style.dart';
@@ -125,7 +125,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               ),
               const SizedBox(width: AppSpacing.xs),
               Icon(
-                Symbols.expand_more,
+                LucideIcons.chevronDown,
                 size: 20,
                 color: Theme.of(context).colorScheme.primary,
               ),
@@ -146,11 +146,11 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         data: (profiles) {
           if (profiles.isEmpty) {
             return _buildStatus(
-              icon: Symbols.cloud,
+              icon: LucideIcons.cloud,
               title: '暂无服务商',
               action: FilledButton.tonalIcon(
                 onPressed: () => _openConfiguration(),
-                icon: const Icon(Symbols.add),
+                icon: const Icon(LucideIcons.plus),
                 label: const Text('去配置服务商'),
               ),
             );
@@ -275,13 +275,13 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
               onSubmitted: (_) => FocusScope.of(context).unfocus(),
               decoration: InputDecoration(
                 hintText: '搜索模型或服务商',
-                prefixIcon: const Icon(Symbols.search),
+                prefixIcon: const Icon(LucideIcons.search),
                 suffixIcon: _query.isEmpty
                     ? null
                     : IconButton(
                         tooltip: '清除搜索',
                         onPressed: _clearSearch,
-                        icon: const Icon(Symbols.close),
+                        icon: const Icon(LucideIcons.x),
                       ),
               ),
             ),
@@ -292,7 +292,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         Expanded(
           child: visible.isEmpty
               ? _buildStatus(
-                  icon: Symbols.search_off,
+                  icon: LucideIcons.searchX,
                   title: '没有找到模型',
                   action: TextButton(
                     onPressed: _clearSearch,
@@ -552,7 +552,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
                 SizedBox.square(
                   dimension: 24,
                   child: selected
-                      ? Icon(Symbols.check_circle, color: foreground, fill: 1)
+                      ? Icon(LucideIcons.circleCheck, color: foreground)
                       : null,
                 ),
               ],
@@ -575,7 +575,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           const SizedBox(height: AppSpacing.s),
           TextButton.icon(
             onPressed: () => _openConfiguration(profile.id),
-            icon: const Icon(Symbols.edit),
+            icon: const Icon(LucideIcons.pencil),
             label: const Text('配置模型'),
           ),
         ],
@@ -681,7 +681,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
 
   Widget _buildLoadError(Object error) {
     return AppEmptyState(
-      icon: Symbols.error_outline,
+      icon: LucideIcons.circleAlert,
       title: '无法加载模型',
       message: error is Failure ? error.userMessage : '读取本地配置失败，请重试。',
       action: FilledButton.tonalIcon(
@@ -689,7 +689,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
           ref.invalidate(providerProfilesProvider);
           ref.invalidate(modelSelectionProvider);
         },
-        icon: const Icon(Symbols.refresh),
+        icon: const Icon(LucideIcons.rotateCw),
         label: const Text('重试'),
       ),
     );

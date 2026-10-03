@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -236,7 +236,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       builder: (context) => AppDialog(
         title: '删除 MCP 服务',
         description: '关闭此服务的连接并删除凭据。历史工具记录保留。',
-        icon: Symbols.delete,
+        icon: LucideIcons.trash2,
         tone: AppTone.error,
         content: const SizedBox.shrink(),
         actions: [
@@ -301,7 +301,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                               .onErrorContainer,
                         ),
                         onPressed: _busy ? null : _delete,
-                        icon: const Icon(Symbols.delete),
+                        icon: const Icon(LucideIcons.trash2),
                       ),
                     if (_entry != null) const SizedBox(width: AppSpacing.m),
                     Expanded(
@@ -310,7 +310,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                         onPressed: _busy || deleting ? null : _save,
                         icon: _saving
                             ? const AppLoadingIndicator.small()
-                            : const Icon(Symbols.check),
+                            : const Icon(LucideIcons.check),
                         label: Text(_saving ? '保存中…' : '保存'),
                       ),
                     ),
@@ -321,7 +321,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
             ? const Center(child: AppLoadingIndicator())
             : widget.serverId != null && _entry == null
             ? AppEmptyState(
-                icon: Symbols.error,
+                icon: LucideIcons.circleAlert,
                 title: '无法读取 MCP 服务',
                 message: _error ?? '服务不存在',
                 action: FilledButton.tonal(
@@ -562,7 +562,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                                 : _check,
                             icon: _checking
                                 ? const AppLoadingIndicator.small()
-                                : const Icon(Symbols.sync),
+                                : const Icon(LucideIcons.refreshCw),
                             label: Text(_checking ? '正在检查…' : '检查连接与工具'),
                           ),
                           if (_checking)
@@ -660,7 +660,11 @@ class _McpToolDirectory extends StatelessWidget {
                 AppSpacing.l,
                 AppSpacing.l,
               ),
-              leading: Icon(Symbols.build, size: 20, color: colors.primary),
+              leading: Icon(
+                LucideIcons.wrench,
+                size: 20,
+                color: colors.primary,
+              ),
               title: Text(
                 tools[index].source.originalName,
                 maxLines: 2,

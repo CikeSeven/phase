@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
@@ -111,7 +111,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                                 tooltip: '重新安装 Ubuntu',
                                 style: environmentActionStyle,
                                 onPressed: onInstallEnvironment,
-                                icon: const Icon(Symbols.refresh),
+                                icon: const Icon(LucideIcons.rotateCw),
                               ),
                               IconButton(
                                 tooltip: '卸载 Ubuntu',
@@ -119,7 +119,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                                 onPressed: dependencies.busy
                                     ? null
                                     : _confirmEnvironmentUninstall,
-                                icon: const Icon(Symbols.delete),
+                                icon: const Icon(LucideIcons.trash2),
                               ),
                             ] else
                               FilledButton.icon(
@@ -132,7 +132,10 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                                   textStyle: theme.textTheme.labelLarge,
                                 ),
                                 onPressed: onInstallEnvironment,
-                                icon: const Icon(Symbols.download, size: 20),
+                                icon: const Icon(
+                                  LucideIcons.download,
+                                  size: 20,
+                                ),
                                 label: const Text('安装'),
                               ),
                           ],
@@ -285,7 +288,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                     onPressed: platform.value?.available == true
                         ? _repairEnvironment
                         : null,
-                    icon: const Icon(Symbols.build),
+                    icon: const Icon(LucideIcons.wrench),
                     label: const Text('修复环境'),
                   ),
                 ),
@@ -307,7 +310,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
       context: context,
       builder: (context) => AppDialog(
         title: ready ? '重新安装 Ubuntu？' : '安装 Ubuntu？',
-        icon: replacesEnvironment ? Symbols.warning : null,
+        icon: replacesEnvironment ? LucideIcons.triangleAlert : null,
         tone: replacesEnvironment ? AppTone.error : AppTone.primary,
         content: Text(
           '安装 Ubuntu ${UbuntuImage.revision}，并自动安装 Python、Node.js、Git 与 ripgrep。'
@@ -343,7 +346,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
       context: context,
       builder: (context) => AppDialog(
         title: '卸载 Ubuntu 环境？',
-        icon: Symbols.delete,
+        icon: LucideIcons.trash2,
         tone: AppTone.error,
         content: const Text('删除环境和已安装依赖，保留全部工作区文件。正在使用时不能卸载。'),
         actions: [
@@ -393,7 +396,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
       context: context,
       builder: (context) => AppDialog(
         title: '开发依赖',
-        icon: Symbols.check_circle,
+        icon: LucideIcons.circleCheck,
         tone: AppTone.teal,
         description: '全部已安装 · ${_formatDate(latest)}',
         content: Column(
@@ -507,7 +510,7 @@ class _DependencyTile extends StatelessWidget {
         title: const Text('开发依赖'),
         subtitle: const Text('Python、Node.js、Git与ripgrep'),
         leading: AppIconBadge(
-          icon: allInstalled ? Symbols.check_circle : Symbols.terminal,
+          icon: allInstalled ? LucideIcons.circleCheck : LucideIcons.terminal,
           tone: AppTone.lavender,
           size: 40,
           iconSize: 20,
@@ -515,7 +518,7 @@ class _DependencyTile extends StatelessWidget {
         trailing: installing
             ? const AppLoadingIndicator.small(size: 20)
             : allInstalled
-            ? const Icon(Symbols.chevron_right)
+            ? const Icon(LucideIcons.chevronRight)
             : null,
         onTap: !installing && allInstalled ? onShowInfo : null,
       ),

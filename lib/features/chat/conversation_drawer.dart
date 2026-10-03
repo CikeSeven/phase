@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
@@ -77,7 +77,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                             Row(
                               children: [
                                 const AppIconBadge(
-                                  icon: Symbols.dark_mode,
+                                  icon: LucideIcons.moon,
                                   tone: AppTone.gold,
                                   size: 40,
                                   iconSize: 22,
@@ -92,7 +92,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                                 IconButton(
                                   tooltip: '关闭侧栏',
                                   onPressed: () => Navigator.of(context).pop(),
-                                  icon: const Icon(Symbols.close),
+                                  icon: const Icon(LucideIcons.x),
                                 ),
                               ],
                             ),
@@ -105,7 +105,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                                     .startNewConversation();
                                 Navigator.of(context).pop();
                               },
-                              icon: const Icon(Symbols.add),
+                              icon: const Icon(LucideIcons.plus),
                               label: const Text('新会话'),
                             ),
                             const SizedBox(height: AppSpacing.l),
@@ -115,7 +115,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                               textInputAction: TextInputAction.search,
                               decoration: InputDecoration(
                                 hintText: '搜索会话',
-                                prefixIcon: const Icon(Symbols.search),
+                                prefixIcon: const Icon(LucideIcons.search),
                                 suffixIcon: _query.isEmpty
                                     ? null
                                     : IconButton(
@@ -124,7 +124,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                                           _searchController.clear();
                                           setState(() => _query = '');
                                         },
-                                        icon: const Icon(Symbols.close),
+                                        icon: const Icon(LucideIcons.x),
                                       ),
                               ),
                               onChanged: (value) => setState(
@@ -248,7 +248,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                     child: Row(
                       children: [
                         const AppIconBadge(
-                          icon: Symbols.settings,
+                          icon: LucideIcons.settings,
                           size: 40,
                           iconSize: 22,
                         ),
@@ -256,7 +256,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer> {
                         Expanded(
                           child: Text('设置', style: theme.textTheme.titleMedium),
                         ),
-                        const Icon(Symbols.chevron_right),
+                        const Icon(LucideIcons.chevronRight),
                       ],
                     ),
                   ),
@@ -387,7 +387,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                       children: [
                         if (conversation.pinned) ...[
                           Icon(
-                            Symbols.push_pin,
+                            LucideIcons.pin,
                             size: 14,
                             color: context.brandColors.gold,
                             semanticLabel: '已置顶',
@@ -428,31 +428,31 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                 ),
                 menuChildren: [
                   AppMenuItemButton(
-                    leadingIcon: const Icon(Symbols.edit),
+                    leadingIcon: const Icon(LucideIcons.pencil),
                     onPressed: () => _rename(context, ref),
                     child: const Text('重命名'),
                   ),
                   AppMenuItemButton(
                     key: ValueKey('duplicate-conversation-${conversation.id}'),
-                    leadingIcon: const Icon(Symbols.content_copy),
+                    leadingIcon: const Icon(LucideIcons.copy),
                     onPressed: () => _duplicate(context, ref, conversation.id),
                     child: const Text('复制会话'),
                   ),
                   AppMenuItemButton(
                     key: ValueKey('export-conversation-${conversation.id}'),
-                    leadingIcon: const Icon(Symbols.download),
+                    leadingIcon: const Icon(LucideIcons.download),
                     onPressed: () => _export(context, ref),
                     child: const Text('导出会话'),
                   ),
                   AppMenuItemButton(
                     key: ValueKey('tool-records-${conversation.id}'),
-                    leadingIcon: const Icon(Symbols.history),
+                    leadingIcon: const Icon(LucideIcons.history),
                     onPressed: () =>
                         context.push('/conversations/${conversation.id}/tools'),
                     child: const Text('执行记录'),
                   ),
                   AppMenuItemButton(
-                    leadingIcon: const Icon(Symbols.push_pin),
+                    leadingIcon: const Icon(LucideIcons.pin),
                     onPressed: () => _runGuarded(context, () async {
                       final repository = await ref.read(
                         conversationRepositoryProvider.future,
@@ -469,7 +469,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                       foregroundColor: colors.error,
                       iconColor: colors.error,
                     ),
-                    leadingIcon: const Icon(Symbols.delete),
+                    leadingIcon: const Icon(LucideIcons.trash2),
                     onPressed: () => _confirmDelete(context, ref),
                     child: const Text('删除'),
                   ),
@@ -479,7 +479,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                   key: ValueKey('conversation-menu-${conversation.id}'),
                   tooltip: '会话菜单',
                   onPressed: _toggleMenu,
-                  icon: const Icon(Symbols.more_horiz),
+                  icon: const Icon(LucideIcons.ellipsis),
                 ),
               ),
             ],
@@ -567,7 +567,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
         return AppDialog(
           title: '删除会话',
           description: '该会话的所有消息、附件、工作区文件与产物将一并删除，此操作无法撤销。',
-          icon: Symbols.delete,
+          icon: LucideIcons.trash2,
           tone: AppTone.error,
           content: Text('确定删除「${conversation.title}」吗？'),
           actions: [
@@ -668,7 +668,7 @@ class _RenameConversationDialogState extends State<_RenameConversationDialog> {
   Widget build(BuildContext context) {
     return AppDialog(
       title: '重命名会话',
-      icon: Symbols.edit,
+      icon: LucideIcons.pencil,
       content: TextField(
         key: const ValueKey('conversation-name-input'),
         controller: _controller,

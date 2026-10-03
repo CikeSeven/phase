@@ -48,7 +48,7 @@ dependencies:
   # HTML 代码预览；Android 实现用于关闭本地文件和内容 URI 访问。
   webview_flutter: ^4.14.1
   webview_flutter_android: ^4.14.1
-  material_symbols_icons: ^4.2960.0
+  lucide_icons_flutter: ^3.1.21
   # 服务商品牌标识使用本地 SVG，复用已有解析版本。
   flutter_svg: ^2.3.0
   material_loading_indicator: ^1.0.0
@@ -69,6 +69,8 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # Existing tests still import Material Symbols; app icons use Lucide.
+  material_symbols_icons: ^4.2960.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

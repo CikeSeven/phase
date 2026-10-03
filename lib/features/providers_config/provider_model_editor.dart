@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -74,7 +74,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
               action: TextButton.icon(
                 key: const ValueKey('add-provider-model'),
                 onPressed: widget.enabled ? widget.onAdd : null,
-                icon: const Icon(Symbols.add),
+                icon: const Icon(LucideIcons.plus),
                 label: const Text('添加模型'),
               ),
               child: TextField(
@@ -85,7 +85,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                 decoration: InputDecoration(
                   labelText: '搜索模型',
                   hintText: '模型 ID',
-                  prefixIcon: const Icon(Symbols.search),
+                  prefixIcon: const Icon(LucideIcons.search),
                   suffixIcon: query.isEmpty
                       ? null
                       : IconButton(
@@ -93,7 +93,7 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
                           onPressed: widget.enabled
                               ? () => setState(_searchController.clear)
                               : null,
-                          icon: const Icon(Symbols.close),
+                          icon: const Icon(LucideIcons.x),
                         ),
                 ),
               ),
@@ -215,7 +215,7 @@ class _ModelCard extends StatelessWidget {
                 tooltip: '移除模型',
                 onPressed: enabled ? () => onRemove(model) : null,
                 color: theme.colorScheme.error,
-                icon: const Icon(Symbols.delete),
+                icon: const Icon(LucideIcons.trash2),
               ),
             ],
           ),
@@ -307,7 +307,10 @@ class _ModelCapabilities extends StatelessWidget {
               multiSelectionEnabled: true,
               emptySelectionAllowed: true,
               direction: horizontal ? Axis.horizontal : Axis.vertical,
-              selectedIcon: const Icon(Symbols.check, size: selectedIconSize),
+              selectedIcon: const Icon(
+                LucideIcons.check,
+                size: selectedIconSize,
+              ),
               onSelectionChanged: enabled
                   ? (values) => onModelChanged(
                       model.withSettings(

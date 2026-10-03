@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
@@ -81,7 +81,7 @@ class _SnackBarSurface extends StatelessWidget {
                           .hideCurrentSnackBar(
                             reason: SnackBarClosedReason.dismiss,
                           ),
-                      icon: const Icon(Symbols.close),
+                      icon: const Icon(LucideIcons.x),
                     ),
                   ],
                 ),

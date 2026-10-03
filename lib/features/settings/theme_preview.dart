@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -63,7 +63,7 @@ class _ThemeMiniature extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  Symbols.nightlight,
+                  LucideIcons.moon,
                   size: 12,
                   color: context.brandColors.gold,
                 ),

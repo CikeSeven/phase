@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -36,35 +36,35 @@ class SettingsPage extends ConsumerWidget {
           _AppearanceSurface(mode: themeMode),
           const SizedBox(height: AppSpacing.xl),
           SettingsEntry(
-            icon: Symbols.cloud,
+            icon: LucideIcons.cloud,
             tone: AppTone.teal,
             title: '服务商配置',
             onTap: () => context.push('/settings/providers'),
           ),
           const SizedBox(height: AppSpacing.s),
           SettingsEntry(
-            icon: Symbols.touch_app,
+            icon: LucideIcons.pointer,
             tone: AppTone.teal,
             title: '执行与权限',
             onTap: () => context.push('/settings/execution'),
           ),
           const SizedBox(height: AppSpacing.s),
           SettingsEntry(
-            icon: Symbols.folder_open,
+            icon: LucideIcons.folderOpen,
             tone: AppTone.teal,
             title: '环境设置',
             onTap: () => context.push('/settings/workspaces'),
           ),
           const SizedBox(height: AppSpacing.s),
           SettingsEntry(
-            icon: Symbols.extension,
+            icon: LucideIcons.puzzle,
             tone: AppTone.teal,
             title: '扩展',
             onTap: () => context.push('/settings/extensions'),
           ),
           const SizedBox(height: AppSpacing.s),
           SettingsEntry(
-            icon: Symbols.bookmark,
+            icon: LucideIcons.bookmark,
             tone: AppTone.teal,
             title: '长期记忆',
             onTap: () => context.push('/settings/memories'),
@@ -75,7 +75,7 @@ class SettingsPage extends ConsumerWidget {
             child: Column(
               children: [
                 Icon(
-                  Symbols.nightlight,
+                  LucideIcons.moon,
                   size: 24,
                   color: context.brandColors.gold,
                 ),
@@ -130,7 +130,11 @@ class _AppearanceSurface extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ExcludeSemantics(
-                  child: Icon(Symbols.palette, size: 24, color: brand.lavender),
+                  child: Icon(
+                    LucideIcons.palette,
+                    size: 24,
+                    color: brand.lavender,
+                  ),
                 ),
                 const SizedBox(width: AppSpacing.m),
                 Expanded(
@@ -151,7 +155,7 @@ class _AppearanceSurface extends StatelessWidget {
                 const SizedBox(width: AppSpacing.s),
                 ExcludeSemantics(
                   child: Icon(
-                    Symbols.chevron_right,
+                    LucideIcons.chevronRight,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),

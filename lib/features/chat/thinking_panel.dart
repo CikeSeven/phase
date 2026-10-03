@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -220,7 +220,7 @@ class _ThinkingPanelState extends State<ThinkingPanel>
                   child: Row(
                     children: [
                       Icon(
-                        Symbols.cognition_rounded,
+                        LucideIcons.brainCircuit,
                         size: 18,
                         color: brand.onTealContainer,
                       ),

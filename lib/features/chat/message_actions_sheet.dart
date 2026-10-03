@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'chat_action_sheet.dart';
 
@@ -50,7 +50,7 @@ class MessageActionsSheet extends StatelessWidget {
         key: const ValueKey('copy-message'),
         value: MessageAction.copy,
         label: '复制',
-        icon: Symbols.content_copy,
+        icon: LucideIcons.copy,
         enabled: canCopy,
       ),
       if (canRegenerate)
@@ -59,14 +59,14 @@ class MessageActionsSheet extends StatelessWidget {
           value: MessageAction.regenerate,
           label: '重新生成',
           description: '保留当前回答，生成一条新的',
-          icon: Symbols.refresh,
+          icon: LucideIcons.rotateCw,
         ),
       if (canViewUsage)
         const ChatSheetAction(
           value: MessageAction.usage,
           label: '用量',
           description: '查看所属运行及每次请求',
-          icon: Symbols.data_usage,
+          icon: LucideIcons.chartNoAxesColumnIncreasing,
         ),
     ],
   );

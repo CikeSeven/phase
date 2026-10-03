@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon_badge.dart';
@@ -51,7 +51,7 @@ class ChatEmptyState extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const AppIconBadge(
-                    icon: Symbols.dark_mode,
+                    icon: LucideIcons.moon,
                     tone: AppTone.gold,
                   ),
                   const SizedBox(height: AppSpacing.xl),
@@ -65,7 +65,7 @@ class ChatEmptyState extends StatelessWidget {
                   const SizedBox(height: AppSpacing.xl),
                   FilledButton.tonalIcon(
                     onPressed: () => context.push('/assistants'),
-                    icon: const Icon(Symbols.smart_toy),
+                    icon: const Icon(LucideIcons.bot),
                     label: const Text('选择助手'),
                   ),
                 ],

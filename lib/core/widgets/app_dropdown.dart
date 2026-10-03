@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/app_control_style.dart';
 import '../theme/app_motion.dart';
@@ -166,7 +166,7 @@ class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
                   dimension: 24,
                   child: entry.key == widget.value
                       ? const ExcludeSemantics(
-                          child: Icon(Symbols.check_circle, fill: 1),
+                          child: Icon(LucideIcons.circleCheck),
                         )
                       : null,
                 ),
@@ -202,8 +202,8 @@ class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
                     labelText: widget.label,
                     suffixIcon: Icon(
                       controller.isOpen
-                          ? Symbols.keyboard_arrow_up
-                          : Symbols.keyboard_arrow_down,
+                          ? LucideIcons.chevronUp
+                          : LucideIcons.chevronDown,
                     ),
                   ),
                   child: Text(

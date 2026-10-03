@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
@@ -154,26 +154,26 @@ class _PermissionTile extends StatelessWidget {
     final (label, icon, background, foreground) = granted.when(
       loading: () => (
         '读取中…',
-        Symbols.hourglass_empty,
+        LucideIcons.hourglass,
         colors.surfaceContainerHighest,
         colors.onSurfaceVariant,
       ),
       error: (_, _) => (
         '读取失败',
-        Symbols.error,
+        LucideIcons.circleAlert,
         colors.errorContainer,
         colors.onErrorContainer,
       ),
       data: (allowed) => allowed
           ? (
               '已授权',
-              Symbols.check_circle,
+              LucideIcons.circleCheck,
               brand.tealContainer,
               brand.onTealContainer,
             )
           : (
               '未授权',
-              Symbols.error,
+              LucideIcons.circleAlert,
               colors.errorContainer,
               colors.onErrorContainer,
             ),
@@ -201,7 +201,7 @@ class _PermissionTile extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ExcludeSemantics(
-                      child: Icon(icon, size: 20, color: foreground, fill: 1),
+                      child: Icon(icon, size: 20, color: foreground),
                     ),
                     const SizedBox(width: AppSpacing.xs),
                     Flexible(
@@ -220,7 +220,7 @@ class _PermissionTile extends StatelessWidget {
           ),
         ),
       ),
-      trailing: const Icon(Symbols.open_in_new),
+      trailing: const Icon(LucideIcons.externalLink),
       onTap: onTap,
     );
   }

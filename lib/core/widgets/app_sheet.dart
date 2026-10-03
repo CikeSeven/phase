@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
@@ -112,7 +112,7 @@ class AppSheet extends StatelessWidget {
                     minWidth: 48,
                     minHeight: 48,
                   ),
-                  icon: const Icon(Symbols.close),
+                  icon: const Icon(LucideIcons.x),
                 ),
               ],
             ],

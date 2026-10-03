@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'chat_action_sheet.dart';
 import 'conversation_export.dart';
@@ -22,14 +22,14 @@ Future<ConversationExportFormat?> showConversationExportSheet(
           value: ConversationExportFormat.markdown,
           label: 'Markdown',
           description: '按当前分支顺序导出正文、思考与工具记录',
-          icon: Symbols.description,
+          icon: LucideIcons.fileText,
         ),
         ChatSheetAction(
           key: ValueKey('export-json'),
           value: ConversationExportFormat.json,
           label: 'JSON',
           description: '会话、消息与工具记录的完整结构',
-          icon: Symbols.data_object,
+          icon: LucideIcons.braces,
         ),
       ],
     ),

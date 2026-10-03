@@ -8,7 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_radius.dart';
@@ -173,7 +173,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 leading: IconButton(
                   tooltip: '打开会话列表',
                   onPressed: _openDrawer,
-                  icon: const Icon(Symbols.menu),
+                  icon: const Icon(LucideIcons.textAlignStart),
                 ),
                 title: Tooltip(
                   message: '选择助手和模型',
@@ -238,7 +238,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                 ],
                                 const SizedBox(width: AppSpacing.xs),
                                 Icon(
-                                  Symbols.expand_more,
+                                  LucideIcons.chevronDown,
                                   size: 16,
                                   color: colors.primary,
                                 ),
@@ -254,7 +254,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   if (workspaceId != null)
                     IconButton(
                       tooltip: '会话工作区',
-                      icon: const Icon(Symbols.folder_open),
+                      icon: const Icon(LucideIcons.folderOpen, size: 20),
                       onPressed: () =>
                           context.push('/settings/workspaces/$workspaceId'),
                     ),
@@ -263,7 +263,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     onPressed: () => ref
                         .read(chatControllerProvider.notifier)
                         .startNewConversation(),
-                    icon: const Icon(Symbols.edit_square),
+                    icon: const Icon(LucideIcons.squarePen, size: 20),
                   ),
                 ],
               ),
@@ -481,7 +481,7 @@ class _ConversationMessages extends ConsumerWidget {
       error: (error, _) => Padding(
         padding: EdgeInsets.only(top: topPadding),
         child: AppEmptyState(
-          icon: Symbols.error,
+          icon: LucideIcons.circleAlert,
           title: '暂时无法读取消息',
           message: error is Failure ? error.userMessage : '加载消息失败，请重试',
           action: FilledButton.tonal(

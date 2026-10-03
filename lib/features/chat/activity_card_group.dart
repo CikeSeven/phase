@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
@@ -164,8 +164,8 @@ class _ActivityCardGroupState extends State<ActivityCardGroup>
                       children: [
                         Icon(
                           widget.reasoningParts.isEmpty
-                              ? Symbols.build_rounded
-                              : Symbols.cognition_rounded,
+                              ? LucideIcons.wrench
+                              : LucideIcons.brainCircuit,
                           size: 18,
                           color: brand.onTealContainer,
                         ),

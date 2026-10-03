@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dialog.dart';
@@ -20,7 +20,7 @@ Future<void> showToolArtifact(BuildContext context, Attachment attachment) {
       builder: (context) => AppDialog(
         title: attachment.name,
         titleStyle: Theme.of(context).textTheme.bodyMedium,
-        icon: Symbols.error,
+        icon: LucideIcons.circleAlert,
         tone: AppTone.gold,
         description: '产物文件不存在，可能已被删除或移动。',
         content: _FileFacts(attachment: attachment),
@@ -64,7 +64,7 @@ Future<void> showToolArtifact(BuildContext context, Attachment attachment) {
       builder: (context) => AppDialog(
         title: attachment.name,
         titleStyle: Theme.of(context).textTheme.bodyMedium,
-        icon: Symbols.description,
+        icon: LucideIcons.fileText,
         description: '这是二进制文件，不能按文本预览。',
         content: _FileFacts(attachment: attachment),
         actions: [
@@ -94,7 +94,7 @@ Future<void> _showTextPreview(
       builder: (context) => AppDialog(
         title: attachment.name,
         titleStyle: Theme.of(context).textTheme.bodyMedium,
-        icon: Symbols.error,
+        icon: LucideIcons.circleAlert,
         tone: AppTone.gold,
         description: '读取产物文件失败。',
         content: _FileFacts(attachment: attachment),

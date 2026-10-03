@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -69,7 +69,7 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
         IconButton(
           tooltip: '刷新',
           onPressed: () => setState(() => _load = _loadRecords()),
-          icon: const Icon(Symbols.refresh),
+          icon: const Icon(LucideIcons.rotateCw),
         ),
       ],
       body: FutureBuilder(
@@ -78,7 +78,7 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
           if (snapshot.hasError) {
             final error = snapshot.error;
             return AppEmptyState(
-              icon: Symbols.error,
+              icon: LucideIcons.circleAlert,
               title: '暂时无法读取记录',
               message: error is Failure ? error.userMessage : '读取失败，请重试',
             );
@@ -91,7 +91,7 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
           final (records, attachments) = snapshot.data!;
           if (records.isEmpty) {
             return const AppEmptyState(
-              icon: Symbols.history,
+              icon: LucideIcons.history,
               title: '还没有执行记录',
               message: '当模型调用工具时，这里会按顺序记录每一次动作与结果。',
             );

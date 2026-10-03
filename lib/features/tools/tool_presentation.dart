@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
@@ -15,26 +15,26 @@ class ToolPresentation {
   const ToolPresentation._();
 
   static IconData icon(String toolName) => switch (toolName) {
-    'submit_plan' => Symbols.checklist,
-    'read_memory' => Symbols.bookmark,
-    'read_history' => Symbols.history,
-    'write_memory' => Symbols.bookmark_add,
-    'wait_for_user' => Symbols.pan_tool_alt,
-    'system_info' => Symbols.schedule,
-    'read_file' => Symbols.description,
-    'shell' || 'termux_shell' => Symbols.terminal,
-    'workspace_transfer' || 'termux_transfer' => Symbols.sync_alt,
-    'install_packages' => Symbols.download,
-    'prepare_skill' => Symbols.folder_copy,
-    'read_skill' => Symbols.auto_stories,
-    'write_file' => Symbols.save,
-    'edit_file' => Symbols.edit_document,
-    'list_files' => Symbols.folder_open,
-    'http_request' => Symbols.language,
-    'capture_screen' => Symbols.screenshot,
-    'shizuku_display' => Symbols.phone_android,
-    'perform_gestures' => Symbols.touch_app,
-    _ => Symbols.build,
+    'submit_plan' => LucideIcons.listChecks,
+    'read_memory' => LucideIcons.bookmark,
+    'read_history' => LucideIcons.history,
+    'write_memory' => LucideIcons.bookmarkPlus,
+    'wait_for_user' => LucideIcons.hand,
+    'system_info' => LucideIcons.clock,
+    'read_file' => LucideIcons.fileText,
+    'shell' || 'termux_shell' => LucideIcons.terminal,
+    'workspace_transfer' || 'termux_transfer' => LucideIcons.arrowLeftRight,
+    'install_packages' => LucideIcons.download,
+    'prepare_skill' => LucideIcons.folderPlus,
+    'read_skill' => LucideIcons.bookOpen,
+    'write_file' => LucideIcons.save,
+    'edit_file' => LucideIcons.filePen,
+    'list_files' => LucideIcons.folderOpen,
+    'http_request' => LucideIcons.globe,
+    'capture_screen' => LucideIcons.scan,
+    'shizuku_display' => LucideIcons.smartphone,
+    'perform_gestures' => LucideIcons.pointer,
+    _ => LucideIcons.wrench,
   };
 
   static String recordLabel(ToolCallRecord record) =>
@@ -102,13 +102,13 @@ class ToolPresentation {
   }
 
   static IconData statusIcon(ToolCallStatus status) => switch (status) {
-    ToolCallStatus.prepared => Symbols.hourglass_top,
-    ToolCallStatus.awaitingConfirmation => Symbols.pan_tool_alt,
-    ToolCallStatus.executing => Symbols.progress_activity,
-    ToolCallStatus.succeeded => Symbols.check_circle,
-    ToolCallStatus.failed => Symbols.error,
-    ToolCallStatus.rejected => Symbols.block,
-    ToolCallStatus.cancelled => Symbols.cancel,
+    ToolCallStatus.prepared => LucideIcons.hourglass,
+    ToolCallStatus.awaitingConfirmation => LucideIcons.hand,
+    ToolCallStatus.executing => LucideIcons.loaderCircle,
+    ToolCallStatus.succeeded => LucideIcons.circleCheck,
+    ToolCallStatus.failed => LucideIcons.circleAlert,
+    ToolCallStatus.rejected => LucideIcons.ban,
+    ToolCallStatus.cancelled => LucideIcons.circleX,
   };
 
   /// 该状态是否仍在进行（用于显示进度动画）。

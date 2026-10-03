@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_choice_chip.dart';
@@ -90,7 +90,7 @@ class _AssistantModelSheetState extends ConsumerState<_AssistantModelSheet> {
               decoration: const InputDecoration(
                 labelText: '搜索模型',
                 hintText: '模型名、展示名或服务商',
-                prefixIcon: Icon(Symbols.search),
+                prefixIcon: Icon(LucideIcons.search),
                 isDense: true,
               ),
             ),
@@ -172,7 +172,7 @@ class _ModelOption extends StatelessWidget {
               SizedBox.square(
                 dimension: 24,
                 child: selected
-                    ? Icon(Symbols.check_circle, color: colors.primary, fill: 1)
+                    ? Icon(LucideIcons.circleCheck, color: colors.primary)
                     : null,
               ),
               const SizedBox(width: AppSpacing.m),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_motion.dart';
@@ -145,7 +145,7 @@ class _ChatReturnToBottomButtonState extends State<ChatReturnToBottomButton>
                       ? Duration.zero
                       : AppMotion.effects,
                 ),
-            icon: const Icon(Symbols.arrow_downward, size: 24),
+            icon: const Icon(LucideIcons.arrowDown, size: 24),
           ),
         ),
       ),

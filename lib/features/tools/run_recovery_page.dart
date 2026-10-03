@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
@@ -87,7 +87,7 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
       body: entries.when(
         loading: () => const Center(child: AppLoadingIndicator()),
         error: (error, _) => AppEmptyState(
-          icon: Symbols.error,
+          icon: LucideIcons.circleAlert,
           title: '无法读取中断任务',
           message: error is Failure ? error.userMessage : '请重试，暂不继续执行动作。',
           action: TextButton(
@@ -102,7 +102,7 @@ class _RunRecoveryPageState extends ConsumerState<RunRecoveryPage> {
         ),
         data: (items) => items.isEmpty
             ? const AppEmptyState(
-                icon: Symbols.task_alt,
+                icon: LucideIcons.circleCheck,
                 title: '没有待处理的中断任务',
                 message: '已保存的执行结果不会自动重做。',
               )

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_bottom_bar.dart';
@@ -48,7 +48,7 @@ class SkillImportPage extends ConsumerWidget {
                       },
                 icon: state.busy
                     ? const AppLoadingIndicator.small()
-                    : const Icon(Symbols.check),
+                    : const Icon(LucideIcons.check),
                 label: Text(replaceId == null ? '安装' : '更新版本'),
               ),
             ),
@@ -67,13 +67,13 @@ class SkillImportPage extends ConsumerWidget {
               FilledButton.tonalIcon(
                 key: const ValueKey('pick-skill-zip'),
                 onPressed: state.busy ? null : () => controller.pick(true),
-                icon: const Icon(Symbols.folder_zip),
+                icon: const Icon(LucideIcons.folderArchive),
                 label: const Text('选择 ZIP'),
               ),
               OutlinedButton.icon(
                 key: const ValueKey('pick-skill-directory'),
                 onPressed: state.busy ? null : () => controller.pick(false),
-                icon: const Icon(Symbols.folder_open),
+                icon: const Icon(LucideIcons.folderOpen),
                 label: const Text('选择目录'),
               ),
             ],

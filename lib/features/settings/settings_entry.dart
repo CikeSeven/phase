@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_list_tile.dart';
@@ -26,7 +26,7 @@ class SettingsEntry extends StatelessWidget {
     title: Text(title),
     subtitle: subtitle == null ? null : Text(subtitle!),
     leading: AppIconBadge(icon: icon, tone: tone),
-    trailing: onTap == null ? null : const Icon(Symbols.chevron_right),
+    trailing: onTap == null ? null : const Icon(LucideIcons.chevronRight),
     onTap: onTap,
   );
 }

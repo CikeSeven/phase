@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/widgets/app_icon_badge.dart';
@@ -66,7 +66,7 @@ class ProviderLogo extends StatelessWidget {
     final asset = _assets[presetId];
     if (asset == null) {
       return AppIconBadge(
-        icon: Symbols.tune,
+        icon: LucideIcons.slidersHorizontal,
         tone: AppTone.teal,
         size: size,
         iconSize: logoSize,
