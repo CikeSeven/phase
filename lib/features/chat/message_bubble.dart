@@ -13,6 +13,7 @@ import '../../../data/models/message_part.dart';
 import 'activity_card_group.dart';
 import 'attachment_chips.dart';
 import 'chat_markdown.dart';
+import 'chat_selection_area.dart';
 import 'thinking_panel.dart';
 import 'tool_call_card.dart';
 
@@ -339,7 +340,7 @@ class MessageBubble extends StatelessWidget {
                       ],
                     ),
                   ),
-                  SelectionArea(
+                  ChatSelectionArea(
                     child: Container(
                       key: const ValueKey('message-body'),
                       padding: isError

@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 
@@ -25,6 +26,7 @@ import 'chat_empty_state.dart';
 import 'chat_horizontal_drag_priority.dart';
 import 'chat_input_bar.dart';
 import 'chat_run_banner.dart';
+import 'chat_selection_area.dart';
 import 'chat_transcript.dart';
 import 'conversation_drawer.dart';
 import 'model_picker_sheet.dart';
@@ -46,9 +48,40 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   static const _contentMaxWidth = 840.0;
 
   final _scaffoldKey = GlobalKey<ScaffoldState>();
+  final _selectionController = ChatSelectionController();
   bool _drawerOpen = false;
+  bool _selectionRebuildScheduled = false;
   double _composerExtent = 0;
   double _runBannerExtent = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectionController.addListener(_onSelectionChanged);
+  }
+
+  void _onSelectionChanged() {
+    if (!mounted) return;
+    if (SchedulerBinding.instance.schedulerPhase !=
+        SchedulerPhase.persistentCallbacks) {
+      setState(() {});
+      return;
+    }
+    // 切换会话或惰性列表回收选中消息时，不在树的构建/销毁阶段重建页面。
+    if (_selectionRebuildScheduled) return;
+    _selectionRebuildScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _selectionRebuildScheduled = false;
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _selectionController.removeListener(_onSelectionChanged);
+    _selectionController.dispose();
+    super.dispose();
+  }
 
   void _openDrawer() {
     _scaffoldKey.currentState?.openDrawer();
@@ -108,14 +141,18 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         '相月';
 
     final page = PopScope<void>(
-      canPop: !_drawerOpen,
+      canPop: !_drawerOpen && !_selectionController.hasSelection,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop || !_drawerOpen) return;
-        // 根页面的返回拦截仍按本地历史逐层关闭菜单、侧栏。
+        if (didPop || (!_drawerOpen && !_selectionController.hasSelection)) {
+          return;
+        }
+        // 根页面的返回拦截按本地历史逐层关闭菜单、侧栏或消息选区。
         if (ModalRoute.of(context)?.willHandlePopInternally ?? false) {
           Navigator.of(context).pop();
-        } else {
+        } else if (_drawerOpen) {
           _scaffoldKey.currentState?.closeDrawer();
+        } else {
+          _selectionController.clearSelection();
         }
       },
       child: AppBackground(
@@ -379,7 +416,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               math.max(AppSpacing.s, _composerExtent - snackBarSafeBottom),
             ),
           ),
-          child: page,
+          child: ChatSelectionScope(
+            controller: _selectionController,
+            child: page,
+          ),
         ),
       ),
     );
