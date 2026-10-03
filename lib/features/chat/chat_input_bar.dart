@@ -167,9 +167,9 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(
-          AppSpacing.l,
+          AppSpacing.m,
           AppSpacing.s,
-          AppSpacing.l,
+          AppSpacing.m,
           AppSpacing.xs,
         ),
         child: ChatInputSurface(

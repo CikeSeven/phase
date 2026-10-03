@@ -417,7 +417,8 @@ class MessageBubble extends StatelessWidget {
                                   : () => _copy(context),
                               icon: const Icon(Symbols.content_copy, size: 24),
                             ),
-                            if (canRegenerate)
+                            if (canRegenerate) ...[
+                              const SizedBox(width: AppSpacing.s),
                               IconButton(
                                 key: const ValueKey('regenerate-message'),
                                 tooltip: '重新生成',
@@ -425,6 +426,7 @@ class MessageBubble extends StatelessWidget {
                                 onPressed: onRegenerate,
                                 icon: const Icon(Symbols.refresh, size: 24),
                               ),
+                            ],
                           ],
                         ),
                       ),
