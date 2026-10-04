@@ -1,5 +1,3 @@
-import '../../models/workspace.dart';
-
 import 'dart:convert';
 import 'dart:io';
 
@@ -19,6 +17,7 @@ import '../../models/permission_mode.dart';
 import 'database_key.dart';
 import 'key_store.dart';
 import 'mcp_server_scope_upgrade.dart';
+import 'workspace_schema_upgrade.dart';
 
 part 'app_database.g.dart';
 
@@ -93,8 +92,6 @@ class Assistants extends Table {
 /// 会话；currentMessageId 指向当前分支末尾。
 @DataClassName('ConversationRow')
 class Conversations extends Table {
-  TextColumn get primaryEnvironment =>
-      textEnum<PrimaryEnvironment>().withDefault(const Constant('ubuntu'))();
   TextColumn get workspaceId => text().nullable().references(
     Workspaces,
     #id,
@@ -265,7 +262,6 @@ class RuntimeEnvironments extends Table {
 
 @DataClassName('WorkspaceRow')
 class Workspaces extends Table {
-  IntColumn get termuxUid => integer().nullable()();
   TextColumn get id => text()();
   TextColumn get name => text().withLength(min: 1, max: 100)();
   TextColumn get environmentId => text()();
@@ -277,14 +273,12 @@ class Workspaces extends Table {
 
 @DataClassName('WorkspaceCopyRow')
 class WorkspaceCopies extends Table {
-  TextColumn get environment =>
-      textEnum<PrimaryEnvironment>().withDefault(const Constant('ubuntu'))();
   TextColumn get workspaceId =>
       text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
   TextColumn get relativePath => text()();
   TextColumn get sourceJson => text()();
   @override
-  Set<Column> get primaryKey => {workspaceId, environment, relativePath};
+  Set<Column> get primaryKey => {workspaceId, relativePath};
 }
 
 /// 派生摘要与独立请求用量，不替代消息树。
@@ -386,8 +380,7 @@ class MemoryEntries extends Table {
 
 /// 当前初版业务库。
 ///
-/// 数据库从创建时加密；schema 变更随初版演进，不保留开发期旧 schema 的
-/// 升级链（见 AGENTS.md §5）。
+/// 数据库从创建时加密；覆盖安装升级保留业务数据，失败回滚。
 @DriftDatabase(
   tables: [
     ProviderProfiles,
@@ -414,19 +407,27 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话主环境及分环境文件来源；11 MCP 按服务整体启用。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话工作区与文件来源；11 MCP 按服务整体启用；12 Ubuntu 会话工作区结构。
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    // 仅本次用户确认的 10 → 11 保数据安装，不扩展其他开发期升级链。
     onUpgrade: (migrator, from, to) async {
-      if (from != 10 || to != 11) {
-        throw const OperationFailure('此测试安装的数据结构不支持直接升级，请保留原数据');
+      if ((from != 10 && from != 11) || to != 12) {
+        throw const OperationFailure('此安装的数据结构不支持直接升级，请保留原数据');
       }
-      await upgradeMcpServerScope(this);
-      AppLogger.info('数据库 10 → 11 保数据升级已提交，MCP 服务范围与引用检查通过');
+      // 重建被引用的表前关闭外键，事务内校验引用，提交后恢复约束。
+      await customStatement('PRAGMA foreign_keys = OFF');
+      try {
+        await transaction(() async {
+          if (from == 10) await upgradeMcpServerScope(this);
+          await upgradeWorkspaceSchema(this, migrator);
+        });
+      } finally {
+        await customStatement('PRAGMA foreign_keys = ON');
+      }
+      AppLogger.info('数据库 $from → 12 保数据升级已提交，工作区与引用检查通过');
     },
     beforeOpen: _prepareDatabase,
   );

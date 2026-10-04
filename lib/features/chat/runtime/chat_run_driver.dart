@@ -14,7 +14,6 @@ import '../../../data/repositories/agent_run_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import '../../../data/repositories/model_request_repository.dart';
 import '../../../data/repositories/workspace_repository.dart';
-import '../../commands/system_channel_tools.dart';
 import '../../execution/execution_controller.dart';
 import '../../execution/execution_api.g.dart';
 import '../../execution/task_activity.dart';
@@ -359,10 +358,7 @@ class ChatRunDriver implements AgentLoopHost {
         workspaceDirectory: run.configuration.workspace?.rootPath ?? '',
         fileAccess: run.configuration.workspace == null
             ? null
-            : _tools!.workspaces!.files(
-                run.configuration.workspace!,
-                ownerId: run.id,
-              ),
+            : _tools!.workspaces!.files(run.configuration.workspace!),
         storage: _storage,
         enabledTools: run.configuration.enabledTools,
         toolPolicies: run.configuration.toolPolicies,
@@ -396,7 +392,7 @@ class ChatRunDriver implements AgentLoopHost {
     final label = ToolPresentation.recordLabel(record);
     final status = switch (record.status) {
       ToolCallStatus.succeeded =>
-        '执行了${isCommandToolName(record.toolName) ? '命令' : label}',
+        '执行了${(record.toolName == 'shell') ? '命令' : label}',
       ToolCallStatus.rejected => '已拒绝$label',
       ToolCallStatus.cancelled => '已取消$label',
       _ => '$label失败',

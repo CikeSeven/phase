@@ -1,14 +1,4 @@
-import 'command_channel.dart';
 import 'ubuntu_filesystem_layout.dart';
-
-enum PrimaryEnvironment { ubuntu, termux }
-
-extension PrimaryEnvironmentLabel on PrimaryEnvironment {
-  String get label => this == PrimaryEnvironment.ubuntu ? 'Ubuntu' : 'Termux';
-  PrimaryEnvironment get other => this == PrimaryEnvironment.ubuntu
-      ? PrimaryEnvironment.termux
-      : PrimaryEnvironment.ubuntu;
-}
 
 enum EnvironmentPhase {
   notInstalled,
@@ -119,19 +109,15 @@ class Workspace {
     required this.rootPath,
     required this.createdAt,
     this.deleting = false,
-    this.primaryEnvironment = PrimaryEnvironment.ubuntu,
-    this.termuxUid,
   });
   final String id;
   final String name;
   final String rootPath;
   final DateTime createdAt;
   final bool deleting;
-  final PrimaryEnvironment primaryEnvironment;
-  final int? termuxUid;
 }
 
-/// 一次运行固定的主环境与两侧位置；rootPath 始终是宿主私有目录，
+/// 一次运行固定的 Ubuntu 环境；rootPath 始终是宿主私有目录，
 /// 只有 executionRoot 表示模型命令实际可使用的工作目录。
 class WorkspaceSnapshot {
   const WorkspaceSnapshot({
@@ -140,31 +126,14 @@ class WorkspaceSnapshot {
     required this.rootPath,
     required this.environmentRoot,
     required this.environmentRevision,
-    this.primaryEnvironment = PrimaryEnvironment.ubuntu,
-    this.termux,
   });
   final String id;
   final String name;
   final String rootPath;
   final String? environmentRoot;
   final String? environmentRevision;
-  final PrimaryEnvironment primaryEnvironment;
-  final CommandChannelSnapshot? termux;
-  String get executionRoot => primaryEnvironment == PrimaryEnvironment.ubuntu
-      ? UbuntuFilesystemLayout.sessionGuestPath(id)
-      : '${termux?.home ?? "/data/data/com.termux/files/home"}/.phase/workspaces/$id';
-  bool get executable => primaryEnvironment == PrimaryEnvironment.ubuntu
-      ? linuxAvailable
-      : termux != null;
-  WorkspaceSnapshot select(PrimaryEnvironment environment) => WorkspaceSnapshot(
-    id: id,
-    name: name,
-    rootPath: rootPath,
-    environmentRoot: environmentRoot,
-    environmentRevision: environmentRevision,
-    primaryEnvironment: environment,
-    termux: termux,
-  );
+  String get executionRoot => UbuntuFilesystemLayout.sessionGuestPath(id);
+  bool get executable => linuxAvailable;
   bool get linuxAvailable =>
       environmentRoot != null && environmentRevision != null;
   Map<String, dynamic> toJson() => {
@@ -173,8 +142,6 @@ class WorkspaceSnapshot {
     'rootPath': rootPath,
     'environmentRoot': environmentRoot,
     'environmentRevision': environmentRevision,
-    'primaryEnvironment': primaryEnvironment.name,
-    'termux': termux?.toJson(),
   };
   factory WorkspaceSnapshot.fromJson(Map<String, dynamic> json) =>
       WorkspaceSnapshot(
@@ -183,13 +150,5 @@ class WorkspaceSnapshot {
         rootPath: json['rootPath'] as String,
         environmentRoot: json['environmentRoot'] as String?,
         environmentRevision: json['environmentRevision'] as String?,
-        primaryEnvironment: PrimaryEnvironment.values.byName(
-          json['primaryEnvironment'] as String? ?? 'ubuntu',
-        ),
-        termux: json['termux'] == null
-            ? null
-            : CommandChannelSnapshot.fromJson(
-                (json['termux'] as Map).cast<String, dynamic>(),
-              ),
       );
 }

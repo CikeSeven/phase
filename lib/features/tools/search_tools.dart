@@ -21,10 +21,7 @@ class WorkspaceSearchTool extends Tool {
   @override
   String get name => findFiles ? 'find' : 'grep';
   @override
-  ExecutionChannel get channel =>
-      workspace?.primaryEnvironment == PrimaryEnvironment.termux
-      ? ExecutionChannel.termux
-      : ExecutionChannel.app;
+  ExecutionChannel get channel => ExecutionChannel.app;
   @override
   bool usesPlatform(Map<String, dynamic> arguments) => false;
   @override
@@ -89,12 +86,7 @@ class WorkspaceSearchTool extends Tool {
     definitionRevision: definitionDigest([name, description, inputSchema]),
   );
   @override
-  Set<String> get requiredCapabilities => {
-    'file_read',
-    workspace?.primaryEnvironment == PrimaryEnvironment.termux
-        ? 'termux_command'
-        : 'linux_process',
-  };
+  Set<String> get requiredCapabilities => const {'file_read', 'linux_process'};
   @override
   ToolPolicy get defaultPolicy => ToolPolicy.allow;
   @override

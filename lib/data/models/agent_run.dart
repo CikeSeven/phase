@@ -185,7 +185,8 @@ class RunConfiguration {
     ),
     commandChannels: [
       for (final value in json['commandChannels'] as List? ?? const [])
-        CommandChannelSnapshot.fromJson(value as Map<String, dynamic>),
+        if ((value as Map<String, dynamic>)['channel'] == 'shizuku')
+          CommandChannelSnapshot.fromJson(value),
     ],
     workspace: json['workspace'] == null
         ? null

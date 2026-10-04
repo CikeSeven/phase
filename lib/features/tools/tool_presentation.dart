@@ -23,8 +23,7 @@ class ToolPresentation {
     'system_info' => LucideIcons.clock,
     'read_file' => LucideIcons.fileText,
     'grep' || 'find' => LucideIcons.search,
-    'shell' || 'termux_shell' => LucideIcons.terminal,
-    'workspace_transfer' || 'termux_transfer' => LucideIcons.arrowLeftRight,
+    'shell' => LucideIcons.terminal,
     'install_packages' => LucideIcons.download,
     'prepare_skill' => LucideIcons.folderPlus,
     'read_skill' => LucideIcons.bookOpen,
@@ -58,9 +57,6 @@ class ToolPresentation {
     'read_file' => '读取文件',
     'read_skill' => '读取 Skill',
     'shell' => '执行命令',
-    'workspace_transfer' => '跨环境复制',
-    'termux_shell' => 'Termux 命令',
-    'termux_transfer' => 'Termux 文件传输',
     'install_packages' => '安装依赖',
     'prepare_skill' => '准备 Skill 资源',
     'write_file' => '写入文件',
@@ -134,7 +130,7 @@ class ToolPresentation {
     ExecutionChannel.app => '应用内',
     ExecutionChannel.accessibility => '无障碍服务',
     ExecutionChannel.shizuku => 'Shizuku',
-    ExecutionChannel.termux => 'Termux',
+    ExecutionChannel.unknown => '未知通道',
   };
 
   /// 用户决定文案；未要求确认时为 null。
@@ -187,11 +183,6 @@ class ToolPresentation {
       'key': '按键',
       'text': '输入文字',
     },
-    'termux_transfer': {
-      'path': '工作区路径',
-      'remotePath': 'Termux 路径',
-      'direction': '传输方向',
-    },
     'read_memory': {'query': '检索关键字'},
     'read_history': {
       'sourceId': '历史来源',
@@ -223,7 +214,6 @@ class ToolPresentation {
     },
     'find': {'pattern': '文件模式', 'path': '搜索目录', 'limit': '结果上限'},
     'shell': {'command': '命令', 'cwd': '工作目录', 'timeout': '超时（秒）'},
-    'termux_shell': {'command': '命令', 'cwd': '工作目录', 'timeout': '超时（秒）'},
     'http_request': {
       'url': '地址',
       'method': '方法',

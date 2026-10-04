@@ -30,7 +30,6 @@ final class ChatControllerProvider
           activeConversationProvider,
           settingsStorageProvider,
           modelCatalogProvider,
-          defaultPrimaryEnvironmentProvider,
           chatRunFactoryProvider,
           chatToolRuntimeFactoryProvider,
         ],
@@ -48,7 +47,6 @@ final class ChatControllerProvider
           ChatControllerProvider.$allTransitiveDependencies10,
           ChatControllerProvider.$allTransitiveDependencies11,
           ChatControllerProvider.$allTransitiveDependencies12,
-          ChatControllerProvider.$allTransitiveDependencies13,
         },
       );
 
@@ -71,9 +69,8 @@ final class ChatControllerProvider
   static final $allTransitiveDependencies9 = modelCatalogProvider;
   static final $allTransitiveDependencies10 =
       ModelCatalogProvider.$allTransitiveDependencies0;
-  static final $allTransitiveDependencies11 = defaultPrimaryEnvironmentProvider;
-  static final $allTransitiveDependencies12 = chatRunFactoryProvider;
-  static final $allTransitiveDependencies13 =
+  static final $allTransitiveDependencies11 = chatRunFactoryProvider;
+  static final $allTransitiveDependencies12 =
       ChatRunFactoryProvider.$allTransitiveDependencies0;
 
   @override
@@ -92,7 +89,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'a7e878367df924182926deaebe5e2cbda2cced99';
+String _$chatControllerHash() => r'607c663bcc1e8e1884cdb4362019cac3be85fc55';
 
 /// 页面操作入口和展示投影；循环、流缓冲及资源生命周期由本次驱动持有。
 

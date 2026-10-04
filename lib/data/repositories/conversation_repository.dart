@@ -1,5 +1,3 @@
-import '../models/workspace.dart';
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -97,7 +95,6 @@ class ConversationRepository {
 
   Future<Conversation> createConversation({
     String title = '新会话',
-    PrimaryEnvironment primaryEnvironment = PrimaryEnvironment.ubuntu,
     PermissionSelection permissions = const PermissionSelection(),
     String? assistantId,
     ModelSelection? modelSelectionOverride,
@@ -110,7 +107,6 @@ class ConversationRepository {
         id: sessionId,
         title: title,
         permissions: permissions,
-        primaryEnvironment: primaryEnvironment,
         workspaceId: workspace.id,
         assistantId: assistantId,
         modelSelectionOverride: modelSelectionOverride,
@@ -134,8 +130,7 @@ class ConversationRepository {
       await (_db.update(
         _db.conversations,
       )..where((t) => t.id.equals(conversation.id))).write(
-        conversationCompanion(conversation.copyWith(updatedAt: DateTime.now()))
-            .copyWith(primaryEnvironment: const Value.absent()),
+        conversationCompanion(conversation.copyWith(updatedAt: DateTime.now())),
       );
     });
   }
@@ -272,7 +267,6 @@ class ConversationRepository {
         title: '${source.conversation.title}（副本）',
         assistantId: source.conversation.assistantId,
         permissions: source.conversation.permissions,
-        primaryEnvironment: source.conversation.primaryEnvironment,
         workspaceId: sessionId,
         modelSelectionOverride: source.conversation.modelSelectionOverride,
         createdAt: now,

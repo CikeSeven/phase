@@ -111,18 +111,6 @@ int _deepHash(Object? value) {
   return value.hashCode;
 }
 
-enum CommandEventKind { stdout, stderr, progress, exited }
-
-enum WorkspaceFileOperation {
-  stat,
-  list,
-  readPage,
-  ensure,
-  importPath,
-  exportPath,
-  deleteRoot,
-}
-
 class CommandChannelStatus {
   CommandChannelStatus({
     required this.channel,
@@ -130,7 +118,6 @@ class CommandChannelStatus {
     required this.message,
     this.uid,
     this.revision,
-    this.home,
   });
 
   String channel;
@@ -143,10 +130,8 @@ class CommandChannelStatus {
 
   String? revision;
 
-  String? home;
-
   List<Object?> _toList() {
-    return <Object?>[channel, state, message, uid, revision, home];
+    return <Object?>[channel, state, message, uid, revision];
   }
 
   Object encode() {
@@ -161,7 +146,6 @@ class CommandChannelStatus {
       message: result[2]! as String,
       uid: result[3] as int?,
       revision: result[4] as String?,
-      home: result[5] as String?,
     );
   }
 
@@ -178,8 +162,7 @@ class CommandChannelStatus {
         _deepEquals(state, other.state) &&
         _deepEquals(message, other.message) &&
         _deepEquals(uid, other.uid) &&
-        _deepEquals(revision, other.revision) &&
-        _deepEquals(home, other.home);
+        _deepEquals(revision, other.revision);
   }
 
   @override
@@ -188,437 +171,7 @@ class CommandChannelStatus {
 
   @override
   String toString() {
-    return 'CommandChannelStatus(channel: $channel, state: $state, message: $message, uid: $uid, revision: $revision, home: $home)';
-  }
-}
-
-class ExternalCommandSpec {
-  ExternalCommandSpec({
-    required this.ownerId,
-    required this.callId,
-    required this.channel,
-    required this.revision,
-    required this.uid,
-    required this.command,
-    required this.cwd,
-    required this.outputLimitBytes,
-  });
-
-  String ownerId;
-
-  String callId;
-
-  String channel;
-
-  String revision;
-
-  int uid;
-
-  String command;
-
-  String cwd;
-
-  int outputLimitBytes;
-
-  List<Object?> _toList() {
-    return <Object?>[
-      ownerId,
-      callId,
-      channel,
-      revision,
-      uid,
-      command,
-      cwd,
-      outputLimitBytes,
-    ];
-  }
-
-  Object encode() {
-    return _toList();
-  }
-
-  static ExternalCommandSpec decode(Object result) {
-    result as List<Object?>;
-    return ExternalCommandSpec(
-      ownerId: result[0]! as String,
-      callId: result[1]! as String,
-      channel: result[2]! as String,
-      revision: result[3]! as String,
-      uid: result[4]! as int,
-      command: result[5]! as String,
-      cwd: result[6]! as String,
-      outputLimitBytes: result[7]! as int,
-    );
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  bool operator ==(Object other) {
-    if (other is! ExternalCommandSpec || other.runtimeType != runtimeType) {
-      return false;
-    }
-    if (identical(this, other)) {
-      return true;
-    }
-    return _deepEquals(ownerId, other.ownerId) &&
-        _deepEquals(callId, other.callId) &&
-        _deepEquals(channel, other.channel) &&
-        _deepEquals(revision, other.revision) &&
-        _deepEquals(uid, other.uid) &&
-        _deepEquals(command, other.command) &&
-        _deepEquals(cwd, other.cwd) &&
-        _deepEquals(outputLimitBytes, other.outputLimitBytes);
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
-
-  @override
-  String toString() {
-    return 'ExternalCommandSpec(ownerId: $ownerId, callId: $callId, channel: $channel, revision: $revision, uid: $uid, command: $command, cwd: $cwd, outputLimitBytes: $outputLimitBytes)';
-  }
-}
-
-class ChannelTransferSpec {
-  ChannelTransferSpec({
-    required this.ownerId,
-    required this.callId,
-    required this.channel,
-    required this.revision,
-    required this.uid,
-    required this.localRoot,
-    required this.path,
-    required this.remotePath,
-    required this.toChannel,
-    required this.fileLimitBytes,
-    required this.totalLimitBytes,
-    required this.entryLimit,
-  });
-
-  String ownerId;
-
-  String callId;
-
-  String channel;
-
-  String revision;
-
-  int uid;
-
-  String localRoot;
-
-  String path;
-
-  String remotePath;
-
-  bool toChannel;
-
-  int fileLimitBytes;
-
-  int totalLimitBytes;
-
-  int entryLimit;
-
-  List<Object?> _toList() {
-    return <Object?>[
-      ownerId,
-      callId,
-      channel,
-      revision,
-      uid,
-      localRoot,
-      path,
-      remotePath,
-      toChannel,
-      fileLimitBytes,
-      totalLimitBytes,
-      entryLimit,
-    ];
-  }
-
-  Object encode() {
-    return _toList();
-  }
-
-  static ChannelTransferSpec decode(Object result) {
-    result as List<Object?>;
-    return ChannelTransferSpec(
-      ownerId: result[0]! as String,
-      callId: result[1]! as String,
-      channel: result[2]! as String,
-      revision: result[3]! as String,
-      uid: result[4]! as int,
-      localRoot: result[5]! as String,
-      path: result[6]! as String,
-      remotePath: result[7]! as String,
-      toChannel: result[8]! as bool,
-      fileLimitBytes: result[9]! as int,
-      totalLimitBytes: result[10]! as int,
-      entryLimit: result[11]! as int,
-    );
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  bool operator ==(Object other) {
-    if (other is! ChannelTransferSpec || other.runtimeType != runtimeType) {
-      return false;
-    }
-    if (identical(this, other)) {
-      return true;
-    }
-    return _deepEquals(ownerId, other.ownerId) &&
-        _deepEquals(callId, other.callId) &&
-        _deepEquals(channel, other.channel) &&
-        _deepEquals(revision, other.revision) &&
-        _deepEquals(uid, other.uid) &&
-        _deepEquals(localRoot, other.localRoot) &&
-        _deepEquals(path, other.path) &&
-        _deepEquals(remotePath, other.remotePath) &&
-        _deepEquals(toChannel, other.toChannel) &&
-        _deepEquals(fileLimitBytes, other.fileLimitBytes) &&
-        _deepEquals(totalLimitBytes, other.totalLimitBytes) &&
-        _deepEquals(entryLimit, other.entryLimit);
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
-
-  @override
-  String toString() {
-    return 'ChannelTransferSpec(ownerId: $ownerId, callId: $callId, channel: $channel, revision: $revision, uid: $uid, localRoot: $localRoot, path: $path, remotePath: $remotePath, toChannel: $toChannel, fileLimitBytes: $fileLimitBytes, totalLimitBytes: $totalLimitBytes, entryLimit: $entryLimit)';
-  }
-}
-
-class ExternalCommandEvent {
-  ExternalCommandEvent({
-    required this.ownerId,
-    required this.callId,
-    required this.sequence,
-    required this.kind,
-    this.bytes,
-    this.exitCode,
-    this.signal,
-    this.error,
-    this.transferredBytes = 0,
-    this.completedPaths = const [],
-    this.cancelled = false,
-    this.outputLimitExceeded = false,
-    this.terminationAcknowledged = false,
-  });
-
-  String ownerId;
-
-  String callId;
-
-  int sequence;
-
-  CommandEventKind kind;
-
-  Uint8List? bytes;
-
-  int? exitCode;
-
-  int? signal;
-
-  String? error;
-
-  int transferredBytes;
-
-  List<String> completedPaths;
-
-  bool cancelled;
-
-  bool outputLimitExceeded;
-
-  bool terminationAcknowledged;
-
-  List<Object?> _toList() {
-    return <Object?>[
-      ownerId,
-      callId,
-      sequence,
-      kind,
-      bytes,
-      exitCode,
-      signal,
-      error,
-      transferredBytes,
-      completedPaths,
-      cancelled,
-      outputLimitExceeded,
-      terminationAcknowledged,
-    ];
-  }
-
-  Object encode() {
-    return _toList();
-  }
-
-  static ExternalCommandEvent decode(Object result) {
-    result as List<Object?>;
-    return ExternalCommandEvent(
-      ownerId: result[0]! as String,
-      callId: result[1]! as String,
-      sequence: result[2]! as int,
-      kind: result[3]! as CommandEventKind,
-      bytes: result[4] as Uint8List?,
-      exitCode: result[5] as int?,
-      signal: result[6] as int?,
-      error: result[7] as String?,
-      transferredBytes: result[8]! as int,
-      completedPaths: (result[9]! as List<Object?>).cast<String>(),
-      cancelled: result[10]! as bool,
-      outputLimitExceeded: result[11]! as bool,
-      terminationAcknowledged: result[12]! as bool,
-    );
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  bool operator ==(Object other) {
-    if (other is! ExternalCommandEvent || other.runtimeType != runtimeType) {
-      return false;
-    }
-    if (identical(this, other)) {
-      return true;
-    }
-    return _deepEquals(ownerId, other.ownerId) &&
-        _deepEquals(callId, other.callId) &&
-        _deepEquals(sequence, other.sequence) &&
-        _deepEquals(kind, other.kind) &&
-        _deepEquals(bytes, other.bytes) &&
-        _deepEquals(exitCode, other.exitCode) &&
-        _deepEquals(signal, other.signal) &&
-        _deepEquals(error, other.error) &&
-        _deepEquals(transferredBytes, other.transferredBytes) &&
-        _deepEquals(completedPaths, other.completedPaths) &&
-        _deepEquals(cancelled, other.cancelled) &&
-        _deepEquals(outputLimitExceeded, other.outputLimitExceeded) &&
-        _deepEquals(terminationAcknowledged, other.terminationAcknowledged);
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
-
-  @override
-  String toString() {
-    return 'ExternalCommandEvent(ownerId: $ownerId, callId: $callId, sequence: $sequence, kind: $kind, bytes: $bytes, exitCode: $exitCode, signal: $signal, error: $error, transferredBytes: $transferredBytes, completedPaths: $completedPaths, cancelled: $cancelled, outputLimitExceeded: $outputLimitExceeded, terminationAcknowledged: $terminationAcknowledged)';
-  }
-}
-
-class WorkspaceFileRequest {
-  WorkspaceFileRequest({
-    required this.ownerId,
-    required this.callId,
-    required this.workspaceId,
-    required this.revision,
-    required this.uid,
-    required this.operation,
-    required this.path,
-    this.offset = 0,
-    this.limit = 2000,
-    this.localPath,
-    this.expectedDigest,
-    this.environmentPaths = false,
-  });
-
-  String ownerId;
-
-  String callId;
-
-  String workspaceId;
-
-  String revision;
-
-  int uid;
-
-  WorkspaceFileOperation operation;
-
-  String path;
-
-  int offset;
-
-  int limit;
-
-  String? localPath;
-
-  String? expectedDigest;
-
-  bool environmentPaths;
-
-  List<Object?> _toList() {
-    return <Object?>[
-      ownerId,
-      callId,
-      workspaceId,
-      revision,
-      uid,
-      operation,
-      path,
-      offset,
-      limit,
-      localPath,
-      expectedDigest,
-      environmentPaths,
-    ];
-  }
-
-  Object encode() {
-    return _toList();
-  }
-
-  static WorkspaceFileRequest decode(Object result) {
-    result as List<Object?>;
-    return WorkspaceFileRequest(
-      ownerId: result[0]! as String,
-      callId: result[1]! as String,
-      workspaceId: result[2]! as String,
-      revision: result[3]! as String,
-      uid: result[4]! as int,
-      operation: result[5]! as WorkspaceFileOperation,
-      path: result[6]! as String,
-      offset: result[7]! as int,
-      limit: result[8]! as int,
-      localPath: result[9] as String?,
-      expectedDigest: result[10] as String?,
-      environmentPaths: result[11]! as bool,
-    );
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  bool operator ==(Object other) {
-    if (other is! WorkspaceFileRequest || other.runtimeType != runtimeType) {
-      return false;
-    }
-    if (identical(this, other)) {
-      return true;
-    }
-    return _deepEquals(ownerId, other.ownerId) &&
-        _deepEquals(callId, other.callId) &&
-        _deepEquals(workspaceId, other.workspaceId) &&
-        _deepEquals(revision, other.revision) &&
-        _deepEquals(uid, other.uid) &&
-        _deepEquals(operation, other.operation) &&
-        _deepEquals(path, other.path) &&
-        _deepEquals(offset, other.offset) &&
-        _deepEquals(limit, other.limit) &&
-        _deepEquals(localPath, other.localPath) &&
-        _deepEquals(expectedDigest, other.expectedDigest) &&
-        _deepEquals(environmentPaths, other.environmentPaths);
-  }
-
-  @override
-  // ignore: avoid_equals_and_hash_code_on_mutable_classes
-  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
-
-  @override
-  String toString() {
-    return 'WorkspaceFileRequest(ownerId: $ownerId, callId: $callId, workspaceId: $workspaceId, revision: $revision, uid: $uid, operation: $operation, path: $path, offset: $offset, limit: $limit, localPath: $localPath, expectedDigest: $expectedDigest, environmentPaths: $environmentPaths)';
+    return 'CommandChannelStatus(channel: $channel, state: $state, message: $message, uid: $uid, revision: $revision)';
   }
 }
 
@@ -629,26 +182,8 @@ class _PigeonCodec extends StandardMessageCodec {
     if (value is int) {
       buffer.putUint8(4);
       buffer.putInt64(value);
-    } else if (value is CommandEventKind) {
-      buffer.putUint8(129);
-      writeValue(buffer, value.index);
-    } else if (value is WorkspaceFileOperation) {
-      buffer.putUint8(130);
-      writeValue(buffer, value.index);
     } else if (value is CommandChannelStatus) {
-      buffer.putUint8(131);
-      writeValue(buffer, value.encode());
-    } else if (value is ExternalCommandSpec) {
-      buffer.putUint8(132);
-      writeValue(buffer, value.encode());
-    } else if (value is ChannelTransferSpec) {
-      buffer.putUint8(133);
-      writeValue(buffer, value.encode());
-    } else if (value is ExternalCommandEvent) {
-      buffer.putUint8(134);
-      writeValue(buffer, value.encode());
-    } else if (value is WorkspaceFileRequest) {
-      buffer.putUint8(135);
+      buffer.putUint8(129);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -659,21 +194,7 @@ class _PigeonCodec extends StandardMessageCodec {
   Object? readValueOfType(int type, ReadBuffer buffer) {
     switch (type) {
       case 129:
-        final value = readValue(buffer) as int?;
-        return value == null ? null : CommandEventKind.values[value];
-      case 130:
-        final value = readValue(buffer) as int?;
-        return value == null ? null : WorkspaceFileOperation.values[value];
-      case 131:
         return CommandChannelStatus.decode(readValue(buffer)!);
-      case 132:
-        return ExternalCommandSpec.decode(readValue(buffer)!);
-      case 133:
-        return ChannelTransferSpec.decode(readValue(buffer)!);
-      case 134:
-        return ExternalCommandEvent.decode(readValue(buffer)!);
-      case 135:
-        return WorkspaceFileRequest.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -796,116 +317,12 @@ class CommandChannelHostApi {
       isNullValid: true,
     );
   }
-
-  Future<void> start(ExternalCommandSpec spec) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.CommandChannelHostApi.start$pigeonVar_messageChannelSuffix';
-    final pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[spec],
-    );
-    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
-
-    _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
-  }
-
-  Future<void> workspaceFile(WorkspaceFileRequest request) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.CommandChannelHostApi.workspaceFile$pigeonVar_messageChannelSuffix';
-    final pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[request],
-    );
-    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
-
-    _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
-  }
-
-  Future<void> transfer(ChannelTransferSpec spec) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.CommandChannelHostApi.transfer$pigeonVar_messageChannelSuffix';
-    final pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[spec],
-    );
-    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
-
-    _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
-  }
-
-  Future<void> cancel(String ownerId, String callId) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.CommandChannelHostApi.cancel$pigeonVar_messageChannelSuffix';
-    final pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[ownerId, callId],
-    );
-    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
-
-    _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
-  }
-
-  Future<void> endOwner(String ownerId) async {
-    final pigeonVar_channelName =
-        'dev.flutter.pigeon.phase.CommandChannelHostApi.endOwner$pigeonVar_messageChannelSuffix';
-    final pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(
-      <Object?>[ownerId],
-    );
-    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
-
-    _extractReplyValueOrThrow(
-      pigeonVar_replyList,
-      pigeonVar_channelName,
-      isNullValid: true,
-    );
-  }
 }
 
 abstract class CommandChannelFlutterApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
-  Future<void> event(ExternalCommandEvent event);
-
   void statusChanged();
-
-  void ownerStopped(String ownerId);
 
   static void setUp(
     CommandChannelFlutterApi? api, {
@@ -915,32 +332,6 @@ abstract class CommandChannelFlutterApi {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty
         ? '.$messageChannelSuffix'
         : '';
-    {
-      final pigeonVar_channel = BasicMessageChannel<Object?>(
-        'dev.flutter.pigeon.phase.CommandChannelFlutterApi.event$messageChannelSuffix',
-        pigeonChannelCodec,
-        binaryMessenger: binaryMessenger,
-      );
-      if (api == null) {
-        pigeonVar_channel.setMessageHandler(null);
-      } else {
-        pigeonVar_channel.setMessageHandler((Object? message) async {
-          final List<Object?> args = message! as List<Object?>;
-          final ExternalCommandEvent arg_event =
-              args[0]! as ExternalCommandEvent;
-          try {
-            await api.event(arg_event);
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          } catch (e) {
-            return wrapResponse(
-              error: PlatformException(code: 'error', message: e.toString()),
-            );
-          }
-        });
-      }
-    }
     {
       final pigeonVar_channel = BasicMessageChannel<Object?>(
         'dev.flutter.pigeon.phase.CommandChannelFlutterApi.statusChanged$messageChannelSuffix',
@@ -953,31 +344,6 @@ abstract class CommandChannelFlutterApi {
         pigeonVar_channel.setMessageHandler((Object? message) async {
           try {
             api.statusChanged();
-            return wrapResponse(empty: true);
-          } on PlatformException catch (e) {
-            return wrapResponse(error: e);
-          } catch (e) {
-            return wrapResponse(
-              error: PlatformException(code: 'error', message: e.toString()),
-            );
-          }
-        });
-      }
-    }
-    {
-      final pigeonVar_channel = BasicMessageChannel<Object?>(
-        'dev.flutter.pigeon.phase.CommandChannelFlutterApi.ownerStopped$messageChannelSuffix',
-        pigeonChannelCodec,
-        binaryMessenger: binaryMessenger,
-      );
-      if (api == null) {
-        pigeonVar_channel.setMessageHandler(null);
-      } else {
-        pigeonVar_channel.setMessageHandler((Object? message) async {
-          final List<Object?> args = message! as List<Object?>;
-          final String arg_ownerId = args[0]! as String;
-          try {
-            api.ownerStopped(arg_ownerId);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

@@ -12,8 +12,7 @@ String toolResultText(ToolCallRecord record, {String? fallback}) {
   final content = record.result ?? fallback ?? toolStatusText(record.status);
   final limit = _previewLimit(record);
 
-  if (record.source?.kind != ToolSourceKind.mcp &&
-      const {'shell', 'termux_shell'}.contains(record.toolName)) {
+  if (record.source?.kind != ToolSourceKind.mcp && record.toolName == 'shell') {
     try {
       final decoded = jsonDecode(content);
       if (decoded is Map<String, dynamic> &&

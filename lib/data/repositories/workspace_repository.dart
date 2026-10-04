@@ -1,10 +1,5 @@
-import '../models/command_channel.dart';
-import '../models/tool_call_record.dart';
-import '../datasources/local/settings_storage.dart';
 import '../datasources/local/ubuntu_filesystem.dart';
-import '../../features/commands/command_channel_driver.dart';
 import '../../features/workspace/workspace_file_access.dart';
-import '../../features/tools/tool.dart';
 
 import 'dart:convert';
 import 'dart:io';
@@ -35,43 +30,14 @@ class WorkspaceLease {
 }
 
 class WorkspaceRepository {
-  WorkspaceRepository(this.db, this.root, {this.loadTermux, this.remoteAccess})
-    : filesystem = UbuntuFilesystem(root);
-  final Future<CommandChannelSnapshot?> Function()? loadTermux;
-  final WorkspaceFileAccess Function(
-    WorkspaceSnapshot binding,
-    String? ownerId,
-  )?
-  remoteAccess;
+  WorkspaceRepository(this.db, this.root) : filesystem = UbuntuFilesystem(root);
 
-  WorkspaceFileAccess files(WorkspaceSnapshot binding, {String? ownerId}) {
-    if (binding.primaryEnvironment == PrimaryEnvironment.ubuntu) {
-      return LocalWorkspaceFileAccess(
+  WorkspaceFileAccess files(WorkspaceSnapshot binding) =>
+      LocalWorkspaceFileAccess(
         binding,
         Directory(p.join(root.path, 'staging')),
       );
-    }
-    if (remoteAccess == null) {
-      throw const WorkspaceFailure('unavailable', 'Termux 文件通道不可用');
-    }
-    return remoteAccess!(binding, ownerId);
-  }
 
-  Future<void> markTermux(String id, int uid) => _records(() async {
-    final current = await get(id);
-    if (current == null || current.deleting) {
-      throw const OperationFailure('工作区已删除');
-    }
-    if (current.termuxUid != null && current.termuxUid != uid) {
-      throw const WorkspaceFailure(
-        'identityChanged',
-        'Termux 身份已改变，原工作区不能直接使用',
-      );
-    }
-    await (db.update(db.workspaces)..where((t) => t.id.equals(id))).write(
-      WorkspacesCompanion(termuxUid: Value(uid)),
-    );
-  });
   final AppDatabase db;
   final Directory root;
   final UbuntuFilesystem filesystem;
@@ -133,18 +99,12 @@ class WorkspaceRepository {
     }
   }
 
-  Workspace _workspace(
-    WorkspaceRow row, {
-    String? name,
-    PrimaryEnvironment primaryEnvironment = PrimaryEnvironment.ubuntu,
-  }) => Workspace(
+  Workspace _workspace(WorkspaceRow row, {String? name}) => Workspace(
     id: row.id,
     name: name ?? row.name,
     rootPath: filesystem.layout.sessionDirectory(row.id),
     createdAt: row.createdAt,
     deleting: row.deleting,
-    primaryEnvironment: primaryEnvironment,
-    termuxUid: row.termuxUid,
   );
   JoinedSelectStatement<HasResultSet, dynamic> _ownedWorkspaces() =>
       db.select(db.workspaces).join([
@@ -157,7 +117,6 @@ class WorkspaceRepository {
   Workspace _ownedWorkspace(TypedResult row) => _workspace(
     row.readTable(db.workspaces),
     name: row.readTable(db.conversations).title,
-    primaryEnvironment: row.readTable(db.conversations).primaryEnvironment,
   );
 
   Future<List<Workspace>> list() => _records(
@@ -178,14 +137,7 @@ class WorkspaceRepository {
       db.workspaces,
     )..where((t) => t.id.equals(id))).getSingleOrNull();
     if (row == null) return null;
-    final owner = await (db.select(
-      db.conversations,
-    )..where((t) => t.workspaceId.equals(id))).getSingleOrNull();
-    return _workspace(
-      row,
-      primaryEnvironment:
-          owner?.primaryEnvironment ?? PrimaryEnvironment.ubuntu,
-    );
+    return _workspace(row);
   });
   Future<Workspace> create(String name, {String? id}) async {
     final release = retainEnvironment();
@@ -297,31 +249,11 @@ class WorkspaceRepository {
           db.workspaceCopies,
         )..where((t) => t.workspaceId.equals(sourceId))).get(),
       );
-      if (source.termuxUid != null) {
-        final from = files(
-          (await snapshot(sourceId)).select(PrimaryEnvironment.termux),
-        );
-        final to = files(
-          (await snapshot(target.id)).select(PrimaryEnvironment.termux),
-        );
-        final temporary = await from.temporary();
-        try {
-          final path = p.join(temporary.path, 'copy');
-          final cancellation = RunCancellation();
-          if ((await from.stat('.', cancellation)).type != 'missing') {
-            await from.exportPath('.', path, cancellation);
-            await to.importPath('.', path, cancellation);
-          }
-        } finally {
-          await temporary.delete(recursive: true);
-        }
-      }
       for (final copy in copies) {
         await recordCopy(
           target.id,
           copy.relativePath,
           jsonDecode(copy.sourceJson) as Map<String, dynamic>,
-          environment: copy.environment,
         );
       }
     } on FileSystemException {
@@ -352,11 +284,6 @@ class WorkspaceRepository {
         ),
       );
       try {
-        if (workspace.termuxUid != null) {
-          final binding = await _snapshot(workspace);
-          await files(binding.select(PrimaryEnvironment.termux))
-              .deleteRoot(RunCancellation());
-        }
         await filesystem.deleteSession(id);
       } on FileSystemException {
         throw const OperationFailure('会话工作区文件清理失败，请重试删除会话');
@@ -426,16 +353,10 @@ class WorkspaceRepository {
 
   Future<WorkspaceSnapshot> _snapshot(Workspace workspace) async {
     final env = await environment();
-    var termux = await loadTermux?.call();
-    if (workspace.termuxUid != null && termux?.uid != workspace.termuxUid) {
-      termux = null;
-    }
     return WorkspaceSnapshot(
       id: workspace.id,
       name: workspace.name,
       rootPath: workspace.rootPath,
-      primaryEnvironment: workspace.primaryEnvironment,
-      termux: termux,
       environmentRoot: !_mutatingEnvironment && environmentReady(env)
           ? env.rootPath
           : null,
@@ -470,15 +391,13 @@ class WorkspaceRepository {
   Future<void> recordCopy(
     String id,
     String relativePath,
-    Map<String, dynamic> source, {
-    PrimaryEnvironment environment = PrimaryEnvironment.ubuntu,
-  }) => _records(() async {
+    Map<String, dynamic> source,
+  ) => _records(() async {
     await db
         .into(db.workspaceCopies)
         .insertOnConflictUpdate(
           WorkspaceCopiesCompanion.insert(
             workspaceId: id,
-            environment: Value(environment),
             relativePath: relativePath,
             sourceJson: jsonEncode(source),
           ),
@@ -519,42 +438,7 @@ class WorkspaceRepository {
 Future<WorkspaceRepository> workspaceRepository(Ref ref) async {
   final db = await ref.watch(appDatabaseProvider.future);
   final info = await ref.watch(processDriverProvider).info();
-  late final WorkspaceRepository repository;
-  repository = WorkspaceRepository(
-    db,
-    Directory(info.rootDirectory),
-    loadTermux: () async {
-      final settings = ref.read(settingsStorageProvider).readCommandChannels();
-      try {
-        final driver = ref.read(commandChannelDriverProvider);
-        await driver.setEnabled(settings.channels);
-        final status = (await driver.status())
-            .where((s) => s.channel == 'termux' && s.state == 'ready')
-            .firstOrNull;
-        if (status?.uid == null ||
-            status?.revision == null ||
-            status?.home == null) {
-          return null;
-        }
-        return CommandChannelSnapshot(
-          channel: ExecutionChannel.termux,
-          uid: status!.uid!,
-          revision: status.revision!,
-          home: status.home!,
-        );
-      } on Failure {
-        return null;
-      }
-    },
-    remoteAccess: (binding, ownerId) => TermuxWorkspaceFileAccess(
-      binding,
-      Directory(p.join(info.rootDirectory, 'staging')),
-      driver: ref.read(commandChannelDriverProvider),
-      processes: ref.read(processDriverProvider),
-      beforeWrite: (uid) => repository.markTermux(binding.id, uid),
-      ownerId: ownerId,
-    ),
-  );
+  final repository = WorkspaceRepository(db, Directory(info.rootDirectory));
   await repository.recoverInstallation();
   return repository;
 }

@@ -15,7 +15,6 @@ String presentToolOutput(ToolCallRecord record, String result) {
       decoded is Map<String, dynamic>) {
     switch (record.toolName) {
       case 'shell':
-      case 'termux_shell':
         if (decoded case {
           'stdout': final String out,
           'stderr': final String err,
@@ -42,19 +41,6 @@ String presentToolOutput(ToolCallRecord record, String result) {
             if (decoded['warning'] case final String warning) warning,
           ].join('\n\n');
         }
-      case 'workspace_transfer':
-        return decoded['copied'] == true
-            ? '已复制 ${decoded['path']}'
-            : '${decoded['error'] ?? '复制未完成'}';
-      case 'termux_transfer':
-        return [
-          '已传输 ${decoded['transferredBytes'] ?? 0} 字节',
-          if (decoded['completedPaths'] case final List paths
-              when paths.isNotEmpty)
-            '已完成 ${paths.length} 项',
-          if (decoded['cancelled'] == true) '传输已停止，已提交的文件保留',
-          if (decoded['error'] case final String error) error,
-        ].join('\n');
       case 'read_file':
         if (decoded['text'] case final String content) {
           return _contentWithDetails(content, decoded, const {

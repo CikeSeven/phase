@@ -33,7 +33,7 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
             !connection.running() -> CommandChannelStatus("shizuku", "notRunning", "Shizuku 未运行")
             !connection.permission() -> CommandChannelStatus("shizuku", "permissionRequired", "未授权 Shizuku")
             uid < 0 -> CommandChannelStatus("shizuku", "unavailable", "无法读取 Shizuku 执行身份")
-            else -> CommandChannelStatus("shizuku", "ready", "已授权", uid.toLong(), ShizukuDeviceService.REVISION, "")
+            else -> CommandChannelStatus("shizuku", "ready", "已授权", uid.toLong(), ShizukuDeviceService.REVISION)
         }
     }
     fun available() = enabled && status().state == "ready"

@@ -22,7 +22,7 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
         /** Shared with native acceptance fixtures; no session/service bind or shell rewriting. */
         fun commandArguments(nativeDir: File, resultFile: File, rootfs: File, spec: LinuxProcessSpec): List<String> {
             return listOf(File(nativeDir, "libphase_exec.so").path, resultFile.path,
-                    // --link2symlink: the Termux PRoot fork turns hard links into
+                    // --link2symlink: PRoot turns hard links into
                     // symlinks; dpkg's link(status, status-old) fails without it.
                     File(nativeDir, "libphase_proot.so").path, "--kill-on-exit", "--link2symlink", "-0", "-r", rootfs.path,
                     "-b", "/dev", "-b", "/proc", "-w", spec.cwd,

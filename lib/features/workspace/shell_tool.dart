@@ -1,5 +1,3 @@
-import '../commands/command_channel_driver.dart';
-import '../commands/system_channel_tools.dart';
 import '../commands/command_output_collector.dart';
 import '../../../data/models/tool_call_record.dart';
 
@@ -21,18 +19,9 @@ abstract final class ShellLimits {
 }
 
 class ShellTool extends Tool {
-  const ShellTool({
-    this.workspace,
-    this.driver,
-    this.files,
-    this.commandDriver,
-  });
-  final CommandChannelDriver? commandDriver;
+  const ShellTool({this.workspace, this.driver, this.files});
   @override
-  ExecutionChannel get channel =>
-      workspace?.primaryEnvironment == PrimaryEnvironment.termux
-      ? ExecutionChannel.termux
-      : ExecutionChannel.app;
+  ExecutionChannel get channel => ExecutionChannel.app;
   @override
   bool usesPlatform(Map<String, dynamic> arguments) => false;
   final WorkspaceSnapshot? workspace;
@@ -44,7 +33,7 @@ class ShellTool extends Tool {
   String get policyKey => commandExecutionPolicyKey;
   @override
   String get description =>
-      '在 ${workspace?.primaryEnvironment.label ?? 'Ubuntu'} 中执行 shell 命令，返回 stdout、stderr、退出码和产物。'
+      '在 Ubuntu 中执行 shell 命令，返回 stdout、stderr、退出码和产物。'
       '支持当前环境中的绝对文件路径和绝对 cwd；默认目录：${workspace?.executionRoot ?? '当前会话目录'}。'
       '输出预览保留最后 2000 行或 50 KiB，以先达到的上限为准；截断时已收完整输出保存为附件。'
       'timeout 可指定秒级超时，默认没有命令总时限。';
@@ -62,7 +51,7 @@ class ShellTool extends Tool {
     'type': 'object',
     'properties': {
       'command': {'type': 'string', 'description': '完整 shell 命令'},
-      'cwd': {'type': 'string', 'description': '所选环境中的绝对工作目录，默认当前会话工作区'},
+      'cwd': {'type': 'string', 'description': 'Ubuntu 中的绝对工作目录，默认当前会话工作区'},
       'timeout': {
         'type': 'number',
         'exclusiveMinimum': 0,
@@ -73,16 +62,12 @@ class ShellTool extends Tool {
     'additionalProperties': false,
   };
   @override
-  Set<String> get requiredCapabilities => {
-    workspace?.primaryEnvironment == PrimaryEnvironment.termux
-        ? 'termux_command'
-        : 'linux_process',
-  };
+  Set<String> get requiredCapabilities => const {'linux_process'};
   @override
   ToolPolicy get defaultPolicy => ToolPolicy.ask;
   @override
   String describeAction(Map<String, dynamic> arguments) =>
-      '${workspace?.primaryEnvironment.label ?? 'Ubuntu'} · ${workspace?.name ?? "会话工作区"}\n目录：${arguments['cwd'] ?? workspace?.executionRoot ?? '所属会话目录'}\n${arguments['command']}';
+      'Ubuntu · ${workspace?.name ?? "会话工作区"}\n目录：${arguments['cwd'] ?? workspace?.executionRoot ?? '所属会话目录'}\n${arguments['command']}';
   @override
   String? validateArguments(Map<String, dynamic> arguments) {
     final timeout = arguments['timeout'];
@@ -105,122 +90,6 @@ class ShellTool extends Tool {
         : null;
   }
 
-  Future<ToolOutcome> _termux(
-    Map<String, dynamic> arguments,
-    ToolContext context,
-    RunCancellation cancellation,
-    WorkspaceSnapshot binding,
-  ) async {
-    if (binding.termux == null || commandDriver == null || files == null) {
-      return const ToolOutcome.failure(
-        'Termux 未授权或尚未就绪',
-        errorCode: 'environmentMissing',
-      );
-    }
-    final access = files!.repository.files(binding, ownerId: context.runId);
-    final artifacts = <String>[];
-    Map<String, String>? before;
-    String? warning;
-    Future<Map<String, String>?> outputs() async {
-      try {
-        return await files!.outputs(
-          binding,
-          ownerId: context.runId,
-          cancellation: cancellation,
-        );
-      } on WorkspaceFailure catch (error) {
-        warning = error.userMessage;
-        return null;
-      }
-    }
-
-    try {
-      await access.ensure(cancellation);
-      for (final attachment in context.attachments.where(
-        (a) => a.kind.name != 'artifact',
-      )) {
-        await files!.importAttachment(
-          Workspace(
-            id: binding.id,
-            name: binding.name,
-            rootPath: binding.rootPath,
-            createdAt: DateTime.now(),
-          ),
-          attachment,
-          cancellation,
-          binding: binding,
-          ownerId: context.runId,
-        );
-      }
-      before = await outputs();
-      cancellation.throwIfCancelled();
-      final outcome = await ExternalShellTool(binding.termux!, commandDriver!)
-          .execute(
-            {...arguments, 'cwd': arguments['cwd'] ?? binding.executionRoot},
-            context,
-            cancellation,
-          );
-      artifacts.addAll(outcome.artifacts);
-      if (before != null && !cancellation.isCancelled && !outcome.cancelled) {
-        try {
-          final after = await outputs();
-          if (after != null) {
-            for (final entry in after.entries) {
-              if (before[entry.key] == entry.value) continue;
-              try {
-                artifacts.add(
-                  (await files!.artifact(
-                    binding,
-                    entry.key,
-                    context,
-                    cancellation,
-                  )).id,
-                );
-              } on WorkspaceFailure catch (error) {
-                warning = error.userMessage;
-              }
-            }
-          }
-        } on ToolCancelled {
-          warning = '产物收集已停止，远端文件保留';
-        }
-      }
-      Map<String, dynamic> result;
-      try {
-        result = (jsonDecode(outcome.content) as Map).cast<String, dynamic>();
-      } on FormatException {
-        result = {'message': outcome.content};
-      }
-      return ToolOutcome(
-        ok: outcome.ok && !cancellation.isCancelled,
-        cancelled: outcome.cancelled || cancellation.isCancelled,
-        errorCode: outcome.errorCode,
-        artifacts: artifacts,
-        content: jsonEncode({
-          ...result,
-          'environment': 'termux',
-          'workspace': binding.name,
-          'artifactIds': artifacts,
-          'artifactWarning': ?warning,
-        }),
-      );
-    } on StorageFailure {
-      rethrow;
-    } on ToolCancelled {
-      return const ToolOutcome.cancelled('命令准备已停止，已复制的文件保留');
-    } on Failure catch (error) {
-      return ToolOutcome.failure(
-        error.userMessage,
-        errorCode: 'workspaceFailed',
-      );
-    } on FileSystemException {
-      return const ToolOutcome.failure(
-        '命令文件处理失败，请检查可用空间',
-        errorCode: 'fileOperationFailed',
-      );
-    }
-  }
-
   @override
   Future<ToolOutcome> execute(
     Map<String, dynamic> arguments,
@@ -229,9 +98,6 @@ class ShellTool extends Tool {
     ToolProgress? onProgress,
   }) async {
     final binding = workspace;
-    if (binding?.primaryEnvironment == PrimaryEnvironment.termux) {
-      return _termux(arguments, context, cancellation, binding!);
-    }
     if (binding == null ||
         !binding.linuxAvailable ||
         driver == null ||

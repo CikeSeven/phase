@@ -24,19 +24,18 @@ class UbuntuFilesystemLayoutTest {
         } finally { root.deleteRecursively() }
     }
 
-    @Test fun exportsAndTermuxTransfersUseRealSessionOrTemporaryDirectories() {
+    @Test fun exportsUseRealSessionOrTemporaryDirectories() {
         val root = Files.createTempDirectory("phase-ufs").toFile().canonicalFile
         try {
             val session = File(UbuntuFilesystemLayout.sessions(root), "a").apply { mkdirs() }
             val staged = File(root, "staging/workspace-fixture").apply { mkdirs() }
             for (directory in listOf(session, staged)) {
                 val file = File(directory, "report").apply { writeText("fixture") }
-                assertEquals(directory, UbuntuFilesystemLayout.managedTransferRoot(root, directory.path))
                 assertEquals(file, UbuntuFilesystemLayout.managedFile(root, file.path))
             }
             for (path in listOf("workspaces/a", "environments/ubuntu/rootfs/root", "environments/ubuntu/rootfs/services/mcp/server", "staging/install-fixture")) {
                 val directory = File(root, path).apply { mkdirs() }
-                assertThrows(IllegalArgumentException::class.java) { UbuntuFilesystemLayout.managedTransferRoot(root, directory.path) }
+                assertThrows(IllegalArgumentException::class.java) { UbuntuFilesystemLayout.managedFile(root, directory.path) }
             }
             val outside = File(root, "outside").apply { writeText("outside") }
             val link = File(session, "escape")

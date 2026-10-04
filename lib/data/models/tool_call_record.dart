@@ -15,8 +15,8 @@ enum ToolCallStatus {
 /// 用户对一次确认的决定。
 enum ToolDecision { approved, rejected, expired }
 
-/// 工具执行通道。
-enum ExecutionChannel { app, accessibility, shizuku, termux }
+/// 工具执行通道；无法识别的历史通道保留为 unknown。
+enum ExecutionChannel { app, accessibility, shizuku, unknown }
 
 /// 工具调用记录：参数、用户决定与结果的唯一业务事实来源。
 ///

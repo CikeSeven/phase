@@ -1,5 +1,3 @@
-import '../commands/system_channel_tools.dart';
-
 import 'dart:convert';
 
 import '../../../data/models/attachment.dart';
@@ -54,10 +52,7 @@ class ToolCallDisplay {
     return switch (record.toolName) {
       'wait_for_user' =>
         args['prompt'] is String ? args['prompt'] as String : null,
-      'shell' || 'termux_shell' =>
-        args['command'] is String ? '\$ ${args['command']}' : null,
-      'workspace_transfer' => '${args['path']}',
-      'termux_transfer' => '${args['path']} ↔ ${args['remotePath']}',
+      'shell' => args['command'] is String ? '\$ ${args['command']}' : null,
       'install_packages' => null,
       'write_file' ||
       'edit_file' ||
@@ -89,13 +84,6 @@ class ToolCallDisplay {
     final output = ToolPresentation.outputText(record);
     if (isBuiltIn(record)) {
       switch (record.toolName) {
-        case 'termux_transfer':
-          return ToolCallDisplay(
-            call:
-                '${args['direction'] == 'to_channel' ? '导出' : '导入'} ${args['path']} ↔ ${args['remotePath']}',
-            output: output,
-            metadata: '目录递归；同名文件覆盖，额外文件保留',
-          );
         case 'wait_for_user':
           if (args['prompt'] case final String prompt) {
             return ToolCallDisplay(
@@ -106,7 +94,6 @@ class ToolCallDisplay {
             );
           }
         case 'shell':
-        case 'termux_shell':
           if (args['command'] case final String command) {
             final metadata = [
               if (args['cwd'] case final String cwd) cwd,
@@ -220,7 +207,7 @@ class ToolCallDisplay {
 
   /// 已完整显示的命令日志不再重复列成文件，用户生成的产物仍保留。
   static String? artifactLabel(ToolCallRecord record, Attachment artifact) {
-    if (isBuiltIn(record) && isCommandToolName(record.toolName)) {
+    if (isBuiltIn(record) && (record.toolName == 'shell')) {
       for (final stream in ['stdout', 'stderr']) {
         if (artifact.name != '${record.id}-$stream.txt') continue;
         try {

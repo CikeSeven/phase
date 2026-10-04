@@ -22,8 +22,6 @@ class CommandChannelsState {
   final List<CommandChannelStatus> statuses;
   final bool busy;
   final String? error;
-
-  bool get termuxAuthorized => hasTermuxCommandPermission(statuses);
 }
 
 @Riverpod(keepAlive: true)
@@ -181,13 +179,11 @@ Future<List<CommandChannelSnapshot>> commandSnapshots(Ref ref) async {
       if (settings.channels.contains(status.channel) &&
           status.state == 'ready' &&
           status.uid != null &&
-          status.revision != null &&
-          status.home != null)
+          status.revision != null)
         CommandChannelSnapshot(
           channel: ExecutionChannel.values.byName(status.channel),
           uid: status.uid!,
           revision: status.revision!,
-          home: status.home!,
         ),
   ];
 }

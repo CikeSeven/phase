@@ -21,7 +21,7 @@
 | 工具入口 | 内置、MCP、命令及后续插件统一进入 `ToolRegistry` / `ToolExecutor` |
 | 插件基础 | MCP 远程 Streamable HTTP、本地 stdio、按需加载 Skills |
 | 本地命令 | 按需安装 Ubuntu 24.04 PRoot 环境，自动安装 Python/pip/venv、Node/npm、Git/ripgrep；依赖未完成可修复 |
-| 系统通道 | 无障碍、Shizuku、Termux 各自声明能力与授权，不自动互换 |
+| 系统通道 | 无障碍、Shizuku 各自声明能力与授权，不自动互换 |
 | 扩展内核 | 不引入第二套常驻 Agent 循环；Pi 扩展、Operit ToolPkg 不列为直接兼容格式 |
 | 平台与发行 | 仅 Android；首次发行使用 GitHub Releases，发行验收独立排期 |
 
@@ -52,7 +52,7 @@
 | 类别 | 缺口 | 详细设计 |
 |---|---|---|
 | 工具生态 | 远程 MCP 外部服务验收、本地 MCP stdio 真机与真实 npx/uvx 服务验收、Skill 脚本真机验收/网络导入、插件包及受限扩展钩子 | [MCP](./agent_extensions_design.md#extensions-mcp)、[Skills](./agent_extensions_design.md#extensions-skills)、[插件包](./agent_extensions_design.md#extensions-plugins) |
-| 命令环境 | PRoot 安装/文件 UI、通知停止和生命周期真机验收、依赖安装真机验收、PTY、Termux、Shizuku | [扩展设计 §5–§7](./agent_extensions_design.md#extensions-runtime) |
+| 命令环境 | PRoot 安装/文件 UI、通知停止和生命周期真机验收、依赖安装真机验收、PTY、Shizuku | [扩展设计 §5–§7](./agent_extensions_design.md#extensions-runtime) |
 | Agent 能力 | 单子代理；上下文/计划/记忆的真实模型质量与真机验收 | [扩展设计 §8、§10](./agent_extensions_design.md#extensions-planning) |
 | 上下文与用量增强 | 统一请求计量、缓存统计、usage 基准、滚动摘要与单次长任务压缩 | [专项开发方案](./context_management_and_usage_design.md)；E5.1 待实施 |
 | 聊天与数据 | 完整分支导航、加密备份恢复、原生文档上传 | [扩展设计 §11](./agent_extensions_design.md#extensions-product) |
@@ -73,7 +73,7 @@
 
 ### 5.1 授权来源
 
-应用私有目录/SAF、主屏无障碍、Shizuku 虚拟屏、Termux 与 Linux 工作区是不同的数据和执行范围。Shizuku 已从通用命令/传输收缩为 `shizuku_display` 设备工具，运行结束释放屏幕；详见 [系统能力专项方案](./system_command_channels_design.md)。通道可用、扩展在助手启用范围内、会话模式授权是独立条件；获取授权不代表工具或模型已通过验收。
+应用私有目录/SAF、主屏无障碍、Shizuku 虚拟屏与 Linux 工作区是不同的数据和执行范围。Shizuku 已从通用命令/传输收缩为 `shizuku_display` 设备工具，运行结束释放屏幕；详见 [系统能力专项方案](./system_command_channels_design.md)。通道可用、扩展在助手启用范围内、会话模式授权是独立条件；获取授权不代表工具或模型已通过验收。
 
 ### 5.2 工具策略
 
@@ -185,9 +185,9 @@ API Key、MCP 凭据和环境密钥只通过安全存储引用，不进入业务
 
 ### 4.1 文件
 
-主环境只在环境设置中全局选择 Ubuntu / Termux，默认 Ubuntu；新会话首次发送时绑定保存值，创建后不可切换，修改全局选择不影响已有会话。聊天输入框不提供环境入口。普通文件工具、文件页、shell 和 Skill 工作副本共用固定绑定。两侧文件独立保留，`workspace_transfer(path, direction)` 与文件页显式复制到另一环境的相同相对路径。Termux 使用其 HOME 下会话专属目录，依赖自行管理，不再设独立使用开关；未获系统命令授权时禁选，保存前再次检查授权，运行仍检查实际就绪状态。Shizuku 保留独立启用开关。本地 MCP stdio 仍固定 Ubuntu 服务专属目录，不自动共享会话文件。详细生命周期与未验收范围见 [系统命令专项设计](./system_command_channels_design.md)。
+普通文件工具、文件页、shell 和 Skill 工作副本共用所属会话的 Ubuntu 目录。环境设置管理 Ubuntu 安装、依赖修复和 Shizuku 独立启用开关。本地 MCP stdio 使用 Ubuntu 服务专属目录，不自动共享会话文件。详细生命周期与未验收范围见 [系统命令专项设计](./system_command_channels_design.md)。
 
-文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径基于当前会话目录，如 `a.txt`、`test/a.txt`；也接受当前 Ubuntu / Termux 环境的绝对路径和 `~`，可访问环境全局文件及其他会话目录。Ubuntu 的绝对路径和链接目标按 guest 文件系统解释，不转换为任意 Android 宿主路径；`/dev`、`/proc` 与 shell 的固定挂载一致。Termux 路径受其 UID 的既有系统授权约束。工作区文件页、会话复制和跨环境传输仍使用受限的工作区相对路径。附件可用 `attachment:<ID>` 或唯一文件名读取，导入原件只读；通过应用文件通道访问 Android 外部文件仍要求授权 URI。
+文件工具参考 pi 的路径与读写/编辑语义，统一使用 `path`，不保留旧 `reference` 参数。相对路径基于当前会话目录，如 `a.txt`、`test/a.txt`；也接受Ubuntu 环境的绝对路径和 `~`，可访问环境全局文件及其他会话目录。Ubuntu 的绝对路径和链接目标按 guest 文件系统解释，不转换为任意 Android 宿主路径；`/dev`、`/proc` 与 shell 的固定挂载一致。工作区文件页与会话复制仍使用受限的工作区相对路径。附件可用 `attachment:<ID>` 或唯一文件名读取，导入原件只读；通过应用文件通道访问 Android 外部文件仍要求授权 URI。
 
 - `read_file(path, offset?, limit?)`：UTF-8 文本或文档已抽取文本，行号从 1 开始；按流读取，最多 2000 行或 50 KiB 完整行，返回明确续读位置。超长单行、越过结尾、非文本均返回具体错误，不让 AI 重复请求同一无效页。
 - `write_file(path, content, directory?)`：内容原样写入，创建或完整覆盖，自动创建父目录；允许空文件、空白内容、隐藏文件和无扩展名文件。字节上限按 UTF-8 计；工作区为 2 MiB，SAF 为 128 KiB。
@@ -232,7 +232,7 @@ SAF 的 `path` 使用用户授予范围内的 URI；创建外部文件时 `direc
 
 ## 5. 新执行通道
 
-Linux 工作区与原始进程桥已有实现，真机安装/原始进程桥通过，完整 UI/生命周期待验收；本地 MCP stdio 已接通原始管道（本机 Python/Node 固件闭环通过，真机与真实 npx/uvx 服务待验收），Termux 命令及显式文件/递归目录传输已接入代码，Shizuku 已收缩为独立虚拟屏视觉控制，尚未进行测试或真机验收，详见 [系统命令专项设计](./system_command_channels_design.md)；通知感知仍待建设。运行快照明确选择通道，环境不可用时返回原因，不在执行器内自动切换身份或重做命令。
+Linux 工作区与原始进程桥已有实现，真机安装/原始进程桥通过，完整 UI/生命周期待验收；本地 MCP stdio 已接通原始管道（本机 Python/Node 固件闭环通过，真机与真实 npx/uvx 服务待验收），Shizuku 已收缩为独立虚拟屏视觉控制，尚未进行测试或真机验收，详见 [系统命令专项设计](./system_command_channels_design.md)；通知感知仍待建设。运行快照明确选择通道，环境不可用时返回原因，不在执行器内自动切换身份或重做命令。
 
 # 第四部分 多代理与调度
 

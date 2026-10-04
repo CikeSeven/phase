@@ -201,43 +201,13 @@ class FlutterError (
   val details: Any? = null
 ) : RuntimeException()
 
-enum class CommandEventKind(val raw: Int) {
-  STDOUT(0),
-  STDERR(1),
-  PROGRESS(2),
-  EXITED(3);
-
-  companion object {
-    fun ofRaw(raw: Int): CommandEventKind? {
-      return values().firstOrNull { it.raw == raw }
-    }
-  }
-}
-
-enum class WorkspaceFileOperation(val raw: Int) {
-  STAT(0),
-  LIST(1),
-  READ_PAGE(2),
-  ENSURE(3),
-  IMPORT_PATH(4),
-  EXPORT_PATH(5),
-  DELETE_ROOT(6);
-
-  companion object {
-    fun ofRaw(raw: Int): WorkspaceFileOperation? {
-      return values().firstOrNull { it.raw == raw }
-    }
-  }
-}
-
 /** Generated class from Pigeon that represents data sent in messages. */
 data class CommandChannelStatus (
   val channel: String,
   val state: String,
   val message: String,
   val uid: Long? = null,
-  val revision: String? = null,
-  val home: String? = null
+  val revision: String? = null
 )
  {
   companion object {
@@ -247,8 +217,7 @@ data class CommandChannelStatus (
       val message = pigeonVar_list[2] as String
       val uid = pigeonVar_list[3] as Long?
       val revision = pigeonVar_list[4] as String?
-      val home = pigeonVar_list[5] as String?
-      return CommandChannelStatus(channel, state, message, uid, revision, home)
+      return CommandChannelStatus(channel, state, message, uid, revision)
     }
   }
   fun toList(): List<Any?> {
@@ -258,7 +227,6 @@ data class CommandChannelStatus (
       message,
       uid,
       revision,
-      home,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -269,7 +237,7 @@ data class CommandChannelStatus (
       return true
     }
     val other = other as CommandChannelStatus
-    return CommandApiPigeonUtils.deepEquals(this.channel, other.channel) && CommandApiPigeonUtils.deepEquals(this.state, other.state) && CommandApiPigeonUtils.deepEquals(this.message, other.message) && CommandApiPigeonUtils.deepEquals(this.uid, other.uid) && CommandApiPigeonUtils.deepEquals(this.revision, other.revision) && CommandApiPigeonUtils.deepEquals(this.home, other.home)
+    return CommandApiPigeonUtils.deepEquals(this.channel, other.channel) && CommandApiPigeonUtils.deepEquals(this.state, other.state) && CommandApiPigeonUtils.deepEquals(this.message, other.message) && CommandApiPigeonUtils.deepEquals(this.uid, other.uid) && CommandApiPigeonUtils.deepEquals(this.revision, other.revision)
   }
 
   override fun hashCode(): Int {
@@ -279,361 +247,18 @@ data class CommandChannelStatus (
     result = 31 * result + CommandApiPigeonUtils.deepHash(this.message)
     result = 31 * result + CommandApiPigeonUtils.deepHash(this.uid)
     result = 31 * result + CommandApiPigeonUtils.deepHash(this.revision)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.home)
     return result
   }
   override fun toString(): String {
-    return "CommandChannelStatus(channel=$channel, state=$state, message=$message, uid=$uid, revision=$revision, home=$home)"
-  }
-}
-
-/** Generated class from Pigeon that represents data sent in messages. */
-data class ExternalCommandSpec (
-  val ownerId: String,
-  val callId: String,
-  val channel: String,
-  val revision: String,
-  val uid: Long,
-  val command: String,
-  val cwd: String,
-  val outputLimitBytes: Long
-)
- {
-  companion object {
-    fun fromList(pigeonVar_list: List<Any?>): ExternalCommandSpec {
-      val ownerId = pigeonVar_list[0] as String
-      val callId = pigeonVar_list[1] as String
-      val channel = pigeonVar_list[2] as String
-      val revision = pigeonVar_list[3] as String
-      val uid = pigeonVar_list[4] as Long
-      val command = pigeonVar_list[5] as String
-      val cwd = pigeonVar_list[6] as String
-      val outputLimitBytes = pigeonVar_list[7] as Long
-      return ExternalCommandSpec(ownerId, callId, channel, revision, uid, command, cwd, outputLimitBytes)
-    }
-  }
-  fun toList(): List<Any?> {
-    return listOf(
-      ownerId,
-      callId,
-      channel,
-      revision,
-      uid,
-      command,
-      cwd,
-      outputLimitBytes,
-    )
-  }
-  override fun equals(other: Any?): Boolean {
-    if (other == null || other.javaClass != javaClass) {
-      return false
-    }
-    if (this === other) {
-      return true
-    }
-    val other = other as ExternalCommandSpec
-    return CommandApiPigeonUtils.deepEquals(this.ownerId, other.ownerId) && CommandApiPigeonUtils.deepEquals(this.callId, other.callId) && CommandApiPigeonUtils.deepEquals(this.channel, other.channel) && CommandApiPigeonUtils.deepEquals(this.revision, other.revision) && CommandApiPigeonUtils.deepEquals(this.uid, other.uid) && CommandApiPigeonUtils.deepEquals(this.command, other.command) && CommandApiPigeonUtils.deepEquals(this.cwd, other.cwd) && CommandApiPigeonUtils.deepEquals(this.outputLimitBytes, other.outputLimitBytes)
-  }
-
-  override fun hashCode(): Int {
-    var result = javaClass.hashCode()
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.ownerId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.callId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.channel)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.revision)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.uid)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.command)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.cwd)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.outputLimitBytes)
-    return result
-  }
-  override fun toString(): String {
-    return "ExternalCommandSpec(ownerId=$ownerId, callId=$callId, channel=$channel, revision=$revision, uid=$uid, command=$command, cwd=$cwd, outputLimitBytes=$outputLimitBytes)"
-  }
-}
-
-/** Generated class from Pigeon that represents data sent in messages. */
-data class ChannelTransferSpec (
-  val ownerId: String,
-  val callId: String,
-  val channel: String,
-  val revision: String,
-  val uid: Long,
-  val localRoot: String,
-  val path: String,
-  val remotePath: String,
-  val toChannel: Boolean,
-  val fileLimitBytes: Long,
-  val totalLimitBytes: Long,
-  val entryLimit: Long
-)
- {
-  companion object {
-    fun fromList(pigeonVar_list: List<Any?>): ChannelTransferSpec {
-      val ownerId = pigeonVar_list[0] as String
-      val callId = pigeonVar_list[1] as String
-      val channel = pigeonVar_list[2] as String
-      val revision = pigeonVar_list[3] as String
-      val uid = pigeonVar_list[4] as Long
-      val localRoot = pigeonVar_list[5] as String
-      val path = pigeonVar_list[6] as String
-      val remotePath = pigeonVar_list[7] as String
-      val toChannel = pigeonVar_list[8] as Boolean
-      val fileLimitBytes = pigeonVar_list[9] as Long
-      val totalLimitBytes = pigeonVar_list[10] as Long
-      val entryLimit = pigeonVar_list[11] as Long
-      return ChannelTransferSpec(ownerId, callId, channel, revision, uid, localRoot, path, remotePath, toChannel, fileLimitBytes, totalLimitBytes, entryLimit)
-    }
-  }
-  fun toList(): List<Any?> {
-    return listOf(
-      ownerId,
-      callId,
-      channel,
-      revision,
-      uid,
-      localRoot,
-      path,
-      remotePath,
-      toChannel,
-      fileLimitBytes,
-      totalLimitBytes,
-      entryLimit,
-    )
-  }
-  override fun equals(other: Any?): Boolean {
-    if (other == null || other.javaClass != javaClass) {
-      return false
-    }
-    if (this === other) {
-      return true
-    }
-    val other = other as ChannelTransferSpec
-    return CommandApiPigeonUtils.deepEquals(this.ownerId, other.ownerId) && CommandApiPigeonUtils.deepEquals(this.callId, other.callId) && CommandApiPigeonUtils.deepEquals(this.channel, other.channel) && CommandApiPigeonUtils.deepEquals(this.revision, other.revision) && CommandApiPigeonUtils.deepEquals(this.uid, other.uid) && CommandApiPigeonUtils.deepEquals(this.localRoot, other.localRoot) && CommandApiPigeonUtils.deepEquals(this.path, other.path) && CommandApiPigeonUtils.deepEquals(this.remotePath, other.remotePath) && CommandApiPigeonUtils.deepEquals(this.toChannel, other.toChannel) && CommandApiPigeonUtils.deepEquals(this.fileLimitBytes, other.fileLimitBytes) && CommandApiPigeonUtils.deepEquals(this.totalLimitBytes, other.totalLimitBytes) && CommandApiPigeonUtils.deepEquals(this.entryLimit, other.entryLimit)
-  }
-
-  override fun hashCode(): Int {
-    var result = javaClass.hashCode()
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.ownerId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.callId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.channel)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.revision)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.uid)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.localRoot)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.path)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.remotePath)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.toChannel)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.fileLimitBytes)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.totalLimitBytes)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.entryLimit)
-    return result
-  }
-  override fun toString(): String {
-    return "ChannelTransferSpec(ownerId=$ownerId, callId=$callId, channel=$channel, revision=$revision, uid=$uid, localRoot=$localRoot, path=$path, remotePath=$remotePath, toChannel=$toChannel, fileLimitBytes=$fileLimitBytes, totalLimitBytes=$totalLimitBytes, entryLimit=$entryLimit)"
-  }
-}
-
-/** Generated class from Pigeon that represents data sent in messages. */
-data class ExternalCommandEvent (
-  val ownerId: String,
-  val callId: String,
-  val sequence: Long,
-  val kind: CommandEventKind,
-  val bytes: ByteArray? = null,
-  val exitCode: Long? = null,
-  val signal: Long? = null,
-  val error: String? = null,
-  val transferredBytes: Long,
-  val completedPaths: List<String>,
-  val cancelled: Boolean,
-  val outputLimitExceeded: Boolean,
-  val terminationAcknowledged: Boolean
-)
- {
-  companion object {
-    fun fromList(pigeonVar_list: List<Any?>): ExternalCommandEvent {
-      val ownerId = pigeonVar_list[0] as String
-      val callId = pigeonVar_list[1] as String
-      val sequence = pigeonVar_list[2] as Long
-      val kind = pigeonVar_list[3] as CommandEventKind
-      val bytes = pigeonVar_list[4] as ByteArray?
-      val exitCode = pigeonVar_list[5] as Long?
-      val signal = pigeonVar_list[6] as Long?
-      val error = pigeonVar_list[7] as String?
-      val transferredBytes = pigeonVar_list[8] as Long
-      val completedPaths = pigeonVar_list[9] as List<String>
-      val cancelled = pigeonVar_list[10] as Boolean
-      val outputLimitExceeded = pigeonVar_list[11] as Boolean
-      val terminationAcknowledged = pigeonVar_list[12] as Boolean
-      return ExternalCommandEvent(ownerId, callId, sequence, kind, bytes, exitCode, signal, error, transferredBytes, completedPaths, cancelled, outputLimitExceeded, terminationAcknowledged)
-    }
-  }
-  fun toList(): List<Any?> {
-    return listOf(
-      ownerId,
-      callId,
-      sequence,
-      kind,
-      bytes,
-      exitCode,
-      signal,
-      error,
-      transferredBytes,
-      completedPaths,
-      cancelled,
-      outputLimitExceeded,
-      terminationAcknowledged,
-    )
-  }
-  override fun equals(other: Any?): Boolean {
-    if (other == null || other.javaClass != javaClass) {
-      return false
-    }
-    if (this === other) {
-      return true
-    }
-    val other = other as ExternalCommandEvent
-    return CommandApiPigeonUtils.deepEquals(this.ownerId, other.ownerId) && CommandApiPigeonUtils.deepEquals(this.callId, other.callId) && CommandApiPigeonUtils.deepEquals(this.sequence, other.sequence) && CommandApiPigeonUtils.deepEquals(this.kind, other.kind) && CommandApiPigeonUtils.deepEquals(this.bytes, other.bytes) && CommandApiPigeonUtils.deepEquals(this.exitCode, other.exitCode) && CommandApiPigeonUtils.deepEquals(this.signal, other.signal) && CommandApiPigeonUtils.deepEquals(this.error, other.error) && CommandApiPigeonUtils.deepEquals(this.transferredBytes, other.transferredBytes) && CommandApiPigeonUtils.deepEquals(this.completedPaths, other.completedPaths) && CommandApiPigeonUtils.deepEquals(this.cancelled, other.cancelled) && CommandApiPigeonUtils.deepEquals(this.outputLimitExceeded, other.outputLimitExceeded) && CommandApiPigeonUtils.deepEquals(this.terminationAcknowledged, other.terminationAcknowledged)
-  }
-
-  override fun hashCode(): Int {
-    var result = javaClass.hashCode()
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.ownerId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.callId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.sequence)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.kind)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.bytes)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.exitCode)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.signal)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.error)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.transferredBytes)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.completedPaths)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.cancelled)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.outputLimitExceeded)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.terminationAcknowledged)
-    return result
-  }
-  override fun toString(): String {
-    return "ExternalCommandEvent(ownerId=$ownerId, callId=$callId, sequence=$sequence, kind=$kind, bytes=${bytes?.contentToString()}, exitCode=$exitCode, signal=$signal, error=$error, transferredBytes=$transferredBytes, completedPaths=$completedPaths, cancelled=$cancelled, outputLimitExceeded=$outputLimitExceeded, terminationAcknowledged=$terminationAcknowledged)"
-  }
-}
-
-/** Generated class from Pigeon that represents data sent in messages. */
-data class WorkspaceFileRequest (
-  val ownerId: String,
-  val callId: String,
-  val workspaceId: String,
-  val revision: String,
-  val uid: Long,
-  val operation: WorkspaceFileOperation,
-  val path: String,
-  val offset: Long,
-  val limit: Long,
-  val localPath: String? = null,
-  val expectedDigest: String? = null,
-  val environmentPaths: Boolean
-)
- {
-  companion object {
-    fun fromList(pigeonVar_list: List<Any?>): WorkspaceFileRequest {
-      val ownerId = pigeonVar_list[0] as String
-      val callId = pigeonVar_list[1] as String
-      val workspaceId = pigeonVar_list[2] as String
-      val revision = pigeonVar_list[3] as String
-      val uid = pigeonVar_list[4] as Long
-      val operation = pigeonVar_list[5] as WorkspaceFileOperation
-      val path = pigeonVar_list[6] as String
-      val offset = pigeonVar_list[7] as Long
-      val limit = pigeonVar_list[8] as Long
-      val localPath = pigeonVar_list[9] as String?
-      val expectedDigest = pigeonVar_list[10] as String?
-      val environmentPaths = pigeonVar_list[11] as Boolean
-      return WorkspaceFileRequest(ownerId, callId, workspaceId, revision, uid, operation, path, offset, limit, localPath, expectedDigest, environmentPaths)
-    }
-  }
-  fun toList(): List<Any?> {
-    return listOf(
-      ownerId,
-      callId,
-      workspaceId,
-      revision,
-      uid,
-      operation,
-      path,
-      offset,
-      limit,
-      localPath,
-      expectedDigest,
-      environmentPaths,
-    )
-  }
-  override fun equals(other: Any?): Boolean {
-    if (other == null || other.javaClass != javaClass) {
-      return false
-    }
-    if (this === other) {
-      return true
-    }
-    val other = other as WorkspaceFileRequest
-    return CommandApiPigeonUtils.deepEquals(this.ownerId, other.ownerId) && CommandApiPigeonUtils.deepEquals(this.callId, other.callId) && CommandApiPigeonUtils.deepEquals(this.workspaceId, other.workspaceId) && CommandApiPigeonUtils.deepEquals(this.revision, other.revision) && CommandApiPigeonUtils.deepEquals(this.uid, other.uid) && CommandApiPigeonUtils.deepEquals(this.operation, other.operation) && CommandApiPigeonUtils.deepEquals(this.path, other.path) && CommandApiPigeonUtils.deepEquals(this.offset, other.offset) && CommandApiPigeonUtils.deepEquals(this.limit, other.limit) && CommandApiPigeonUtils.deepEquals(this.localPath, other.localPath) && CommandApiPigeonUtils.deepEquals(this.expectedDigest, other.expectedDigest) && CommandApiPigeonUtils.deepEquals(this.environmentPaths, other.environmentPaths)
-  }
-
-  override fun hashCode(): Int {
-    var result = javaClass.hashCode()
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.ownerId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.callId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.workspaceId)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.revision)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.uid)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.operation)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.path)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.offset)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.limit)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.localPath)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.expectedDigest)
-    result = 31 * result + CommandApiPigeonUtils.deepHash(this.environmentPaths)
-    return result
-  }
-  override fun toString(): String {
-    return "WorkspaceFileRequest(ownerId=$ownerId, callId=$callId, workspaceId=$workspaceId, revision=$revision, uid=$uid, operation=$operation, path=$path, offset=$offset, limit=$limit, localPath=$localPath, expectedDigest=$expectedDigest, environmentPaths=$environmentPaths)"
+    return "CommandChannelStatus(channel=$channel, state=$state, message=$message, uid=$uid, revision=$revision)"
   }
 }
 private open class CommandApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
       129.toByte() -> {
-        return (readValue(buffer) as Long?)?.let {
-          CommandEventKind.ofRaw(it.toInt())
-        }
-      }
-      130.toByte() -> {
-        return (readValue(buffer) as Long?)?.let {
-          WorkspaceFileOperation.ofRaw(it.toInt())
-        }
-      }
-      131.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           CommandChannelStatus.fromList(it)
-        }
-      }
-      132.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ExternalCommandSpec.fromList(it)
-        }
-      }
-      133.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ChannelTransferSpec.fromList(it)
-        }
-      }
-      134.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          ExternalCommandEvent.fromList(it)
-        }
-      }
-      135.toByte() -> {
-        return (readValue(buffer) as? List<Any?>)?.let {
-          WorkspaceFileRequest.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -641,32 +266,8 @@ private open class CommandApiPigeonCodec : StandardMessageCodec() {
   }
   override fun writeValue(stream: ByteArrayOutputStream, value: Any?)   {
     when (value) {
-      is CommandEventKind -> {
-        stream.write(129)
-        writeValue(stream, value.raw.toLong())
-      }
-      is WorkspaceFileOperation -> {
-        stream.write(130)
-        writeValue(stream, value.raw.toLong())
-      }
       is CommandChannelStatus -> {
-        stream.write(131)
-        writeValue(stream, value.toList())
-      }
-      is ExternalCommandSpec -> {
-        stream.write(132)
-        writeValue(stream, value.toList())
-      }
-      is ChannelTransferSpec -> {
-        stream.write(133)
-        writeValue(stream, value.toList())
-      }
-      is ExternalCommandEvent -> {
-        stream.write(134)
-        writeValue(stream, value.toList())
-      }
-      is WorkspaceFileRequest -> {
-        stream.write(135)
+        stream.write(129)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -682,11 +283,6 @@ interface CommandChannelHostApi {
   suspend fun initialize(channel: String)
   fun openSettings(channel: String)
   suspend fun setEnabled(channels: List<String>)
-  suspend fun start(spec: ExternalCommandSpec)
-  suspend fun workspaceFile(request: WorkspaceFileRequest)
-  suspend fun transfer(spec: ChannelTransferSpec)
-  suspend fun cancel(ownerId: String, callId: String)
-  suspend fun endOwner(ownerId: String)
 
   companion object {
     /** The codec used by CommandChannelHostApi. */
@@ -792,107 +388,6 @@ interface CommandChannelHostApi {
           channel.setMessageHandler(null)
         }
       }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.CommandChannelHostApi.start$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val specArg = args[0] as ExternalCommandSpec
-            CoroutineScope(Dispatchers.Main).launch {
-              val wrapped: List<Any?> = try {
-                api.start(specArg)
-                listOf(null)
-              } catch (exception: Throwable) {
-                CommandApiPigeonUtils.wrapError(exception)
-              }
-              reply.reply(wrapped)
-            }
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.CommandChannelHostApi.workspaceFile$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val requestArg = args[0] as WorkspaceFileRequest
-            CoroutineScope(Dispatchers.Main).launch {
-              val wrapped: List<Any?> = try {
-                api.workspaceFile(requestArg)
-                listOf(null)
-              } catch (exception: Throwable) {
-                CommandApiPigeonUtils.wrapError(exception)
-              }
-              reply.reply(wrapped)
-            }
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.CommandChannelHostApi.transfer$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val specArg = args[0] as ChannelTransferSpec
-            CoroutineScope(Dispatchers.Main).launch {
-              val wrapped: List<Any?> = try {
-                api.transfer(specArg)
-                listOf(null)
-              } catch (exception: Throwable) {
-                CommandApiPigeonUtils.wrapError(exception)
-              }
-              reply.reply(wrapped)
-            }
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.CommandChannelHostApi.cancel$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val ownerIdArg = args[0] as String
-            val callIdArg = args[1] as String
-            CoroutineScope(Dispatchers.Main).launch {
-              val wrapped: List<Any?> = try {
-                api.cancel(ownerIdArg, callIdArg)
-                listOf(null)
-              } catch (exception: Throwable) {
-                CommandApiPigeonUtils.wrapError(exception)
-              }
-              reply.reply(wrapped)
-            }
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
-      run {
-        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.CommandChannelHostApi.endOwner$separatedMessageChannelSuffix", codec)
-        if (api != null) {
-          channel.setMessageHandler { message, reply ->
-            val args = message as List<Any?>
-            val ownerIdArg = args[0] as String
-            CoroutineScope(Dispatchers.Main).launch {
-              val wrapped: List<Any?> = try {
-                api.endOwner(ownerIdArg)
-                listOf(null)
-              } catch (exception: Throwable) {
-                CommandApiPigeonUtils.wrapError(exception)
-              }
-              reply.reply(wrapped)
-            }
-          }
-        } else {
-          channel.setMessageHandler(null)
-        }
-      }
     }
   }
 }
@@ -904,25 +399,6 @@ class CommandChannelFlutterApi(private val binaryMessenger: BinaryMessenger, pri
       CommandApiPigeonCodec()
     }
   }
-  suspend fun event(eventArg: ExternalCommandEvent)
-{
-    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
-    return suspendCancellableCoroutine { continuation ->
-      val channelName = "dev.flutter.pigeon.phase.CommandChannelFlutterApi.event$separatedMessageChannelSuffix"
-      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-      channel.send(listOf(eventArg)) {
-        if (it is List<*>) {
-          if (it.size > 1) {
-            continuation.resumeWithException(FlutterError(it[0] as String, it[1] as String, it[2] as String?))
-          } else {
-            continuation.resume(Unit)
-          }
-        } else {
-          continuation.resumeWithException(CommandApiPigeonUtils.createConnectionError(channelName))
-        }
-      }
-    }
-  }
   suspend fun statusChanged()
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
@@ -930,25 +406,6 @@ class CommandChannelFlutterApi(private val binaryMessenger: BinaryMessenger, pri
       val channelName = "dev.flutter.pigeon.phase.CommandChannelFlutterApi.statusChanged$separatedMessageChannelSuffix"
       val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
       channel.send(null) {
-        if (it is List<*>) {
-          if (it.size > 1) {
-            continuation.resumeWithException(FlutterError(it[0] as String, it[1] as String, it[2] as String?))
-          } else {
-            continuation.resume(Unit)
-          }
-        } else {
-          continuation.resumeWithException(CommandApiPigeonUtils.createConnectionError(channelName))
-        }
-      }
-    }
-  }
-  suspend fun ownerStopped(ownerIdArg: String)
-{
-    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
-    return suspendCancellableCoroutine { continuation ->
-      val channelName = "dev.flutter.pigeon.phase.CommandChannelFlutterApi.ownerStopped$separatedMessageChannelSuffix"
-      val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
-      channel.send(listOf(ownerIdArg)) {
         if (it is List<*>) {
           if (it.size > 1) {
             continuation.resumeWithException(FlutterError(it[0] as String, it[1] as String, it[2] as String?))

@@ -8,40 +8,26 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_menu_anchor.dart';
-import '../../../data/models/tool_call_record.dart';
 import 'command_api.g.dart';
 import 'command_channel_driver.dart';
 
-enum CommandChannelAction { open, authorize, initialize, copySetup, retry }
+enum CommandChannelAction { open, authorize, initialize, retry }
 
-/// 两张卡片共用菜单入口，派发前用当前状态核对菜单中的可用动作。
-List<CommandChannelAction> commandChannelActions(
-  ExecutionChannel channel,
-  String? state,
-) => switch (state) {
-  'notInstalled' || 'notRunning' => const [CommandChannelAction.open],
-  'permissionRequired' => [
-    CommandChannelAction.authorize,
-    CommandChannelAction.open,
-    if (channel == ExecutionChannel.termux) CommandChannelAction.copySetup,
-  ],
-  'initializationRequired' => [
-    CommandChannelAction.initialize,
-    CommandChannelAction.open,
-    if (channel == ExecutionChannel.termux) CommandChannelAction.copySetup,
-  ],
-  'ready' => [
-    CommandChannelAction.open,
-    CommandChannelAction.initialize,
-    if (channel == ExecutionChannel.termux) CommandChannelAction.copySetup,
-  ],
-  'unsupported' => const [],
-  _ => const [CommandChannelAction.retry],
-};
+/// 派发前用当前状态核对菜单中的可用动作。
+List<CommandChannelAction> commandChannelActions(String? state) =>
+    switch (state) {
+      'notInstalled' || 'notRunning' => const [CommandChannelAction.open],
+      'permissionRequired' => [
+        CommandChannelAction.authorize,
+        CommandChannelAction.open,
+      ],
+      'ready' => [CommandChannelAction.open, CommandChannelAction.initialize],
+      'unsupported' => const [],
+      _ => const [CommandChannelAction.retry],
+    };
 
 class CommandChannelCard extends StatefulWidget {
   const CommandChannelCard({
-    required this.channel,
     required this.enabled,
     required this.locked,
     required this.loading,
@@ -51,7 +37,6 @@ class CommandChannelCard extends StatefulWidget {
     super.key,
   });
 
-  final ExecutionChannel channel;
   final bool enabled;
   final bool locked;
   final bool loading;
@@ -68,20 +53,13 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
   final _menuFocus = FocusNode();
   LocalHistoryEntry? _history;
 
-  bool get _termux => widget.channel == ExecutionChannel.termux;
-  String get _name => _termux ? 'Termux' : 'Shizuku 虚拟屏';
+  static const _name = 'Shizuku 虚拟屏';
 
   String _actionLabel(CommandChannelAction action) => switch (action) {
     CommandChannelAction.open =>
       widget.status?.state == 'notInstalled' ? '下载' : '打开应用',
     CommandChannelAction.authorize => '授权',
-    CommandChannelAction.initialize =>
-      !_termux
-          ? '连接'
-          : widget.status?.state == 'ready'
-          ? '重新初始化'
-          : '初始化',
-    CommandChannelAction.copySetup => '复制外部调用设置',
+    CommandChannelAction.initialize => '连接',
     CommandChannelAction.retry => '重试',
   };
 
@@ -91,9 +69,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
           ? LucideIcons.download
           : LucideIcons.externalLink,
     CommandChannelAction.authorize => LucideIcons.keyRound,
-    CommandChannelAction.initialize =>
-      _termux ? LucideIcons.wrench : LucideIcons.link,
-    CommandChannelAction.copySetup => LucideIcons.copy,
+    CommandChannelAction.initialize => LucideIcons.link,
     CommandChannelAction.retry => LucideIcons.rotateCw,
   };
 
@@ -142,7 +118,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final actions = commandChannelActions(widget.channel, widget.status?.state);
+    final actions = commandChannelActions(widget.status?.state);
     final canOpen = !widget.locked && actions.isNotEmpty;
 
     return AppMenuAnchor(
@@ -201,13 +177,14 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
         painter.width +
         AppSpacing.s +
         24 +
-        (_termux ? 0 : 60 + AppSpacing.s);
+        60 +
+        AppSpacing.s;
     painter.dispose();
 
-    final toggle = _termux ? null : _shizukuSwitch(context);
+    final toggle = _shizukuSwitch(context);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final stacked = toggle != null && constraints.maxWidth < minWidth;
+        final stacked = constraints.maxWidth < minWidth;
         return Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -219,7 +196,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
               child: Row(
                 children: [
                   AppIconBadge(
-                    icon: _termux ? LucideIcons.terminal : LucideIcons.server,
+                    icon: LucideIcons.server,
                     size: 40,
                     iconSize: 22,
                   ),
@@ -241,7 +218,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
                     ),
                   ),
                   const SizedBox(width: AppSpacing.s),
-                  if (toggle != null && !stacked) ...[
+                  if (!stacked) ...[
                     toggle,
                     const SizedBox(width: AppSpacing.s),
                   ],

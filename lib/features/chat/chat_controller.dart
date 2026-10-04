@@ -24,7 +24,6 @@ import '../../data/repositories/model_request_repository.dart';
 import '../execution/execution_controller.dart';
 import '../tools/run_recovery_controller.dart';
 import '../tools/tool.dart';
-import '../workspace/workspace_controller.dart';
 import 'active_conversation.dart';
 import 'chat_operation.dart';
 import 'chat_providers.dart';
@@ -53,7 +52,6 @@ part 'chat_controller.g.dart';
     ActiveConversation,
     settingsStorage,
     modelCatalog,
-    DefaultPrimaryEnvironment,
     chatRunFactory,
     chatToolRuntimeFactory,
   ],
@@ -386,15 +384,8 @@ class ChatController extends _$ChatController {
       throw const OperationFailure('计划模式需要支持工具调用的模型');
     }
     if (conversationId == null) {
-      final primaryEnvironment = await ref
-          .read(defaultPrimaryEnvironmentProvider.notifier)
-          .forNewConversation();
-      if (revision != _viewRevision) {
-        throw const OperationFailure('会话已切换，请重新发送');
-      }
       final conversation = await repository.createConversation(
         permissions: permissions,
-        primaryEnvironment: primaryEnvironment,
         assistantId: assistant?.id,
         modelSelectionOverride: ref
             .read(activeConversationProvider)
@@ -559,9 +550,10 @@ class ChatController extends _$ChatController {
       final plannedThread = await (await ref.read(
         conversationRepositoryProvider.future,
       )).getThread(plan.conversationId);
-      if (plannedThread?.conversation.primaryEnvironment !=
-          source.configuration.workspace?.primaryEnvironment) {
-        throw const OperationFailure('会话环境与计划记录不一致，请重新规划');
+      if (plannedThread == null ||
+          plannedThread.conversation.workspaceId !=
+              source.configuration.workspace?.id) {
+        throw const OperationFailure('会话工作区与计划记录不一致，请重新规划');
       }
       await _startRun(
         repository: await ref.read(conversationRepositoryProvider.future),

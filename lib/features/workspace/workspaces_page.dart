@@ -19,7 +19,6 @@ import 'dependency_controller.dart';
 import 'dependency_profiles.dart';
 import 'linux_installer.dart';
 import 'installation_progress.dart';
-import 'primary_environment_selector.dart';
 import 'workspace_controller.dart';
 import 'ubuntu_icon.dart';
 
@@ -91,8 +90,6 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          const PrimaryEnvironmentSelector(),
-          const SizedBox(height: AppSpacing.l),
           Material(
             color: context.brandColors.goldContainer,
             borderRadius: AppRadius.mediumAll,

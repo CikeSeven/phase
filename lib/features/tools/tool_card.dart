@@ -1,5 +1,3 @@
-import '../commands/system_channel_tools.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -163,7 +161,7 @@ class _ToolCardState extends State<ToolCard>
     // 收起动画继续呈现最后一次展开的内容，不在动画开始时清空。
     final display = _display;
     final detail = ToolCallDisplay.detail(record, appName: widget.appName);
-    final command = isCommandToolName(record.toolName);
+    final command = (record.toolName == 'shell');
     final artifacts = [
       for (final artifact in widget.artifacts)
         if (ToolCallDisplay.artifactLabel(record, artifact)

@@ -9,7 +9,6 @@ import '../../../data/models/provider_profile.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_source.dart';
 import '../../../data/models/tool_policy.dart';
-import '../../../data/models/workspace.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../../../data/repositories/conversation_repository.dart';
 import '../../../providers/tool_result_images.dart';
@@ -48,31 +47,6 @@ class HistoryResolver {
         final record = records[part.toolCallId];
         final callId = record?.providerCallId;
         if (record == null || callId == null) continue;
-        var environmentPrefix = '';
-        final path = record.arguments['path'];
-        if (record.source?.kind != ToolSourceKind.mcp &&
-            const {
-              'read_file',
-              'list_files',
-              'write_file',
-              'edit_file',
-              'prepare_skill',
-            }.contains(record.toolName) &&
-            !(path is String &&
-                (path.startsWith('content://') ||
-                    path.startsWith('attachment:'))) &&
-            !record.arguments.containsKey('directory')) {
-          if (!sourceRuns.containsKey(record.runId)) {
-            sourceRuns[record.runId] = await runs.getById(record.runId);
-          }
-          final environment = sourceRuns[record.runId]
-              ?.configuration
-              .workspace
-              ?.primaryEnvironment;
-          if (environment != null) {
-            environmentPrefix = '[本次调用工作区：${environment.label}]\n';
-          }
-        }
         results[part.toolCallId] = ResolvedToolResult(
           recordId: record.id,
           status: record.status.name,
@@ -95,12 +69,10 @@ class HistoryResolver {
                     if (attachments[id]?.isImage == true) attachments[id]!,
                 ]
               : const [],
-          content:
-              environmentPrefix +
-              toolResultText(
-                record,
-                fallback: message.text.isNotEmpty ? message.text : null,
-              ),
+          content: toolResultText(
+            record,
+            fallback: message.text.isNotEmpty ? message.text : null,
+          ),
           artifactIds: record.artifacts,
           isError: record.status != ToolCallStatus.succeeded,
         );

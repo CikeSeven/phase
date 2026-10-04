@@ -56,10 +56,9 @@ class WorkspaceFiles {
     Attachment attachment,
     RunCancellation cancellation, {
     WorkspaceSnapshot? binding,
-    String? ownerId,
   }) async {
     final snapshot = binding ?? await repository.snapshot(workspace.id);
-    final access = repository.files(snapshot, ownerId: ownerId);
+    final access = repository.files(snapshot);
     final relative = 'imports/${attachment.id}/${p.basename(attachment.name)}';
     try {
       if (await File(attachment.localPath).length() > maxCopyBytes) {
@@ -72,7 +71,7 @@ class WorkspaceFiles {
         'kind': 'attachment',
         'id': attachment.id,
         'name': attachment.name,
-      }, environment: snapshot.primaryEnvironment);
+      });
       return access.executionPath(relative);
     } on FileSystemException {
       throw WorkspaceFailure('importFailed', '无法复制附件「${attachment.name}」到工作区');
@@ -84,9 +83,8 @@ class WorkspaceFiles {
     SkillSnapshot skill,
     RunCancellation cancellation, {
     required Future<void> Function() checkPermission,
-    String? ownerId,
   }) async {
-    final access = repository.files(workspace, ownerId: ownerId);
+    final access = repository.files(workspace);
     final temporary = await access.temporary();
     final staging = Directory(p.join(temporary.path, 'skill'));
     final relative = '.skills/${skill.id}/${skill.revision}-${generateId()}';
@@ -122,7 +120,7 @@ class WorkspaceFiles {
         'kind': 'skill',
         'id': skill.id,
         'revision': skill.revision,
-      }, environment: workspace.primaryEnvironment);
+      });
       return access.executionPath(relative);
     } on FileSystemException {
       throw const WorkspaceFailure(
@@ -156,7 +154,7 @@ class WorkspaceFiles {
     ToolContext context,
     RunCancellation cancellation,
   ) async {
-    final access = repository.files(workspace, ownerId: context.runId);
+    final access = repository.files(workspace);
     final temp = await access.temporary();
     final destination = File(
       p.join(
@@ -183,10 +181,9 @@ class WorkspaceFiles {
 
   Future<Map<String, String>> outputs(
     WorkspaceSnapshot workspace, {
-    String? ownerId,
     RunCancellation? cancellation,
   }) async {
-    final access = repository.files(workspace, ownerId: ownerId);
+    final access = repository.files(workspace);
     final cancel = cancellation ?? RunCancellation();
     final result = <String, String>{};
     var total = 0;
@@ -222,65 +219,12 @@ class WorkspaceFiles {
     await visit('.');
     return result;
   }
-
-  Future<void> transfer(
-    WorkspaceSnapshot workspace,
-    String path,
-    bool toOther,
-    RunCancellation cancellation, {
-    String? ownerId,
-  }) async {
-    final other = workspace.select(workspace.primaryEnvironment.other);
-    final from = repository.files(
-      toOther ? workspace : other,
-      ownerId: ownerId,
-    );
-    final to = repository.files(toOther ? other : workspace, ownerId: ownerId);
-    final temporary = await from.temporary();
-    try {
-      final staged = p.join(temporary.path, 'transfer');
-      try {
-        await from.exportPath(path, staged, cancellation);
-      } on WorkspaceFailure catch (error) {
-        if (error.cancelled) throw const ToolCancelled();
-        throw WorkspaceFailure(error.code, error.message);
-      }
-      try {
-        await to.importPath(path, staged, cancellation);
-      } on WorkspaceFailure catch (error) {
-        final completed = [
-          for (final item in error.completedPaths)
-            item.isEmpty ? path : p.posix.join(path, item),
-        ];
-        for (final item in completed) {
-          await repository.recordCopy(workspace.id, item, {
-            'kind': 'workspace',
-            'environment': from.binding.primaryEnvironment.name,
-            'path': item,
-          }, environment: to.binding.primaryEnvironment);
-        }
-        throw WorkspaceFailure(
-          error.code,
-          error.message,
-          completedPaths: completed,
-          cancelled: error.cancelled,
-        );
-      }
-      await repository.recordCopy(workspace.id, path, {
-        'kind': 'workspace',
-        'environment': from.binding.primaryEnvironment.name,
-        'path': path,
-      }, environment: to.binding.primaryEnvironment);
-    } finally {
-      await temporary.delete(recursive: true);
-    }
-  }
 }
 
 String workspacePrompt(WorkspaceSnapshot? workspace) {
   if (workspace == null) return '';
-  return '\n\n本会话主环境：${workspace.primaryEnvironment.label}。'
+  return '\n\n本会话环境：Ubuntu。'
       'shell 默认目录：${workspace.executionRoot}。'
       '文件工具支持当前环境的绝对路径或相对于当前会话目录的路径；~ 指向当前环境 HOME。'
-      '${workspace.executable ? '附件副本路径：imports/<附件ID>/<原文件名>。' : '所选命令环境未就绪。'}';
+      '${workspace.executable ? '附件副本路径：imports/<附件ID>/<原文件名>。' : 'Ubuntu 环境未就绪。'}';
 }

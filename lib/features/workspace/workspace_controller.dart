@@ -5,10 +5,8 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/utils/id.dart';
-import '../../../data/datasources/local/settings_storage.dart';
 import '../../../data/models/workspace.dart';
 import '../../../data/repositories/workspace_repository.dart';
-import '../commands/command_channel_driver.dart';
 import '../tools/tool.dart';
 import 'dependency_controller.dart';
 import 'linux_installer.dart';
@@ -16,62 +14,6 @@ import 'process_driver.dart';
 import 'process_api.g.dart';
 
 part 'workspace_controller.g.dart';
-
-class PrimaryEnvironmentSetting {
-  const PrimaryEnvironmentSetting(
-    this.environment, {
-    this.saving = false,
-    this.error,
-  });
-  final PrimaryEnvironment environment;
-  final bool saving;
-  final String? error;
-}
-
-@Riverpod(keepAlive: true, dependencies: [settingsStorage])
-class DefaultPrimaryEnvironment extends _$DefaultPrimaryEnvironment {
-  Future<void>? _pending;
-  @override
-  PrimaryEnvironmentSetting build() => PrimaryEnvironmentSetting(
-    ref.read(settingsStorageProvider).readPrimaryEnvironment(),
-  );
-
-  Future<void> select(PrimaryEnvironment environment) async {
-    if (state.saving || environment == state.environment) return;
-    final previous = state.environment;
-    state = PrimaryEnvironmentSetting(previous, saving: true);
-    final pending = _save(environment);
-    _pending = pending;
-    try {
-      await pending;
-      if (ref.mounted) state = PrimaryEnvironmentSetting(environment);
-    } on Failure catch (error) {
-      if (ref.mounted) {
-        state = PrimaryEnvironmentSetting(previous, error: error.userMessage);
-      }
-    } finally {
-      _pending = null;
-    }
-  }
-
-  Future<void> _save(PrimaryEnvironment environment) async {
-    if (environment == PrimaryEnvironment.termux) {
-      final statuses = await ref.read(commandChannelDriverProvider).status();
-      if (!hasTermuxCommandPermission(statuses)) {
-        throw const OperationFailure('请先授权 Termux 命令权限');
-      }
-    }
-    if (!ref.mounted) return;
-    await ref
-        .read(settingsStorageProvider)
-        .writePrimaryEnvironment(environment);
-  }
-
-  Future<PrimaryEnvironment> forNewConversation() async {
-    await _pending;
-    return state.environment;
-  }
-}
 
 @riverpod
 Future<LinuxPlatformInfo> linuxPlatformInfo(Ref ref) =>

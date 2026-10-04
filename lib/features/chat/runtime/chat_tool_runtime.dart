@@ -25,7 +25,6 @@ import '../context/read_history_tool.dart';
 import '../chat_operation.dart';
 import '../planning/planning_tools.dart';
 import '../../commands/command_channel_driver.dart';
-import '../../commands/system_channel_tools.dart';
 import '../../execution/channel_driver.dart';
 import '../../execution/execution_controller.dart';
 import '../../execution/execution_api.g.dart';
@@ -46,20 +45,16 @@ import '../../workspace/prepare_skill_tool.dart';
 import '../../workspace/process_driver.dart';
 import '../../workspace/shell_tool.dart';
 import '../../workspace/workspace_files.dart';
-import '../../workspace/workspace_transfer_tool.dart';
 import '../../workspace/workspace_search.dart';
 import '../../../data/models/chat_request.dart';
 
 const _environmentTools = {'shell', 'install_packages', 'grep', 'find'};
 
 bool workspaceToolAvailable(String name, WorkspaceSnapshot? workspace) =>
-    name == 'install_packages'
-    ? workspace?.primaryEnvironment == PrimaryEnvironment.ubuntu &&
-          workspace?.linuxAvailable == true
-    : workspace?.executable == true;
+    workspace?.linuxAvailable == true;
 
 String toolActivity(Tool tool, Map<String, dynamic> arguments) =>
-    isCommandToolName(tool.name)
+    tool.name == 'shell'
     ? '\$ ${panelExcerpt(arguments['command'] as String? ?? '', limit: 300)}'
     : panelExcerpt(tool.describeAction(arguments), limit: 300);
 
@@ -157,19 +152,10 @@ class ChatToolRuntimeFactory {
     );
   }
 
-  List<Tool> _channelTools(
-    List<CommandChannelSnapshot> channels,
-    WorkspaceSnapshot? workspace,
-    WorkspaceRepository? workspaces,
-  ) => [
-    if (workspace?.termux != null)
-      WorkspaceTransferTool(workspace!, WorkspaceFiles(workspaces!)),
-    for (final channel in channels) ...[
+  List<Tool> _channelTools(List<CommandChannelSnapshot> channels) => [
+    for (final channel in channels)
       if (channel.channel == ExecutionChannel.shizuku)
         ShizukuDisplayTool(channel, platform),
-      if (channel.channel == ExecutionChannel.termux && workspace != null)
-        ChannelTransferTool(channel, commands(), workspace, workspaces!),
-    ],
   ];
 
   Future<ChatToolCatalog> catalog({
@@ -195,7 +181,7 @@ class ChatToolRuntimeFactory {
           scope: memoryScope,
           inputMessageId: inputMessageId,
         ),
-      if (supportsTools) ..._channelTools(channels, workspace, workspaces),
+      if (supportsTools) ..._channelTools(channels),
       for (final tool in builtIns.tools)
         if (tool is ShellTool)
           ShellTool(workspace: workspace)
@@ -277,10 +263,7 @@ class ChatToolRuntimeFactory {
     final workspaces = binding == null ? null : await loadWorkspaces();
     final files = workspaces == null ? null : WorkspaceFiles(workspaces);
     final skill = await _skillTool(config.skills, run.assistantId, binding);
-    final commandDriver =
-        config.commandChannels.isEmpty && binding?.termux == null
-        ? null
-        : commands();
+    final commandDriver = config.commandChannels.isEmpty ? null : commands();
     if (commandDriver != null) {
       await commandDriver.setEnabled(settings.readCommandChannels().channels);
     }
@@ -294,26 +277,20 @@ class ChatToolRuntimeFactory {
           scope: config.memoryScope,
           inputMessageId: run.inputMessageId,
         ),
-      ..._channelTools(config.commandChannels, binding, workspaces),
+      ..._channelTools(config.commandChannels),
       for (final tool in builtIns.tools)
         if (!_environmentTools.contains(tool.name))
           if (tool is WaitForUserTool) WaitForUserTool(waitForUser) else tool,
       if (binding?.executable == true)
-        ShellTool(
-          workspace: binding,
-          driver: processDriver,
-          files: files,
-          commandDriver: commandDriver,
-        ),
+        ShellTool(workspace: binding, driver: processDriver, files: files),
       if (binding?.executable == true)
         for (final findFiles in [false, true])
           WorkspaceSearchTool(
             findFiles: findFiles,
             workspace: binding,
-            search: WorkspaceSearch(binding!, processDriver, commandDriver),
+            search: WorkspaceSearch(binding!, processDriver),
           ),
-      if (binding?.primaryEnvironment == PrimaryEnvironment.ubuntu &&
-          binding?.linuxAvailable == true)
+      if (binding?.linuxAvailable == true)
         InstallTool(
           workspace: binding,
           repository: workspaces,
@@ -349,7 +326,7 @@ class ChatToolRuntimeFactory {
         );
       },
       currentPolicy: (tool) async {
-        if ((tool is SystemChannelTool || tool is ShizukuDisplayTool) &&
+        if (tool is ShizukuDisplayTool &&
             !settings.readCommandChannels().enabled(tool.channel)) {
           return ToolPolicy.deny;
         }
@@ -384,7 +361,6 @@ class ChatToolRuntimeFactory {
         );
         if (tool is ShellTool ||
             tool is WorkspaceSearchTool ||
-            tool is SystemChannelTool ||
             tool is ShizukuDisplayTool) {
           await processDriver!.beginTask(
             run.id,
@@ -392,9 +368,7 @@ class ChatToolRuntimeFactory {
                 ? '虚拟屏控制'
                 : tool is ShellTool
                 ? '工作区命令'
-                : tool is WorkspaceSearchTool
-                ? '文件搜索'
-                : '系统命令',
+                : '文件搜索',
           );
           if (tool is! ShizukuDisplayTool) {
             await execution.showAvailablePanel(run.id);
@@ -413,7 +387,6 @@ class ChatToolRuntimeFactory {
       registry,
       executor,
       mcp,
-      commandDriver,
       processDriver,
       workspaces,
     );
@@ -427,7 +400,6 @@ class ChatToolRuntime {
     this.registry,
     this.executor,
     this.mcp,
-    this.commandDriver,
     this.processDriver,
     this.workspaces,
   );
@@ -435,10 +407,8 @@ class ChatToolRuntime {
   final ToolRegistry registry;
   final ToolExecutor executor;
   final McpRunRuntime? mcp;
-  final CommandChannelDriver? commandDriver;
   final ProcessDriver? processDriver;
   final WorkspaceRepository? workspaces;
-  StreamSubscription<String>? _commandStops;
   StreamSubscription<String>? _processStops;
 
   List<ToolDefinition> get definitions => run.configuration.supportsTools
@@ -450,32 +420,12 @@ class ChatToolRuntime {
       : const [];
 
   void listenStops(void Function() stop) {
-    _commandStops = commandDriver?.stops.listen((owner) {
-      if (owner == run.id) stop();
-    });
     _processStops = processDriver?.stops.listen((owner) {
       if (owner == run.id) stop();
     });
   }
 
   ExecutionChannel channelFor(String name, Map<String, dynamic> arguments) {
-    if (run.configuration.workspace?.primaryEnvironment ==
-            PrimaryEnvironment.termux &&
-        const {
-          'read_file',
-          'list_files',
-          'write_file',
-          'edit_file',
-          'prepare_skill',
-          'workspace_transfer',
-        }.contains(name) &&
-        !(arguments['path'] is String &&
-            (arguments['path'] as String).startsWith('content://')) &&
-        !arguments.containsKey('directory') &&
-        !(arguments['path'] is String &&
-            (arguments['path'] as String).startsWith('attachment:'))) {
-      return ExecutionChannel.termux;
-    }
     return registry.byName(name)?.channel ?? ExecutionChannel.app;
   }
 
@@ -485,14 +435,6 @@ class ChatToolRuntime {
       failureMessage: 'MCP 连接未能完整关闭',
     );
     await operation.cleanup(
-      () async => commandDriver?.endOwner(run.id),
-      failureMessage: '系统命令任务未收到完整结束回执',
-    );
-    await operation.cleanup(
-      () async => _commandStops?.cancel(),
-      failureMessage: '系统命令停止监听未能释放',
-    );
-    await operation.cleanup(
       () async => processDriver?.endTask(run.id),
       failureMessage: 'Linux 任务服务未确认结束',
     );
@@ -500,7 +442,6 @@ class ChatToolRuntime {
       () async => _processStops?.cancel(),
       failureMessage: 'Linux 停止监听未能释放',
     );
-    _commandStops = null;
     _processStops = null;
   }
 }

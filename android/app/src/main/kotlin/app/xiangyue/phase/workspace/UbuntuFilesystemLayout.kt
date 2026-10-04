@@ -38,9 +38,5 @@ object UbuntuFilesystemLayout {
         return file
     }
 
-    fun managedTransferRoot(linuxRoot: File, path: String): File {
-        val file = File(path).absoluteFile
-        require(realDirectory(file) && (inSession(linuxRoot, file) || inStagedWorkspace(linuxRoot, file)))
-        return file
-    }
+
 }

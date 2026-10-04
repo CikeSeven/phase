@@ -1,12 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
-import '../../../core/widgets/app_snack_bar.dart';
-import '../../../data/models/tool_call_record.dart';
 import 'command_channel_card.dart';
 import 'command_channels_controller.dart';
 
@@ -20,64 +17,42 @@ class CommandChannelsSection extends ConsumerStatefulWidget {
 
 class _CommandChannelsSectionState
     extends ConsumerState<CommandChannelsSection> {
-  ExecutionChannel? _activeChannel;
+  bool _busy = false;
 
-  Future<void> _operate(
-    ExecutionChannel channel,
-    Future<void> Function() action,
-  ) async {
-    if (_activeChannel != null ||
+  Future<void> _operate(Future<void> Function() action) async {
+    if (_busy ||
         ref.read(commandChannelsControllerProvider).value?.busy == true) {
       return;
     }
-    setState(() => _activeChannel = channel);
+    setState(() => _busy = true);
     try {
       await action();
     } finally {
-      if (mounted) setState(() => _activeChannel = null);
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _perform(
-    ExecutionChannel channel,
-    CommandChannelAction action,
-  ) async {
+  Future<void> _perform(CommandChannelAction action) async {
     final status = ref
         .read(commandChannelsControllerProvider)
         .value
         ?.statuses
-        .where((status) => status.channel == channel.name)
+        .where((status) => status.channel == 'shizuku')
         .firstOrNull;
-    if (!commandChannelActions(channel, status?.state).contains(action)) return;
+    if (!commandChannelActions(status?.state).contains(action)) return;
     final controller = ref.read(commandChannelsControllerProvider.notifier);
-    await _operate(channel, () async {
+    await _operate(() async {
       switch (action) {
         case CommandChannelAction.open:
-          await controller.open(channel.name);
+          await controller.open('shizuku');
         case CommandChannelAction.authorize:
-          await controller.authorize(channel.name);
+          await controller.authorize('shizuku');
         case CommandChannelAction.initialize:
-          await controller.initialize(channel.name);
-        case CommandChannelAction.copySetup:
-          await _copyTermuxSetup();
+          await controller.initialize('shizuku');
         case CommandChannelAction.retry:
           await controller.refresh();
       }
     });
-  }
-
-  Future<void> _copyTermuxSetup() async {
-    var message = '已复制，请在 Termux 中执行';
-    try {
-      await Clipboard.setData(const ClipboardData(text: _termuxSetup));
-    } on PlatformException {
-      message = '复制外部调用设置失败，请重试';
-    } on MissingPluginException {
-      message = '此设备不支持复制外部调用设置';
-    }
-    if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(buildAppSnackBar(content: Text(message)));
   }
 
   @override
@@ -97,36 +72,22 @@ class _CommandChannelsSectionState
       ),
       data: (state) {
         final controller = ref.read(commandChannelsControllerProvider.notifier);
-        final locked = state.busy || _activeChannel != null;
+        final locked = state.busy || _busy;
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: AppSpacing.m,
           children: [
-            for (final channel in [
-              ExecutionChannel.shizuku,
-              ExecutionChannel.termux,
-            ])
-              CommandChannelCard(
-                key: ValueKey(channel),
-                channel: channel,
-                enabled:
-                    channel == ExecutionChannel.shizuku &&
-                    state.settings.shizuku,
-                locked: locked,
-                loading:
-                    _activeChannel == channel ||
-                    state.busy && _activeChannel == null,
-                status: state.statuses
-                    .where((status) => status.channel == channel.name)
-                    .firstOrNull,
-                onEnabled: channel == ExecutionChannel.shizuku
-                    ? (value) => _operate(
-                        channel,
-                        () => controller.setShizukuEnabled(value),
-                      )
-                    : null,
-                onAction: (action) => _perform(channel, action),
-              ),
+            CommandChannelCard(
+              enabled: state.settings.shizuku,
+              locked: locked,
+              loading: _busy || state.busy,
+              status: state.statuses
+                  .where((status) => status.channel == 'shizuku')
+                  .firstOrNull,
+              onEnabled: (value) =>
+                  _operate(() => controller.setShizukuEnabled(value)),
+              onAction: _perform,
+            ),
             if (state.error != null)
               Semantics(
                 liveRegion: true,
@@ -142,6 +103,3 @@ class _CommandChannelsSectionState
     );
   }
 }
-
-const _termuxSetup =
-    "mkdir -p ~/.termux; touch ~/.termux/termux.properties; sed -i '/^[[:space:]#]*allow-external-apps[[:space:]]*=/d' ~/.termux/termux.properties; printf '\\nallow-external-apps=true\\n' >> ~/.termux/termux.properties; termux-reload-settings";

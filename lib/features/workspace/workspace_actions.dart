@@ -11,7 +11,6 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/utils/id.dart';
-import '../../../core/utils/logger.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/workspace.dart';
 import '../../../data/repositories/workspace_repository.dart';
@@ -37,7 +36,6 @@ Future<List<(String, int)>> workspaceEntries(
 
 @riverpod
 class WorkspaceActions extends _$WorkspaceActions {
-  final Map<String, Directory> _previews = {};
   @override
   AsyncValue<void> build() => const AsyncData(null);
   Future<T?> perform<T>(Future<T?> Function() operation) async {
@@ -64,68 +62,19 @@ class WorkspaceActions extends _$WorkspaceActions {
     if (value == null || value.deleting) throw const OperationFailure('工作区已删除');
     final lease = await repository.acquire(id);
     try {
-      final binding = lease.snapshot;
-      if (binding.primaryEnvironment == PrimaryEnvironment.ubuntu) {
-        final path = await workspacePath(value.rootPath, relative);
-        return Attachment(
-          id: generateId(),
-          kind: AttachmentKind.artifact,
-          name: p.basename(relative),
-          mimeType: lookupMimeType(relative) ?? 'application/octet-stream',
-          size: await File(path).length(),
-          localPath: path,
-          createdAt: DateTime.now(),
-        );
-      }
-      final access = repository.files(binding);
-      final temp = await access.temporary();
-      try {
-        final path = p.join(temp.path, p.basename(relative));
-        await access.exportPath(relative, path, RunCancellation());
-        _previews[path] = temp;
-        return Attachment(
-          id: generateId(),
-          kind: AttachmentKind.artifact,
-          name: p.basename(relative),
-          mimeType: lookupMimeType(relative) ?? 'application/octet-stream',
-          size: await File(path).length(),
-          localPath: path,
-          createdAt: DateTime.now(),
-        );
-      } catch (_) {
-        _previews.removeWhere((_, directory) => directory.path == temp.path);
-        await temp.delete(recursive: true);
-        rethrow;
-      }
+      final path = await workspacePath(value.rootPath, relative);
+      return Attachment(
+        id: generateId(),
+        kind: AttachmentKind.artifact,
+        name: p.basename(relative),
+        mimeType: lookupMimeType(relative) ?? 'application/octet-stream',
+        size: await File(path).length(),
+        localPath: path,
+        createdAt: DateTime.now(),
+      );
     } finally {
       lease.close();
     }
-  }
-
-  Future<void> releasePreview(Attachment attachment) async {
-    final directory = _previews.remove(attachment.localPath);
-    if (directory != null) {
-      try {
-        if (await directory.exists()) await directory.delete(recursive: true);
-      } on FileSystemException {
-        AppLogger.warning('工作区预览临时文件清理失败');
-      }
-    }
-  }
-
-  Future<void> copyToOther(String id, String path) async {
-    await perform(() async {
-      final repository = await ref.read(workspaceRepositoryProvider.future);
-      final lease = await repository.acquire(id);
-      try {
-        await WorkspaceFiles(repository)
-            .transfer(lease.snapshot, path, true, RunCancellation());
-      } finally {
-        lease.close();
-      }
-      if (ref.mounted) ref.invalidate(workspaceEntriesProvider);
-      return true;
-    });
   }
 
   Future<void> importFile(String id) async {
@@ -184,8 +133,6 @@ class WorkspaceActions extends _$WorkspaceActions {
               ? '文件导出未完整保存，请检查目标位置后重试'
               : '无法导出文件，请检查工作区文件和目标授权',
         );
-      } finally {
-        await releasePreview(file);
       }
       return true;
     });

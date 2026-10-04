@@ -58,7 +58,6 @@ class PrepareSkillTool extends Tool {
         workspace,
         skill,
         cancellation,
-        ownerId: context.runId,
         checkPermission: () => reader.checkAccess(skill, cancellation),
       );
       return ToolOutcome.success(

@@ -6,8 +6,6 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/error/failure.dart';
 import '../../../data/models/workspace.dart';
-import '../commands/command_api.g.dart';
-import '../commands/command_channel_driver.dart';
 import '../tools/tool.dart';
 import '../tools/tool_output_limits.dart';
 import 'process_api.g.dart';
@@ -37,10 +35,9 @@ class WorkspaceSearchRequest {
 
 /// Fixed ripgrep flags and quoted values; no model-supplied command is dispatched.
 class WorkspaceSearch {
-  const WorkspaceSearch(this.binding, this.processes, this.commands);
+  const WorkspaceSearch(this.binding, this.processes);
   final WorkspaceSnapshot binding;
   final ProcessDriver? processes;
-  final CommandChannelDriver? commands;
 
   Future<String> run(
     WorkspaceSearchRequest request,
@@ -76,84 +73,43 @@ class WorkspaceSearch {
       );
     }
     LinuxProcess? process;
-    CommandOperation? operation;
     int? exitCode;
     String? processError;
-    var acknowledged = true;
     var outputLimitExceeded = false;
     var interrupted = false;
     var settled = false;
     try {
-      if (binding.primaryEnvironment == PrimaryEnvironment.ubuntu) {
-        process = await processes!.start(
-          LinuxProcessSpec(
-            ownerId: context.runId,
-            processId: context.toolCallId,
-            rootfs: binding.environmentRoot!,
-            executable: '/bin/sh',
-            argv: ['-c', command],
-            cwd: binding.executionRoot,
-            environment: {},
-            outputLimitBytes: 8 * 1024 * 1024,
-          ),
-          receive,
-        );
-        await process.closeInput();
-        final done = process.exited;
-        final completed = await Future.any<bool>([
-          done.then((_) => true),
-          cancellation.whenCancelled.then((_) => false),
-          output.stopped.future.then((_) => false),
-        ]);
-        if (!completed) await process.cancel();
-        final result = await done;
-        settled = true;
-        exitCode = result.exitCode;
-        processError = result.error;
-        interrupted = result.cancelled || result.signal != null;
-        outputLimitExceeded = result.outputLimitExceeded;
-      } else {
-        final identity = binding.termux;
-        if (commands == null || identity == null) {
-          throw const WorkspaceFailure('environmentMissing', 'Termux 搜索通道未就绪');
-        }
-        operation = await commands!.start(
-          ExternalCommandSpec(
-            ownerId: context.runId,
-            callId: context.toolCallId,
-            channel: 'termux',
-            revision: identity.revision,
-            uid: identity.uid,
-            command: command,
-            cwd: binding.executionRoot,
-            outputLimitBytes: 8 * 1024 * 1024,
-          ),
-          receive,
-        );
-        final done = operation.done.future;
-        final completed = await Future.any<bool>([
-          done.then((_) => true),
-          cancellation.whenCancelled.then((_) => false),
-          output.stopped.future.then((_) => false),
-        ]);
-        if (!completed) {
-          await commands!.cancel(context.runId, context.toolCallId);
-        }
-        final result = await done;
-        settled = true;
-        exitCode = result.exitCode;
-        processError = result.error;
-        interrupted = result.cancelled || result.signal != null;
-        acknowledged = result.terminationAcknowledged;
-        outputLimitExceeded = result.outputLimitExceeded;
-      }
+      process = await processes!.start(
+        LinuxProcessSpec(
+          ownerId: context.runId,
+          processId: context.toolCallId,
+          rootfs: binding.environmentRoot!,
+          executable: '/bin/sh',
+          argv: ['-c', command],
+          cwd: binding.executionRoot,
+          environment: {},
+          outputLimitBytes: 8 * 1024 * 1024,
+        ),
+        receive,
+      );
+      await process.closeInput();
+      final done = process.exited;
+      final completed = await Future.any<bool>([
+        done.then((_) => true),
+        cancellation.whenCancelled.then((_) => false),
+        output.stopped.future.then((_) => false),
+      ]);
+      if (!completed) await process.cancel();
+      final result = await done;
+      settled = true;
+      exitCode = result.exitCode;
+      processError = result.error;
+      interrupted = result.cancelled || result.signal != null;
+      outputLimitExceeded = result.outputLimitExceeded;
     } finally {
       try {
         if (!settled) {
           if (process != null) await process.cancel();
-          if (operation != null) {
-            await commands!.cancel(context.runId, context.toolCallId);
-          }
         }
       } finally {
         input.close();
@@ -163,8 +119,7 @@ class WorkspaceSearch {
     if (output.failure != null) {
       throw WorkspaceFailure('searchResultInvalid', output.failure!);
     }
-    if (!acknowledged ||
-        (processError != null &&
+    if ((processError != null &&
             !(output.stopped.isCompleted && processError == 'outputStopped')) ||
         (interrupted && !output.stopped.isCompleted)) {
       throw const WorkspaceFailure('searchInterrupted', '搜索未收到完整退出回执，请缩小范围后重试');
