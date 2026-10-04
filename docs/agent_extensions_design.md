@@ -201,6 +201,10 @@ Ubuntu 基础环境检查并提交后，自动安装 python3/pip/venv、nodejs/n
 
 该清单只承诺 Ubuntu 仓库中可用的命令行与 Python 工具；不声称安装原生图形办公界面或覆盖专有云端格式。办公包体积由当前仓库依赖解析决定，确认界面不显示未经实测的空间估算。
 
+文档分组在校验前配置 `/usr/local/bin/libreoffice` 与 `/usr/local/bin/soffice` 无界面入口，直接启动 `/usr/lib/libreoffice/program/soffice.bin --headless`。Ubuntu 的 `oosplash` 启动器会因 Android 禁止访问 `/proc/version` 而中止；兼容入口绕开该探针，不改动发行版文件、不伪造 `/proc`、不要求 Android Root。入口使用临时文件原子替换，重复修复不会留下半写入的可执行文件。归档分组按 Noble `7zip` 包的实际命令 `7z` 校验，不要求不存在的 `7zz`。
+
+安装失败或取消后，软件包管理页保留停止阶段、时间与最近输出，不再在结束时隐藏诊断。验证失败明确显示分组与退出码／信号等安全原因，原始输出不写入应用日志；所有分组通过后才保存版本记录。重试继续复用已安装的 APT 软件包，不执行 `--reinstall` 或替换 rootfs。
+
 基础命令与 stdio 先完成，再提供 PTY 终端：输入、窗口尺寸、Ctrl-C、退出与会话切换。关闭终端页面不等于结束有明确宿主的任务；终端退出操作必须终止自己的进程。交互终端不暴露给模型充当 MCP 传输。
 
 ### 5.4 服务与性能

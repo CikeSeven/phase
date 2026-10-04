@@ -105,6 +105,8 @@ class DependencyController extends _$DependencyController {
           logTail: state.logTail,
           error: '已取消安装，已安装内容保留',
           failed: true,
+          stepStartedAt: state.stepStartedAt,
+          lastOutputAt: state.lastOutputAt,
         );
       }
     } catch (error) {
@@ -115,6 +117,8 @@ class DependencyController extends _$DependencyController {
           logTail: state.logTail,
           error: error is Failure ? error.userMessage : '依赖安装失败，请重试',
           failed: true,
+          stepStartedAt: state.stepStartedAt,
+          lastOutputAt: state.lastOutputAt,
         );
       }
     } finally {

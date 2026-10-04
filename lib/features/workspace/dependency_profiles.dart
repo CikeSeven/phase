@@ -1,6 +1,8 @@
 import 'package:flutter/widgets.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import 'ubuntu_office_compatibility.dart';
+
 /// 依赖安装的固定白名单；设置页与后续模型工具共用同一来源。
 enum DependencyStep {
   repairing,
@@ -19,7 +21,7 @@ enum DependencyStep {
     repairing => '检查并配置上次未完成的软件包',
     updating => '下载 Ubuntu 软件包索引',
     installing => '下载、解包并配置所选软件包',
-    verifying => '逐组检查命令可用性并记录版本',
+    verifying => '逐组配置运行兼容、检查命令可用性并记录版本',
   };
 }
 
@@ -30,12 +32,16 @@ class DependencyProfile {
     required this.description,
     required this.packages,
     required this.verifyCommand,
+    this.configureCommand,
   });
   final String id;
   final String label;
   final String description;
   final List<String> packages;
   final String verifyCommand;
+
+  /// 安装后、版本校验前执行的固定运行兼容配置。
+  final String? configureCommand;
 
   static const python = DependencyProfile(
     id: 'python',
@@ -76,6 +82,7 @@ class DependencyProfile {
       'fonts-crosextra-carlito',
       'fonts-crosextra-caladea',
     ],
+    configureCommand: UbuntuOfficeCompatibility.configureCommand,
     verifyCommand: 'libreoffice --headless --version && pandoc --version && fc-match :lang=zh-cn',
   );
   static const officeData = DependencyProfile(
@@ -137,7 +144,7 @@ class DependencyProfile {
       'unzip',
       '7zip',
     ],
-    verifyCommand: 'for command in antiword catdoc unrtf odt2txt zip unzip 7zz; do command -v "\$command" >/dev/null || exit 1; done; printf \'Legacy office formats and archives available\\n\'',
+    verifyCommand: 'for command in antiword catdoc unrtf odt2txt zip unzip 7z; do command -v "\$command" >/dev/null || { printf \'Missing command: %s\\n\' "\$command" >&2; exit 1; }; done; 7z i >/dev/null && printf \'Legacy office formats and archives available\\n\'',
   );
   static const office = [
     officeDocuments,

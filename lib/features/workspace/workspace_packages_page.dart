@@ -200,7 +200,10 @@ class _BaseEnvironmentCard extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final brand = context.brandColors;
-    final isInstallingThis = dependencies.busy && dependencies.title == '基础环境';
+    final isCurrentOperation =
+        dependencies.title == '基础环境' || dependencies.title == '开发依赖';
+    final isInstallingThis = dependencies.busy && isCurrentOperation;
+    final failedThis = dependencies.failed && isCurrentOperation;
 
     return Material(
       color: colors.surfaceContainerLow,
@@ -264,19 +267,24 @@ class _BaseEnvironmentCard extends StatelessWidget {
                         style: theme.textTheme.bodyMedium,
                       ),
                     ),
-                    Text(
-                      records[profile.id]?.version ?? '未安装',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: records.containsKey(profile.id)
-                            ? colors.onSurfaceVariant
-                            : colors.error,
+                    const SizedBox(width: AppSpacing.m),
+                    Flexible(
+                      child: Text(
+                        records[profile.id]?.version ?? '未安装',
+                        textAlign: TextAlign.end,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: records.containsKey(profile.id)
+                              ? colors.onSurfaceVariant
+                              : colors.error,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ],
-            if (isInstallingThis) ...[
+            if (isInstallingThis ||
+                (failedThis && dependencies.step != null)) ...[
               const SizedBox(height: AppSpacing.m),
               InstallationProgress(
                 title: '基础环境',
@@ -287,8 +295,17 @@ class _BaseEnvironmentCard extends StatelessWidget {
                 lines: dependencies.logTail,
                 startedAt: dependencies.stepStartedAt,
                 updatedAt: dependencies.lastOutputAt,
-                running: true,
+                running: isInstallingThis,
               ),
+            ],
+            if (failedThis && dependencies.error != null) ...[
+              const SizedBox(height: AppSpacing.s),
+              Text(
+                dependencies.error!,
+                style: theme.textTheme.bodySmall?.copyWith(color: colors.error),
+              ),
+            ],
+            if (isInstallingThis) ...[
               Align(
                 alignment: Alignment.centerRight,
                 child: Consumer(
@@ -305,7 +322,7 @@ class _BaseEnvironmentCard extends StatelessWidget {
               Align(
                 alignment: Alignment.centerRight,
                 child: FilledButton.icon(
-                  onPressed: onRepair,
+                  onPressed: dependencies.busy ? null : onRepair,
                   icon: const Icon(LucideIcons.wrench, size: 18),
                   label: const Text('修复基础环境'),
                 ),
@@ -341,6 +358,8 @@ class _BundleCard extends StatelessWidget {
     final installedCount = bundle.installedCount(records);
     final isInstallingThis =
         dependencies.busy && dependencies.title == bundle.label;
+    final failedThis =
+        dependencies.failed && dependencies.title == bundle.label;
 
     final (badgeLabel, badgeIcon, badgeBg, badgeFg) = isInstalled
         ? (
@@ -423,19 +442,24 @@ class _BundleCard extends StatelessWidget {
                         style: theme.textTheme.bodyMedium,
                       ),
                     ),
-                    Text(
-                      records[profile.id]?.version ?? '未安装',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: records.containsKey(profile.id)
-                            ? colors.onSurfaceVariant
-                            : colors.outline,
+                    const SizedBox(width: AppSpacing.m),
+                    Flexible(
+                      child: Text(
+                        records[profile.id]?.version ?? '未安装',
+                        textAlign: TextAlign.end,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: records.containsKey(profile.id)
+                              ? colors.onSurfaceVariant
+                              : colors.outline,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
             ],
-            if (isInstallingThis) ...[
+            if (isInstallingThis ||
+                (failedThis && dependencies.step != null)) ...[
               const SizedBox(height: AppSpacing.m),
               InstallationProgress(
                 title: bundle.label,
@@ -446,8 +470,10 @@ class _BundleCard extends StatelessWidget {
                 lines: dependencies.logTail,
                 startedAt: dependencies.stepStartedAt,
                 updatedAt: dependencies.lastOutputAt,
-                running: true,
+                running: isInstallingThis,
               ),
+            ],
+            if (isInstallingThis) ...[
               Align(
                 alignment: Alignment.centerRight,
                 child: Consumer(
@@ -460,9 +486,7 @@ class _BundleCard extends StatelessWidget {
                 ),
               ),
             ] else ...[
-              if (dependencies.failed &&
-                  dependencies.title == bundle.label &&
-                  dependencies.error != null) ...[
+              if (failedThis && dependencies.error != null) ...[
                 const SizedBox(height: AppSpacing.s),
                 Text(
                   dependencies.error!,
@@ -476,18 +500,18 @@ class _BundleCard extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: isInstalled
                     ? OutlinedButton.icon(
-                        onPressed: onInstall,
+                        onPressed: dependencies.busy ? null : onInstall,
                         icon: const Icon(LucideIcons.rotateCw, size: 18),
                         label: const Text('重新安装'),
                       )
                     : isPartial
                     ? FilledButton.icon(
-                        onPressed: onInstall,
+                        onPressed: dependencies.busy ? null : onInstall,
                         icon: const Icon(LucideIcons.wrench, size: 18),
                         label: const Text('继续安装'),
                       )
                     : FilledButton.icon(
-                        onPressed: onInstall,
+                        onPressed: dependencies.busy ? null : onInstall,
                         icon: const Icon(LucideIcons.download, size: 18),
                         label: const Text('安装'),
                       ),

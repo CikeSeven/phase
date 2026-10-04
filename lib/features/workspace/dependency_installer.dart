@@ -13,7 +13,7 @@ import 'dependency_profiles.dart';
 import 'process_api.g.dart';
 import 'process_driver.dart';
 
-/// 托管 apt 安装：修复、更新、一次装齐全部依赖组，再逐组验证并记录版本。
+/// 托管 apt 安装：修复、更新、装齐所选依赖，再配置兼容、逐组验证并记录版本。
 /// 失败或取消保留已知状态；不替换 rootfs，因此可与模型运行并发。
 class DependencyInstaller {
   DependencyInstaller(this.repository, this.driver, {this.taskOwner});
@@ -40,7 +40,14 @@ class DependencyInstaller {
           '$_apt install -y --no-install-recommends '
               'ca-certificates ${profiles.expand((p) => p.packages).join(' ')}',
         DependencyStep.verifying =>
-          profiles.map((profile) => profile.verifyCommand).join(' && '),
+          profiles
+              .map(
+                (profile) => profile.configureCommand == null
+                    ? profile.verifyCommand
+                    : '(\n${profile.configureCommand}\n) && '
+                          '${profile.verifyCommand}',
+              )
+              .join(' && '),
       };
 
   /// 安装所选依赖组；返回按组记录的安装结果。
@@ -161,7 +168,8 @@ class DependencyInstaller {
     onOutput(
       step,
       step == DependencyStep.verifying
-          ? '正在验证 ${profiles.single.label}'
+          ? '正在${profiles.single.configureCommand == null ? '验证' : '配置并验证'} '
+                '${profiles.single.label}'
           : step.description,
     );
     void line(bool stderr, String text) {
@@ -248,11 +256,12 @@ class DependencyInstaller {
       return '';
     }
     if (failed) {
-      if (event.timedOut) {
+      if (event.timedOut && step != DependencyStep.verifying) {
         throw const WorkspaceFailure('aptTimeout', '安装超时，可重试；已安装内容保留');
       }
       AppLogger.error(
         '依赖安装步骤失败 step=${step.name} exit=${event.exitCode} '
+        'profiles=${profiles.map((profile) => profile.id).join(',')} '
         'signal=${event.signal} outputLimit=${event.outputLimitExceeded}',
       );
       throw switch (step) {
@@ -264,10 +273,30 @@ class DependencyInstaller {
           'aptInstall',
           '依赖安装失败，可重试；已安装内容保留',
         ),
-        _ => const WorkspaceFailure('verifyFailed', '已安装但验证未通过，未记录版本，可重试'),
+        _ => WorkspaceFailure(
+          'verifyFailed',
+          _verificationFailure(profiles.single, event),
+        ),
       };
     }
     return stdout.toString();
+  }
+
+  static String _verificationFailure(
+    DependencyProfile profile,
+    LinuxProcessEvent event,
+  ) {
+    final reasons = [
+      if (event.timedOut) '命令超时',
+      if (event.outputLimitExceeded) '输出超限',
+      if (event.signal != null) '信号 ${event.signal}',
+      if (event.exitCode != null && event.exitCode != 0)
+        '退出码 ${event.exitCode}',
+      if (event.error != null) '进程异常',
+    ];
+    final status = reasons.isEmpty ? '' : '（${reasons.join('、')}）';
+    final action = profile.configureCommand == null ? '验证' : '配置或验证';
+    return '${profile.label}$action未通过$status；已安装内容保留，请查看输出后重试';
   }
 
   static String? _firstLine(String text) {
