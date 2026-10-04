@@ -1,13 +1,9 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/theme/app_spacing.dart';
-import '../../../core/error/failure.dart';
-import '../../../core/widgets/app_snack_bar.dart';
 import '../tools/run_recovery_controller.dart';
 import '../execution/execution_controller.dart';
 import 'chat_controller.dart';
@@ -17,43 +13,27 @@ import 'tool_confirmation_host.dart';
 class ChatRunBanner extends ConsumerWidget {
   const ChatRunBanner({super.key});
 
-  Future<void> _openRunning(
-    BuildContext context,
-    WidgetRef ref,
-    String id,
-  ) async {
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await ref.read(chatControllerProvider.notifier).openConversation(id);
-    } catch (error) {
-      if (messenger.mounted) {
-        messenger.showSnackBar(
-          buildAppSnackBar(
-            content: Text(error is Failure ? error.userMessage : '打开运行会话失败'),
-          ),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chat = ref.watch(chatControllerProvider);
-    final viewed = ref.watch(activeConversationProvider).conversationId;
+    final chat = ref.watch(
+      chatControllerProvider.select(
+        (state) => (retry: state.retry, summarizing: state.summarizing),
+      ),
+    );
     final recovery = ref.watch(runRecoveryControllerProvider);
-    final runningElsewhere =
-        chat.isGenerating &&
-        chat.runningConversationId != null &&
-        chat.runningConversationId != viewed;
     final count = recovery.value?.length ?? 0;
-    final execution = ref.watch(executionControllerProvider);
+    final execution = ref.watch(
+      executionControllerProvider.select(
+        (state) =>
+            (confirmation: state.confirmation, userAction: state.userAction),
+      ),
+    );
     final pending = execution.confirmation;
     final userAction = execution.userAction;
     final reopen = ToolConfirmationHost.reopenOf(context);
     final canConfirm = pending != null && reopen != null;
     final retry = chat.retry;
-    if (!runningElsewhere &&
-        count == 0 &&
+    if (count == 0 &&
         !recovery.hasError &&
         !canConfirm &&
         userAction == null &&
@@ -122,14 +102,6 @@ class ChatRunBanner extends ConsumerWidget {
                   key: const ValueKey('reopen-tool-confirmation'),
                   onPressed: reopen,
                   child: const Text('查看待确认动作'),
-                ),
-              if (runningElsewhere)
-                TextButton(
-                  key: const ValueKey('return-to-running-chat'),
-                  onPressed: () => unawaited(
-                    _openRunning(context, ref, chat.runningConversationId!),
-                  ),
-                  child: const Text('返回运行中的会话'),
                 ),
               if (recovery.hasError)
                 TextButton(

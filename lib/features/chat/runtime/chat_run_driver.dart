@@ -136,6 +136,7 @@ class ChatRunDriver implements AgentLoopHost {
         onPanelMessage: (text, cancellation) =>
             _sendFromPanel(run.id, run.conversationId, text, cancellation),
       );
+      await _execution.ensureBackgroundHost(run.id);
       _attachments = await _contexts.attachments(run.conversationId);
       _observe(ChatRunStarted(run.id, run.conversationId, _attachments));
       if (onPanelAccepted != null) {
@@ -371,15 +372,17 @@ class ChatRunDriver implements AgentLoopHost {
         if (cancellation.isCancelled) return;
         _execution.updateActivity(
           run.id,
-          _execution.activity.upsert(
-            TaskMessage(
-              id: 'tool/${call.recordId}',
-              kind: TaskPanelMessageKind.tool,
-              label: '正在${ToolPresentation.toolLabel(call.toolName)}',
-              text:
-                  '${toolActivity(_tools!.registry.byName(call.toolName)!, call.arguments)}\n${panelExcerpt(message, limit: 160)}',
-            ),
-          ),
+          _execution
+              .activityFor(run.id)
+              .upsert(
+                TaskMessage(
+                  id: 'tool/${call.recordId}',
+                  kind: TaskPanelMessageKind.tool,
+                  label: '正在${ToolPresentation.toolLabel(call.toolName)}',
+                  text:
+                      '${toolActivity(_tools!.registry.byName(call.toolName)!, call.arguments)}\n${panelExcerpt(message, limit: 160)}',
+                ),
+              ),
         );
       },
     );
@@ -397,7 +400,7 @@ class ChatRunDriver implements AgentLoopHost {
       ToolCallStatus.cancelled => '已取消$label',
       _ => '$label失败',
     };
-    final previousActivity = _execution.activity;
+    final previousActivity = _execution.activityFor(run.id);
     _execution.updateActivity(
       run.id,
       previousActivity

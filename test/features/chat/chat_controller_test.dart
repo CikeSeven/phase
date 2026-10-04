@@ -44,6 +44,7 @@ class _FakeAiProvider implements AiProvider {
   final ApiProtocol protocol;
 
   Stream<ChatChunk> Function()? streamFactory;
+  Stream<ChatChunk> Function(ChatRequest)? requestStreamFactory;
   ChatRequest? lastRequest;
 
   @override
@@ -52,7 +53,7 @@ class _FakeAiProvider implements AiProvider {
   @override
   Stream<ChatChunk> streamChat(ChatRequest request) {
     lastRequest = request;
-    return streamFactory!();
+    return requestStreamFactory?.call(request) ?? streamFactory!();
   }
 }
 
@@ -718,6 +719,61 @@ void main() {
       request.messages.single.parts.whereType<ResolvedText>().single.text,
       text,
     );
+  });
+
+  test('切换与新建会话不打断其他会话，多个流式运行各自收口', () async {
+    final firstChunks = StreamController<ChatChunk>();
+    final secondChunks = StreamController<ChatChunk>();
+    fakeProvider.requestStreamFactory = (request) {
+      final input = request.messages
+          .lastWhere((message) => message.role == ChatRole.user)
+          .parts
+          .whereType<ResolvedText>()
+          .single
+          .text;
+      return input == '第一个会话' ? firstChunks.stream : secondChunks.stream;
+    };
+
+    final firstSend = controller().send('第一个会话');
+    await waitUntil(() => state().isGenerating);
+    final firstId = activeConversation()!;
+
+    controller().startNewConversation();
+    expect(state().isGenerating, isFalse);
+    final secondSend = controller().send('第二个会话');
+    await waitUntil(
+      () => state().isGenerating && activeConversation() != firstId,
+    );
+    final secondId = activeConversation()!;
+    expect(state().runningConversationIds, containsAll([firstId, secondId]));
+
+    await controller().openConversation(firstId);
+    expect(state().isGenerating, isTrue);
+    controller().startNewConversation();
+    expect(state().isGenerating, isFalse);
+    await controller().openConversation(secondId);
+    expect(state().isGenerating, isTrue);
+
+    for (final chunk in textResponse('第二个回答')) {
+      secondChunks.add(chunk);
+    }
+    await secondChunks.close();
+    await secondSend;
+    expect(state().isGenerating, isFalse);
+    expect(state().runningConversationIds, contains(firstId));
+
+    await controller().openConversation(firstId);
+    expect(state().isGenerating, isTrue);
+    for (final chunk in textResponse('第一个回答')) {
+      firstChunks.add(chunk);
+    }
+    await firstChunks.close();
+    await firstSend;
+
+    expect(state().isGenerating, isFalse);
+    expect(state().runningConversationIds, isEmpty);
+    expect((await threadOf(firstId)).branch.last.text, '第一个回答');
+    expect((await threadOf(secondId)).branch.last.text, '第二个回答');
   });
 
   test('思考与正文分通道累积，思考耗时单独记录', () async {

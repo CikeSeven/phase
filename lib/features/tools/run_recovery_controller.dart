@@ -12,7 +12,7 @@ part 'run_recovery_controller.g.dart';
 @Riverpod(keepAlive: true)
 class RunRecoveryController extends _$RunRecoveryController {
   Future<void>? _initialization;
-  String? _activeRunId;
+  final _activeRunIds = <String>{};
   Timer? _expiry;
   int _revision = 0;
 
@@ -40,7 +40,7 @@ class RunRecoveryController extends _$RunRecoveryController {
   }
 
   void runStarted(String id) {
-    _activeRunId = id;
+    _activeRunIds.add(id);
     _revision++;
     state = AsyncData([
       for (final entry in state.value ?? <RecoveredRun>[])
@@ -48,8 +48,8 @@ class RunRecoveryController extends _$RunRecoveryController {
     ]);
   }
 
-  Future<void> runFinished() async {
-    _activeRunId = null;
+  Future<void> runFinished(String id) async {
+    _activeRunIds.remove(id);
     await refresh();
   }
 
@@ -58,7 +58,9 @@ class RunRecoveryController extends _$RunRecoveryController {
     final revision = ++_revision;
     try {
       final repository = await ref.read(agentRunRepositoryProvider.future);
-      final entries = await repository.recover(activeRunId: _activeRunId);
+      final entries = await recoverExcludingActiveRuns(repository, {
+        ..._activeRunIds,
+      });
       if (!ref.mounted || revision != _revision) return;
       state = AsyncData(entries);
       _scheduleExpiry(entries);
@@ -71,7 +73,9 @@ class RunRecoveryController extends _$RunRecoveryController {
   }
 
   Future<void> stop(String runId) async {
-    if (runId == _activeRunId) throw const OperationFailure('请使用运行中的停止入口');
+    if (_activeRunIds.contains(runId)) {
+      throw const OperationFailure('请使用运行中的停止入口');
+    }
     final repository = await ref.read(agentRunRepositoryProvider.future);
     await repository.stopRecovered(runId);
     await refresh();

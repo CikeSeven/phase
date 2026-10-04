@@ -9,6 +9,8 @@ import android.content.Intent
 import android.os.Build
 import app.xiangyue.phase.bridge.*
 import kotlinx.coroutines.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import app.xiangyue.phase.files.AppFileDriver
 import app.xiangyue.phase.accessibility.PhaseAccessibilityService
 import app.xiangyue.phase.accessibility.DeviceActionQueue
@@ -23,9 +25,11 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     val files = AppFileDriver(context)
     private val applications = ApplicationCatalog(context)
     val setup = ExecutionSetup(context, files, applications)
-    private var session: ExecutionSession? = null
+    private val sessions = mutableMapOf<String, ExecutionSession>()
+    private val startGate = Mutex()
     private val deviceQueue = DeviceActionQueue()
     private var deviceActive = false
+    private var deviceRunId: String? = null
     private var virtualDeviceActive = false
     private var launching = false
     private var overlaySuppressed = false
@@ -36,13 +40,20 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     private val visualActions = setOf(ExecutionAction.CAPTURE_SCREEN, ExecutionAction.PERFORM_GESTURES)
     private val tasks: NativeExecutionTasks = NativeExecutionTasks(scope, ExecutionAction.entries.associateWith { action ->
         NativeAction { request, progress ->
-            if (action in fileActions) files.execute(request, session?.fileUris ?: emptyList())
+            if (action in fileActions) files.execute(request, sessions[request.runId]?.fileUris ?: emptyList())
             else if (action == ExecutionAction.LIST_APPS) listApplications(request)
             else if (action == ExecutionAction.CONTROL_DISPLAY) deviceQueue.withLock {
+                if (request.runId != deviceRunId) {
+                    return@withLock NativeExecutionTasks.result(
+                        request.toolCallId,
+                        ExecutionStatus.FAILED,
+                        ChannelError.PERMISSION_REQUIRED,
+                    )
+                }
                 virtualDeviceActive = true
                 shizuku.execute(request, applicationExists = { target ->
                     applications.get(target) != null
-                }, checkpoint = { tasks.checkpoint(request.toolCallId, it) })
+                }, checkpoint = { tasks.checkpoint(request.runId, request.toolCallId, it) })
             }
             else executeUi(request, progress)
         }
@@ -51,7 +62,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     }
     private var resumed = false
     private var service: ExecutionService? = null
-    private var starting: CompletableDeferred<HostReply>? = null
+    private val starting = mutableMapOf<String, CompletableDeferred<HostReply>>()
     private var confirmationExpiry: Job? = null
     // Only transient presentation state. ToolExecutor/Drift remains the business source of truth.
     var confirmation: ExecutionConfirmation? = null
@@ -83,14 +94,22 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     }
 
     override suspend fun startRun(session: ExecutionSession): HostReply {
+        return startGate.withLock { startRunLocked(session) }
+    }
+
+    private suspend fun startRunLocked(session: ExecutionSession): HostReply {
         val runId = session.runId
-        val existing = this.session
-        if (runId.isBlank() || (tasks.runId != null && tasks.runId != runId) ||
+        val existing = sessions[runId]
+        val deviceRequested = existing?.deviceTask == true || session.deviceTask
+        if (runId.isBlank() ||
             (existing != null && existing.fileUris != session.fileUris)) return HostReply(ChannelError.INVALID_ARGUMENTS)
+        if (deviceRequested && deviceRunId != null && deviceRunId != runId) {
+            return HostReply(ChannelError.UNAVAILABLE)
+        }
         val fromPanel = panelSubmission?.takeIf {
             !it.cancelled && it.nextRunId == null && it.sourceRunId == panel.runId && panel.finished
         }
-        if (session.deviceTask && !deviceActive) {
+        if (deviceRequested && !deviceActive && deviceRunId == null) {
             if (!resumed && fromPanel == null) return HostReply(ChannelError.UNAVAILABLE)
             if (context.getSystemService(KeyguardManager::class.java).isKeyguardLocked ||
                 !queryCapabilities().notificationsAllowed || PhaseAccessibilityService.instance == null)
@@ -98,61 +117,78 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         }
         if (fromPanel != null) fromPanel.nextRunId = runId
         if (existing == null) {
-            this.session = session; tasks.begin(runId)
-            if (fromPanel == null) panel.clear()
-            refreshOverlay()
+            tasks.begin(runId)
+            if (deviceRequested && fromPanel == null && deviceRunId == null) panel.clear()
         }
-        if (!session.deviceTask || deviceActive) return HostReply()
+        val registeredSession = ExecutionSession(
+            runId,
+            deviceRequested,
+            session.fileUris,
+        )
+        sessions[runId] = registeredSession
+        if (deviceActive && deviceRunId == runId) return HostReply()
         val ready = CompletableDeferred<HostReply>()
-        starting = ready
+        starting[runId] = ready
         return try {
-            val intent = Intent(context, ExecutionService::class.java).putExtra(ExecutionService.RUN_ID, runId)
-            if (Build.VERSION.SDK_INT >= 26) context.startForegroundService(intent) else context.startService(intent)
+            val intent = Intent(context, ExecutionService::class.java)
+                .putExtra(ExecutionService.RUN_ID, runId)
+                .putExtra(ExecutionService.DEVICE_TASK, registeredSession.deviceTask)
+            if (service == null && Build.VERSION.SDK_INT >= 26) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
             val reply = withTimeout(5000) { ready.await() }
             if (reply.error != null) { endRun(runId); return reply }
-            if (fromPanel?.cancelled == true || tasks.runId != runId) {
+            if (fromPanel?.cancelled == true || !tasks.contains(runId)) {
                 endRun(runId); return HostReply(ChannelError.CANCELLED)
             }
-            deviceActive = true
-            panel.begin(runId)
-            refreshOverlay()
+            if (registeredSession.deviceTask) {
+                deviceActive = true
+                deviceRunId = runId
+                panel.begin(runId)
+                refreshOverlay()
+            }
             reply
         } catch (_: Exception) {
             endRun(runId)
             HostReply(ChannelError.UNAVAILABLE)
         } finally {
             launching = false
-            if (starting === ready) starting = null
+            if (starting[runId] === ready) starting.remove(runId)
         }
     }
 
-    fun expectsStart(runId: String): Boolean = tasks.runId == runId && starting != null
+    fun expectsStart(runId: String): Boolean = tasks.contains(runId) && starting.containsKey(runId)
 
     fun serviceStarted(host: ExecutionService, runId: String): Boolean {
         if (!expectsStart(runId)) return false
         service = host
-        starting?.complete(HostReply())
+        starting[runId]?.complete(HostReply())
         return true
     }
 
     fun serviceFailed(runId: String) {
-        if (tasks.runId == runId) starting?.complete(HostReply(ChannelError.UNAVAILABLE))
+        starting[runId]?.complete(HostReply(ChannelError.UNAVAILABLE))
     }
 
     override fun endRun(runId: String) {
-        if (tasks.runId != runId) return
-        panel.finish(runId)
-        clearConfirmation()
+        if (!tasks.contains(runId)) return
+        if (deviceRunId == runId) {
+            panel.finish(runId)
+            deviceActive = false
+            deviceRunId = null
+            virtualDeviceActive = false
+            PhaseAccessibilityService.instance?.driver?.clear()
+            PhaseAccessibilityService.instance?.visual?.clear()
+        }
+        if (confirmation?.runId == runId) clearConfirmation()
         shizuku.endOwner(runId)
         tasks.end(runId)
-        session = null; deviceActive = false; virtualDeviceActive = false
-        PhaseAccessibilityService.instance?.driver?.clear()
-        PhaseAccessibilityService.instance?.visual?.clear()
+        sessions.remove(runId)
         refreshOverlay()
-        starting?.complete(HostReply(ChannelError.CANCELLED))
-        val host = service
-        service = null
-        host?.finishTask()
+        starting.remove(runId)?.complete(HostReply(ChannelError.CANCELLED))
+        service?.finishTask(runId)
     }
 
     fun externalOwnerStopped(owner: String) { scope.launch { stopFromSystem(owner, "serviceStopped") } }
@@ -162,28 +198,29 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         val submission = panelSubmission
         if (reason != "panelMessage" && submission != null &&
             runId in setOf(submission.sourceRunId, submission.nextRunId)) cancelPanelSubmission()
-        if (tasks.runId != runId) return
+        if (!tasks.contains(runId)) return
         shizuku.endOwner(runId)
         tasks.stop(runId)
-        deviceActive = false
-        panel.finish(runId)
-        clearConfirmation()
+        if (deviceRunId == runId) {
+            deviceActive = false
+            deviceRunId = null
+            panel.finish(runId)
+        }
+        if (confirmation?.runId == runId) clearConfirmation()
         refreshOverlay()
         send { flutter.stopRequested(runId, reason) }
-        val host = service
-        service = null
-        host?.finishTask()
+        service?.finishTask(runId)
     }
 
-    fun serviceDestroyed(host: ExecutionService, runId: String?) {
-        if (service !== host || runId == null) return
+    fun serviceDestroyed(host: ExecutionService, runIds: Set<String>) {
+        if (service !== host) return
         service = null
-        stopFromSystem(runId, "serviceStopped")
+        runIds.forEach { stopFromSystem(it, "serviceStopped") }
     }
 
     override fun setConfirmation(confirmation: ExecutionConfirmation?) {
         clearConfirmation()
-        if (confirmation == null || resumed || confirmation.runId != tasks.runId ||
+        if (confirmation == null || resumed || !tasks.contains(confirmation.runId) ||
             confirmation.expiresAtMs <= System.currentTimeMillis()) return
         this.confirmation = confirmation
         confirmationExpiry = scope.launch {
@@ -215,7 +252,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         val accessibility = PhaseAccessibilityService.instance
         accessibility?.overlay?.awaitInputIdle()
         currentCoroutineContext().ensureActive()
-        if (request.action == ExecutionAction.CAPTURE_SCREEN && (!deviceActive || accessibility == null))
+        if (request.action == ExecutionAction.CAPTURE_SCREEN &&
+            (!deviceActive || request.runId != deviceRunId || accessibility == null))
             return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.PERMISSION_REQUIRED)
         val target = try { resolveUiTarget(request) { accessibility?.driver?.activePackage() } }
         catch (_: IllegalArgumentException) {
@@ -224,7 +262,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
             mapOf("reason" to "当前没有可截图的前台应用窗口"), emptyList(), ChannelError.UNAVAILABLE)
         val application = applications.get(target)
         if (application == null || application.packageName != target) return@withLock applicationUnavailable(request)
-        if (!deviceActive || accessibility == null) return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.PERMISSION_REQUIRED)
+        if (!deviceActive || request.runId != deviceRunId || accessibility == null)
+            return@withLock NativeExecutionTasks.result(request.toolCallId, ExecutionStatus.FAILED, ChannelError.PERMISSION_REQUIRED)
         windowChanged(accessibility.driver.activePackage())
         overlaySuppressed = true
         accessibility.overlay.hide()
@@ -244,7 +283,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
                     currentCoroutineContext().ensureActive()
                     val current = applications.get(packageName)
                     if (current == null) throw app.xiangyue.phase.vision.VisualBlocked("applicationUnavailable")
-                }, checkpoint = { tasks.checkpoint(request.toolCallId, it) }, progress = progress)
+                }, checkpoint = { tasks.checkpoint(request.runId, request.toolCallId, it) }, progress = progress)
             } else {
                 // No implicit launch or switch: snapshot/package/window identity is checked by the driver.
                 accessibility.driver.execute(request, target)
@@ -288,7 +327,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         mapOf("reason" to "目标应用不存在或已不可用", "reasonCode" to "applicationUnavailable"), emptyList(), ChannelError.UNAVAILABLE)
 
     override fun setTaskPanel(snapshot: TaskPanelSnapshot) {
-        if (snapshot.runId != tasks.runId || !deviceActive) return
+        if (snapshot.runId != deviceRunId || !deviceActive) return
         val wasWaiting = panel.waitingForUser
         panel.update(snapshot)
         if (wasWaiting && !panel.waitingForUser) clearHandoffTarget()
@@ -320,7 +359,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         }
         val submission = PanelSubmission(runId)
         panelSubmission = submission
-        if (tasks.runId == runId) stopFromSystem(runId, "panelMessage")
+        if (tasks.contains(runId)) stopFromSystem(runId, "panelMessage")
         refreshOverlay()
         scope.launch {
             val error = try {
@@ -345,7 +384,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         if (submission.cancelled) return
         submission.cancelled = true
         send { flutter.stopRequested(submission.sourceRunId, "panelMessageCancelled") }
-        submission.nextRunId?.let { if (tasks.runId == it) stopFromSystem(it) }
+        submission.nextRunId?.let { if (tasks.contains(it)) stopFromSystem(it) }
     }
 
     private fun stopFromPanel(runId: String) {
@@ -388,7 +427,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
     fun accessibilityChanged() { send { flutter.capabilityChanged(queryCapabilities()) } }
     fun interruptDevice(reason: String) {
         cancelPanelSubmission()
-        if (deviceActive && !virtualDeviceActive) tasks.runId?.let { stopFromSystem(it, reason) }
+        if (deviceActive && !virtualDeviceActive) deviceRunId?.let { stopFromSystem(it, reason) }
         refreshOverlay()
     }
     fun windowChanged(packageName: String?) {

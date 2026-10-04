@@ -445,12 +445,31 @@ class _ConversationMessages extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final thread = ref.watch(conversationThreadProvider(conversationId));
-    final state = ref.watch(chatControllerProvider);
+    final state = ref.watch(
+      chatControllerProvider.select(
+        (state) => (
+          state.streamingParts,
+          state.attachments,
+          state.isGenerating,
+          state.runningConversationId,
+          state.savingPermissionMode,
+        ),
+      ),
+    );
     return thread.when(
       data: (value) {
         final messages = value == null
             ? const <ChatMessage>[]
-            : visibleMessages(value, state);
+            : visibleMessages(
+                value,
+                ChatState(
+                  streamingParts: state.$1,
+                  attachments: state.$2,
+                  isGenerating: state.$3,
+                  runningConversationId: state.$4,
+                  savingPermissionMode: state.$5,
+                ),
+              );
         if (messages.isEmpty) {
           return ChatEmptyState(
             topPadding: topPadding,
@@ -461,11 +480,9 @@ class _ConversationMessages extends ConsumerWidget {
           key: ValueKey(conversationId),
           conversationId: conversationId,
           messages: messages,
-          attachments: state.attachments,
-          isGenerating:
-              state.isGenerating &&
-              state.runningConversationId == conversationId,
-          onRegenerate: state.savingPermissionMode || state.isGenerating
+          attachments: state.$2,
+          isGenerating: state.$3 && state.$4 == conversationId,
+          onRegenerate: state.$5 || state.$3
               ? null
               : () => _regenerate(context, ref),
           topPadding: topPadding,

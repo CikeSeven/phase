@@ -89,10 +89,11 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   final Duration cancelGrace;
   final _events = StreamController<NativeExecutionEvent>.broadcast(sync: true);
   final _pending = <String, _PendingExecution>{};
-  final _seen = <String>{};
+  final _seen = <String, Set<String>>{};
   final _panelMessages = <NativePanelMessage>{};
-  String? _runId;
+  final _runIds = <String>{};
   Map<String, Object?>? _latestSnapshot;
+  String? _snapshotRunId;
   bool _disposed = false;
 
   @override
@@ -101,7 +102,10 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
   Map<String, Object?>? get latestSnapshot => _latestSnapshot;
 
   @override
-  void clearSnapshot() => _latestSnapshot = null;
+  void clearSnapshot() {
+    _latestSnapshot = null;
+    _snapshotRunId = null;
+  }
 
   Future<T> _boundary<T>(Future<T> Function() call) async {
     if (_disposed) {
@@ -124,11 +128,11 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
     ExecutionScope scope = const ExecutionScope(),
     bool deviceTask = true,
   }) async {
-    if ((_runId != null && _runId != runId) || runId.isEmpty) {
+    if (runId.isEmpty) {
       throw const ExecutionFailure(ExecutionFailureCode.invalidArguments);
     }
-    if (_runId == null) _seen.clear();
-    _runId = runId;
+    _runIds.add(runId);
+    _seen.putIfAbsent(runId, () => <String>{});
     try {
       final reply = await _boundary(
         () => _host.startRun(
@@ -145,29 +149,35 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
     } catch (_) {
       // 启动回执丢失时服务可能已启动；发送带原 runId 的清理，不能影响下一任务。
       await _bestEffort(() => _host.endRun(runId));
-      _runId = null;
+      _runIds.remove(runId);
+      _seen.remove(runId);
       rethrow;
     }
   }
 
   @override
   Future<void> endRun(String runId) async {
-    if (_runId != runId) return;
+    if (!_runIds.contains(runId)) return;
     try {
       await _boundary(() => _host.endRun(runId));
     } finally {
       for (final pending in _pending.values.toList()) {
-        pending.complete(
-          _result(
-            pending.id,
-            ExecutionStatus.cancelled,
-            ChannelError.cancelled,
-          ),
-        );
+        if (pending.runId == runId) {
+          pending.complete(
+            _result(
+              pending.id,
+              ExecutionStatus.cancelled,
+              ChannelError.cancelled,
+            ),
+          );
+        }
       }
-      _runId = null;
-      _seen.clear();
-      _latestSnapshot = null;
+      _runIds.remove(runId);
+      _seen.remove(runId);
+      if (_snapshotRunId == runId) {
+        _latestSnapshot = null;
+        _snapshotRunId = null;
+      }
     }
   }
 
@@ -196,7 +206,7 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
         ChannelError.cancelled,
       );
     }
-    if (_disposed || request.runId != _runId) {
+    if (_disposed || !_runIds.contains(request.runId)) {
       return _result(
         request.toolCallId,
         ExecutionStatus.failed,
@@ -206,7 +216,7 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
     if (request.toolCallId.isEmpty ||
         request.timeoutMs < 1 ||
         request.timeoutMs > 300000 ||
-        !_seen.add(request.toolCallId)) {
+        !_seen[request.runId]!.add(request.toolCallId)) {
       return _result(
         request.toolCallId,
         ExecutionStatus.failed,
@@ -245,7 +255,11 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
         ChannelError.invalidArguments,
       );
     }
-    final pending = _PendingExecution(frozen.toolCallId, onProgress);
+    final pending = _PendingExecution(
+      frozen.runId,
+      frozen.toolCallId,
+      onProgress,
+    );
     _pending[pending.id] = pending;
     final deadline = Timer(
       Duration(milliseconds: frozen.timeoutMs) + cancelGrace,
@@ -297,6 +311,7 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
         final snapshot = result.result['snapshot'];
         if (snapshot is Map) {
           _latestSnapshot = Map<String, Object?>.from(snapshot);
+          _snapshotRunId = request.runId;
         } else if (const {
           ExecutionAction.openApp,
           ExecutionAction.inspectUi,
@@ -306,7 +321,10 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
           ExecutionAction.captureScreen,
           ExecutionAction.performGestures,
         }.contains(request.action)) {
-          _latestSnapshot = null;
+          if (_snapshotRunId == request.runId) {
+            _latestSnapshot = null;
+            _snapshotRunId = null;
+          }
         }
       }
       pending.complete(
@@ -393,8 +411,9 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
         _result(pending.id, ExecutionStatus.cancelled, ChannelError.cancelled),
       );
     }
-    final runId = _runId;
-    if (runId != null) await _bestEffort(() => _host.endRun(runId));
+    for (final runId in _runIds.toList()) {
+      await _bestEffort(() => _host.endRun(runId));
+    }
     await _events.close();
   }
 
@@ -414,7 +433,8 @@ class PigeonChannelDriver implements ChannelDriver, ExecutionFlutterApi {
 }
 
 class _PendingExecution {
-  _PendingExecution(this.id, this.onProgress);
+  _PendingExecution(this.runId, this.id, this.onProgress);
+  final String runId;
   final String id;
   final void Function(ExecutionProgress)? onProgress;
   final done = Completer<ExecutionResult>();

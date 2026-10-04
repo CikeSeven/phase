@@ -5,6 +5,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <!-- 应用发现需要列出无启动图标的第三方应用和系统应用。 -->
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
     <!-- 部分系统另设运行时权限；仅在系统实际定义为危险权限时申请。 -->
@@ -31,7 +32,7 @@
             android:stopWithTask="false"
             android:foregroundServiceType="specialUse">
             <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-initiated device automation, Linux environment installation and local commands with visible task control and cancellation"/>
+                android:value="User-initiated AI conversation, device automation, Linux environment installation and local commands with visible task control and cancellation"/>
         </service>
         <activity
             android:name=".MainActivity"

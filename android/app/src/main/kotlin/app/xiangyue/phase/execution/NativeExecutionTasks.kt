@@ -3,65 +3,66 @@ package app.xiangyue.phase.execution
 import app.xiangyue.phase.bridge.*
 import kotlinx.coroutines.*
 
-/** Drivers own the threading/cancellation of their system API. No driver is registered until implemented. */
 fun interface NativeAction {
     suspend fun execute(request: ExecutionRequest, progress: suspend (ProgressKind, String) -> Unit): ExecutionResult
 }
 
-/** Main-thread confined. No business database and no replay of an already dispatched call. */
+/** Main-thread confined. Run ownership is isolated while device actions share a native queue. */
 class NativeExecutionTasks(
     private val scope: CoroutineScope,
     private val actions: Map<ExecutionAction, NativeAction>,
     private val emit: (ExecutionProgress) -> Unit,
 ) {
-    private class Pending {
+    private class RunState {
+        val seen = mutableSetOf<String>()
+        var stopped = false
+    }
+
+    private class Pending(val runId: String) {
         var sequence = 0L
         var lastProgressAt = 0L
         var checkpoint: Map<String, Any?> = emptyMap()
         lateinit var job: Deferred<ExecutionResult>
     }
-    private val pending = mutableMapOf<String, Pending>()
-    private val seen = mutableSetOf<String>()
-    var runId: String? = null
-        private set
-    private var stopped = false
 
+    private val runs = mutableMapOf<String, RunState>()
+    private val pending = mutableMapOf<String, Pending>()
     val capabilities get() = actions.keys.toList()
 
-    fun checkpoint(id: String, value: Map<String, Any?>) {
-        pending[id]?.checkpoint = value.toMap()
+    fun contains(runId: String) = runId in runs
+
+    fun checkpoint(runId: String, id: String, value: Map<String, Any?>) {
+        pending[id]?.takeIf { it.runId == runId }?.checkpoint = value.toMap()
     }
 
     private fun interrupted(id: String, task: Pending, status: ExecutionStatus, error: ChannelError) =
         if (task.checkpoint.isEmpty()) result(id, status, error)
         else ExecutionResult(id, status, task.checkpoint + ("reason" to error.name.lowercase()), emptyList(), error)
 
-    fun begin(run: String) {
-        check(runId == null)
-        runId = run
-        stopped = false
-        seen.clear()
+    fun begin(runId: String) {
+        check(runId.isNotBlank())
+        runs.putIfAbsent(runId, RunState())
     }
 
     suspend fun execute(request: ExecutionRequest): ExecutionResult {
         val id = request.toolCallId
-        if (request.runId != runId || stopped) return result(id, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
-        if (id.isBlank() || request.timeoutMs !in 1..300000 || !seen.add(id)) {
+        val run = runs[request.runId]
+        if (run == null || run.stopped) return result(id, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
+        if (id.isBlank() || request.timeoutMs !in 1..300000 || !run.seen.add(id)) {
             return result(id, ExecutionStatus.FAILED, ChannelError.INVALID_ARGUMENTS)
         }
         val action = actions[request.action]
             ?: return result(id, ExecutionStatus.FAILED, ChannelError.UNAVAILABLE)
-        val task = Pending()
+        val task = Pending(request.runId)
         pending[id] = task
         task.job = scope.async(start = CoroutineStart.LAZY) {
             try {
                 withTimeout(request.timeoutMs) {
                     ensureActive()
                     val response = action.execute(request) { kind, payload ->
-                        // File drivers may report from IO; maps and Pigeon delivery stay on main.
                         withContext(scope.coroutineContext.minusKey(Job)) {
                             val now = System.nanoTime()
-                            if (pending[id] === task && !stopped && payload.toByteArray().size <= 4096 &&
+                            if (pending[id] === task && !run.stopped && payload.toByteArray().size <= 4096 &&
                                 (kind == ProgressKind.STAGE || now - task.lastProgressAt >= 100_000_000)) {
                                 task.lastProgressAt = now
                                 emit(ExecutionProgress(id, ++task.sequence, kind, payload))
@@ -75,7 +76,6 @@ class NativeExecutionTasks(
             } catch (_: CancellationException) {
                 interrupted(id, task, ExecutionStatus.CANCELLED, ChannelError.CANCELLED)
             } catch (_: Exception) {
-                // Do not send raw Android exception messages across the bridge.
                 result(id, ExecutionStatus.FAILED, ChannelError.EXECUTION_FAILED)
             }
         }
@@ -89,19 +89,17 @@ class NativeExecutionTasks(
         }
     }
 
-    fun cancel(id: String) { pending[id]?.job?.cancel() }
+    fun cancel(toolCallId: String) { pending[toolCallId]?.job?.cancel() }
 
-    fun stop(run: String) {
-        if (run != runId) return
-        stopped = true
-        pending.values.toList().forEach { it.job.cancel() }
+    fun stop(runId: String) {
+        val run = runs[runId] ?: return
+        run.stopped = true
+        pending.values.filter { it.runId == runId }.forEach { it.job.cancel() }
     }
 
-    fun end(run: String) {
-        if (run != runId) return
-        stop(run)
-        runId = null
-        seen.clear()
+    fun end(runId: String) {
+        stop(runId)
+        runs.remove(runId)
     }
 
     companion object {

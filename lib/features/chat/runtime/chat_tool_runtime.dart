@@ -310,7 +310,8 @@ class ChatToolRuntimeFactory {
         if (cancellation.isCancelled) return;
         execution.updateActivity(
           run.id,
-          execution.activity
+          execution
+              .activityFor(run.id)
               .copyWith(
                 phase: TaskPanelPhase.executingTool,
                 status: '正在${ToolPresentation.toolLabel(tool.name)}',
@@ -354,10 +355,12 @@ class ChatToolRuntimeFactory {
       prepareChannel: (tool, arguments) async {
         execution.updateActivity(
           run.id,
-          execution.activity.copyWith(
-            phase: TaskPanelPhase.preparingTool,
-            status: '准备${ToolPresentation.toolLabel(tool.name)}',
-          ),
+          execution
+              .activityFor(run.id)
+              .copyWith(
+                phase: TaskPanelPhase.preparingTool,
+                status: '准备${ToolPresentation.toolLabel(tool.name)}',
+              ),
         );
         if (tool is ShellTool ||
             tool is WorkspaceSearchTool ||

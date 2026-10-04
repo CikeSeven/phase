@@ -20,11 +20,12 @@ void main() {
   late int stopped;
   ToolConfirmationRequest request({
     String id = 'call',
+    String runId = 'run',
     Duration remaining = const Duration(seconds: 60),
   }) => ToolConfirmationRequest(
     record: ToolCallRecord(
       id: id,
-      runId: 'run',
+      runId: runId,
       assistantMessageId: 'message',
       toolName: 'click_node',
       arguments: {'nodeId': 'node'},
@@ -182,6 +183,59 @@ void main() {
     await controller.endRun('run');
     expect(driver.ends, ['run']);
     expect(container.read(executionControllerProvider).runId, isNull);
+  });
+
+  test('并行运行保留各自活动与状态，确认按顺序交接', () async {
+    controller.beginRun('second', stop: () {});
+    controller.updateActivity('run', const TaskActivity(status: '第一个任务'));
+    controller.updateActivity('second', const TaskActivity(status: '第二个任务'));
+
+    final first = controller.confirm(request(), cancellation);
+    final second = controller.confirm(
+      request(id: 'call-2', runId: 'second'),
+      cancellation,
+    );
+    expect(
+      container.read(executionControllerProvider).activeRunIds,
+      containsAll(['run', 'second']),
+    );
+    expect(controller.activityFor('run').status, '第一个任务');
+    expect(controller.activityFor('second').status, '第二个任务');
+    expect(
+      container.read(executionControllerProvider).confirmation!.record.id,
+      'call',
+    );
+
+    expect(controller.decide('run', 'call', ToolDecision.approved), isTrue);
+    expect(await first, ToolDecision.approved);
+    expect(
+      container.read(executionControllerProvider).confirmation!.record.id,
+      'call-2',
+    );
+    expect(
+      controller.decide('second', 'call-2', ToolDecision.rejected),
+      isTrue,
+    );
+    expect(await second, ToolDecision.rejected);
+
+    await controller.endRun('second');
+    expect(container.read(executionControllerProvider).activeRunIds, {'run'});
+    expect(controller.activityFor('run').status, '第一个任务');
+  });
+
+  test('后台宿主可与设备运行并行，但第二个设备运行被串行限制', () async {
+    await controller.ensureDeviceHost('run');
+    controller.beginRun('second', stop: () {});
+    await controller.ensureDeviceHost('second', deviceTask: false);
+
+    expect(driver.starts, ['run', 'second']);
+    expect(driver.deviceTasks, [true, false]);
+    await expectLater(
+      controller.ensureDeviceHost('second'),
+      throwsA(isA<OperationFailure>()),
+    );
+    expect(driver.starts, ['run', 'second']);
+    await controller.endRun('second');
   });
 
   test('确认前后台移交保持调用和原期限；旧决定、重复决定不能批准新调用', () async {

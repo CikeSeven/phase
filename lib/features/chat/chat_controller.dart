@@ -57,30 +57,42 @@ part 'chat_controller.g.dart';
   ],
 )
 class ChatController extends _$ChatController {
-  ChatOperation? _operation;
-  ChatRunDriver? _driver;
+  final Set<ChatOperation> _operations = {};
+  final Map<String, ChatOperation> _conversationOperations = {};
+  final Map<ChatOperation, ChatRunDriver> _drivers = {};
   int _viewRevision = 0;
-  bool get _busy => _operation != null;
+  bool _busyFor(String? conversationId) =>
+      conversationId != null &&
+      _conversationOperations.containsKey(conversationId);
 
   @override
   ChatState build() {
     ref.onDispose(() {
-      _operation?.cancel();
-      _driver?.stop();
+      for (final operation in _operations) {
+        operation.cancel();
+      }
+      for (final driver in _drivers.values) {
+        driver.stop();
+      }
     });
     return const ChatState();
   }
 
   Future<void> setPermissionMode(PermissionMode mode) async {
-    if (_busy || state.isGenerating || state.savingPermissionMode) {
+    final active = ref.read(activeConversationProvider);
+    if (_busyFor(active.conversationId) ||
+        state.isGenerating ||
+        state.savingPermissionMode) {
       throw const OperationFailure('请先结束当前操作再切换权限模式');
     }
-    final active = ref.read(activeConversationProvider);
     if (active.conversationId == null) {
       ref.read(activeConversationProvider.notifier).draftPermissionMode(mode);
       return;
     }
-    state = state.copyWith(savingPermissionMode: true);
+    state = state.updateConversation(
+      active.conversationId!,
+      (session) => session.copyWith(savingPermissionMode: true),
+    );
     try {
       final repository = await ref.read(conversationRepositoryProvider.future);
       await repository.setPermissionMode(active.conversationId!, mode);
@@ -89,7 +101,12 @@ class ChatController extends _$ChatController {
         ref.invalidate(conversationThreadProvider(active.conversationId!));
       }
     } finally {
-      if (ref.mounted) state = state.copyWith(savingPermissionMode: false);
+      if (ref.mounted) {
+        state = state.updateConversation(
+          active.conversationId!,
+          (session) => session.copyWith(savingPermissionMode: false),
+        );
+      }
     }
   }
 
@@ -102,7 +119,7 @@ class ChatController extends _$ChatController {
   void startNewConversation() {
     _viewRevision++;
     ref.read(activeConversationProvider.notifier).clear();
-    state = state.copyWith(attachments: const {});
+    state = state.selectConversation(null);
   }
 
   /// 切换到某个会话；消息由界面订阅仓储，附件索引进入时读取。
@@ -114,7 +131,9 @@ class ChatController extends _$ChatController {
     final attachments = await _attachmentIndex(conversationId, const []);
     if (!ref.mounted || revision != _viewRevision) return;
     ref.read(activeConversationProvider.notifier).open(conversationId);
-    state = state.copyWith(attachments: attachments);
+    state = state
+        .selectConversation(conversationId)
+        .copyWith(attachments: attachments);
     // 会话绑定的助手可能不同：刷新派生选择。
     ref.invalidate(modelSelectionProvider);
   }
@@ -231,28 +250,70 @@ class ChatController extends _$ChatController {
     List<Attachment> attachments = const [],
   }) async {
     _checkPermissionSave();
-    if (_busy) return;
-    final operation = ChatOperation();
-    _operation = operation;
+    final activeId = ref.read(activeConversationProvider).conversationId;
+    if (_busyFor(activeId) || (activeId == null && state.isGenerating)) return;
+    final operation = _beginOperation(activeId);
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
-      await _send(text, attachments: attachments);
+      await _send(text, operation: operation, attachments: attachments);
     } finally {
       _releaseOperation(operation);
     }
   }
 
+  ChatOperation _beginOperation(String? conversationId) {
+    if (_busyFor(conversationId)) {
+      throw const OperationFailure('此会话已有任务正在运行');
+    }
+    final operation = ChatOperation();
+    _operations.add(operation);
+    if (conversationId != null) _reserveOperation(operation, conversationId);
+    return operation;
+  }
+
+  void _reserveOperation(ChatOperation operation, String conversationId) {
+    final current = _conversationOperations[conversationId];
+    if (current != null && !identical(current, operation)) {
+      throw const OperationFailure('此会话已有任务正在运行');
+    }
+    operation.bindConversation(conversationId);
+    _conversationOperations[conversationId] = operation;
+  }
+
+  void _claimOperation(ChatOperation operation, String conversationId) {
+    _reserveOperation(operation, conversationId);
+    state = state.updateConversation(
+      conversationId,
+      (session) => session.copyWith(
+        isGenerating: true,
+        runningConversationId: conversationId,
+        clearStreaming: true,
+        clearContext: true,
+      ),
+    );
+  }
+
   void _releaseOperation(ChatOperation operation) {
     try {
-      if (identical(_operation, operation)) {
-        _operation = null;
-        _driver = null;
+      _operations.remove(operation);
+      _drivers.remove(operation);
+      final conversationId = operation.conversationId;
+      if (conversationId != null &&
+          identical(_conversationOperations[conversationId], operation)) {
+        _conversationOperations.remove(conversationId);
         if (ref.mounted) {
-          state = state.copyWith(
-            isGenerating: false,
-            clearStreaming: true,
-            clearRun: true,
+          state = state.updateConversation(
+            conversationId,
+            (session) => session.copyWith(
+              isGenerating: false,
+              clearStreaming: true,
+              clearRun: true,
+            ),
           );
+          if (ref.read(activeConversationProvider).conversationId !=
+              conversationId) {
+            state = state.removeConversation(conversationId);
+          }
         }
       }
     } finally {
@@ -274,39 +335,42 @@ class ChatController extends _$ChatController {
     RunCancellation cancellation,
   ) async {
     _checkPanelCancellation(cancellation);
-    if (_operation case final operation?) {
-      if (operation.runId != sourceRunId) {
-        throw const OperationFailure('已有其他操作，请返回相月处理');
-      }
+    final sourceOperation = _operations
+        .where((operation) => operation.runId == sourceRunId)
+        .firstOrNull;
+    if (sourceOperation != null) {
       ref.read(executionControllerProvider.notifier).stopRun(sourceRunId);
-      stop();
-      await Future.any([operation.whenSettled, cancellation.whenCancelled]);
+      _drivers[sourceOperation]?.stop();
+      sourceOperation.cancel();
+      await Future.any([
+        sourceOperation.whenSettled,
+        cancellation.whenCancelled,
+      ]);
     }
     _checkPanelCancellation(cancellation);
-    if (_busy || state.isGenerating || state.savingPermissionMode) {
+    if (_busyFor(conversationId) || state.savingPermissionMode) {
       throw const OperationFailure('当前操作尚未结束，请稍后重试');
     }
-    final operation = ChatOperation();
-    _operation = operation;
+    final operation = _beginOperation(conversationId);
     final accepted = Completer<void>();
     unawaited(
       _sendPanelMessage(
+        operation,
         conversationId,
         text,
         cancellation,
         accepted,
-        operation,
       ),
     );
     await accepted.future;
   }
 
   Future<void> _sendPanelMessage(
+    ChatOperation operation,
     String conversationId,
     String text,
     RunCancellation cancellation,
     Completer<void> accepted,
-    ChatOperation operation,
   ) async {
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
@@ -319,6 +383,7 @@ class ChatController extends _$ChatController {
       }
       await _send(
         text,
+        operation: operation,
         panelCancellation: cancellation,
         onPanelAccepted: () {
           if (!accepted.isCompleted) accepted.complete();
@@ -346,12 +411,16 @@ class ChatController extends _$ChatController {
 
   Future<void> _send(
     String text, {
+    required ChatOperation operation,
     List<Attachment> attachments = const [],
     RunCancellation? panelCancellation,
     void Function()? onPanelAccepted,
   }) async {
     final trimmed = text.trim();
-    if ((trimmed.isEmpty && attachments.isEmpty) || state.isGenerating) {
+    final activeId = ref.read(activeConversationProvider).conversationId;
+    final owner = activeId == null ? null : _conversationOperations[activeId];
+    if ((trimmed.isEmpty && attachments.isEmpty) ||
+        (owner != null && !identical(owner, operation))) {
       return;
     }
 
@@ -394,6 +463,7 @@ class ChatController extends _$ChatController {
       conversationId = conversation.id;
       if (revision == _viewRevision) {
         ref.read(activeConversationProvider.notifier).adopt(conversationId);
+        state = state.selectConversation(conversationId);
       }
     }
     final thread = await repository.getThread(conversationId);
@@ -418,9 +488,10 @@ class ChatController extends _$ChatController {
     // 附件索引带上刚落库的这批，发送后即可在气泡里看到缩略图，
     // 同时用于把历史消息里的附件引用解析成请求内容。
     final attachmentIndex = await _attachmentIndex(conversationId, claimed);
-    if (ref.read(activeConversationProvider).conversationId == conversationId) {
-      state = state.copyWith(attachments: attachmentIndex);
-    }
+    state = state.updateConversation(
+      conversationId,
+      (session) => session.copyWith(attachments: attachmentIndex),
+    );
 
     final parentId = thread.currentMessageId;
     if (panelCancellation != null) _checkPanelCancellation(panelCancellation);
@@ -442,7 +513,9 @@ class ChatController extends _$ChatController {
     );
     await repository.appendMessage(userMessage, updateTitle: parentId == null);
 
+    _claimOperation(operation, conversationId);
     await _startRun(
+      operation: operation,
       repository: repository,
       conversationId: conversationId,
       inputMessageId: userMessage.id,
@@ -461,21 +534,20 @@ class ChatController extends _$ChatController {
   /// 新运行不继承这些内容，也不重放旧调用，工具仍由模型重新提出并授权。
   Future<void> regenerate() async {
     _checkPermissionSave();
-    if (_busy) return;
-    final operation = ChatOperation();
-    _operation = operation;
+    final conversationId = ref.read(activeConversationProvider).conversationId;
+    if (conversationId == null || _busyFor(conversationId)) return;
+    final operation = _beginOperation(conversationId);
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
-      await _regenerate();
+      await _regenerate(operation);
     } finally {
       _releaseOperation(operation);
     }
   }
 
-  Future<void> _regenerate() async {
-    if (state.isGenerating) return;
+  Future<void> _regenerate(ChatOperation operation) async {
     final revision = _viewRevision;
-    final conversationId = ref.read(activeConversationProvider).conversationId;
+    final conversationId = operation.conversationId;
     if (conversationId == null) return;
     _checkRecoveredConversation(conversationId);
 
@@ -500,9 +572,11 @@ class ChatController extends _$ChatController {
     if (revision != _viewRevision) throw const OperationFailure('会话已切换，请重新生成');
 
     // 回到整轮的原始输入，不把其中任一工具轮留在新运行上下文中。
+    _claimOperation(operation, conversationId);
     await repository.setCurrentMessage(conversationId, userMessage.id);
 
     await _startRun(
+      operation: operation,
       repository: repository,
       conversationId: conversationId,
       inputMessageId: userMessage.id,
@@ -524,9 +598,10 @@ class ChatController extends _$ChatController {
 
   Future<void> approvePlan(AgentPlan plan) async {
     _checkPermissionSave();
-    if (_busy || state.isGenerating) throw const OperationFailure('请先结束当前任务');
-    final operation = ChatOperation();
-    _operation = operation;
+    if (_busyFor(plan.conversationId)) {
+      throw const OperationFailure('此会话已有任务正在运行');
+    }
+    final operation = _beginOperation(plan.conversationId);
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
       _checkRecoveredConversation(plan.conversationId);
@@ -555,7 +630,9 @@ class ChatController extends _$ChatController {
               source.configuration.workspace?.id) {
         throw const OperationFailure('会话工作区与计划记录不一致，请重新规划');
       }
+      _claimOperation(operation, plan.conversationId);
       await _startRun(
+        operation: operation,
         repository: await ref.read(conversationRepositoryProvider.future),
         conversationId: plan.conversationId,
         inputMessageId: generateId(),
@@ -601,16 +678,16 @@ class ChatController extends _$ChatController {
 
   Future<String> compactContext(String conversationId) async {
     _checkPermissionSave();
-    if (_busy || state.isGenerating) throw const OperationFailure('请先结束当前任务');
-    final operation = ChatOperation();
-    _operation = operation;
+    if (_busyFor(conversationId)) {
+      throw const OperationFailure('此会话已有任务正在运行');
+    }
+    final operation = _beginOperation(conversationId);
     final cancellation = operation.beginCancellation();
     final revision = _viewRevision;
-    state = state.copyWith(
-      isGenerating: true,
-      runningConversationId: conversationId,
-      summarizing: true,
-      clearContext: true,
+    _claimOperation(operation, conversationId);
+    state = state.updateConversation(
+      conversationId,
+      (session) => session.copyWith(summarizing: true, clearContext: true),
     );
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
@@ -625,9 +702,12 @@ class ChatController extends _$ChatController {
         chatContextCoordinatorProvider.future,
       )).compact(prepared, cancellation);
       if (ref.mounted && revision == _viewRevision) {
-        state = state.copyWith(
-          contextBuild: result,
-          contextConversationId: conversationId,
+        state = state.updateConversation(
+          conversationId,
+          (session) => session.copyWith(
+            contextBuild: result,
+            contextConversationId: conversationId,
+          ),
         );
       }
       return cancellation.isCancelled
@@ -641,6 +721,7 @@ class ChatController extends _$ChatController {
 
   /// 配置固定后创建一次独立驱动；租约释放完成后才解除操作互斥。
   Future<void> _startRun({
+    required ChatOperation operation,
     required ConversationRepository repository,
     required String conversationId,
     required String inputMessageId,
@@ -652,7 +733,6 @@ class ChatController extends _$ChatController {
     RunCancellation? panelCancellation,
     void Function()? onPanelAccepted,
   }) async {
-    final operation = _operation!;
     final runs = await ref.read(agentRunRepositoryProvider.future);
     final factory = await ref.read(chatRunFactoryProvider.future);
     final prepared = await factory.create(
@@ -675,9 +755,10 @@ class ChatController extends _$ChatController {
     try {
       try {
         await _driveRun(
-          run,
-          repository,
-          selection,
+          operation: operation,
+          run: run,
+          repository: repository,
+          selection: selection,
           panelCancellation: panelCancellation,
           onPanelAccepted: onPanelAccepted,
         );
@@ -710,15 +791,15 @@ class ChatController extends _$ChatController {
     operation.throwIfCleanupFailed();
   }
 
-  Future<void> _driveRun(
-    AgentRun run,
-    ConversationRepository repository,
-    ChatModelSelection selection, {
+  Future<void> _driveRun({
+    required ChatOperation operation,
+    required AgentRun run,
+    required ConversationRepository repository,
+    required ChatModelSelection selection,
     bool resuming = false,
     RunCancellation? panelCancellation,
     void Function()? onPanelAccepted,
   }) async {
-    final operation = _operation!;
     final runs = await ref.read(agentRunRepositoryProvider.future);
     final requests = await ref.read(modelRequestRepositoryProvider.future);
     final storage = await ref.read(artifactStorageProvider.future);
@@ -743,7 +824,7 @@ class ChatController extends _$ChatController {
       observe: (update) => _onRunUpdate(operation, update),
       runStarted: recovery.runStarted,
       refreshRecovery: () async {
-        if (ref.mounted) await recovery.runFinished();
+        if (ref.mounted) await recovery.runFinished(run.id);
       },
       sendFromPanel: _sendFromPanel,
       darkTheme: switch (ref.read(settingsStorageProvider).readThemeMode()) {
@@ -752,7 +833,7 @@ class ChatController extends _$ChatController {
         ThemeMode.system => null,
       },
     );
-    _driver = driver;
+    _drivers[operation] = driver;
     try {
       await driver.run(
         resuming: resuming,
@@ -760,58 +841,56 @@ class ChatController extends _$ChatController {
         onPanelAccepted: onPanelAccepted,
       );
     } finally {
-      if (identical(_driver, driver)) _driver = null;
+      if (identical(_drivers[operation], driver)) _drivers.remove(operation);
     }
   }
 
   /// 展示更新不提交业务数据；旧驱动与其他会话不能回写当前页面附件。
   void _onRunUpdate(ChatOperation operation, ChatRunUpdate update) {
     if (!ref.mounted ||
-        !identical(_operation, operation) ||
+        !_operations.contains(operation) ||
         operation.runId != update.runId) {
       return;
     }
-    final active =
-        ref.read(activeConversationProvider).conversationId ==
-        update.conversationId;
-    state = switch (update) {
-      ChatRunStarted(:final attachments) => state.copyWith(
-        isGenerating: true,
-        runningConversationId: update.conversationId,
-        clearContext: true,
-        clearStreaming: true,
-        attachments: active ? attachments : null,
-      ),
-      ChatStreamingStarted(:final messageId) => state.copyWith(
-        streamingParts: const [],
-        streamingMessageId: messageId,
-      ),
-      ChatStreamingChanged(:final parts) => state.copyWith(
-        streamingParts: parts,
-      ),
-      ChatStreamingFinished() => state.copyWith(clearStreaming: true),
-      ChatRetryChanged(:final retry) => state.copyWith(
-        retry: retry,
-        clearRetry: retry == null,
-      ),
-      ChatContextMeasured(:final context) => state.copyWith(
-        contextBuild: context,
-        contextConversationId: update.conversationId,
-      ),
-      ChatSummarizingChanged(:final value) => state.copyWith(
-        summarizing: value,
-      ),
-      ChatAttachmentsChanged(:final attachments) => state.copyWith(
-        attachments: active ? attachments : null,
-      ),
-    };
+    state = state.updateConversation(update.conversationId, (session) {
+      return switch (update) {
+        ChatRunStarted(:final attachments) => session.copyWith(
+          isGenerating: true,
+          runningConversationId: update.conversationId,
+          clearContext: true,
+          clearStreaming: true,
+          attachments: attachments,
+        ),
+        ChatStreamingStarted(:final messageId) => session.copyWith(
+          streamingParts: const [],
+          streamingMessageId: messageId,
+        ),
+        ChatStreamingChanged(:final parts) => session.copyWith(
+          streamingParts: parts,
+        ),
+        ChatStreamingFinished() => session.copyWith(clearStreaming: true),
+        ChatRetryChanged(:final retry) => session.copyWith(
+          retry: retry,
+          clearRetry: retry == null,
+        ),
+        ChatContextMeasured(:final context) => session.copyWith(
+          contextBuild: context,
+          contextConversationId: update.conversationId,
+        ),
+        ChatSummarizingChanged(:final value) => session.copyWith(
+          summarizing: value,
+        ),
+        ChatAttachmentsChanged(:final attachments) => session.copyWith(
+          attachments: attachments,
+        ),
+      };
+    });
   }
 
   /// 用户继续已保存的位置；连接、能力与工具范围来自原运行快照。
   Future<void> resumeRun(String runId) async {
-    if (_busy) return;
-    final operation = ChatOperation();
-    _operation = operation;
+    if (_operations.any((operation) => operation.runId == runId)) return;
+    ChatOperation? operation;
     try {
       final recovery = ref.read(runRecoveryControllerProvider.notifier);
       await recovery.refresh();
@@ -820,19 +899,41 @@ class ChatController extends _$ChatController {
           .firstOrNull;
       if (entry == null) throw const OperationFailure('此任务已结束');
       final run = entry.run;
+      if (_busyFor(run.conversationId)) {
+        throw const OperationFailure('此会话已有任务正在运行');
+      }
+      operation = _beginOperation(run.conversationId);
       final selection = selectionForRun(run);
       await openConversation(run.conversationId);
+      _claimOperation(operation, run.conversationId);
       final repository = await ref.read(conversationRepositoryProvider.future);
-      await _driveRun(run, repository, selection, resuming: true);
+      await _driveRun(
+        operation: operation,
+        run: run,
+        repository: repository,
+        selection: selection,
+        resuming: true,
+      );
       operation.throwIfCleanupFailed();
     } finally {
-      _releaseOperation(operation);
+      if (operation != null) _releaseOperation(operation);
     }
   }
 
   void stop() {
-    _operation?.cancel();
-    _driver?.stop();
+    final conversationId = ref.read(activeConversationProvider).conversationId;
+    if (conversationId != null) stopConversation(conversationId);
+  }
+
+  void stopConversation(String conversationId) {
+    final operation = _conversationOperations[conversationId];
+    if (operation == null) return;
+    operation.cancel();
+    _drivers[operation]?.stop();
+    final runId = operation.runId;
+    if (runId != null) {
+      ref.read(executionControllerProvider.notifier).stopRun(runId);
+    }
   }
 
   void _checkRecoveredConversation(String? id) {

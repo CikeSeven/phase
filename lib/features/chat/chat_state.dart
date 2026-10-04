@@ -3,10 +3,7 @@ import '../../data/models/message_part.dart';
 import 'context/context_builder.dart';
 import 'model_retry.dart';
 
-/// 聊天页状态：当前会话、附件索引与流式中的内容块。
-///
-/// 持久化消息以 repository 的 watch 流为准；[streamingParts] 只服务
-/// 流式期间尚未落库的最后一条回答。
+/// 聊天页的当前会话投影，以及其他会话各自保留的运行展示状态。
 class ChatState {
   const ChatState({
     this.streamingParts = const [],
@@ -19,14 +16,12 @@ class ChatState {
     this.contextBuild,
     this.contextConversationId,
     this.summarizing = false,
+    this.activeConversationId,
+    this.sessions = const {},
   });
 
-  /// 正在生成的回答内容块（按 Part 顺序）。
   final List<MessagePart> streamingParts;
-
-  /// 当前会话的附件索引，用于把 Part 里的附件引用还原成文件。
   final Map<String, Attachment> attachments;
-
   final bool isGenerating;
   final String? runningConversationId;
   final String? streamingMessageId;
@@ -35,6 +30,66 @@ class ChatState {
   final ContextBuild? contextBuild;
   final String? contextConversationId;
   final bool summarizing;
+  final String? activeConversationId;
+  final Map<String, ChatSessionState> sessions;
+
+  List<String> get runningConversationIds => [
+    for (final entry in sessions.entries)
+      if (entry.value.isGenerating) entry.key,
+  ];
+
+  ChatState forConversation(String? conversationId) {
+    if (conversationId == null) {
+      return ChatState(activeConversationId: null, sessions: sessions);
+    }
+    final session = sessions[conversationId];
+    return ChatState(
+      streamingParts: session?.streamingParts ?? const [],
+      attachments: session?.attachments ?? const {},
+      isGenerating: session?.isGenerating ?? false,
+      runningConversationId: session?.runningConversationId,
+      streamingMessageId: session?.streamingMessageId,
+      retry: session?.retry,
+      savingPermissionMode: session?.savingPermissionMode ?? false,
+      contextBuild: session?.contextBuild,
+      contextConversationId: session?.contextConversationId,
+      summarizing: session?.summarizing ?? false,
+      activeConversationId: conversationId,
+      sessions: sessions,
+    );
+  }
+
+  ChatState selectConversation(String? conversationId) {
+    final retained = {
+      for (final entry in sessions.entries)
+        if (entry.key == conversationId || entry.value.isGenerating)
+          entry.key: entry.value,
+    };
+    return forConversation(conversationId)._copyRaw(sessions: retained);
+  }
+
+  ChatState removeConversation(String conversationId) {
+    if (activeConversationId == conversationId) return this;
+    return _copyRaw(sessions: {...sessions}..remove(conversationId));
+  }
+
+  ChatState updateConversation(
+    String conversationId,
+    ChatState Function(ChatState state) update,
+  ) {
+    final changed = update(forConversation(conversationId));
+    final mergedSessions = {
+      ...sessions,
+      conversationId: ChatSessionState.fromState(changed),
+    };
+    if (activeConversationId == conversationId) {
+      return changed._copyRaw(
+        activeConversationId: activeConversationId,
+        sessions: mergedSessions,
+      );
+    }
+    return _copyRaw(sessions: mergedSessions);
+  }
 
   ChatState copyWith({
     List<MessagePart>? streamingParts,
@@ -51,26 +106,115 @@ class ChatState {
     String? contextConversationId,
     bool? summarizing,
     bool clearContext = false,
+    Map<String, ChatSessionState>? sessions,
   }) {
-    return ChatState(
-      savingPermissionMode: savingPermissionMode ?? this.savingPermissionMode,
-      contextBuild: clearContext ? null : contextBuild ?? this.contextBuild,
-      contextConversationId: clearContext
-          ? null
-          : contextConversationId ?? this.contextConversationId,
-      summarizing: clearRun ? false : summarizing ?? this.summarizing,
-      retry: clearRetry || clearRun ? null : retry ?? this.retry,
+    final updated = _copyRaw(
       streamingParts: clearStreaming
           ? const []
           : streamingParts ?? this.streamingParts,
       attachments: attachments ?? this.attachments,
       isGenerating: isGenerating ?? this.isGenerating,
-      runningConversationId: clearRun
-          ? null
-          : runningConversationId ?? this.runningConversationId,
-      streamingMessageId: clearStreaming
-          ? null
-          : streamingMessageId ?? this.streamingMessageId,
+      runningConversationId:
+          runningConversationId ?? this.runningConversationId,
+      streamingMessageId: streamingMessageId ?? this.streamingMessageId,
+      retry: retry ?? this.retry,
+      savingPermissionMode: savingPermissionMode ?? this.savingPermissionMode,
+      contextBuild: contextBuild ?? this.contextBuild,
+      contextConversationId:
+          contextConversationId ?? this.contextConversationId,
+      summarizing: clearRun ? false : summarizing ?? this.summarizing,
+      sessions: sessions ?? this.sessions,
+      clearRun: clearRun,
+      clearStreaming: clearStreaming,
+      clearRetry: clearRetry || clearRun,
+      clearContext: clearContext,
+    );
+    final conversationId = updated.activeConversationId;
+    if (conversationId == null) return updated;
+    return updated._copyRaw(
+      sessions: {
+        ...updated.sessions,
+        conversationId: ChatSessionState.fromState(updated),
+      },
     );
   }
+
+  ChatState _copyRaw({
+    List<MessagePart>? streamingParts,
+    Map<String, Attachment>? attachments,
+    bool? isGenerating,
+    String? runningConversationId,
+    String? streamingMessageId,
+    ModelRetryState? retry,
+    bool? savingPermissionMode,
+    ContextBuild? contextBuild,
+    String? contextConversationId,
+    bool? summarizing,
+    bool clearRun = false,
+    bool clearStreaming = false,
+    bool clearRetry = false,
+    bool clearContext = false,
+    String? activeConversationId,
+    Map<String, ChatSessionState>? sessions,
+  }) => ChatState(
+    streamingParts: streamingParts ?? this.streamingParts,
+    attachments: attachments ?? this.attachments,
+    isGenerating: isGenerating ?? this.isGenerating,
+    runningConversationId: clearRun
+        ? null
+        : runningConversationId ?? this.runningConversationId,
+    streamingMessageId: clearStreaming
+        ? null
+        : streamingMessageId ?? this.streamingMessageId,
+    retry: clearRetry ? null : retry ?? this.retry,
+    savingPermissionMode: savingPermissionMode ?? this.savingPermissionMode,
+    contextBuild: clearContext ? null : contextBuild ?? this.contextBuild,
+    contextConversationId: clearContext
+        ? null
+        : contextConversationId ?? this.contextConversationId,
+    summarizing: summarizing ?? this.summarizing,
+    activeConversationId: activeConversationId ?? this.activeConversationId,
+    sessions: sessions ?? this.sessions,
+  );
+}
+
+/// Persistable-in-memory view for one conversation; message history stays in
+/// the repository and only transient run presentation is retained here.
+class ChatSessionState {
+  const ChatSessionState({
+    required this.streamingParts,
+    required this.attachments,
+    required this.isGenerating,
+    required this.runningConversationId,
+    required this.streamingMessageId,
+    required this.retry,
+    required this.savingPermissionMode,
+    required this.contextBuild,
+    required this.contextConversationId,
+    required this.summarizing,
+  });
+
+  final List<MessagePart> streamingParts;
+  final Map<String, Attachment> attachments;
+  final bool isGenerating;
+  final String? runningConversationId;
+  final String? streamingMessageId;
+  final ModelRetryState? retry;
+  final bool savingPermissionMode;
+  final ContextBuild? contextBuild;
+  final String? contextConversationId;
+  final bool summarizing;
+
+  factory ChatSessionState.fromState(ChatState state) => ChatSessionState(
+    streamingParts: state.streamingParts,
+    attachments: state.attachments,
+    isGenerating: state.isGenerating,
+    runningConversationId: state.runningConversationId,
+    streamingMessageId: state.streamingMessageId,
+    retry: state.retry,
+    savingPermissionMode: state.savingPermissionMode,
+    contextBuild: state.contextBuild,
+    contextConversationId: state.contextConversationId,
+    summarizing: state.summarizing,
+  );
 }

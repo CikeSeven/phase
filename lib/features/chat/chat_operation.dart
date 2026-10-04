@@ -9,10 +9,13 @@ final class ChatOperation {
   final _settled = Completer<void>();
   RunCancellation? _cancellation;
   String? _runId;
+  String? _conversationId;
   bool _runFinished = false;
+  bool _cancelRequested = false;
   Failure? _cleanupFailure;
 
   String? get runId => _runId;
+  String? get conversationId => _conversationId;
   RunCancellation? get cancellation => _cancellation;
   bool get runFinished => _runFinished;
   Future<void> get whenSettled => _settled.future;
@@ -24,11 +27,25 @@ final class ChatOperation {
     _runId = runId;
   }
 
-  RunCancellation beginCancellation() => _cancellation ??= RunCancellation();
+  void bindConversation(String conversationId) {
+    if (_conversationId != null && _conversationId != conversationId) {
+      throw StateError('Chat operation already owns another conversation');
+    }
+    _conversationId = conversationId;
+  }
+
+  RunCancellation beginCancellation() {
+    final cancellation = _cancellation ??= RunCancellation();
+    if (_cancelRequested) cancellation.cancel();
+    return cancellation;
+  }
 
   void markRunFinished() => _runFinished = true;
 
-  void cancel() => _cancellation?.cancel();
+  void cancel() {
+    _cancelRequested = true;
+    _cancellation?.cancel();
+  }
 
   /// 清理彼此独立；保留失败供宿主展示，不让首个异常跳过后续资源。
   Future<void> cleanup(

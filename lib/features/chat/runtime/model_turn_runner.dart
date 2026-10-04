@@ -256,7 +256,10 @@ class ModelTurnRunner {
     await repository.appendMessage(assistantMessage);
 
     _liveParts.clear();
-    _execution.updateActivity(run.id, _execution.activity.waitForResponse());
+    _execution.updateActivity(
+      run.id,
+      _execution.activityFor(run.id).waitForResponse(),
+    );
     _streamingMessageId = assistantMessage.id;
     _streamError = null;
     _stoppedManually = isCancelled;
@@ -570,10 +573,12 @@ class ModelTurnRunner {
         );
         _execution.updateActivity(
           _run.id,
-          _execution.activity.copyWith(
-            phase: TaskPanelPhase.waitingModel,
-            status: '等待自动重试 ${attempt + 1}/${policy.maxRetries}',
-          ),
+          _execution
+              .activityFor(_run.id)
+              .copyWith(
+                phase: TaskPanelPhase.waitingModel,
+                status: '等待自动重试 ${attempt + 1}/${policy.maxRetries}',
+              ),
         );
       }
       await waitForModelRetry(delay, _cancellation);
@@ -832,7 +837,7 @@ class ModelTurnRunner {
       PartKind.toolCall => TaskPanelPhase.preparingTool,
       _ => TaskPanelPhase.waitingModel,
     };
-    final activity = _execution.activity;
+    final activity = _execution.activityFor(runId);
     final messageId = _streamingMessageId;
     if (messageId == null) return;
     final parts = [

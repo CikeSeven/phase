@@ -138,20 +138,30 @@ class _ToolConfirmationHostState extends ConsumerState<ToolConfirmationHost>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(executionControllerProvider, (previous, next) {
-      _scheduleSync();
-      if (next.failure != null && !identical(previous?.failure, next.failure)) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          final context = widget.navigatorKey.currentContext;
-          if (context != null) {
-            ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-              buildAppSnackBar(content: Text(next.failure!.userMessage)),
-            );
-          }
-        });
-      }
-    });
+    ref.listen(
+      executionControllerProvider.select(
+        (state) => (
+          confirmation: state.confirmation,
+          foreground: state.foreground,
+          failure: state.failure,
+        ),
+      ),
+      (previous, next) {
+        _scheduleSync();
+        if (next.failure != null &&
+            !identical(previous?.failure, next.failure)) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!mounted) return;
+            final context = widget.navigatorKey.currentContext;
+            if (context != null) {
+              ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+                buildAppSnackBar(content: Text(next.failure!.userMessage)),
+              );
+            }
+          });
+        }
+      },
+    );
     return _ConfirmationPresentation(
       reopen: () {
         _dismissedId = null;

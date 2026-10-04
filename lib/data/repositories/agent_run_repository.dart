@@ -74,6 +74,14 @@ class AgentRunRepository {
   Future<List<RecoveredRun>> recover({
     bool afterRestart = false,
     String? activeRunId,
+  }) => _recover(
+    afterRestart: afterRestart,
+    activeRunIds: activeRunId == null ? const {} : {activeRunId},
+  );
+
+  Future<List<RecoveredRun>> _recover({
+    bool afterRestart = false,
+    Set<String> activeRunIds = const {},
   }) {
     return _guard(
       '读取中断任务失败',
@@ -98,7 +106,7 @@ class AgentRunRepository {
         final recovered = <RecoveredRun>[];
         final now = DateTime.now();
         for (final row in rows) {
-          if (row.id == activeRunId) continue;
+          if (activeRunIds.contains(row.id)) continue;
           final callRows =
               await (_db.select(_db.toolCalls)
                     ..where((t) => t.runId.equals(row.id))
@@ -370,6 +378,11 @@ class AgentRunRepository {
     }
   }
 }
+
+Future<List<RecoveredRun>> recoverExcludingActiveRuns(
+  AgentRunRepository repository,
+  Set<String> activeRunIds,
+) => repository._recover(activeRunIds: activeRunIds);
 
 @Riverpod(keepAlive: true)
 Future<AgentRunRepository> agentRunRepository(Ref ref) async {
