@@ -9,10 +9,7 @@ import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_linear_progress_indicator.dart';
-import '../../../core/widgets/app_list_tile.dart';
-import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
-import '../../../core/widgets/app_section.dart';
 import '../../../data/models/workspace.dart';
 import '../commands/command_channels_section.dart';
 import 'dependency_controller.dart';
@@ -72,6 +69,81 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
               ? '正在卸载环境'
               : _phase(operation.phase)
         : '正在读取环境';
+
+    final String subtitle;
+    final Color? subtitleColor;
+    if (operation.busy) {
+      subtitle = operation.uninstalling
+          ? '24.04 ARM64 · 卸载中'
+          : installingDependencies
+          ? '24.04 ARM64 · 配置依赖中'
+          : '24.04 ARM64 · 安装中';
+      subtitleColor = null;
+    } else if (dependencies.busy) {
+      subtitle = '24.04 ARM64 · 配置依赖中';
+      subtitleColor = null;
+    } else if (!replacesEnvironment) {
+      subtitle = '24.04 ARM64 · 未安装';
+      subtitleColor = null;
+    } else if (environment.value?.ready != true) {
+      subtitle = '24.04 ARM64 · 未就绪';
+      subtitleColor = colors.error;
+    } else if (needsRepair) {
+      subtitle = '24.04 ARM64 · 依赖未完整安装';
+      subtitleColor = colors.error;
+    } else {
+      subtitle = '24.04 ARM64 · 已就绪';
+      subtitleColor = null;
+    }
+
+    final headerActions = <Widget>[
+      if (operation.busy || dependencies.busy)
+        ...const []
+      else if (replacesEnvironment) ...[
+        if (environment.value?.ready != true)
+          IconButton(
+            tooltip: '重试安装 Ubuntu',
+            style: environmentActionStyle,
+            onPressed: onInstallEnvironment,
+            icon: const Icon(LucideIcons.rotateCw),
+          )
+        else
+          IconButton(
+            tooltip: '开发依赖详情',
+            onPressed: () =>
+                _showDependencyInfo(environment.value!.installedDependencies),
+            icon: const Icon(LucideIcons.info),
+          ),
+        IconButton(
+          tooltip: '卸载 Ubuntu',
+          style: environmentActionStyle,
+          onPressed: _confirmEnvironmentUninstall,
+          icon: const Icon(LucideIcons.trash2),
+        ),
+      ] else
+        FilledButton.icon(
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(48, 40),
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.l,
+              vertical: AppSpacing.s,
+            ),
+            textStyle: theme.textTheme.labelLarge,
+          ),
+          onPressed: onInstallEnvironment,
+          icon: const Icon(LucideIcons.download, size: 20),
+          label: const Text('安装'),
+        ),
+    ];
+
+    void onCancel() {
+      if (operation.busy) {
+        ref.read(environmentControllerProvider.notifier).cancel();
+      } else {
+        ref.read(dependencyControllerProvider.notifier).cancel();
+      }
+    }
+
     return AppScaffold(
       title: '环境设置',
       showAppBarDivider: !showProgress,
@@ -88,7 +160,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
             )
           : null,
       body: ListView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.l),
         children: [
           Material(
             color: context.brandColors.goldContainer,
@@ -99,54 +171,21 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _UbuntuHeader(
-                    actions: operation.busy
-                        ? const []
-                        : [
-                            if (replacesEnvironment) ...[
-                              if (environment.value?.ready != true)
-                                IconButton(
-                                  tooltip: '重试安装 Ubuntu',
-                                  style: environmentActionStyle,
-                                  onPressed: onInstallEnvironment,
-                                  icon: const Icon(LucideIcons.rotateCw),
-                                ),
-                              IconButton(
-                                tooltip: '卸载 Ubuntu',
-                                style: environmentActionStyle,
-                                onPressed: dependencies.busy
-                                    ? null
-                                    : _confirmEnvironmentUninstall,
-                                icon: const Icon(LucideIcons.trash2),
-                              ),
-                            ] else
-                              FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  minimumSize: const Size(48, 40),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.l,
-                                    vertical: AppSpacing.s,
-                                  ),
-                                  textStyle: theme.textTheme.labelLarge,
-                                ),
-                                onPressed: onInstallEnvironment,
-                                icon: const Icon(
-                                  LucideIcons.download,
-                                  size: 20,
-                                ),
-                                label: const Text('安装'),
-                              ),
-                          ],
+                    subtitle: subtitle,
+                    subtitleColor: subtitleColor,
+                    actions: headerActions,
                   ),
                   if (platform.value?.available == false)
                     const Padding(
                       padding: EdgeInsets.only(top: AppSpacing.m),
                       child: Text('此设备不支持 Ubuntu 环境，目前仅支持 ARM64。'),
                     ),
-                  if (!operation.busy)
+                  if (!operation.busy && !dependencies.busy)
                     environment.when(
                       data: (value) {
                         final status = [
-                          if (value.phase != EnvironmentPhase.ready)
+                          if (replacesEnvironment &&
+                              value.phase != EnvironmentPhase.ready)
                             _phase(value.phase),
                           ?value.error,
                         ].join('\n');
@@ -168,7 +207,31 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                         ),
                       ),
                     ),
-                  if (operation.busy && !installingDependencies) ...[
+                  if (dependencies.busy || installingDependencies) ...[
+                    const SizedBox(height: AppSpacing.l),
+                    InstallationProgress(
+                      title: '开发依赖',
+                      steps: [
+                        for (final step in DependencyStep.values) step.label,
+                      ],
+                      current:
+                          (dependencies.step ?? DependencyStep.repairing).index,
+                      description:
+                          (dependencies.step ?? DependencyStep.repairing)
+                              .description,
+                      lines: dependencies.logTail,
+                      startedAt: dependencies.stepStartedAt,
+                      updatedAt: dependencies.lastOutputAt,
+                      running: dependencies.busy,
+                    ),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: TextButton(
+                        onPressed: onCancel,
+                        child: const Text('取消安装'),
+                      ),
+                    ),
+                  ] else if (operation.busy) ...[
                     const SizedBox(height: AppSpacing.l),
                     if (operation.uninstalling)
                       const Text('正在卸载环境…')
@@ -201,14 +264,35 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: ref
-                              .read(environmentControllerProvider.notifier)
-                              .cancel,
+                          onPressed: onCancel,
                           child: const Text('取消安装'),
                         ),
                       ),
                     ],
+                  ] else if (dependencies.failed &&
+                      dependencies.step != null) ...[
+                    const SizedBox(height: AppSpacing.l),
+                    InstallationProgress(
+                      title: '开发依赖',
+                      steps: [
+                        for (final step in DependencyStep.values) step.label,
+                      ],
+                      current: dependencies.step!.index,
+                      description: dependencies.step!.description,
+                      lines: dependencies.logTail,
+                      startedAt: dependencies.stepStartedAt,
+                      updatedAt: dependencies.lastOutputAt,
+                      running: false,
+                    ),
                   ],
+                  if (dependencies.error != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.m),
+                      child: Text(
+                        dependencies.error!,
+                        style: TextStyle(color: colors.error),
+                      ),
+                    ),
                   if (operation.error != null)
                     Padding(
                       padding: const EdgeInsets.only(top: AppSpacing.m),
@@ -217,81 +301,45 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                         style: TextStyle(color: colors.error),
                       ),
                     ),
+                  if (needsRepair &&
+                      !operation.busy &&
+                      !dependencies.busy &&
+                      environment.value?.ready == true) ...[
+                    if (dependencies.error == null)
+                      const Padding(
+                        padding: EdgeInsets.only(top: AppSpacing.m),
+                        child: Text('开发依赖未安装完成，可能影响工具执行'),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.m),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: FilledButton.icon(
+                          onPressed: platform.value?.available == true
+                              ? _repairEnvironment
+                              : null,
+                          icon: const Icon(LucideIcons.wrench),
+                          label: const Text('修复环境'),
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (!needsRepair &&
+                      !operation.busy &&
+                      !dependencies.busy &&
+                      environment.value?.ready == true)
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.m),
+                      child: Text(
+                        '内置 Python、Node.js、Git 与 ripgrep',
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
-          if ((!operation.busy || installingDependencies) &&
-              environment.value?.ready == true) ...[
-            const SizedBox(height: 24),
-            AppSection(
-              title: '环境依赖',
-              child: _DependencyTile(
-                records: environment.value!.installedDependencies,
-                operation: dependencies,
-                onShowInfo: operation.busy || dependencies.busy
-                    ? null
-                    : () => _showDependencyInfo(
-                        environment.value!.installedDependencies,
-                      ),
-              ),
-            ),
-            if (dependencies.busy ||
-                dependencies.failed && dependencies.step != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: InstallationProgress(
-                  title: '开发依赖',
-                  steps: [for (final step in DependencyStep.values) step.label],
-                  current:
-                      (dependencies.step ?? DependencyStep.repairing).index,
-                  description: (dependencies.step ?? DependencyStep.repairing)
-                      .description,
-                  lines: dependencies.logTail,
-                  startedAt: dependencies.stepStartedAt,
-                  updatedAt: dependencies.lastOutputAt,
-                  running: dependencies.busy,
-                ),
-              ),
-            if (dependencies.busy)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: TextButton(
-                  onPressed: ref
-                      .read(dependencyControllerProvider.notifier)
-                      .cancel,
-                  child: const Text('取消安装'),
-                ),
-              ),
-            if (dependencies.error != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 4),
-                child: Text(
-                  dependencies.error!,
-                  style: TextStyle(color: colors.error),
-                ),
-              )
-            else if (needsRepair && !operation.busy && !dependencies.busy)
-              const Padding(
-                padding: EdgeInsets.only(top: AppSpacing.m),
-                child: Text('开发依赖未安装完成'),
-              ),
-            if (needsRepair && !operation.busy && !dependencies.busy)
-              Padding(
-                padding: const EdgeInsets.only(top: AppSpacing.m),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: FilledButton.icon(
-                    onPressed: platform.value?.available == true
-                        ? _repairEnvironment
-                        : null,
-                    icon: const Icon(LucideIcons.wrench),
-                    label: const Text('修复环境'),
-                  ),
-                ),
-              ),
-          ],
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.l),
           const CommandChannelsSection(),
         ],
       ),
@@ -386,23 +434,30 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
   Future<void> _showDependencyInfo(
     Map<String, InstalledDependency> records,
   ) async {
-    var latest = records.values.first.installedAt;
+    var latest = records.values.firstOrNull?.installedAt ?? DateTime.now();
     for (final record in records.values) {
       if (record.installedAt.isAfter(latest)) latest = record.installedAt;
     }
+    final allInstalled = DependencyProfile.all.every(
+      (profile) => records.containsKey(profile.id),
+    );
     await showDialog<void>(
       context: context,
       builder: (context) => AppDialog(
         title: '开发依赖',
-        icon: LucideIcons.circleCheck,
-        tone: AppTone.teal,
-        description: '全部已安装 · ${_formatDate(latest)}',
+        icon: allInstalled
+            ? LucideIcons.circleCheck
+            : LucideIcons.triangleAlert,
+        tone: allInstalled ? AppTone.teal : AppTone.error,
+        description: allInstalled
+            ? '全部已安装 · ${_formatDate(latest)}'
+            : '部分依赖未安装',
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             for (final profile in DependencyProfile.all)
-              Text('${profile.label}：${records[profile.id]?.version ?? '已安装'}'),
+              Text('${profile.label}：${records[profile.id]?.version ?? '未安装'}'),
             const SizedBox(height: 8),
             Text('包含软件包：${DependencyProfile.completePackages}'),
           ],
@@ -419,7 +474,14 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
 }
 
 class _UbuntuHeader extends StatelessWidget {
-  const _UbuntuHeader({required this.actions});
+  const _UbuntuHeader({
+    required this.subtitle,
+    required this.actions,
+    this.subtitleColor,
+  });
+
+  final String subtitle;
+  final Color? subtitleColor;
   final List<Widget> actions;
 
   @override
@@ -436,7 +498,12 @@ class _UbuntuHeader extends StatelessWidget {
             children: [
               Text('Ubuntu', style: theme.textTheme.titleMedium),
               const SizedBox(height: AppSpacing.xs),
-              Text('24.04 ARM64', style: theme.textTheme.bodyMedium),
+              Text(
+                subtitle,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: subtitleColor,
+                ),
+              ),
             ],
           ),
         ),
@@ -477,49 +544,6 @@ class _UbuntuHeader extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-}
-
-class _DependencyTile extends StatelessWidget {
-  const _DependencyTile({
-    required this.records,
-    required this.operation,
-    required this.onShowInfo,
-  });
-  final Map<String, InstalledDependency> records;
-  final DependencyOperation operation;
-  final VoidCallback? onShowInfo;
-
-  @override
-  Widget build(BuildContext context) {
-    final allInstalled = DependencyProfile.all.every(
-      (profile) => records.containsKey(profile.id),
-    );
-    final installing = operation.busy;
-    return Semantics(
-      value: installing
-          ? '正在安装'
-          : allInstalled
-          ? '全部已安装'
-          : '未全部安装',
-      child: AppListTile(
-        color: context.brandColors.lavenderContainer,
-        title: const Text('开发依赖'),
-        subtitle: const Text('Python、Node.js、Git与ripgrep'),
-        leading: AppIconBadge(
-          icon: allInstalled ? LucideIcons.circleCheck : LucideIcons.terminal,
-          tone: AppTone.lavender,
-          size: 40,
-          iconSize: 20,
-        ),
-        trailing: installing
-            ? const AppLoadingIndicator.small(size: 20)
-            : allInstalled
-            ? const Icon(LucideIcons.chevronRight)
-            : null,
-        onTap: !installing && allInstalled ? onShowInfo : null,
-      ),
     );
   }
 }
