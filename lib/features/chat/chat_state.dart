@@ -18,6 +18,7 @@ class ChatState {
     this.summarizing = false,
     this.activeConversationId,
     this.sessions = const {},
+    this.completedConversationIds = const {},
   });
 
   final List<MessagePart> streamingParts;
@@ -32,6 +33,7 @@ class ChatState {
   final bool summarizing;
   final String? activeConversationId;
   final Map<String, ChatSessionState> sessions;
+  final Set<String> completedConversationIds;
 
   List<String> get runningConversationIds {
     final activeRunning = isGenerating && activeConversationId != null;
@@ -51,9 +53,34 @@ class ChatState {
     return sessions[conversationId]?.isGenerating ?? false;
   }
 
+  /// 某会话是否刚刚完成任务且尚未被用户点开查看。
+  bool isConversationCompleted(String conversationId) {
+    if (isConversationRunning(conversationId)) return false;
+    return completedConversationIds.contains(conversationId);
+  }
+
+  ChatState markConversationCompleted(String conversationId) {
+    if (completedConversationIds.contains(conversationId)) return this;
+    return _copyRaw(
+      completedConversationIds: {...completedConversationIds, conversationId},
+    );
+  }
+
+  ChatState clearCompleted(String conversationId) {
+    if (!completedConversationIds.contains(conversationId)) return this;
+    return _copyRaw(
+      completedConversationIds: {...completedConversationIds}
+        ..remove(conversationId),
+    );
+  }
+
   ChatState forConversation(String? conversationId) {
     if (conversationId == null) {
-      return ChatState(activeConversationId: null, sessions: sessions);
+      return ChatState(
+        activeConversationId: null,
+        sessions: sessions,
+        completedConversationIds: completedConversationIds,
+      );
     }
     final session = sessions[conversationId];
     return ChatState(
@@ -69,6 +96,7 @@ class ChatState {
       summarizing: session?.summarizing ?? false,
       activeConversationId: conversationId,
       sessions: sessions,
+      completedConversationIds: completedConversationIds,
     );
   }
 
@@ -99,9 +127,13 @@ class ChatState {
       return changed._copyRaw(
         activeConversationId: activeConversationId,
         sessions: mergedSessions,
+        completedConversationIds: changed.completedConversationIds,
       );
     }
-    return _copyRaw(sessions: mergedSessions);
+    return _copyRaw(
+      sessions: mergedSessions,
+      completedConversationIds: changed.completedConversationIds,
+    );
   }
 
   ChatState copyWith({
@@ -120,6 +152,7 @@ class ChatState {
     bool? summarizing,
     bool clearContext = false,
     Map<String, ChatSessionState>? sessions,
+    Set<String>? completedConversationIds,
   }) {
     final updated = _copyRaw(
       streamingParts: clearStreaming
@@ -137,6 +170,8 @@ class ChatState {
           contextConversationId ?? this.contextConversationId,
       summarizing: clearRun ? false : summarizing ?? this.summarizing,
       sessions: sessions ?? this.sessions,
+      completedConversationIds:
+          completedConversationIds ?? this.completedConversationIds,
       clearRun: clearRun,
       clearStreaming: clearStreaming,
       clearRetry: clearRetry || clearRun,
@@ -169,6 +204,7 @@ class ChatState {
     bool clearContext = false,
     String? activeConversationId,
     Map<String, ChatSessionState>? sessions,
+    Set<String>? completedConversationIds,
   }) => ChatState(
     streamingParts: streamingParts ?? this.streamingParts,
     attachments: attachments ?? this.attachments,
@@ -188,6 +224,8 @@ class ChatState {
     summarizing: summarizing ?? this.summarizing,
     activeConversationId: activeConversationId ?? this.activeConversationId,
     sessions: sessions ?? this.sessions,
+    completedConversationIds:
+        completedConversationIds ?? this.completedConversationIds,
   );
 }
 

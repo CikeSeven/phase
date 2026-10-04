@@ -18,6 +18,8 @@ final class ChatOperation {
   String? get conversationId => _conversationId;
   RunCancellation? get cancellation => _cancellation;
   bool get runFinished => _runFinished;
+  bool get isCancelled =>
+      _cancelRequested || _cancellation?.isCancelled == true;
   Future<void> get whenSettled => _settled.future;
 
   void bindRun(String runId) {

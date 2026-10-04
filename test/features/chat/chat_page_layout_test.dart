@@ -226,6 +226,13 @@ class _MemoryConversations implements ConversationRepository {
     thinkingDurationMs: thinkingDurationMs,
   );
 
+  @override
+  Future<bool> setGeneratedTitleIfUnchanged(
+    String id, {
+    required String expectedTitle,
+    required String title,
+  }) async => true;
+
   final items = <Conversation>[];
   final messages = <String, List<ChatMessage>>{};
   final _changes = StreamController<void>.broadcast(sync: true);

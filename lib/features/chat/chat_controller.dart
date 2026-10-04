@@ -80,9 +80,10 @@ class ChatController extends _$ChatController {
 
   Future<void> setPermissionMode(PermissionMode mode) async {
     final active = ref.read(activeConversationProvider);
-    if (_busyFor(active.conversationId) ||
-        state.isGenerating ||
-        state.savingPermissionMode) {
+    final isBusy = active.conversationId == null
+        ? (state.activeConversationId == null && state.isGenerating)
+        : _busyFor(active.conversationId);
+    if (isBusy || state.savingPermissionMode) {
       throw const OperationFailure('请先结束当前操作再切换权限模式');
     }
     if (active.conversationId == null) {
@@ -122,8 +123,13 @@ class ChatController extends _$ChatController {
     state = state.selectConversation(null);
   }
 
+  void clearCompleted(String conversationId) {
+    state = state.clearCompleted(conversationId);
+  }
+
   /// 切换到某个会话；消息由界面订阅仓储，附件索引进入时读取。
   Future<void> openConversation(String conversationId) async {
+    state = state.clearCompleted(conversationId);
     final revision = ++_viewRevision;
     final repository = await ref.read(conversationRepositoryProvider.future);
     final thread = await repository.getThread(conversationId);
@@ -132,6 +138,7 @@ class ChatController extends _$ChatController {
     if (!ref.mounted || revision != _viewRevision) return;
     ref.read(activeConversationProvider.notifier).open(conversationId);
     state = state
+        .clearCompleted(conversationId)
         .selectConversation(conversationId)
         .copyWith(attachments: attachments);
     // 会话绑定的助手可能不同：刷新派生选择。
@@ -251,7 +258,10 @@ class ChatController extends _$ChatController {
   }) async {
     _checkPermissionSave();
     final activeId = ref.read(activeConversationProvider).conversationId;
-    if (_busyFor(activeId) || (activeId == null && state.isGenerating)) return;
+    final isBusy = activeId == null
+        ? (state.activeConversationId == null && state.isGenerating)
+        : _busyFor(activeId);
+    if (isBusy) return;
     final operation = _beginOperation(activeId);
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
@@ -282,15 +292,17 @@ class ChatController extends _$ChatController {
 
   void _claimOperation(ChatOperation operation, String conversationId) {
     _reserveOperation(operation, conversationId);
-    state = state.updateConversation(
-      conversationId,
-      (session) => session.copyWith(
-        isGenerating: true,
-        runningConversationId: conversationId,
-        clearStreaming: true,
-        clearContext: true,
-      ),
-    );
+    state = state
+        .clearCompleted(conversationId)
+        .updateConversation(
+          conversationId,
+          (session) => session.copyWith(
+            isGenerating: true,
+            runningConversationId: conversationId,
+            clearStreaming: true,
+            clearContext: true,
+          ),
+        );
   }
 
   void _releaseOperation(ChatOperation operation) {
@@ -302,6 +314,7 @@ class ChatController extends _$ChatController {
           identical(_conversationOperations[conversationId], operation)) {
         _conversationOperations.remove(conversationId);
         if (ref.mounted) {
+          final wasCancelled = operation.isCancelled;
           state = state.updateConversation(
             conversationId,
             (session) => session.copyWith(
@@ -313,6 +326,9 @@ class ChatController extends _$ChatController {
           if (ref.read(activeConversationProvider).conversationId !=
               conversationId) {
             state = state.removeConversation(conversationId);
+          }
+          if (!wasCancelled) {
+            state = state.markConversationCompleted(conversationId);
           }
         }
       }

@@ -346,6 +346,11 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
         (state) => state.isConversationRunning(conversation.id),
       ),
     );
+    final isCompleted = ref.watch(
+      chatControllerProvider.select(
+        (state) => state.isConversationCompleted(conversation.id),
+      ),
+    );
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final label = TextPainter(
@@ -357,9 +362,14 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
         .clamp(176.0, MediaQuery.sizeOf(context).width - 32)
         .toDouble();
     label.dispose();
+    final semanticStatus = isRunning
+        ? '运行中'
+        : isCompleted
+        ? '已完成'
+        : null;
     return Semantics(
       selected: selected,
-      value: isRunning ? '运行中' : null,
+      value: semanticStatus,
       child: AppInteractiveSurface(
         key: ValueKey('conversation-row-${conversation.id}'),
         selected: selected,
@@ -388,16 +398,52 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      conversation.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleSmall?.copyWith(
-                        color: selected
-                            ? colors.onPrimaryContainer
-                            : colors.onSurface,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            conversation.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              color: selected
+                                  ? colors.onPrimaryContainer
+                                  : colors.onSurface,
+                            ),
+                          ),
+                        ),
+                        if (isRunning) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          Tooltip(
+                            message: '运行中',
+                            child: AppLoadingIndicator.small(
+                              size: 14,
+                              color: selected
+                                  ? colors.onPrimaryContainer
+                                  : colors.primary,
+                              semanticsLabel: '运行中',
+                            ),
+                          ),
+                        ] else if (isCompleted) ...[
+                          const SizedBox(width: AppSpacing.xs),
+                          Tooltip(
+                            message: '已完成',
+                            child: Icon(
+                              LucideIcons.circleCheck,
+                              key: ValueKey(
+                                'conversation-completed-${conversation.id}',
+                              ),
+                              size: 14,
+                              color: selected
+                                  ? colors.onPrimaryContainer
+                                  : context.brandColors.teal,
+                              semanticLabel: '已完成',
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
+                    const SizedBox(height: 2),
                     Row(
                       children: [
                         if (conversation.pinned) ...[
@@ -406,13 +452,6 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                             size: 14,
                             color: context.brandColors.gold,
                             semanticLabel: '已置顶',
-                          ),
-                          const SizedBox(width: AppSpacing.xs),
-                        ],
-                        if (isRunning) ...[
-                          _ConversationRunningBadge(
-                            selected: selected,
-                            conversationId: conversation.id,
                           ),
                           const SizedBox(width: AppSpacing.xs),
                         ],
@@ -630,6 +669,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
             .read(chatControllerProvider.notifier)
             .stopConversation(conversation.id);
       }
+      ref.read(chatControllerProvider.notifier).clearCompleted(conversation.id);
       final repository = await ref.read(conversationRepositoryProvider.future);
       await repository.deleteConversation(conversation.id);
     });
@@ -733,62 +773,6 @@ class _RenameConversationDialogState extends State<_RenameConversationDialog> {
         ),
         FilledButton(onPressed: _save, child: const Text('保存')),
       ],
-    );
-  }
-}
-
-class _ConversationRunningBadge extends StatelessWidget {
-  const _ConversationRunningBadge({
-    required this.selected,
-    required this.conversationId,
-  });
-
-  final bool selected;
-  final String conversationId;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final colors = theme.colorScheme;
-    final foregroundColor = selected
-        ? colors.onPrimaryContainer
-        : colors.primary;
-    final backgroundColor = selected
-        ? colors.onPrimaryContainer.withValues(alpha: 0.14)
-        : colors.primary.withValues(alpha: 0.12);
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: backgroundColor,
-        borderRadius: AppRadius.extraSmallAll,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.xs + 2,
-          vertical: 2,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ExcludeSemantics(
-              child: AppLoadingIndicator.small(
-                size: 12,
-                color: foregroundColor,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            Text(
-              '运行中',
-              key: ValueKey('conversation-running-$conversationId'),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: foregroundColor,
-                fontWeight: FontWeight.w600,
-                height: 1.1,
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

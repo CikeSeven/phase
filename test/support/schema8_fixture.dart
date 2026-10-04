@@ -183,8 +183,7 @@ void createSchema8Fixture(String path) {
       'run_id': 'execute',
       'role': 'tool',
       'status': 'completed',
-      'parts_json':
-          '[{"type":"toolResult","toolResultId":"call"}]',
+      'parts_json': '[{"type":"toolResult","toolResultId":"call"}]',
       'created_at': 3,
     });
     insert('attachments', {

@@ -186,6 +186,26 @@ class ConversationRepository {
     });
   }
 
+  /// 仅当标题仍是首条消息生成的兜底标题时应用模型标题。
+  Future<bool> setGeneratedTitleIfUnchanged(
+    String id, {
+    required String expectedTitle,
+    required String title,
+  }) {
+    return _guard('保存自动标题失败', () async {
+      final changed =
+          await (_db.update(_db.conversations)
+                ..where((t) => t.id.equals(id) & t.title.equals(expectedTitle)))
+              .write(
+                ConversationsCompanion(
+                  title: Value(title),
+                  updatedAt: Value(DateTime.now()),
+                ),
+              );
+      return changed == 1;
+    });
+  }
+
   Future<void> setPinned(String id, {required bool pinned}) {
     return _guard('更新置顶状态失败', () async {
       await (_db.update(_db.conversations)..where((t) => t.id.equals(id)))
@@ -561,7 +581,7 @@ class ConversationRepository {
             currentMessageId: Value(message.id),
             updatedAt: Value(message.createdAt),
             title: updateTitle
-                ? Value(_titleFromMessage(message))
+                ? Value(defaultTitleForMessage(message))
                 : const Value.absent(),
           ),
         );
@@ -786,7 +806,7 @@ class ConversationRepository {
     );
   }
 
-  String _titleFromMessage(ChatMessage message) {
+  static String defaultTitleForMessage(ChatMessage message) {
     final text = message.text.trim().replaceAll(RegExp(r'\s+'), ' ');
     if (text.isEmpty) return '新会话';
     final runes = text.runes.toList();
