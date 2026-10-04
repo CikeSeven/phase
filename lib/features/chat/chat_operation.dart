@@ -12,6 +12,7 @@ final class ChatOperation {
   String? _conversationId;
   bool _runFinished = false;
   bool _cancelRequested = false;
+  bool? _wasCancelledBeforeClose;
   Failure? _cleanupFailure;
 
   String? get runId => _runId;
@@ -20,6 +21,7 @@ final class ChatOperation {
   bool get runFinished => _runFinished;
   bool get isCancelled =>
       _cancelRequested || _cancellation?.isCancelled == true;
+  bool get wasCancelled => _wasCancelledBeforeClose ?? isCancelled;
   Future<void> get whenSettled => _settled.future;
 
   void bindRun(String runId) {
@@ -46,6 +48,12 @@ final class ChatOperation {
 
   void cancel() {
     _cancelRequested = true;
+    _cancellation?.cancel();
+  }
+
+  // Cleanup closes the token too; preserve whether cancellation preceded it.
+  void closeCancellation() {
+    _wasCancelledBeforeClose ??= isCancelled;
     _cancellation?.cancel();
   }
 

@@ -412,19 +412,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                             ),
                           ),
                         ),
-                        if (isRunning) ...[
-                          const SizedBox(width: AppSpacing.xs),
-                          Tooltip(
-                            message: '运行中',
-                            child: AppLoadingIndicator.small(
-                              size: 14,
-                              color: selected
-                                  ? colors.onPrimaryContainer
-                                  : colors.primary,
-                              semanticsLabel: '运行中',
-                            ),
-                          ),
-                        ] else if (isCompleted) ...[
+                        if (isCompleted) ...[
                           const SizedBox(width: AppSpacing.xs),
                           Tooltip(
                             message: '已完成',
@@ -452,6 +440,19 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                             size: 14,
                             color: context.brandColors.gold,
                             semanticLabel: '已置顶',
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                        ],
+                        if (isRunning) ...[
+                          Tooltip(
+                            message: '运行中',
+                            child: AppLoadingIndicator.small(
+                              size: 14,
+                              color: selected
+                                  ? colors.onPrimaryContainer
+                                  : colors.primary,
+                              semanticsLabel: '运行中',
+                            ),
                           ),
                           const SizedBox(width: AppSpacing.xs),
                         ],

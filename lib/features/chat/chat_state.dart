@@ -55,7 +55,10 @@ class ChatState {
 
   /// 某会话是否刚刚完成任务且尚未被用户点开查看。
   bool isConversationCompleted(String conversationId) {
-    if (isConversationRunning(conversationId)) return false;
+    if (activeConversationId == conversationId ||
+        isConversationRunning(conversationId)) {
+      return false;
+    }
     return completedConversationIds.contains(conversationId);
   }
 

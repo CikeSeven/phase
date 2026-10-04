@@ -209,7 +209,7 @@ class ChatRunDriver implements AgentLoopHost {
       throw UnknownFailure('运行执行失败', cause: error);
     } finally {
       _closed = true;
-      _operation.cancel();
+      _operation.closeCancellation();
       await _operation.cleanup(
         () async => _models?.close(_operation),
         failureMessage: '模型运行资源未能完整关闭',

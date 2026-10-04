@@ -320,7 +320,7 @@ class ChatController extends _$ChatController {
           identical(_conversationOperations[conversationId], operation)) {
         _conversationOperations.remove(conversationId);
         if (ref.mounted) {
-          final wasCancelled = operation.isCancelled;
+          final wasCancelled = operation.wasCancelled;
           state = state.updateConversation(
             conversationId,
             (session) => session.copyWith(
@@ -333,7 +333,9 @@ class ChatController extends _$ChatController {
               conversationId) {
             state = state.removeConversation(conversationId);
           }
-          if (!wasCancelled) {
+          if (!wasCancelled &&
+              ref.read(activeConversationProvider).conversationId !=
+                  conversationId) {
             state = state.markConversationCompleted(conversationId);
           }
         }
