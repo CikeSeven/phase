@@ -12,6 +12,7 @@ part 'dependency_controller.g.dart';
 class DependencyOperation {
   const DependencyOperation({
     this.busy = false,
+    this.title = '开发依赖',
     this.step,
     this.logTail = const [],
     this.error,
@@ -20,13 +21,14 @@ class DependencyOperation {
     this.lastOutputAt,
   });
   final bool busy;
+  final String title;
   final DependencyStep? step;
   final List<String> logTail;
   final String? error;
   final DateTime? stepStartedAt;
   final DateTime? lastOutputAt;
 
-  /// 最近一次失败可原样重试；重试重发同样的完整安装。
+  /// 最近一次失败可原样重试；重试重发同一依赖组。
   final bool failed;
 }
 
@@ -46,14 +48,25 @@ class DependencyController extends _$DependencyController {
 
   Future<void> install() => installWithCancellation(RunCancellation());
 
+  Future<void> installSelected({
+    required List<DependencyProfile> profiles,
+    required String title,
+  }) => installWithCancellation(
+    RunCancellation(),
+    profiles: profiles,
+    title: title,
+  );
+
   /// Ubuntu 安装与后续依赖共用取消信号，阶段切换不丢失停止请求。
   Future<void> installWithCancellation(
     RunCancellation cancellation, {
     String? taskOwner,
+    List<DependencyProfile>? profiles,
+    String title = '开发依赖',
   }) async {
     if (state.busy) return;
     _cancellation = cancellation;
-    state = const DependencyOperation(busy: true);
+    state = DependencyOperation(busy: true, title: title);
     try {
       final repository = await ref.read(workspaceRepositoryProvider.future);
       if (!ref.mounted) return;
@@ -63,24 +76,31 @@ class DependencyController extends _$DependencyController {
         ref.read(processDriverProvider),
         taskOwner: taskOwner,
       );
-      await installer.install(cancellation, (step, line) {
-        if (!ref.mounted) return;
-        final now = DateTime.now();
-        final lines = [if (state.step == step) ...state.logTail, line];
-        state = DependencyOperation(
-          busy: true,
-          step: step,
-          logTail: lines
-              .skip((lines.length - 5).clamp(0, lines.length))
-              .toList(),
-          stepStartedAt: state.step == step ? state.stepStartedAt : now,
-          lastOutputAt: now,
-        );
-      });
+      await installer.install(
+        cancellation,
+        (step, line) {
+          if (!ref.mounted) return;
+          final now = DateTime.now();
+          final lines = [if (state.step == step) ...state.logTail, line];
+          state = DependencyOperation(
+            busy: true,
+            title: title,
+            step: step,
+            logTail: lines
+                .skip((lines.length - 5).clamp(0, lines.length))
+                .toList(),
+            stepStartedAt: state.step == step ? state.stepStartedAt : now,
+            lastOutputAt: now,
+          );
+        },
+        profiles: profiles,
+        taskLabel: '安装$title',
+      );
       if (ref.mounted) state = const DependencyOperation();
     } on ToolCancelled {
       if (ref.mounted) {
         state = DependencyOperation(
+          title: title,
           step: state.step,
           logTail: state.logTail,
           error: '已取消安装，已安装内容保留',
@@ -90,6 +110,7 @@ class DependencyController extends _$DependencyController {
     } catch (error) {
       if (ref.mounted) {
         state = DependencyOperation(
+          title: title,
           step: state.step,
           logTail: state.logTail,
           error: error is Failure ? error.userMessage : '依赖安装失败，请重试',

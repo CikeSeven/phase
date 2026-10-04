@@ -14,8 +14,8 @@ enum DependencyStep {
 
   String get description => switch (this) {
     repairing => '检查并配置上次未完成的软件包',
-    updating => '下载软件包索引，尚未安装 Python、Node.js 等依赖',
-    installing => '下载、解包并配置 Python、Node.js、Git 与 ripgrep',
+    updating => '下载 Ubuntu 软件包索引',
+    installing => '下载、解包并配置所选软件包',
     verifying => '逐组检查命令可用性并记录版本',
   };
 }
@@ -55,13 +55,107 @@ class DependencyProfile {
     packages: ['git', 'ripgrep'],
     verifyCommand: 'git --version && rg --version',
   );
-  static const all = [python, node, gitTools];
+  static const base = [python, node, gitTools];
 
-  /// 完整安装时一次装入的全部软件包，用于确认文案与模型侧描述。
+  static const officeDocuments = DependencyProfile(
+    id: 'office-documents',
+    label: '文档与格式转换',
+    description: '无界面 Office 文档处理、格式转换与中英文字体',
+    packages: [
+      'libreoffice-writer',
+      'libreoffice-calc',
+      'libreoffice-impress',
+      'libreoffice-draw',
+      'pandoc',
+      'fonts-noto-cjk',
+      'fontconfig',
+      'fonts-liberation',
+      'fonts-crosextra-carlito',
+      'fonts-crosextra-caladea',
+    ],
+    verifyCommand: 'libreoffice --headless --version && pandoc --version && fc-match :lang=zh-cn',
+  );
+  static const officeData = DependencyProfile(
+    id: 'office-data',
+    label: '表格与 Office 脚本',
+    description: 'DOCX、XLS/XLSX、ODF、PDF、CSV 读写、分析与绘图',
+    packages: [
+      'python3-docx',
+      'python3-openpyxl',
+      'python3-xlsxwriter',
+      'python3-xlrd',
+      'python3-xlwt',
+      'python3-odf',
+      'python3-pandas',
+      'python3-pypdf',
+      'python3-matplotlib',
+      'python3-pil',
+      'csvkit',
+    ],
+    verifyCommand: 'python3 -c "import importlib.util; names=[\'docx\',\'openpyxl\',\'xlsxwriter\',\'xlrd\',\'xlwt\',\'odf\',\'pandas\',\'pypdf\',\'matplotlib\',\'PIL\']; missing=[name for name in names if importlib.util.find_spec(name) is None]; assert not missing, missing; print(\'Python office libraries available\')" && command -v csvstat >/dev/null',
+  );
+  static const officePdf = DependencyProfile(
+    id: 'office-pdf',
+    label: 'PDF 与文件元数据',
+    description: 'PDF 文本提取、页面渲染、合并拆分、修复与元数据读取',
+    packages: [
+      'poppler-utils',
+      'qpdf',
+      'ghostscript',
+      'libimage-exiftool-perl',
+    ],
+    verifyCommand: 'command -v pdftotext >/dev/null && qpdf --version && gs --version && exiftool -ver',
+  );
+  static const officeOcr = DependencyProfile(
+    id: 'office-ocr',
+    label: '扫描件与图像',
+    description: '英文、简体/繁體中文 OCR、可搜索 PDF 与图像处理',
+    packages: [
+      'ocrmypdf',
+      'tesseract-ocr',
+      'tesseract-ocr-eng',
+      'tesseract-ocr-chi-sim',
+      'tesseract-ocr-chi-tra',
+      'tesseract-ocr-osd',
+      'imagemagick',
+    ],
+    verifyCommand: 'ocrmypdf --version && tesseract --version && for language in eng chi_sim chi_tra; do tesseract --list-langs | grep -qx "\$language" || exit 1; done && convert -version',
+  );
+  static const officeLegacyAndArchives = DependencyProfile(
+    id: 'office-legacy-archives',
+    label: '旧版格式与归档',
+    description: '旧版 Word/RTF/ODF 文本提取与 ZIP、7z 归档',
+    packages: [
+      'antiword',
+      'catdoc',
+      'unrtf',
+      'odt2txt',
+      'zip',
+      'unzip',
+      '7zip',
+    ],
+    verifyCommand: 'for command in antiword catdoc unrtf odt2txt zip unzip 7zz; do command -v "\$command" >/dev/null || exit 1; done; printf \'Legacy office formats and archives available\\n\'',
+  );
+  static const office = [
+    officeDocuments,
+    officeData,
+    officePdf,
+    officeOcr,
+    officeLegacyAndArchives,
+  ];
+
+  /// Kept for callers that use the original complete development profile set.
+  static const all = base;
+  static const managed = [...base, ...office];
+
+  /// Complete package lists used in install confirmations and dependency details.
   static String get completePackages =>
-      all.expand((profile) => profile.packages).join('、');
+      base.expand((profile) => profile.packages).join('、');
+  static String get officeCompletePackages =>
+      office.expand((profile) => profile.packages).join('、');
+
   static DependencyProfile? byId(String id) {
-    for (final profile in all) {
+    for (final profile in managed) {
       if (profile.id == id) return profile;
     }
     return null;

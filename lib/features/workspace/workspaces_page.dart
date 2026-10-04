@@ -37,12 +37,25 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     final dependencies = ref.watch(dependencyControllerProvider);
     final installingDependencies =
         operation.busy && operation.phase == EnvironmentPhase.ready;
-    final allDependenciesInstalled = DependencyProfile.all.every(
+    final baseDependenciesInstalled = DependencyProfile.base.every(
       (profile) =>
           environment.value?.installedDependencies.containsKey(profile.id) ==
           true,
     );
-    final needsRepair = !allDependenciesInstalled;
+    final dependencyRecords =
+        environment.value?.installedDependencies ??
+        const <String, InstalledDependency>{};
+    final installedOfficeGroups = DependencyProfile.office
+        .where((profile) => dependencyRecords.containsKey(profile.id))
+        .length;
+    final officeDependenciesInstalled =
+        installedOfficeGroups == DependencyProfile.office.length;
+    final officeDependencyStatus = installedOfficeGroups == 0
+        ? '未安装'
+        : officeDependenciesInstalled
+        ? '已安装'
+        : '部分安装 · $installedOfficeGroups/${DependencyProfile.office.length} 组';
+    final needsRepair = !baseDependenciesInstalled;
     final VoidCallback? onInstallEnvironment =
         environment.hasValue &&
             !operation.busy &&
@@ -109,7 +122,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
           )
         else
           IconButton(
-            tooltip: '开发依赖详情',
+            tooltip: '依赖详情',
             onPressed: () =>
                 _showDependencyInfo(environment.value!.installedDependencies),
             icon: const Icon(LucideIcons.info),
@@ -210,7 +223,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                   if (dependencies.busy || installingDependencies) ...[
                     const SizedBox(height: AppSpacing.l),
                     InstallationProgress(
-                      title: '开发依赖',
+                      title: dependencies.title,
                       steps: [
                         for (final step in DependencyStep.values) step.label,
                       ],
@@ -273,7 +286,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                       dependencies.step != null) ...[
                     const SizedBox(height: AppSpacing.l),
                     InstallationProgress(
-                      title: '开发依赖',
+                      title: dependencies.title,
                       steps: [
                         for (final step in DependencyStep.values) step.label,
                       ],
@@ -335,6 +348,49 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                         style: theme.textTheme.bodyMedium,
                       ),
                     ),
+                  if (environment.value?.ready == true &&
+                      !operation.busy &&
+                      !dependencies.busy) ...[
+                    const Divider(height: AppSpacing.xl),
+                    Wrap(
+                      alignment: WrapAlignment.spaceBetween,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: AppSpacing.l,
+                      runSpacing: AppSpacing.s,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('办公依赖', style: theme.textTheme.titleSmall),
+                            const SizedBox(height: AppSpacing.xs),
+                            Text(
+                              officeDependencyStatus,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: colors.onSurfaceVariant,
+                              ),
+                            ),
+                          ],
+                        ),
+                        FilledButton.tonalIcon(
+                          onPressed: _confirmOfficeInstall,
+                          icon: Icon(
+                            officeDependenciesInstalled
+                                ? LucideIcons.refreshCw
+                                : LucideIcons.download,
+                            size: 18,
+                          ),
+                          label: Text(
+                            officeDependenciesInstalled
+                                ? '修复办公依赖'
+                                : installedOfficeGroups == 0
+                                ? '安装办公依赖'
+                                : '继续安装办公依赖',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -422,13 +478,69 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
         ref.read(dependencyControllerProvider).busy ||
         environment == null ||
         !environment.ready ||
-        DependencyProfile.all.every(
+        DependencyProfile.base.every(
           (profile) =>
               environment.installedDependencies.containsKey(profile.id),
         )) {
       return;
     }
     await ref.read(dependencyControllerProvider.notifier).install();
+  }
+
+  Future<void> _confirmOfficeInstall() async {
+    final environment = ref.read(runtimeEnvironmentProvider).value;
+    final operation = ref.read(environmentControllerProvider);
+    final dependencyOperation = ref.read(dependencyControllerProvider);
+    if (operation.busy ||
+        dependencyOperation.busy ||
+        environment?.ready != true) {
+      return;
+    }
+    final records = environment!.installedDependencies;
+    final installedGroups = DependencyProfile.office
+        .where((profile) => records.containsKey(profile.id))
+        .length;
+    final repairing = installedGroups > 0;
+    final allowed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AppDialog(
+        title: repairing ? '修复办公依赖？' : '安装办公依赖？',
+        icon: LucideIcons.fileText,
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('将安装以下 Ubuntu 命令行依赖：'),
+            for (final profile in DependencyProfile.office) ...[
+              const SizedBox(height: AppSpacing.m),
+              Text(
+                '${profile.label}\n${profile.packages.join('、')}',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: AppSpacing.l),
+            const Text(
+              '此可选包不安装桌面环境。需要联网和额外存储空间；安装内容保留在 Ubuntu 中，卸载 Ubuntu 时一并删除。',
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(repairing ? '修复' : '安装'),
+          ),
+        ],
+      ),
+    );
+    if (allowed == true && mounted) {
+      await ref
+          .read(dependencyControllerProvider.notifier)
+          .installSelected(profiles: DependencyProfile.office, title: '办公依赖');
+    }
   }
 
   Future<void> _showDependencyInfo(
@@ -438,28 +550,38 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     for (final record in records.values) {
       if (record.installedAt.isAfter(latest)) latest = record.installedAt;
     }
-    final allInstalled = DependencyProfile.all.every(
+    final baseInstalled = DependencyProfile.base.every(
       (profile) => records.containsKey(profile.id),
     );
+    final officeInstalled = DependencyProfile.office
+        .where((profile) => records.containsKey(profile.id))
+        .length;
     await showDialog<void>(
       context: context,
       builder: (context) => AppDialog(
-        title: '开发依赖',
-        icon: allInstalled
+        title: '依赖详情',
+        icon: baseInstalled
             ? LucideIcons.circleCheck
             : LucideIcons.triangleAlert,
-        tone: allInstalled ? AppTone.teal : AppTone.error,
-        description: allInstalled
-            ? '全部已安装 · ${_formatDate(latest)}'
-            : '部分依赖未安装',
+        tone: baseInstalled ? AppTone.teal : AppTone.error,
+        description: baseInstalled
+            ? '基础依赖完整 · 最近安装 ${_formatDate(latest)}'
+            : '基础依赖部分未安装',
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            for (final profile in DependencyProfile.all)
+            Text('基础开发依赖'),
+            for (final profile in DependencyProfile.base)
               Text('${profile.label}：${records[profile.id]?.version ?? '未安装'}'),
             const SizedBox(height: 8),
             Text('包含软件包：${DependencyProfile.completePackages}'),
+            const SizedBox(height: AppSpacing.l),
+            Text('办公依赖：$officeInstalled/${DependencyProfile.office.length} 组'),
+            for (final profile in DependencyProfile.office)
+              Text('${profile.label}：${records[profile.id]?.version ?? '未安装'}'),
+            const SizedBox(height: 8),
+            Text('包含软件包：${DependencyProfile.officeCompletePackages}'),
           ],
         ),
         actions: [

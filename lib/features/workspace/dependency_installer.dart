@@ -43,12 +43,17 @@ class DependencyInstaller {
           profiles.map((profile) => profile.verifyCommand).join(' && '),
       };
 
-  /// 一次安装全部依赖组；返回按组记录的安装结果。
+  /// 安装所选依赖组；返回按组记录的安装结果。
   Future<Map<String, InstalledDependency>> install(
     RunCancellation cancellation,
-    void Function(DependencyStep step, String line) onOutput,
-  ) async {
-    final profiles = DependencyProfile.all;
+    void Function(DependencyStep step, String line) onOutput, {
+    List<DependencyProfile>? profiles,
+    String taskLabel = '安装开发依赖',
+  }) async {
+    final selectedProfiles = profiles ?? DependencyProfile.base;
+    if (selectedProfiles.isEmpty) {
+      throw const WorkspaceFailure('emptyProfile', '没有选择要安装的依赖');
+    }
     repository.beginDependencyChange();
     final owner = taskOwner ?? 'deps-${generateId()}';
     final cwd = '/tmp/phase-deps-${generateId()}';
@@ -69,7 +74,7 @@ class DependencyInstaller {
       }
       scratch = Directory(p.join(temporaryRoot.path, p.posix.basename(cwd)));
       await scratch.create();
-      await driver.beginTask(owner, '安装开发依赖');
+      await driver.beginTask(owner, taskLabel);
       for (final step in DependencyStep.values.take(3)) {
         cancellation.throwIfCancelled();
         await _run(
@@ -77,7 +82,7 @@ class DependencyInstaller {
           env.rootPath!,
           cwd,
           step,
-          profiles,
+          selectedProfiles,
           cancellation,
           onOutput,
         );
@@ -91,7 +96,7 @@ class DependencyInstaller {
           '环境已变化，本次安装结果未记录，可重试',
         );
       }
-      for (final profile in profiles) {
+      for (final profile in selectedProfiles) {
         cancellation.throwIfCancelled();
         final version = await _run(
           owner,

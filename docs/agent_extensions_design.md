@@ -189,6 +189,18 @@ E2 当前实现：上述本地导入、助手范围、版本固定、管理界�
 
 Ubuntu 基础环境检查并提交后，自动安装 python3/pip/venv、nodejs/npm、git/ripgrep，沿用软件源与完整依赖白名单，不包含 uv/uvx。基础环境的 ready 只表示 shell 与文件读写可用，开发依赖全部验证并保存版本记录后才视为完整安装。依赖失败、取消或进程中断不回滚 Ubuntu 与已装软件包；环境设置按持久化依赖记录显示“修复环境”，点击执行包状态修复、索引更新、完整安装与逐组验证，不重新下载 rootfs。Ubuntu 安装的阶段切换共用取消信号，依赖修复不替换 rootfs；模型侧 `install_packages` 仍是独立、受权限控制的工具，不在 MCP 调用内隐式执行。
 
+办公依赖是环境设置中的独立可选包，不参与 Ubuntu 首装，也不影响基础环境就绪状态；用户确认后一次安装并按组校验，可重复修复。仅提供无界面的命令行能力，不安装桌面环境、浏览器、云服务客户端、用户凭据或大型模型文件。软件包固定在 Ubuntu Noble ARM64 的 APT 仓库白名单内：
+
+| 分组 | apt 软件包 | 能力范围 |
+|---|---|---|
+| 文档与格式转换 | `libreoffice-writer`、`libreoffice-calc`、`libreoffice-impress`、`libreoffice-draw`、`pandoc`、`fonts-noto-cjk`、`fontconfig`、`fonts-liberation`、`fonts-crosextra-carlito`、`fonts-crosextra-caladea` | 无界面处理和转换 DOCX/XLSX/PPTX/ODF、Markdown/HTML 等常见文档；提供中英文字体及常见 Office 字体替代 |
+| 表格与 Office 脚本 | `python3-docx`、`python3-openpyxl`、`python3-xlsxwriter`、`python3-xlrd`、`python3-xlwt`、`python3-odf`、`python3-pandas`、`python3-pypdf`、`python3-matplotlib`、`python3-pil`、`csvkit` | DOCX、XLS/XLSX、ODF、PDF、CSV 的脚本读写、数据清理、分析和绘图 |
+| PDF 与文件元数据 | `poppler-utils`、`qpdf`、`ghostscript`、`libimage-exiftool-perl` | PDF 文本/页面提取、合并拆分、检查修复、渲染和文件元数据读取 |
+| 扫描件与图像 | `ocrmypdf`、`tesseract-ocr`、`tesseract-ocr-eng`、`tesseract-ocr-chi-sim`、`tesseract-ocr-chi-tra`、`tesseract-ocr-osd`、`imagemagick` | 英文及简体/繁體中文 OCR、扫描 PDF 加文字层、图像转换和处理 |
+| 旧版格式与归档 | `antiword`、`catdoc`、`unrtf`、`odt2txt`、`zip`、`unzip`、`7zip` | 旧版 Word/RTF/ODF 文本提取及 ZIP/7z 文件处理 |
+
+该清单只承诺 Ubuntu 仓库中可用的命令行与 Python 工具；不声称安装原生图形办公界面或覆盖专有云端格式。办公包体积由当前仓库依赖解析决定，确认界面不显示未经实测的空间估算。
+
 基础命令与 stdio 先完成，再提供 PTY 终端：输入、窗口尺寸、Ctrl-C、退出与会话切换。关闭终端页面不等于结束有明确宿主的任务；终端退出操作必须终止自己的进程。交互终端不暴露给模型充当 MCP 传输。
 
 ### 5.4 服务与性能
