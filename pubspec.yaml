@@ -65,6 +65,8 @@ dependencies:
   syncfusion_flutter_pdf: ^34.2.7
   archive: ^4.2.0
   yaml: ^3.1.4
+  html: ^0.15.6
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:

@@ -6,6 +6,7 @@ import 'dart:convert';
 
 import '../../models/execution_scope.dart';
 import '../../models/command_channel.dart';
+import '../../models/web_search_settings.dart';
 import '../../../core/error/failure.dart';
 
 part 'settings_storage.g.dart';
@@ -15,6 +16,34 @@ class SettingsStorage {
   SettingsStorage(this._prefs);
 
   final SharedPreferences _prefs;
+
+  WebSearchSettings readWebSearch() {
+    final value = _prefs.getString('web_search_v1');
+    if (value == null) return const WebSearchSettings();
+    try {
+      return WebSearchSettings.fromJson(
+        jsonDecode(value) as Map<String, dynamic>,
+      );
+    } on Object {
+      throw const StorageFailure('网页搜索配置读取失败');
+    }
+  }
+
+  Future<void> writeWebSearch(WebSearchSettings value) async {
+    value.validate();
+    try {
+      if (!await _prefs.setString(
+        'web_search_v1',
+        jsonEncode(value.toJson()),
+      )) {
+        throw const StorageFailure('网页搜索配置保存失败');
+      }
+    } on Failure {
+      rethrow;
+    } on Object {
+      throw const StorageFailure('网页搜索配置保存失败');
+    }
+  }
 
   ExecutionScope readExecutionScope() {
     final value = _prefs.getString('execution_scope');

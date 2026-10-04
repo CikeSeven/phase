@@ -7,12 +7,36 @@ part 'secure_key_storage.g.dart';
 
 /// 密钥的唯一存取通道（AGENTS.md §5）。
 ///
-/// 模型 API Key 按配置 ID 存取，MCP 凭据/请求头按版本引用存取。
+/// 模型 API Key 按配置 ID 存取，MCP 与网页搜索凭据按版本引用存取。
 /// 密钥不进普通持久化、日志或数据模型；读取失败不自动清空密钥库。
 class SecureKeyStorage {
   const SecureKeyStorage([this._store = const SecureKeyStore()]);
 
   final KeyStore _store;
+
+  Future<String?> readWebSearch(String reference) async {
+    try {
+      return await _store.read('web_search_secret_$reference');
+    } on Object {
+      throw const StorageFailure('搜索凭据读取失败');
+    }
+  }
+
+  Future<void> writeWebSearch(String reference, String value) async {
+    try {
+      await _store.write('web_search_secret_$reference', value);
+    } on Object {
+      throw const StorageFailure('搜索凭据保存失败');
+    }
+  }
+
+  Future<void> deleteWebSearch(String reference) async {
+    try {
+      await _store.delete('web_search_secret_$reference');
+    } on Object {
+      throw const StorageFailure('搜索凭据删除失败');
+    }
+  }
 
   Future<String?> readMcp(String reference) async {
     try {

@@ -11,6 +11,7 @@ import '../../tools/search_tools.dart';
 import '../../execution/platform_tools.dart';
 import '../../skills/read_skill_tool.dart';
 import '../../memory/memory_tools.dart';
+import '../../web_search/web_tools.dart';
 
 /// 宿主类型白名单；不接受 MCP 自报的 readOnly 或同名工具。
 bool historyReadOnlyTool(Tool? tool) =>
@@ -18,6 +19,8 @@ bool historyReadOnlyTool(Tool? tool) =>
     tool is ReadFileTool ||
     tool is ListFilesTool ||
     tool is WorkspaceSearchTool ||
+    tool is WebSearchTool ||
+    tool is WebFetchTool ||
     tool is ReadSkillTool ||
     tool is ReadHistoryTool ||
     (tool is MemoryTool && !tool.write) ||

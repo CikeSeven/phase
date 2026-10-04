@@ -11,6 +11,7 @@ import 'openai_compat.dart';
 import 'execution_scope.dart';
 import 'tool_source.dart';
 import 'mcp_server_profile.dart';
+import 'web_search_settings.dart';
 
 enum RunStatus {
   running,
@@ -91,6 +92,7 @@ class RunConfiguration {
     this.supportsTools = true,
     this.compatOverrides,
     this.executionScope = const ExecutionScope(),
+    this.webSearch,
   });
 
   final PermissionMode mode;
@@ -134,6 +136,9 @@ class RunConfiguration {
   final OpenAiCompat? compatOverrides;
   final ExecutionScope executionScope;
 
+  /// 非敏感的搜索连接和上限快照；密钥仅持安全存储版本引用。
+  final WebSearchSettings? webSearch;
+
   Map<String, dynamic> toJson() => {
     'mode': mode.name,
     'planExecutionMode': planExecutionMode.name,
@@ -162,11 +167,15 @@ class RunConfiguration {
     'supportsTools': supportsTools,
     'compatOverrides': compatOverrides?.toJson(),
     'executionScope': executionScope.toJson(),
+    if (webSearch != null) 'webSearch': webSearch!.toJson(),
   };
 
   factory RunConfiguration.fromJson(
     Map<String, dynamic> json,
   ) => RunConfiguration(
+    webSearch: json['webSearch'] == null
+        ? null
+        : WebSearchSettings.fromJson(json['webSearch'] as Map<String, dynamic>),
     mode: PermissionMode.values.byName(json['mode'] as String? ?? 'basic'),
     planExecutionMode: PermissionMode.values.byName(
       json['planExecutionMode'] as String? ?? 'basic',

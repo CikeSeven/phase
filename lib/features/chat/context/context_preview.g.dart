@@ -62,7 +62,10 @@ final class ContextPreviewProvider
       ChatControllerProvider.$allTransitiveDependencies13;
   static final $allTransitiveDependencies15 =
       ChatControllerProvider.$allTransitiveDependencies14;
-  static final $allTransitiveDependencies16 = conversationPermissionsProvider;
+  static final $allTransitiveDependencies16 =
+      ChatControllerProvider.$allTransitiveDependencies15;
+  static final $allTransitiveDependencies17 = conversationPermissionsProvider;
+  static final $allTransitiveDependencies18 = webSearchControllerProvider;
 
   @override
   String debugGetCreateSourceHash() => _$contextPreviewHash();
@@ -97,7 +100,7 @@ final class ContextPreviewProvider
   }
 }
 
-String _$contextPreviewHash() => r'212789594ee06e38c766fb973f1a0f2bf6959e75';
+String _$contextPreviewHash() => r'61aca301480761e5367c7b99d2e3c866c3989689';
 
 final class ContextPreviewFamily extends $Family
     with $FunctionalFamilyOverride<FutureOr<ContextBuild?>, String> {
@@ -113,6 +116,7 @@ final class ContextPreviewFamily extends $Family
           conversationThreadProvider,
           conversationPermissionsProvider,
           modelCatalogProvider,
+          webSearchControllerProvider,
         ],
         $allTransitiveDependencies: <ProviderOrFamily>{
           ContextPreviewProvider.$allTransitiveDependencies0,
@@ -132,6 +136,8 @@ final class ContextPreviewFamily extends $Family
           ContextPreviewProvider.$allTransitiveDependencies14,
           ContextPreviewProvider.$allTransitiveDependencies15,
           ContextPreviewProvider.$allTransitiveDependencies16,
+          ContextPreviewProvider.$allTransitiveDependencies17,
+          ContextPreviewProvider.$allTransitiveDependencies18,
         },
         isAutoDispose: true,
       );

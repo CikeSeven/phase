@@ -128,6 +128,7 @@ class ChatRunFactory {
         commandChannels: channels,
         mcpServers: catalog.mcpServers,
         executionScope: tools.settings.readExecutionScope(),
+        webSearch: catalog.webSearch,
         enabledTools: catalog.enabledTools,
         toolPolicies: catalog.policies,
         supportsReasoning: selection.supportsReasoning,

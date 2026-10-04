@@ -6,6 +6,7 @@ import '../../../data/repositories/skill_repository.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
 import '../../tools/tool.dart';
 import '../../workspace/workspace_controller.dart';
+import '../../web_search/web_search_controller.dart';
 import '../chat_controller.dart';
 import '../model_selection.dart';
 import 'context_builder.dart';
@@ -21,6 +22,7 @@ part 'context_preview.g.dart';
     conversationThread,
     conversationPermissions,
     modelCatalog,
+    WebSearchController,
   ],
 )
 Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
@@ -43,6 +45,9 @@ Future<ContextBuild?> contextPreview(Ref ref, String conversationId) async {
         : null;
   }
   // 仅空闲时重建；正文流式期间不逐字符测量、读附件或扫描统计表。
+  ref.watch(
+    webSearchControllerProvider.select((state) => state.value?.settings),
+  );
   final selected = await ref.watch(modelSelectionProvider.future);
   if (!ref.mounted) return null;
   final thread = await ref.watch(

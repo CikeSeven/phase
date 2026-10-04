@@ -3,6 +3,7 @@ import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/utils/external_web_link.dart';
 import 'chat_code_block.dart';
 import 'chat_markdown_scroll_view.dart';
 import 'chat_markdown_table.dart';
@@ -151,6 +152,7 @@ class _ChatMarkdownState extends State<ChatMarkdown> {
           : GptMarkdownAnimation.none,
       charactersPerSecond: 1200,
       isStreaming: widget.streaming,
+      onLinkTap: (url, _) => openExternalWebLink(context, url),
       codeBuilder: (context, language, code, closed) =>
           ChatCodeBlock(language: language, code: code, closed: closed),
       tableBuilder: (context, rows, style, config) =>

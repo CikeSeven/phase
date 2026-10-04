@@ -43,6 +43,13 @@ class SettingsPage extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.s),
           SettingsEntry(
+            icon: LucideIcons.search,
+            tone: AppTone.teal,
+            title: '网页搜索',
+            onTap: () => context.push('/settings/web-search'),
+          ),
+          const SizedBox(height: AppSpacing.s),
+          SettingsEntry(
             icon: LucideIcons.pointer,
             tone: AppTone.teal,
             title: '执行与权限',

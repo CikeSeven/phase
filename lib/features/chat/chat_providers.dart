@@ -10,6 +10,7 @@ import '../../data/repositories/plan_repository.dart';
 import '../../data/repositories/skill_repository.dart';
 import '../../data/repositories/tool_call_repository.dart';
 import '../../data/repositories/workspace_repository.dart';
+import '../../data/repositories/web_search_repository.dart';
 import '../commands/command_channel_driver.dart';
 import '../commands/command_channels_controller.dart';
 import '../mcp/mcp_connections.dart';
@@ -150,10 +151,11 @@ Future<Assistant?> awaitAssistantContext(Ref ref) async {
 }
 
 /// 装配点只提供依赖；目录发现、运行创建和资源启动由对应组件显式调用。
-@Riverpod(keepAlive: true, dependencies: [settingsStorage])
+@Riverpod(keepAlive: true, dependencies: [settingsStorage, webSearchRepository])
 Future<ChatToolRuntimeFactory> chatToolRuntimeFactory(Ref ref) async {
   return ChatToolRuntimeFactory(
     builtIns: ref.watch(toolRegistryProvider),
+    web: ref.watch(webSearchRepositoryProvider),
     conversations: await ref.watch(conversationRepositoryProvider.future),
     runs: await ref.watch(agentRunRepositoryProvider.future),
     calls: await ref.watch(toolCallRepositoryProvider.future),

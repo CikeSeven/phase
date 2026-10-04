@@ -10,7 +10,7 @@ import '../execution/execution_api.g.dart';
 import '../execution/platform_tools.dart';
 import '../execution/visual_tools.dart';
 
-/// 首版内置工具集。
+/// 固定内置工具集；可配置的 Web、MCP 与 Skill 由运行装配边界加入。
 ///
 /// 私有文件在 Dart 处理，显式授权 URI 与 UI 工具经同一平台通道执行。
 ToolRegistry buildBuiltInRegistry({

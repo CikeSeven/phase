@@ -149,3 +149,11 @@ final class CommandChannelFailure extends Failure {
   @override
   String get userMessage => message;
 }
+
+/// 搜索和网页读取只返回固定的安全文案，不携带远端错误正文或鉴权头。
+final class WebFailure extends Failure {
+  const WebFailure(this.code, super.message);
+  final String code;
+  @override
+  String get userMessage => message;
+}

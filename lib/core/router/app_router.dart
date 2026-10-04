@@ -24,6 +24,8 @@ import '../../features/skills/skills_page.dart';
 import '../../features/skills/skill_import_page.dart';
 import '../../features/skills/skill_detail_page.dart';
 import '../../features/skills/skill_resource_page.dart';
+import '../../features/web_search/web_search_page.dart';
+import '../../features/web_search/web_search_profile_page.dart';
 
 part 'app_router.g.dart';
 
@@ -71,6 +73,25 @@ GoRouter appRouter(Ref ref) {
         pageBuilder: (context, state) =>
             materialPage(state, const SettingsPage()),
         routes: [
+          GoRoute(
+            path: 'web-search',
+            pageBuilder: (context, state) =>
+                materialPage(state, const WebSearchPage()),
+            routes: [
+              GoRoute(
+                path: 'new',
+                pageBuilder: (context, state) =>
+                    materialPage(state, const WebSearchProfilePage()),
+              ),
+              GoRoute(
+                path: ':id',
+                pageBuilder: (context, state) => materialPage(
+                  state,
+                  WebSearchProfilePage(profileId: state.pathParameters['id']),
+                ),
+              ),
+            ],
+          ),
           GoRoute(
             path: 'memories',
             pageBuilder: (context, state) =>

@@ -8,6 +8,7 @@
 - [初版实施计划](docs/implementation_plan.md)：从正式契约到首版验收的建设顺序。
 - [工程规范](AGENTS.md)：代码边界、数据安全、测试和 Android 操作约定。
 - [UI 规范](DESIGN.md)：Material 3 Expressive 组件、月色玻璃主题、交互和验收要求。
+- [网页搜索与读取](docs/web_search.md)：搜索提供方、工具契约、配置、凭据和结果处理。
 
 ## 开发检查
 

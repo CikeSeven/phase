@@ -358,16 +358,21 @@ final class ChatToolRuntimeFactoryProvider
         retry: null,
         name: r'chatToolRuntimeFactoryProvider',
         isAutoDispose: false,
-        dependencies: <ProviderOrFamily>[settingsStorageProvider],
+        dependencies: <ProviderOrFamily>[
+          settingsStorageProvider,
+          webSearchRepositoryProvider,
+        ],
         $allTransitiveDependencies: <ProviderOrFamily>[
           ChatToolRuntimeFactoryProvider.$allTransitiveDependencies0,
           ChatToolRuntimeFactoryProvider.$allTransitiveDependencies1,
+          ChatToolRuntimeFactoryProvider.$allTransitiveDependencies2,
         ],
       );
 
   static final $allTransitiveDependencies0 = settingsStorageProvider;
   static final $allTransitiveDependencies1 =
       SettingsStorageProvider.$allTransitiveDependencies0;
+  static final $allTransitiveDependencies2 = webSearchRepositoryProvider;
 
   @override
   String debugGetCreateSourceHash() => _$chatToolRuntimeFactoryHash();
@@ -385,7 +390,7 @@ final class ChatToolRuntimeFactoryProvider
 }
 
 String _$chatToolRuntimeFactoryHash() =>
-    r'd500cf9ea3985654d95a718cacca3428fc40777a';
+    r'022dc86797d64c503c896804e6d3201ff50cb4f6';
 
 @ProviderFor(chatRunFactory)
 final chatRunFactoryProvider = ChatRunFactoryProvider._();
@@ -415,6 +420,7 @@ final class ChatRunFactoryProvider
           ChatRunFactoryProvider.$allTransitiveDependencies2,
           ChatRunFactoryProvider.$allTransitiveDependencies3,
           ChatRunFactoryProvider.$allTransitiveDependencies4,
+          ChatRunFactoryProvider.$allTransitiveDependencies5,
         },
       );
 
@@ -423,8 +429,10 @@ final class ChatRunFactoryProvider
       ChatToolRuntimeFactoryProvider.$allTransitiveDependencies0;
   static final $allTransitiveDependencies2 =
       ChatToolRuntimeFactoryProvider.$allTransitiveDependencies1;
-  static final $allTransitiveDependencies3 = modelCatalogProvider;
-  static final $allTransitiveDependencies4 =
+  static final $allTransitiveDependencies3 =
+      ChatToolRuntimeFactoryProvider.$allTransitiveDependencies2;
+  static final $allTransitiveDependencies4 = modelCatalogProvider;
+  static final $allTransitiveDependencies5 =
       ModelCatalogProvider.$allTransitiveDependencies0;
 
   @override

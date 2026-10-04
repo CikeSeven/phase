@@ -51,6 +51,7 @@ final class ChatControllerProvider
           ChatControllerProvider.$allTransitiveDependencies12,
           ChatControllerProvider.$allTransitiveDependencies13,
           ChatControllerProvider.$allTransitiveDependencies14,
+          ChatControllerProvider.$allTransitiveDependencies15,
         },
       );
 
@@ -78,6 +79,8 @@ final class ChatControllerProvider
   static final $allTransitiveDependencies13 = chatRunFactoryProvider;
   static final $allTransitiveDependencies14 =
       ChatRunFactoryProvider.$allTransitiveDependencies0;
+  static final $allTransitiveDependencies15 =
+      ChatRunFactoryProvider.$allTransitiveDependencies3;
 
   @override
   String debugGetCreateSourceHash() => _$chatControllerHash();
@@ -95,7 +98,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'cec28be2fd0f7c46f8a3b056b671fa5836414a6a';
+String _$chatControllerHash() => r'5fe4ea6843b24026acc03b71b7bc4950df2a98fc';
 
 /// 页面操作入口和展示投影；循环、流缓冲及资源生命周期由本次驱动持有。
 

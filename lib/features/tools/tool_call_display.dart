@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_source.dart';
+import '../../../data/models/web_search_result.dart';
 import 'application_tool_display.dart';
 import 'tool_diff.dart';
 import 'tool_presentation.dart';
@@ -17,6 +18,8 @@ class ToolCallDisplay {
     this.copyText,
     this.copyLabel = '复制调用',
     this.showScreenshots = false,
+    this.webSearch,
+    this.webFetch,
   });
 
   final String? call;
@@ -26,6 +29,8 @@ class ToolCallDisplay {
   final String? copyText;
   final String copyLabel;
   final bool showScreenshots;
+  final WebSearchResult? webSearch;
+  final WebFetchResult? webFetch;
 
   static bool isBuiltIn(ToolCallRecord record) =>
       record.source?.kind != ToolSourceKind.mcp;
@@ -65,6 +70,8 @@ class ToolCallDisplay {
       'prepare_skill' =>
         args['skillId'] is String ? args['skillId'] as String : null,
       'http_request' => '${args['method'] ?? 'GET'} ${args['url'] ?? ''}',
+      'web_search' => (args['queries'] as List? ?? const []).join('；'),
+      'web_fetch' => args['url'] as String?,
       _ => null,
     };
   }
@@ -84,6 +91,16 @@ class ToolCallDisplay {
     final output = ToolPresentation.outputText(record);
     if (isBuiltIn(record)) {
       switch (record.toolName) {
+        case 'web_search':
+          return ToolCallDisplay(
+            output: output,
+            webSearch: WebSearchResult.tryParse(record.result),
+          );
+        case 'web_fetch':
+          return ToolCallDisplay(
+            output: output,
+            webFetch: WebFetchResult.tryParse(record.result),
+          );
         case 'wait_for_user':
           if (args['prompt'] case final String prompt) {
             return ToolCallDisplay(

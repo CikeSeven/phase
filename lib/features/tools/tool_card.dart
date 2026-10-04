@@ -20,6 +20,7 @@ import 'tool_diff.dart';
 import 'tool_diff_view.dart';
 import 'tool_presentation.dart';
 import 'tool_screenshot_preview.dart';
+import '../web_search/web_tool_result_view.dart';
 
 /// 默认收起为工具名与状态；展开后查看完整输入、输出和产物。
 ///
@@ -423,16 +424,23 @@ class _ToolCardState extends State<ToolCard>
                                 radius: AppRadius.fullAll,
                                 color: cardForeground.withValues(alpha: 0.2),
                               ),
-                            Text(
-                              output,
-                              key: ValueKey('tool-result-${record.id}'),
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                height: 1.5,
-                                color: record.status == ToolCallStatus.failed
-                                    ? colors.error
-                                    : colors.onSurface,
+                            if (display.webSearch != null ||
+                                display.webFetch != null)
+                              WebToolResultView(
+                                search: display.webSearch,
+                                fetch: display.webFetch,
+                              )
+                            else
+                              Text(
+                                output,
+                                key: ValueKey('tool-result-${record.id}'),
+                                style: theme.textTheme.bodyMedium?.copyWith(
+                                  height: 1.5,
+                                  color: record.status == ToolCallStatus.failed
+                                      ? colors.error
+                                      : colors.onSurface,
+                                ),
                               ),
-                            ),
                           ],
                           if (display.showScreenshots) ...[
                             for (final (:artifact, label: _) in artifacts)

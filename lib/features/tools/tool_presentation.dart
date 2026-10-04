@@ -23,6 +23,8 @@ class ToolPresentation {
     'system_info' => LucideIcons.clock,
     'read_file' => LucideIcons.fileText,
     'grep' || 'find' => LucideIcons.search,
+    'web_search' => LucideIcons.search,
+    'web_fetch' => LucideIcons.globe,
     'shell' => LucideIcons.terminal,
     'install_packages' => LucideIcons.download,
     'prepare_skill' => LucideIcons.folderPlus,
@@ -65,6 +67,8 @@ class ToolPresentation {
     'grep' => '搜索文件内容',
     'find' => '查找文件',
     'http_request' => 'HTTP 请求',
+    'web_search' => '搜索网页',
+    'web_fetch' => '读取网页',
     'inspect_ui' => '读取界面控件',
     'list_apps' => '获取应用列表',
     'open_app' => '打开应用',
@@ -171,6 +175,8 @@ class ToolPresentation {
 
   /// 关键参数的中文标签；未登记的参数用原始键名。
   static const _parameterLabels = <String, Map<String, String>>{
+    'web_search': {'queries': '搜索查询'},
+    'web_fetch': {'url': '网页地址'},
     'shizuku_display': {
       'action': '虚拟屏操作',
       'packageName': '目标应用',

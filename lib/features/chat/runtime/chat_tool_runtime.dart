@@ -20,6 +20,9 @@ import '../../../data/repositories/plan_repository.dart';
 import '../../../data/repositories/skill_repository.dart';
 import '../../../data/repositories/tool_call_repository.dart';
 import '../../../data/repositories/workspace_repository.dart';
+import '../../../data/repositories/web_search_repository.dart';
+import '../../../data/models/web_search_settings.dart';
+import '../../web_search/web_tools.dart';
 import '../context/context_configuration.dart';
 import '../context/read_history_tool.dart';
 import '../chat_operation.dart';
@@ -66,12 +69,14 @@ class ChatToolCatalog {
     required this.enabledTools,
     required this.policies,
     required this.mcpServers,
+    this.webSearch,
   });
   final ToolRegistry registry;
   final List<ToolSnapshot> snapshots;
   final Set<String> enabledTools;
   final Map<String, ToolPolicy> policies;
   final List<McpServerProfile> mcpServers;
+  final WebSearchSettings? webSearch;
 
   List<ToolDefinition> get definitions => [
     ...registry.definitionsFor(enabledTools, policies, includeDenied: true),
@@ -100,8 +105,10 @@ class ChatToolRuntimeFactory {
     required this.processes,
     required this.connections,
     required this.commandSnapshots,
+    this.web,
   });
   final ToolRegistry builtIns;
+  final WebSearchRepository? web;
   final ConversationRepository conversations;
   final AgentRunRepository runs;
   final ToolCallRepository calls;
@@ -170,6 +177,7 @@ class ChatToolRuntimeFactory {
     required WorkspaceSnapshot? workspace,
     required List<CommandChannelSnapshot> channels,
   }) async {
+    final webSettings = supportsTools ? web?.read() : null;
     final workspaces = workspace == null ? null : await loadWorkspaces();
     final skill = supportsTools
         ? await _skillTool(skillSnapshots, assistantId, workspace)
@@ -182,6 +190,7 @@ class ChatToolRuntimeFactory {
           inputMessageId: inputMessageId,
         ),
       if (supportsTools) ..._channelTools(channels),
+      if (webSettings != null) ...buildWebTools(web!, webSettings),
       for (final tool in builtIns.tools)
         if (tool is ShellTool)
           ShellTool(workspace: workspace)
@@ -217,6 +226,7 @@ class ChatToolRuntimeFactory {
     ];
     final fixedEnabled = {for (final snapshot in snapshots) snapshot.name};
     return ChatToolCatalog(
+      webSearch: webSettings,
       registry: registry,
       snapshots: snapshots,
       enabledTools: fixedEnabled,
@@ -278,6 +288,8 @@ class ChatToolRuntimeFactory {
           inputMessageId: run.inputMessageId,
         ),
       ..._channelTools(config.commandChannels),
+      if (web != null && config.webSearch != null)
+        ...buildWebTools(web!, config.webSearch!),
       for (final tool in builtIns.tools)
         if (!_environmentTools.contains(tool.name))
           if (tool is WaitForUserTool) WaitForUserTool(waitForUser) else tool,
@@ -327,6 +339,12 @@ class ChatToolRuntimeFactory {
         );
       },
       currentPolicy: (tool) async {
+        if (tool is WebSearchTool &&
+                !tool.repository.allowed(tool.settings, fetch: false) ||
+            tool is WebFetchTool &&
+                !tool.repository.allowed(tool.settings, fetch: true)) {
+          return ToolPolicy.deny;
+        }
         if (tool is ShizukuDisplayTool &&
             !settings.readCommandChannels().enabled(tool.channel)) {
           return ToolPolicy.deny;
