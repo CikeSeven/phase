@@ -28,6 +28,7 @@ String requestPurposeLabel(ModelRequestPurpose purpose) => switch (purpose) {
   ModelRequestPurpose.chat => '主聊天',
   ModelRequestPurpose.contextSummary => '历史摘要',
   ModelRequestPurpose.turnPrefixSummary => '任务前缀摘要',
+  ModelRequestPurpose.conversationTitle => '会话标题',
 };
 
 String requestStatusLabel(ModelRequestStatus status) => switch (status) {
@@ -109,7 +110,7 @@ class _UsagePanelState extends ConsumerState<UsagePanel> {
               ],
             ),
             const SizedBox(height: 8),
-            Text('已报告用量 · ${totals.requestCount} 次实际请求（摘要 $summaryCount 次）'),
+            Text('已报告用量 · ${totals.requestCount} 次实际请求（摘要/标题 $summaryCount 次）'),
             const Text('仅统计有请求记录的已报告用量；升级前档案与继承记录不计入。不代表当前窗口占用或账单金额。'),
             if (totals.includesPending) const Text('包含进行中请求，统计尚未收口'),
             if (totals.requestCount == 0)
@@ -141,6 +142,7 @@ class _UsagePanelState extends ConsumerState<UsagePanel> {
               ModelRequestPurpose.chat,
               ModelRequestPurpose.contextSummary,
               ModelRequestPurpose.turnPrefixSummary,
+              ModelRequestPurpose.conversationTitle,
             ])
               if (totals.requests.any((r) => r.purpose == purpose))
                 Text(

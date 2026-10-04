@@ -7,6 +7,7 @@ import '../../core/error/failure.dart';
 import '../../core/utils/id.dart';
 import '../../core/utils/logger.dart';
 import '../../data/datasources/local/model_catalog_cache.dart';
+import '../../data/datasources/local/secure_key_storage.dart';
 import '../../data/datasources/local/settings_storage.dart';
 import '../../data/models/agent_plan.dart';
 import '../../data/models/agent_run.dart';
@@ -21,6 +22,7 @@ import '../../data/repositories/agent_run_repository.dart';
 import '../../data/repositories/assistant_repository.dart';
 import '../../data/repositories/conversation_repository.dart';
 import '../../data/repositories/model_request_repository.dart';
+import '../../providers/provider_factory.dart';
 import '../execution/execution_controller.dart';
 import '../tools/run_recovery_controller.dart';
 import '../tools/tool.dart';
@@ -29,6 +31,7 @@ import 'chat_operation.dart';
 import 'chat_providers.dart';
 import 'chat_state.dart';
 import 'context/context_configuration.dart';
+import 'conversation_title_generator.dart';
 import 'conversation_providers.dart';
 import 'model_selection.dart';
 import 'runtime/chat_run_driver.dart';
@@ -51,6 +54,8 @@ part 'chat_controller.g.dart';
     currentAssistant,
     ActiveConversation,
     settingsStorage,
+    secureKeyStorage,
+    aiProviderFactory,
     modelCatalog,
     chatRunFactory,
     chatToolRuntimeFactory,
@@ -60,6 +65,7 @@ class ChatController extends _$ChatController {
   final Set<ChatOperation> _operations = {};
   final Map<String, ChatOperation> _conversationOperations = {};
   final Map<ChatOperation, ChatRunDriver> _drivers = {};
+  final Set<String> _titleGenerationConversations = {};
   int _viewRevision = 0;
   bool _busyFor(String? conversationId) =>
       conversationId != null &&
@@ -856,9 +862,42 @@ class ChatController extends _$ChatController {
         panelCancellation: panelCancellation,
         onPanelAccepted: onPanelAccepted,
       );
+      _scheduleConversationTitle(
+        run: run,
+        selection: selection,
+        conversations: repository,
+        runs: runs,
+        requests: requests,
+      );
     } finally {
       if (identical(_drivers[operation], driver)) _drivers.remove(operation);
     }
+  }
+
+  void _scheduleConversationTitle({
+    required AgentRun run,
+    required ChatModelSelection selection,
+    required ConversationRepository conversations,
+    required AgentRunRepository runs,
+    required ModelRequestRepository requests,
+  }) {
+    if (!_titleGenerationConversations.add(run.conversationId)) return;
+    unawaited(() async {
+      try {
+        final completedRun = await runs.getById(run.id);
+        if (completedRun?.status != RunStatus.completed) return;
+        await ConversationTitleGenerator(
+          conversations: conversations,
+          requests: requests,
+          keys: ref.read(secureKeyStorageProvider),
+          buildProvider: ref.read(aiProviderFactoryProvider),
+        ).generate(run: completedRun!, selection: selection);
+      } on Object {
+        AppLogger.warning('自动生成会话标题失败');
+      } finally {
+        _titleGenerationConversations.remove(run.conversationId);
+      }
+    }());
   }
 
   /// 展示更新不提交业务数据；旧驱动与其他会话不能回写当前页面附件。
@@ -929,6 +968,13 @@ class ChatController extends _$ChatController {
         repository: repository,
         selection: selection,
         resuming: true,
+      );
+      _scheduleConversationTitle(
+        run: run,
+        selection: selection,
+        conversations: repository,
+        runs: await ref.read(agentRunRepositoryProvider.future),
+        requests: await ref.read(modelRequestRepositoryProvider.future),
       );
       operation.throwIfCleanupFailed();
     } finally {

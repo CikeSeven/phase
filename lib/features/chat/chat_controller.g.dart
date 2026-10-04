@@ -29,6 +29,8 @@ final class ChatControllerProvider
           currentAssistantProvider,
           activeConversationProvider,
           settingsStorageProvider,
+          secureKeyStorageProvider,
+          aiProviderFactoryProvider,
           modelCatalogProvider,
           chatRunFactoryProvider,
           chatToolRuntimeFactoryProvider,
@@ -47,6 +49,8 @@ final class ChatControllerProvider
           ChatControllerProvider.$allTransitiveDependencies10,
           ChatControllerProvider.$allTransitiveDependencies11,
           ChatControllerProvider.$allTransitiveDependencies12,
+          ChatControllerProvider.$allTransitiveDependencies13,
+          ChatControllerProvider.$allTransitiveDependencies14,
         },
       );
 
@@ -66,11 +70,13 @@ final class ChatControllerProvider
   static final $allTransitiveDependencies7 =
       ModelSelectionProvider.$allTransitiveDependencies6;
   static final $allTransitiveDependencies8 = currentAssistantProvider;
-  static final $allTransitiveDependencies9 = modelCatalogProvider;
-  static final $allTransitiveDependencies10 =
-      ModelCatalogProvider.$allTransitiveDependencies0;
-  static final $allTransitiveDependencies11 = chatRunFactoryProvider;
+  static final $allTransitiveDependencies9 = secureKeyStorageProvider;
+  static final $allTransitiveDependencies10 = aiProviderFactoryProvider;
+  static final $allTransitiveDependencies11 = modelCatalogProvider;
   static final $allTransitiveDependencies12 =
+      ModelCatalogProvider.$allTransitiveDependencies0;
+  static final $allTransitiveDependencies13 = chatRunFactoryProvider;
+  static final $allTransitiveDependencies14 =
       ChatRunFactoryProvider.$allTransitiveDependencies0;
 
   @override
@@ -89,7 +95,7 @@ final class ChatControllerProvider
   }
 }
 
-String _$chatControllerHash() => r'607c663bcc1e8e1884cdb4362019cac3be85fc55';
+String _$chatControllerHash() => r'cec28be2fd0f7c46f8a3b056b671fa5836414a6a';
 
 /// 页面操作入口和展示投影；循环、流缓冲及资源生命周期由本次驱动持有。
 

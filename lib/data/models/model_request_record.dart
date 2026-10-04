@@ -1,6 +1,11 @@
 import 'token_usage.dart';
 
-enum ModelRequestPurpose { chat, contextSummary, turnPrefixSummary }
+enum ModelRequestPurpose {
+  chat,
+  contextSummary,
+  turnPrefixSummary,
+  conversationTitle,
+}
 
 enum ModelRequestStatus {
   prepared,

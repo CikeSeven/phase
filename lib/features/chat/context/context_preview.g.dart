@@ -58,7 +58,11 @@ final class ContextPreviewProvider
       ChatControllerProvider.$allTransitiveDependencies11;
   static final $allTransitiveDependencies13 =
       ChatControllerProvider.$allTransitiveDependencies12;
-  static final $allTransitiveDependencies14 = conversationPermissionsProvider;
+  static final $allTransitiveDependencies14 =
+      ChatControllerProvider.$allTransitiveDependencies13;
+  static final $allTransitiveDependencies15 =
+      ChatControllerProvider.$allTransitiveDependencies14;
+  static final $allTransitiveDependencies16 = conversationPermissionsProvider;
 
   @override
   String debugGetCreateSourceHash() => _$contextPreviewHash();
@@ -126,6 +130,8 @@ final class ContextPreviewFamily extends $Family
           ContextPreviewProvider.$allTransitiveDependencies12,
           ContextPreviewProvider.$allTransitiveDependencies13,
           ContextPreviewProvider.$allTransitiveDependencies14,
+          ContextPreviewProvider.$allTransitiveDependencies15,
+          ContextPreviewProvider.$allTransitiveDependencies16,
         },
         isAutoDispose: true,
       );
