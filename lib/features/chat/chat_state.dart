@@ -33,10 +33,23 @@ class ChatState {
   final String? activeConversationId;
   final Map<String, ChatSessionState> sessions;
 
-  List<String> get runningConversationIds => [
-    for (final entry in sessions.entries)
-      if (entry.value.isGenerating) entry.key,
-  ];
+  List<String> get runningConversationIds {
+    final activeRunning = isGenerating && activeConversationId != null;
+    final ids = [
+      for (final entry in sessions.entries)
+        if (entry.value.isGenerating) entry.key,
+    ];
+    if (activeRunning && !ids.contains(activeConversationId)) {
+      ids.add(activeConversationId!);
+    }
+    return ids;
+  }
+
+  /// 某会话是否正在运行（包含当前正在生成或后台会话正在生成）。
+  bool isConversationRunning(String conversationId) {
+    if (activeConversationId == conversationId && isGenerating) return true;
+    return sessions[conversationId]?.isGenerating ?? false;
+  }
 
   ChatState forConversation(String? conversationId) {
     if (conversationId == null) {

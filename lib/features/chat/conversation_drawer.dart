@@ -12,6 +12,7 @@ import '../../../core/theme/frosted_surface.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
+import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_menu_anchor.dart';
 import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/conversation.dart';
@@ -340,6 +341,11 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
         (active) => active.conversationId == conversation.id,
       ),
     );
+    final isRunning = ref.watch(
+      chatControllerProvider.select(
+        (state) => state.isConversationRunning(conversation.id),
+      ),
+    );
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final label = TextPainter(
@@ -353,6 +359,7 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
     label.dispose();
     return Semantics(
       selected: selected,
+      value: isRunning ? '运行中' : null,
       child: AppInteractiveSurface(
         key: ValueKey('conversation-row-${conversation.id}'),
         selected: selected,
@@ -402,6 +409,13 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                           ),
                           const SizedBox(width: AppSpacing.xs),
                         ],
+                        if (isRunning) ...[
+                          _ConversationRunningBadge(
+                            selected: selected,
+                            conversationId: conversation.id,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                        ],
                         Expanded(
                           child: Text(
                             _relativeTime(conversation.updatedAt),
@@ -435,6 +449,15 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
                   ),
                 ),
                 menuChildren: [
+                  if (isRunning)
+                    AppMenuItemButton(
+                      key: ValueKey('stop-conversation-${conversation.id}'),
+                      leadingIcon: const Icon(LucideIcons.square),
+                      onPressed: () => ref
+                          .read(chatControllerProvider.notifier)
+                          .stopConversation(conversation.id),
+                      child: const Text('停止运行'),
+                    ),
                   AppMenuItemButton(
                     leadingIcon: const Icon(LucideIcons.pencil),
                     onPressed: () => _rename(context, ref),
@@ -597,6 +620,16 @@ class _ConversationTileState extends ConsumerState<_ConversationTile> {
     );
     if (confirmed != true || !context.mounted) return;
     final deleted = await _runGuarded(context, () async {
+      final isRunning = ref.read(
+        chatControllerProvider.select(
+          (state) => state.isConversationRunning(conversation.id),
+        ),
+      );
+      if (isRunning) {
+        ref
+            .read(chatControllerProvider.notifier)
+            .stopConversation(conversation.id);
+      }
       final repository = await ref.read(conversationRepositoryProvider.future);
       await repository.deleteConversation(conversation.id);
     });
@@ -700,6 +733,62 @@ class _RenameConversationDialogState extends State<_RenameConversationDialog> {
         ),
         FilledButton(onPressed: _save, child: const Text('保存')),
       ],
+    );
+  }
+}
+
+class _ConversationRunningBadge extends StatelessWidget {
+  const _ConversationRunningBadge({
+    required this.selected,
+    required this.conversationId,
+  });
+
+  final bool selected;
+  final String conversationId;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final foregroundColor = selected
+        ? colors.onPrimaryContainer
+        : colors.primary;
+    final backgroundColor = selected
+        ? colors.onPrimaryContainer.withValues(alpha: 0.14)
+        : colors.primary.withValues(alpha: 0.12);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: backgroundColor,
+        borderRadius: AppRadius.extraSmallAll,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.xs + 2,
+          vertical: 2,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ExcludeSemantics(
+              child: AppLoadingIndicator.small(
+                size: 12,
+                color: foregroundColor,
+              ),
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Text(
+              '运行中',
+              key: ValueKey('conversation-running-$conversationId'),
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: foregroundColor,
+                fontWeight: FontWeight.w600,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
