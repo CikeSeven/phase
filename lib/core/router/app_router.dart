@@ -1,4 +1,5 @@
 import '../../features/memory/memories_page.dart';
+import '../../features/workspace/workspace_packages_page.dart';
 import '../../features/workspace/workspaces_page.dart';
 import '../../features/workspace/workspace_files_page.dart';
 
@@ -147,6 +148,11 @@ GoRouter appRouter(Ref ref) {
             pageBuilder: (context, state) =>
                 materialPage(state, const WorkspacesPage()),
             routes: [
+              GoRoute(
+                path: 'packages',
+                pageBuilder: (context, state) =>
+                    materialPage(state, const WorkspacePackagesPage()),
+              ),
               GoRoute(
                 path: ':id',
                 pageBuilder: (context, state) => materialPage(

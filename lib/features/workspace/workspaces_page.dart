@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
@@ -9,6 +10,7 @@ import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_linear_progress_indicator.dart';
+import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../data/models/workspace.dart';
 import '../commands/command_channels_section.dart';
@@ -45,16 +47,20 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     final dependencyRecords =
         environment.value?.installedDependencies ??
         const <String, InstalledDependency>{};
-    final installedOfficeGroups = DependencyProfile.office
-        .where((profile) => dependencyRecords.containsKey(profile.id))
+    final installedBundles = DependencyBundle.optionalBundles
+        .where((b) => b.isInstalled(dependencyRecords))
         .length;
-    final officeDependenciesInstalled =
-        installedOfficeGroups == DependencyProfile.office.length;
-    final officeDependencyStatus = installedOfficeGroups == 0
-        ? '未安装'
-        : officeDependenciesInstalled
-        ? '已安装'
-        : '部分安装 · $installedOfficeGroups/${DependencyProfile.office.length} 组';
+    final totalBundles = DependencyBundle.optionalBundles.length;
+    final String packagesSubtitle;
+    if (!baseDependenciesInstalled) {
+      packagesSubtitle = '核心环境需要修复';
+    } else if (installedBundles == totalBundles) {
+      packagesSubtitle = '核心环境已就绪 · 已安装全部 $totalBundles 项扩展包';
+    } else if (installedBundles > 0) {
+      packagesSubtitle = '核心环境已就绪 · 已安装 $installedBundles/$totalBundles 项扩展包';
+    } else {
+      packagesSubtitle = '核心环境已就绪 · $totalBundles 项可选扩展包可用';
+    }
     final needsRepair = !baseDependenciesInstalled;
     final VoidCallback? onInstallEnvironment =
         environment.hasValue &&
@@ -122,17 +128,11 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
           )
         else
           IconButton(
-            tooltip: '依赖详情',
-            onPressed: () =>
-                _showDependencyInfo(environment.value!.installedDependencies),
-            icon: const Icon(LucideIcons.info),
+            tooltip: '卸载 Ubuntu',
+            style: environmentActionStyle,
+            onPressed: _confirmEnvironmentUninstall,
+            icon: const Icon(LucideIcons.trash2),
           ),
-        IconButton(
-          tooltip: '卸载 Ubuntu',
-          style: environmentActionStyle,
-          onPressed: _confirmEnvironmentUninstall,
-          icon: const Icon(LucideIcons.trash2),
-        ),
       ] else
         FilledButton.icon(
           style: FilledButton.styleFrom(
@@ -348,53 +348,25 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
                         style: theme.textTheme.bodyMedium,
                       ),
                     ),
-                  if (environment.value?.ready == true &&
-                      !operation.busy &&
-                      !dependencies.busy) ...[
-                    const Divider(height: AppSpacing.xl),
-                    Wrap(
-                      alignment: WrapAlignment.spaceBetween,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      spacing: AppSpacing.l,
-                      runSpacing: AppSpacing.s,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('办公依赖', style: theme.textTheme.titleSmall),
-                            const SizedBox(height: AppSpacing.xs),
-                            Text(
-                              officeDependencyStatus,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colors.onSurfaceVariant,
-                              ),
-                            ),
-                          ],
-                        ),
-                        FilledButton.tonalIcon(
-                          onPressed: _confirmOfficeInstall,
-                          icon: Icon(
-                            officeDependenciesInstalled
-                                ? LucideIcons.refreshCw
-                                : LucideIcons.download,
-                            size: 18,
-                          ),
-                          label: Text(
-                            officeDependenciesInstalled
-                                ? '修复办公依赖'
-                                : installedOfficeGroups == 0
-                                ? '安装办公依赖'
-                                : '继续安装办公依赖',
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
                 ],
               ),
             ),
           ),
+          if (environment.value?.ready == true) ...[
+            const SizedBox(height: AppSpacing.l),
+            AppListTile(
+              leading: const AppIconBadge(
+                icon: LucideIcons.boxes,
+                tone: AppTone.teal,
+                size: 40,
+                iconSize: 20,
+              ),
+              title: const Text('软件包管理'),
+              subtitle: Text(packagesSubtitle),
+              trailing: const Icon(LucideIcons.chevronRight),
+              onTap: () => context.push('/settings/workspaces/packages'),
+            ),
+          ],
           const SizedBox(height: AppSpacing.l),
           const CommandChannelsSection(),
         ],
@@ -485,113 +457,6 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
       return;
     }
     await ref.read(dependencyControllerProvider.notifier).install();
-  }
-
-  Future<void> _confirmOfficeInstall() async {
-    final environment = ref.read(runtimeEnvironmentProvider).value;
-    final operation = ref.read(environmentControllerProvider);
-    final dependencyOperation = ref.read(dependencyControllerProvider);
-    if (operation.busy ||
-        dependencyOperation.busy ||
-        environment?.ready != true) {
-      return;
-    }
-    final records = environment!.installedDependencies;
-    final installedGroups = DependencyProfile.office
-        .where((profile) => records.containsKey(profile.id))
-        .length;
-    final repairing = installedGroups > 0;
-    final allowed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AppDialog(
-        title: repairing ? '修复办公依赖？' : '安装办公依赖？',
-        icon: LucideIcons.fileText,
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('将安装以下 Ubuntu 命令行依赖：'),
-            for (final profile in DependencyProfile.office) ...[
-              const SizedBox(height: AppSpacing.m),
-              Text(
-                '${profile.label}\n${profile.packages.join('、')}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-            const SizedBox(height: AppSpacing.l),
-            const Text(
-              '此可选包不安装桌面环境。需要联网和额外存储空间；安装内容保留在 Ubuntu 中，卸载 Ubuntu 时一并删除。',
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text(repairing ? '修复' : '安装'),
-          ),
-        ],
-      ),
-    );
-    if (allowed == true && mounted) {
-      await ref
-          .read(dependencyControllerProvider.notifier)
-          .installSelected(profiles: DependencyProfile.office, title: '办公依赖');
-    }
-  }
-
-  Future<void> _showDependencyInfo(
-    Map<String, InstalledDependency> records,
-  ) async {
-    var latest = records.values.firstOrNull?.installedAt ?? DateTime.now();
-    for (final record in records.values) {
-      if (record.installedAt.isAfter(latest)) latest = record.installedAt;
-    }
-    final baseInstalled = DependencyProfile.base.every(
-      (profile) => records.containsKey(profile.id),
-    );
-    final officeInstalled = DependencyProfile.office
-        .where((profile) => records.containsKey(profile.id))
-        .length;
-    await showDialog<void>(
-      context: context,
-      builder: (context) => AppDialog(
-        title: '依赖详情',
-        icon: baseInstalled
-            ? LucideIcons.circleCheck
-            : LucideIcons.triangleAlert,
-        tone: baseInstalled ? AppTone.teal : AppTone.error,
-        description: baseInstalled
-            ? '基础依赖完整 · 最近安装 ${_formatDate(latest)}'
-            : '基础依赖部分未安装',
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('基础开发依赖'),
-            for (final profile in DependencyProfile.base)
-              Text('${profile.label}：${records[profile.id]?.version ?? '未安装'}'),
-            const SizedBox(height: 8),
-            Text('包含软件包：${DependencyProfile.completePackages}'),
-            const SizedBox(height: AppSpacing.l),
-            Text('办公依赖：$officeInstalled/${DependencyProfile.office.length} 组'),
-            for (final profile in DependencyProfile.office)
-              Text('${profile.label}：${records[profile.id]?.version ?? '未安装'}'),
-            const SizedBox(height: 8),
-            Text('包含软件包：${DependencyProfile.officeCompletePackages}'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('关闭'),
-          ),
-        ],
-      ),
-    );
   }
 }
 
@@ -691,6 +556,3 @@ String _phase(EnvironmentPhase? phase) => switch (phase) {
   EnvironmentPhase.failed => '安装失败',
   EnvironmentPhase.cancelled => '已取消',
 };
-
-String _formatDate(DateTime time) =>
-    '${time.year}-${time.month.toString().padLeft(2, '0')}-${time.day.toString().padLeft(2, '0')}';

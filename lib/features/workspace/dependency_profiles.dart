@@ -1,3 +1,6 @@
+import 'package:flutter/widgets.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
 /// 依赖安装的固定白名单；设置页与后续模型工具共用同一来源。
 enum DependencyStep {
   repairing,
@@ -160,4 +163,52 @@ class DependencyProfile {
     }
     return null;
   }
+}
+
+/// 组织可选依赖包组；支持页面渲染、状态统计与后续扩展。
+class DependencyBundle {
+  const DependencyBundle({
+    required this.id,
+    required this.label,
+    required this.description,
+    required this.profiles,
+    required this.icon,
+  });
+
+  final String id;
+  final String label;
+  final String description;
+  final List<DependencyProfile> profiles;
+  final IconData icon;
+
+  static const office = DependencyBundle(
+    id: 'office',
+    label: '办公与文档处理',
+    description: '无界面 Office 文档转换、表格数据脚本、PDF 处理与 OCR 识别',
+    profiles: DependencyProfile.office,
+    icon: LucideIcons.fileText,
+  );
+
+  static const optionalBundles = [office];
+
+  int installedCount(Map<String, dynamic> records) =>
+      profiles.where((profile) => records.containsKey(profile.id)).length;
+
+  bool isInstalled(Map<String, dynamic> records) =>
+      profiles.every((profile) => records.containsKey(profile.id));
+
+  bool isPartiallyInstalled(Map<String, dynamic> records) {
+    final count = installedCount(records);
+    return count > 0 && count < profiles.length;
+  }
+
+  String statusText(Map<String, dynamic> records) {
+    final count = installedCount(records);
+    if (count == 0) return '未安装';
+    if (count == profiles.length) return '已安装';
+    return '部分安装 · $count/${profiles.length} 组';
+  }
+
+  String get completePackages =>
+      profiles.expand((profile) => profile.packages).join('、');
 }
