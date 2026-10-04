@@ -49,6 +49,13 @@ class WebSearchTool extends Tool {
         'items': {'type': 'string', 'minLength': 1, 'maxLength': 2048},
         'description': '1 至 ${settings.maxQueries} 个聚焦的搜索查询；完全相同的查询只执行一次。',
       },
+      'max_results': {
+        'type': 'integer',
+        'minimum': 1,
+        'maximum': 20,
+        'description':
+            '期望返回的最大来源数 (1–20)。可选，不填写默认使用用户配置的 ${settings.maxResults} 条。',
+      },
     },
     'required': ['queries'],
     'additionalProperties': false,
@@ -66,14 +73,24 @@ class WebSearchTool extends Tool {
   @override
   ToolPolicy get defaultPolicy => ToolPolicy.allow;
   @override
-  String describeAction(Map<String, dynamic> arguments) =>
-      '搜索网页：${(arguments['queries'] as List? ?? const []).join('；')}';
+  String describeAction(Map<String, dynamic> arguments) {
+    final queries = (arguments['queries'] as List? ?? const []).join('；');
+    final max = arguments['max_results'] ?? arguments['maxResults'];
+    return max != null ? '搜索网页（最多 $max 条）：$queries' : '搜索网页：$queries';
+  }
 
   @override
   String? validateArguments(Map<String, dynamic> arguments) {
     final queries = arguments['queries'];
     if (queries is! List || queries.any((query) => query is! String)) {
       return 'queries 须为字符串数组';
+    }
+    final rawMax = arguments['max_results'] ?? arguments['maxResults'];
+    if (rawMax != null) {
+      final max = rawMax is num ? rawMax.toInt() : null;
+      if (max == null || max < 1 || max > 20) {
+        return 'max_results 须为 1 至 20 的整数';
+      }
     }
     try {
       WebSearchRepository.validateQueries(
@@ -99,10 +116,14 @@ class WebSearchTool extends Tool {
       return ToolOutcome.failure(validation, errorCode: 'invalidArguments');
     }
     onProgress?.call('正在搜索网页');
+    final rawMax = arguments['max_results'] ?? arguments['maxResults'];
+    final requestedMax = rawMax is num ? rawMax.toInt() : null;
+    final effectiveMax = requestedMax?.clamp(1, 20) ?? settings.maxResults;
     try {
       final result = await repository.search(
         settings,
         (arguments['queries'] as List).cast<String>(),
+        maxResults: effectiveMax,
         cancellation: cancellation.whenCancelled,
       );
       cancellation.throwIfCancelled();

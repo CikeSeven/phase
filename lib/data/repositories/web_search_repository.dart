@@ -259,6 +259,7 @@ class WebSearchRepository {
   Future<WebSearchResult> search(
     WebSearchSettings snapshot,
     List<String> queries, {
+    int? maxResults,
     Future<void>? cancellation,
   }) async {
     final accepted = validateQueries(queries, snapshot.maxQueries);
@@ -272,11 +273,13 @@ class WebSearchRepository {
     if (!profile.enabled || profile.deleting) {
       throw const WebFailure('disabled', '当前搜索服务已停用');
     }
+    final effectiveMax = (maxResults ?? snapshot.maxResults).clamp(1, 20);
     return _search(
       profile,
       snapshot,
       accepted,
       cancellation,
+      maxResultsOverride: effectiveMax,
       enforceAuthorization: true,
     );
   }
@@ -294,6 +297,7 @@ class WebSearchRepository {
       settings,
       ['Flutter documentation'],
       cancellation,
+      maxResultsOverride: 1,
       draftKey: apiKey,
     );
   }
@@ -303,9 +307,11 @@ class WebSearchRepository {
     WebSearchSettings settings,
     List<String> queries,
     Future<void>? cancellation, {
+    int? maxResultsOverride,
     String? draftKey,
     bool enforceAuthorization = false,
   }) async {
+    final effectiveMax = maxResultsOverride ?? settings.maxResults;
     final scope = _request(
       Duration(seconds: settings.searchTimeoutSeconds),
       cancellation,
@@ -342,7 +348,7 @@ class WebSearchRepository {
           try {
             pages[entry.$1] = await provider.search(
               query: entry.$2,
-              maxResults: settings.maxResults,
+              maxResults: effectiveMax,
               profile: profile,
               apiKey: apiKey,
               scope: scope,
@@ -358,7 +364,7 @@ class WebSearchRepository {
         throw const WebFailure('invalidResponse', '搜索服务返回的结果无法解析');
       }
       scope.check();
-      return _merge(queries, pages.cast<WebSearchPage>(), settings.maxResults);
+      return _merge(queries, pages.cast<WebSearchPage>(), effectiveMax);
     } finally {
       _closeRequest(scope);
     }
@@ -392,12 +398,16 @@ class WebSearchRepository {
 
   WebSearchProvider _provider(WebSearchProviderKind kind) => switch (kind) {
     WebSearchProviderKind.duckDuckGo => DuckduckgoSearchProvider(_http),
+    WebSearchProviderKind.bing => BingSearchProvider(_http),
     WebSearchProviderKind.deepseek => DeepseekSearchProvider(_http),
     WebSearchProviderKind.exa => ExaSearchProvider(_http),
     WebSearchProviderKind.brave => BraveSearchProvider(_http),
     WebSearchProviderKind.tavily => TavilySearchProvider(_http),
     WebSearchProviderKind.perplexity => PerplexitySearchProvider(_http),
     WebSearchProviderKind.searxng => SearxngSearchProvider(_http),
+    WebSearchProviderKind.bocha => BochaSearchProvider(_http),
+    WebSearchProviderKind.serper => SerperSearchProvider(_http),
+    WebSearchProviderKind.jina => JinaSearchProvider(_http),
   };
 
   WebSearchResult _merge(

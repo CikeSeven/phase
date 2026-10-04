@@ -4,17 +4,24 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/error/failure.dart';
+import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/widgets/app_bottom_bar.dart';
+import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_empty_state.dart';
+import '../../core/widgets/app_icon_badge.dart';
+import '../../core/widgets/app_interactive_surface.dart';
 import '../../core/widgets/app_loading_indicator.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/app_section.dart';
 import '../../core/widgets/app_snack_bar.dart';
+import '../../data/models/web_search_settings.dart';
 import 'web_search_controller.dart';
 import 'web_search_form_widgets.dart';
 
 class WebSearchPage extends ConsumerWidget {
   const WebSearchPage({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) => ref
       .watch(webSearchControllerProvider)
@@ -44,6 +51,7 @@ class WebSearchPage extends ConsumerWidget {
 class _WebSearchSettingsView extends ConsumerStatefulWidget {
   const _WebSearchSettingsView({required this.state});
   final WebSearchState state;
+
   @override
   ConsumerState<_WebSearchSettingsView> createState() =>
       _WebSearchSettingsViewState();
@@ -52,13 +60,7 @@ class _WebSearchSettingsView extends ConsumerStatefulWidget {
 class _WebSearchSettingsViewState
     extends ConsumerState<_WebSearchSettingsView> {
   final _form = GlobalKey<FormState>();
-  final _queries = TextEditingController();
   final _results = TextEditingController();
-  final _searchTimeout = TextEditingController();
-  final _fetchTimeout = TextEditingController();
-  final _pageSize = TextEditingController();
-  bool _searchEnabled = true;
-  bool _fetchEnabled = true;
   bool _dirty = false;
   String? _error;
 
@@ -76,43 +78,26 @@ class _WebSearchSettingsViewState
 
   void _loadOptions() {
     final settings = widget.state.settings;
-    _searchEnabled = settings.searchEnabled;
-    _fetchEnabled = settings.fetchEnabled;
-    _queries.text = '${settings.maxQueries}';
     _results.text = '${settings.maxResults}';
-    _searchTimeout.text = '${settings.searchTimeoutSeconds}';
-    _fetchTimeout.text = '${settings.fetchTimeoutSeconds}';
-    _pageSize.text = '${settings.maxPageCharacters}';
   }
 
   void _changed([String? _]) => setState(() {
     _dirty = true;
     _error = null;
   });
+
   @override
   void dispose() {
-    for (final controller in [
-      _queries,
-      _results,
-      _searchTimeout,
-      _fetchTimeout,
-      _pageSize,
-    ]) {
-      controller.dispose();
-    }
+    _results.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     if (widget.state.busy || !_form.currentState!.validate()) return;
     final settings = widget.state.settings.copyWith(
-      searchEnabled: _searchEnabled,
-      fetchEnabled: _fetchEnabled,
-      maxQueries: int.parse(_queries.text.trim()),
+      searchEnabled: true,
+      fetchEnabled: true,
       maxResults: int.parse(_results.text.trim()),
-      searchTimeoutSeconds: int.parse(_searchTimeout.text.trim()),
-      fetchTimeoutSeconds: int.parse(_fetchTimeout.text.trim()),
-      maxPageCharacters: int.parse(_pageSize.text.trim()),
     );
     try {
       await ref
@@ -134,6 +119,17 @@ class _WebSearchSettingsViewState
 
   Future<void> _select(String id) async {
     try {
+      if (_dirty && _form.currentState?.validate() == true) {
+        final settings = widget.state.settings.copyWith(
+          searchEnabled: true,
+          fetchEnabled: true,
+          maxResults: int.parse(_results.text.trim()),
+        );
+        await ref
+            .read(webSearchControllerProvider.notifier)
+            .saveOptions(settings);
+        if (mounted) setState(() => _dirty = false);
+      }
       await ref.read(webSearchControllerProvider.notifier).select(id);
     } on Failure catch (error) {
       if (mounted) {
@@ -152,10 +148,8 @@ class _WebSearchSettingsViewState
   Widget build(BuildContext context) {
     final state = widget.state;
     final theme = Theme.of(context);
-    Widget heading(String text) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.l),
-      child: Text(text, style: theme.textTheme.titleMedium),
-    );
+    final colors = theme.colorScheme;
+
     return WebDraftBackGuard(
       dirty: _dirty,
       busy: state.busy,
@@ -171,117 +165,303 @@ class _WebSearchSettingsViewState
           ),
         ],
         bottomBar: AppBottomBar(
-          child: FilledButton.icon(
-            onPressed: state.busy || !_dirty ? null : _save,
-            icon: state.busy
-                ? const AppLoadingIndicator.small()
-                : const Icon(LucideIcons.check),
-            label: Text(state.busy ? '保存中…' : '保存设置'),
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 688),
+              child: SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: state.busy || !_dirty ? null : _save,
+                  icon: state.busy
+                      ? const AppLoadingIndicator.small()
+                      : Icon(
+                          _dirty ? LucideIcons.check : LucideIcons.checkCheck,
+                        ),
+                  label: Text(
+                    state.busy ? '保存中…' : (_dirty ? '保存设置' : '已是最新设置'),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
-        body: Form(
-          key: _form,
-          child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.l),
-            children: [
-              SwitchListTile.adaptive(
-                title: const Text('网页搜索'),
-                value: _searchEnabled,
-                onChanged: state.busy
-                    ? null
-                    : (value) {
-                        _searchEnabled = value;
-                        _changed();
-                      },
-              ),
-              SwitchListTile.adaptive(
-                title: const Text('网页读取'),
-                value: _fetchEnabled,
-                onChanged: state.busy
-                    ? null
-                    : (value) {
-                        _fetchEnabled = value;
-                        _changed();
-                      },
-              ),
-              heading('搜索服务'),
-              if (state.settings.profiles.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(AppSpacing.l),
-                  child: Text('尚未添加搜索服务'),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 688),
+            child: Form(
+              key: _form,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.l,
+                  AppSpacing.l,
+                  AppSpacing.l,
+                  AppSpacing.xxl,
                 ),
-              for (final profile in state.settings.profiles)
-                ListTile(
-                  selected: profile.id == state.settings.selectedProfileId,
-                  leading: Icon(
-                    profile.id == state.settings.selectedProfileId
-                        ? LucideIcons.circleCheck
-                        : LucideIcons.circle,
-                  ),
-                  title: Text(profile.name),
-                  subtitle: Text(
-                    '${profile.kind.label} · ${profile.deleting
-                        ? '删除未完成'
-                        : profile.enabled
-                        ? '已启用'
-                        : '已停用'}',
-                  ),
-                  trailing: IconButton(
-                    tooltip: '编辑 ${profile.name}',
-                    onPressed: state.busy
-                        ? null
-                        : () => context.push(
-                            '/settings/web-search/${profile.id}',
+                children: [
+                  AppSection(
+                    title: '搜索服务',
+                    subtitle: '点击选择默认搜索服务；可通过操作按钮编辑详情',
+                    action: TextButton.icon(
+                      onPressed: state.busy
+                          ? null
+                          : () => context.push('/settings/web-search/new'),
+                      icon: const Icon(LucideIcons.plus, size: 18),
+                      label: const Text('新增服务'),
+                    ),
+                    child: state.settings.profiles.isEmpty
+                        ? AppInteractiveSurface(
+                            color: colors.surfaceContainerLow,
+                            radius: AppRadius.large,
+                            onTap: state.busy
+                                ? null
+                                : () =>
+                                      context.push('/settings/web-search/new'),
+                            child: Padding(
+                              padding: const EdgeInsets.all(AppSpacing.xl),
+                              child: Column(
+                                children: [
+                                  const AppIconBadge(
+                                    icon: LucideIcons.searchX,
+                                    tone: AppTone.primary,
+                                  ),
+                                  const SizedBox(height: AppSpacing.m),
+                                  Text(
+                                    '尚未配置搜索服务',
+                                    style: theme.textTheme.titleMedium,
+                                  ),
+                                  const SizedBox(height: AppSpacing.xs),
+                                  Text(
+                                    '添加至少一个搜索服务后即可开启网页检索',
+                                    textAlign: TextAlign.center,
+                                    style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: colors.onSurfaceVariant,
+                                    ),
+                                  ),
+                                  const SizedBox(height: AppSpacing.l),
+                                  FilledButton.tonalIcon(
+                                    onPressed: state.busy
+                                        ? null
+                                        : () => context.push(
+                                            '/settings/web-search/new',
+                                          ),
+                                    icon: const Icon(LucideIcons.plus),
+                                    label: const Text('添加搜索服务'),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : Column(
+                            children: [
+                              for (
+                                int i = 0;
+                                i < state.settings.profiles.length;
+                                i++
+                              ) ...[
+                                if (i > 0) const SizedBox(height: AppSpacing.s),
+                                _ProfileItemCard(
+                                  profile: state.settings.profiles[i],
+                                  isSelected:
+                                      state.settings.profiles[i].id ==
+                                      state.settings.selectedProfileId,
+                                  busy: state.busy,
+                                  onSelect: () =>
+                                      _select(state.settings.profiles[i].id),
+                                  onEdit: () => context.push(
+                                    '/settings/web-search/${state.settings.profiles[i].id}',
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                    icon: const Icon(LucideIcons.pencil),
                   ),
-                  onTap: state.busy || !profile.enabled || profile.deleting
-                      ? null
-                      : () => _select(profile.id),
+                  const SizedBox(height: AppSpacing.xl),
+                  AppSection(
+                    title: '搜索参数',
+                    subtitle: '控制单次网页搜索向助手返回的来源条数',
+                    child: AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                LucideIcons.listOrdered,
+                                size: 18,
+                                color: colors.primary,
+                              ),
+                              const SizedBox(width: AppSpacing.s),
+                              Text('返回来源数量', style: theme.textTheme.titleSmall),
+                            ],
+                          ),
+                          const SizedBox(height: AppSpacing.m),
+                          WebNumberField(
+                            controller: _results,
+                            label: '返回来源数',
+                            helperText: '单次查询返回的最大网页来源条数 (1–20)',
+                            suffixText: '条',
+                            prefixIcon: LucideIcons.newspaper,
+                            minimum: 1,
+                            maximum: 20,
+                            enabled: !state.busy,
+                            onChanged: _changed,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_error != null) ...[
+                    const SizedBox(height: AppSpacing.l),
+                    Container(
+                      padding: const EdgeInsets.all(AppSpacing.m),
+                      decoration: BoxDecoration(
+                        color: colors.errorContainer,
+                        borderRadius: AppRadius.smallAll,
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            LucideIcons.circleAlert,
+                            color: colors.onErrorContainer,
+                            size: 20,
+                          ),
+                          const SizedBox(width: AppSpacing.m),
+                          Expanded(
+                            child: Text(
+                              _error!,
+                              style: TextStyle(color: colors.onErrorContainer),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ProfileItemCard extends StatelessWidget {
+  const _ProfileItemCard({
+    required this.profile,
+    required this.isSelected,
+    required this.busy,
+    required this.onSelect,
+    required this.onEdit,
+  });
+
+  final WebSearchProfile profile;
+  final bool isSelected;
+  final bool busy;
+  final VoidCallback onSelect;
+  final VoidCallback onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final canSelect = !busy && !profile.deleting;
+
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      child: AppInteractiveSurface(
+        selected: isSelected,
+        color: isSelected
+            ? colors.primaryContainer.withValues(alpha: 0.35)
+            : colors.surfaceContainerLow,
+        radius: AppRadius.large,
+        onTap: canSelect ? onSelect : null,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.l),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              WebSearchProviderBadge(kind: profile.kind, size: 40),
+              const SizedBox(width: AppSpacing.m),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            profile.name,
+                            style: theme.textTheme.titleMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (isSelected) ...[
+                          const SizedBox(width: AppSpacing.s),
+                          const AppBadge(label: '默认', tone: AppTone.teal),
+                        ],
+                        if (profile.deleting) ...[
+                          const SizedBox(width: AppSpacing.s),
+                          const AppBadge(label: '删除未完成', tone: AppTone.error),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Wrap(
+                      spacing: AppSpacing.s,
+                      runSpacing: AppSpacing.xs,
+                      children: [
+                        Text(
+                          profile.kind.label,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant,
+                          ),
+                        ),
+                        if (profile.resolvedModel.isNotEmpty)
+                          Text(
+                            '· ${profile.resolvedModel}',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Text(
+                      profile.baseUrl.isEmpty ? '内置地址' : profile.baseUrl,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: colors.onSurfaceVariant.withValues(alpha: 0.75),
+                      ),
+                    ),
+                  ],
                 ),
-              heading('搜索与读取上限'),
-              WebNumberField(
-                controller: _queries,
-                label: '单次查询数',
-                minimum: 1,
-                maximum: 8,
-                enabled: !state.busy,
-                onChanged: _changed,
               ),
-              WebNumberField(
-                controller: _results,
-                label: '返回来源数',
-                minimum: 1,
-                maximum: 20,
-                enabled: !state.busy,
-                onChanged: _changed,
+              const SizedBox(width: AppSpacing.s),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    tooltip: '编辑 ${profile.name}',
+                    onPressed: busy ? null : onEdit,
+                    icon: const Icon(LucideIcons.pencil, size: 20),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  ExcludeSemantics(
+                    child: Icon(
+                      isSelected ? LucideIcons.circleCheck : LucideIcons.circle,
+                      color: isSelected
+                          ? colors.primary
+                          : colors.onSurfaceVariant.withValues(alpha: 0.45),
+                      size: 22,
+                    ),
+                  ),
+                ],
               ),
-              WebNumberField(
-                controller: _searchTimeout,
-                label: '搜索超时（秒）',
-                minimum: 5,
-                maximum: 180,
-                enabled: !state.busy,
-                onChanged: _changed,
-              ),
-              WebNumberField(
-                controller: _fetchTimeout,
-                label: '网页读取超时（秒）',
-                minimum: 5,
-                maximum: 180,
-                enabled: !state.busy,
-                onChanged: _changed,
-              ),
-              WebNumberField(
-                controller: _pageSize,
-                label: '网页正文字符上限',
-                minimum: 1024,
-                maximum: 100000,
-                enabled: !state.busy,
-                onChanged: _changed,
-              ),
-              if (_error != null)
-                Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
             ],
           ),
         ),

@@ -2,34 +2,47 @@ import '../../core/error/failure.dart';
 
 enum WebSearchProviderKind {
   duckDuckGo,
+  bing,
   deepseek,
   exa,
   brave,
   tavily,
   perplexity,
-  searxng;
+  searxng,
+  bocha,
+  serper,
+  jina;
 
   String get label => switch (this) {
     duckDuckGo => 'DuckDuckGo',
+    bing => 'Bing',
     deepseek => 'DeepSeek',
     exa => 'Exa',
     brave => 'Brave Search',
     tavily => 'Tavily',
     perplexity => 'Perplexity',
     searxng => 'SearXNG',
+    bocha => '博查 (Bocha)',
+    serper => 'Serper (Google)',
+    jina => 'Jina Search',
   };
 
   String get defaultBaseUrl => switch (this) {
     duckDuckGo => 'https://html.duckduckgo.com',
+    bing => 'https://www.bing.com',
     deepseek => 'https://api.deepseek.com/anthropic/v1',
     exa => 'https://api.exa.ai',
     brave => 'https://api.search.brave.com/res/v1',
     tavily => 'https://api.tavily.com',
     perplexity => 'https://api.perplexity.ai',
     searxng => '',
+    bocha => 'https://api.bochaai.com/v1',
+    serper => 'https://google.serper.dev',
+    jina => 'https://s.jina.ai',
   };
 
-  bool get requiresKey => this != duckDuckGo && this != searxng;
+  bool get requiresKey =>
+      this != duckDuckGo && this != bing && this != searxng && this != jina;
   bool get usesModel => this == deepseek || this == perplexity;
   String get defaultModel => switch (this) {
     deepseek => 'deepseek-v4-flash',
@@ -289,8 +302,8 @@ class WebSearchSettings {
   );
 
   Map<String, dynamic> toJson() => {
-    'searchEnabled': searchEnabled,
-    'fetchEnabled': fetchEnabled,
+    'searchEnabled': true,
+    'fetchEnabled': true,
     'selectedProfileId': selectedProfileId,
     'profiles': [for (final profile in profiles) profile.toJson()],
     'maxQueries': maxQueries,
@@ -302,8 +315,8 @@ class WebSearchSettings {
 
   factory WebSearchSettings.fromJson(Map<String, dynamic> json) {
     final value = WebSearchSettings(
-      searchEnabled: json['searchEnabled'] as bool? ?? true,
-      fetchEnabled: json['fetchEnabled'] as bool? ?? true,
+      searchEnabled: true,
+      fetchEnabled: true,
       selectedProfileId: json['selectedProfileId'] as String?,
       profiles: List.unmodifiable([
         for (final value in json['profiles'] as List)

@@ -175,7 +175,11 @@ class ToolPresentation {
 
   /// 关键参数的中文标签；未登记的参数用原始键名。
   static const _parameterLabels = <String, Map<String, String>>{
-    'web_search': {'queries': '搜索查询'},
+    'web_search': {
+      'queries': '搜索查询',
+      'max_results': '返回来源数',
+      'maxResults': '返回来源数',
+    },
     'web_fetch': {'url': '网页地址'},
     'shizuku_display': {
       'action': '虚拟屏操作',

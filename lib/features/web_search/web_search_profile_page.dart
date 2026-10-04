@@ -4,15 +4,19 @@ import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/error/failure.dart';
+import '../../core/theme/app_radius.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/theme/brand_colors.dart';
 import '../../core/utils/id.dart';
 import '../../core/widgets/app_bottom_bar.dart';
+import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_dialog.dart';
 import '../../core/widgets/app_dropdown.dart';
 import '../../core/widgets/app_empty_state.dart';
 import '../../core/widgets/app_icon_badge.dart';
 import '../../core/widgets/app_loading_indicator.dart';
 import '../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/app_section.dart';
 import '../../data/models/web_search_settings.dart';
 import '../tools/tool.dart';
 import 'web_search_controller.dart';
@@ -21,6 +25,7 @@ import 'web_search_form_widgets.dart';
 class WebSearchProfilePage extends ConsumerStatefulWidget {
   const WebSearchProfilePage({this.profileId, super.key});
   final String? profileId;
+
   @override
   ConsumerState<WebSearchProfilePage> createState() =>
       _WebSearchProfilePageState();
@@ -42,7 +47,6 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
   WebSearchProviderKind _kind = WebSearchProviderKind.deepseek;
   String _searchDepth = 'basic';
   String _searchType = 'auto';
-  bool _enabled = true;
   bool _loading = true;
   bool _saving = false;
   bool _checking = false;
@@ -93,7 +97,6 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
       _maxUses.text = '${profile?.maxUses ?? 5}';
       setState(() {
         _hasKey = configured;
-        _enabled = profile?.enabled ?? true;
         _searchDepth = profile?.searchDepth ?? 'basic';
         _searchType = profile?.searchType ?? 'auto';
         _loading = false;
@@ -146,7 +149,7 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
           .copyWith(
             name: _name.text.trim(),
             baseUrl: _endpoint.text.trim().replaceFirst(RegExp(r'/+$'), ''),
-            enabled: _enabled,
+            enabled: true,
             model: _model.text.trim(),
             region: _region.text.trim(),
             language: _language.text.trim(),
@@ -207,7 +210,7 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
             cancellation: cancellation.whenCancelled,
           );
       if (mounted && !cancellation.isCancelled) {
-        setState(() => _notice = '已连接 · 返回 ${result.sources.length} 个来源');
+        setState(() => _notice = '连接成功 · 返回 ${result.sources.length} 个来源');
       }
     } on WebFailure catch (error) {
       if (!mounted) return;
@@ -304,6 +307,8 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
     String label, {
     bool required = false,
     TextInputType? keyboardType,
+    IconData? prefixIcon,
+    String? helperText,
   }) => Padding(
     padding: const EdgeInsets.only(bottom: AppSpacing.l),
     child: TextFormField(
@@ -311,7 +316,11 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
       enabled: !_busy && _profile?.deleting != true,
       keyboardType: keyboardType,
       autocorrect: false,
-      decoration: InputDecoration(labelText: label),
+      decoration: InputDecoration(
+        labelText: label,
+        helperText: helperText,
+        prefixIcon: prefixIcon != null ? Icon(prefixIcon, size: 20) : null,
+      ),
       onChanged: _changed,
       validator: required
           ? (value) => value?.trim().isNotEmpty == true ? null : '请填写$label'
@@ -321,9 +330,12 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final brand = context.brandColors;
     final missing = widget.profileId != null && _profile == null;
     final deleting = _profile?.deleting == true;
+
     return WebDraftBackGuard(
       dirty: _dirty,
       busy: _busy,
@@ -333,30 +345,36 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
         bottomBar: _loading || missing
             ? null
             : AppBottomBar(
-                child: Row(
-                  children: [
-                    if (_profile != null) ...[
-                      IconButton.filledTonal(
-                        tooltip: deleting ? '重试删除搜索服务' : '删除搜索服务',
-                        onPressed: _busy ? null : _delete,
-                        style: IconButton.styleFrom(
-                          backgroundColor: colors.errorContainer,
-                          foregroundColor: colors.onErrorContainer,
+                child: Center(
+                  heightFactor: 1,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 688),
+                    child: Row(
+                      children: [
+                        if (_profile != null) ...[
+                          IconButton.filledTonal(
+                            tooltip: deleting ? '重试删除搜索服务' : '删除搜索服务',
+                            onPressed: _busy ? null : _delete,
+                            style: IconButton.styleFrom(
+                              backgroundColor: colors.errorContainer,
+                              foregroundColor: colors.onErrorContainer,
+                            ),
+                            icon: const Icon(LucideIcons.trash2),
+                          ),
+                          const SizedBox(width: AppSpacing.m),
+                        ],
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: _busy || deleting ? null : _save,
+                            icon: _saving
+                                ? const AppLoadingIndicator.small()
+                                : const Icon(LucideIcons.check),
+                            label: Text(_saving ? '保存中…' : '保存服务'),
+                          ),
                         ),
-                        icon: const Icon(LucideIcons.trash2),
-                      ),
-                      const SizedBox(width: AppSpacing.m),
-                    ],
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _busy || deleting ? null : _save,
-                        icon: _saving
-                            ? const AppLoadingIndicator.small()
-                            : const Icon(LucideIcons.check),
-                        label: Text(_saving ? '保存中…' : '保存'),
-                      ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
         body: _loading
@@ -371,168 +389,527 @@ class _WebSearchProfilePageState extends ConsumerState<WebSearchProfilePage> {
                   child: const Text('重试'),
                 ),
               )
-            : Form(
-                key: _form,
-                child: ListView(
-                  padding: const EdgeInsets.all(AppSpacing.l),
-                  children: [
-                    AppDropdown<WebSearchProviderKind>(
-                      label: '搜索提供方',
-                      value: _kind,
-                      options: {
-                        for (final kind in WebSearchProviderKind.values)
-                          kind: kind.label,
-                      },
-                      onChanged: _busy || _profile != null ? null : _changeKind,
-                    ),
-                    const SizedBox(height: AppSpacing.l),
-                    _textField(_name, '名称', required: true),
-                    _textField(
-                      _endpoint,
-                      '接口地址',
-                      required: true,
-                      keyboardType: TextInputType.url,
-                    ),
-                    if (_kind != WebSearchProviderKind.duckDuckGo) ...[
-                      TextFormField(
-                        controller: _apiKey,
-                        enabled: !_busy && !deleting && !_clearKey,
-                        obscureText: !_keyVisible,
-                        enableSuggestions: false,
-                        autocorrect: false,
-                        decoration: InputDecoration(
-                          labelText: _kind == WebSearchProviderKind.searxng
-                              ? 'Bearer 令牌（可选）'
-                              : 'API Key',
-                          helperText: _hasKey ? '已设置 · 留空保留' : '尚未设置',
-                          suffixIcon: IconButton(
-                            tooltip: _keyVisible ? '隐藏密钥' : '显示密钥',
-                            onPressed: _busy
-                                ? null
-                                : () => setState(
-                                    () => _keyVisible = !_keyVisible,
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 688),
+                  child: Form(
+                    key: _form,
+                    child: ListView(
+                      padding: const EdgeInsets.fromLTRB(
+                        AppSpacing.l,
+                        AppSpacing.l,
+                        AppSpacing.l,
+                        AppSpacing.xxl,
+                      ),
+                      children: [
+                        AppSection(
+                          title: '基本信息',
+                          subtitle: '选择搜索引擎类型并指定名称',
+                          child: AppCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                if (widget.profileId == null) ...[
+                                  AppDropdown<WebSearchProviderKind>(
+                                    label: '搜索提供方',
+                                    value: _kind,
+                                    options: {
+                                      for (final kind
+                                          in WebSearchProviderKind.values)
+                                        kind: kind.label,
+                                    },
+                                    onChanged: _busy ? null : _changeKind,
                                   ),
-                            icon: Icon(
-                              _keyVisible
-                                  ? LucideIcons.eyeOff
-                                  : LucideIcons.eye,
+                                  const SizedBox(height: AppSpacing.m),
+                                  Container(
+                                    padding: const EdgeInsets.all(AppSpacing.m),
+                                    decoration: BoxDecoration(
+                                      color: colors.surfaceContainerHighest
+                                          .withValues(alpha: 0.5),
+                                      borderRadius: AppRadius.mediumAll,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        WebSearchProviderBadge(
+                                          kind: _kind,
+                                          size: 36,
+                                          iconSize: 18,
+                                        ),
+                                        const SizedBox(width: AppSpacing.m),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  Text(
+                                                    _kind.label,
+                                                    style: theme
+                                                        .textTheme
+                                                        .titleSmall,
+                                                  ),
+                                                  const SizedBox(
+                                                    width: AppSpacing.s,
+                                                  ),
+                                                  if (!_kind.requiresKey)
+                                                    const AppBadge(
+                                                      label: '免密钥',
+                                                      tone: AppTone.teal,
+                                                    ),
+                                                  if (_kind.usesModel)
+                                                    const AppBadge(
+                                                      label: '大模型',
+                                                      tone: AppTone.lavender,
+                                                    ),
+                                                ],
+                                              ),
+                                              const SizedBox(
+                                                height: AppSpacing.xs,
+                                              ),
+                                              Text(
+                                                webSearchProviderDescription(
+                                                  _kind,
+                                                ),
+                                                style: theme.textTheme.bodySmall
+                                                    ?.copyWith(
+                                                      color: colors
+                                                          .onSurfaceVariant,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ] else ...[
+                                  Container(
+                                    padding: const EdgeInsets.all(AppSpacing.m),
+                                    decoration: BoxDecoration(
+                                      color: colors.surfaceContainerHighest
+                                          .withValues(alpha: 0.5),
+                                      borderRadius: AppRadius.mediumAll,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        WebSearchProviderBadge(
+                                          kind: _kind,
+                                          size: 40,
+                                        ),
+                                        const SizedBox(width: AppSpacing.m),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                _kind.label,
+                                                style:
+                                                    theme.textTheme.titleMedium,
+                                              ),
+                                              const SizedBox(
+                                                height: AppSpacing.xs,
+                                              ),
+                                              Text(
+                                                webSearchProviderDescription(
+                                                  _kind,
+                                                ),
+                                                style: theme.textTheme.bodySmall
+                                                    ?.copyWith(
+                                                      color: colors
+                                                          .onSurfaceVariant,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: AppSpacing.s),
+                                        const AppBadge(
+                                          label: '已锁定类型',
+                                          tone: AppTone.primary,
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: AppSpacing.l),
+                                _textField(
+                                  _name,
+                                  '服务名称',
+                                  prefixIcon: LucideIcons.tag,
+                                  required: true,
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                        onChanged: _changed,
-                      ),
-                      if (_hasKey)
-                        CheckboxListTile(
-                          title: const Text('移除已保存的密钥'),
-                          value: _clearKey,
-                          onChanged: _busy || deleting
-                              ? null
-                              : (value) {
-                                  _clearKey = value ?? false;
-                                  if (_clearKey) _apiKey.clear();
-                                  _changed();
-                                },
+                        const SizedBox(height: AppSpacing.xl),
+                        AppSection(
+                          title: '接口与凭据',
+                          subtitle: '配置服务接口地址及认证凭据',
+                          child: AppCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                _textField(
+                                  _endpoint,
+                                  '接口地址 (Base URL)',
+                                  prefixIcon: LucideIcons.link,
+                                  required: true,
+                                  keyboardType: TextInputType.url,
+                                ),
+                                if (_kind != WebSearchProviderKind.duckDuckGo &&
+                                    _kind != WebSearchProviderKind.bing) ...[
+                                  TextFormField(
+                                    controller: _apiKey,
+                                    enabled: !_busy && !deleting && !_clearKey,
+                                    obscureText: !_keyVisible,
+                                    enableSuggestions: false,
+                                    autocorrect: false,
+                                    decoration: InputDecoration(
+                                      labelText:
+                                          _kind == WebSearchProviderKind.searxng
+                                          ? 'Bearer 令牌（可选）'
+                                          : !_kind.requiresKey
+                                          ? 'API Key（可选）'
+                                          : 'API Key',
+                                      prefixIcon: const Icon(
+                                        LucideIcons.keyRound,
+                                        size: 20,
+                                      ),
+                                      suffixIcon: IconButton(
+                                        tooltip: _keyVisible ? '隐藏密钥' : '显示密钥',
+                                        onPressed: _busy
+                                            ? null
+                                            : () => setState(
+                                                () =>
+                                                    _keyVisible = !_keyVisible,
+                                              ),
+                                        icon: Icon(
+                                          _keyVisible
+                                              ? LucideIcons.eyeOff
+                                              : LucideIcons.eye,
+                                          size: 20,
+                                        ),
+                                      ),
+                                      helperText: _hasKey
+                                          ? (_clearKey
+                                                ? '已勾选移除已存密钥'
+                                                : '已配置密钥 · 留空保留原密钥')
+                                          : (_kind ==
+                                                    WebSearchProviderKind
+                                                        .searxng
+                                                ? '若 SearXNG 实例无需鉴权可留空'
+                                                : !_kind.requiresKey
+                                                ? '可选 · 若有 API Key 可填写以提升配额'
+                                                : '请输入用于鉴权的 API Key'),
+                                    ),
+                                    onChanged: _changed,
+                                  ),
+                                  if (_hasKey) ...[
+                                    const SizedBox(height: AppSpacing.m),
+                                    Row(
+                                      children: [
+                                        AppBadge(
+                                          label: _clearKey ? '将移除密钥' : '已保存密钥',
+                                          tone: _clearKey
+                                              ? AppTone.error
+                                              : AppTone.teal,
+                                        ),
+                                        const Spacer(),
+                                        InkWell(
+                                          borderRadius: AppRadius.controlAll,
+                                          onTap: _busy || deleting
+                                              ? null
+                                              : () {
+                                                  setState(() {
+                                                    _clearKey = !_clearKey;
+                                                    if (_clearKey) {
+                                                      _apiKey.clear();
+                                                    }
+                                                    _changed();
+                                                  });
+                                                },
+                                          child: Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: AppSpacing.s,
+                                              vertical: AppSpacing.xs,
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(
+                                                  _clearKey
+                                                      ? LucideIcons.undo2
+                                                      : LucideIcons.trash2,
+                                                  size: 16,
+                                                  color: _clearKey
+                                                      ? colors.primary
+                                                      : colors.error,
+                                                ),
+                                                const SizedBox(
+                                                  width: AppSpacing.xs,
+                                                ),
+                                                Text(
+                                                  _clearKey ? '取消移除' : '移除已存密钥',
+                                                  style: theme
+                                                      .textTheme
+                                                      .bodySmall
+                                                      ?.copyWith(
+                                                        color: _clearKey
+                                                            ? colors.primary
+                                                            : colors.error,
+                                                        fontWeight:
+                                                            FontWeight.w500,
+                                                      ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ],
+                              ],
+                            ),
+                          ),
                         ),
-                      const SizedBox(height: AppSpacing.l),
-                    ],
-                    if (_kind.usesModel) ...[
-                      _textField(_model, '搜索模型', required: true),
-                      WebNumberField(
-                        controller: _maxTokens,
-                        label: '搜索回答 token 上限',
-                        minimum: 256,
-                        maximum: 32768,
-                        enabled: !_busy && !deleting,
-                        onChanged: _changed,
-                      ),
-                    ],
-                    if (_kind == WebSearchProviderKind.deepseek)
-                      WebNumberField(
-                        controller: _maxUses,
-                        label: '单个查询最多原生搜索次数',
-                        minimum: 1,
-                        maximum: 20,
-                        enabled: !_busy && !deleting,
-                        onChanged: _changed,
-                      ),
-                    if (_kind == WebSearchProviderKind.exa) ...[
-                      AppDropdown<String>(
-                        label: '检索模式',
-                        value: _searchType,
-                        options: const {
-                          'auto': '自动',
-                          'keyword': '关键词',
-                          'neural': '语义',
-                        },
-                        onChanged: _busy || deleting
-                            ? null
-                            : (value) {
-                                if (value == _searchType) return;
-                                _searchType = value;
-                                _changed();
-                              },
-                      ),
-                      const SizedBox(height: AppSpacing.l),
-                    ],
-                    if (_kind == WebSearchProviderKind.tavily) ...[
-                      AppDropdown<String>(
-                        label: '搜索深度',
-                        value: _searchDepth,
-                        options: const {'basic': '标准', 'advanced': '深入'},
-                        onChanged: _busy || deleting
-                            ? null
-                            : (value) {
-                                if (value == _searchDepth) return;
-                                _searchDepth = value;
-                                _changed();
-                              },
-                      ),
-                      const SizedBox(height: AppSpacing.l),
-                    ],
-                    if (_kind == WebSearchProviderKind.duckDuckGo ||
-                        _kind == WebSearchProviderKind.brave)
-                      _textField(
-                        _region,
-                        _kind == WebSearchProviderKind.brave
-                            ? '国家代码（可选，如 cn）'
-                            : '地区（可选，如 cn-zh）',
-                      ),
-                    if (_kind == WebSearchProviderKind.brave ||
-                        _kind == WebSearchProviderKind.searxng)
-                      _textField(_language, '语言（可选）'),
-                    if (_kind == WebSearchProviderKind.searxng)
-                      _textField(_engines, '搜索引擎（可选，逗号分隔）'),
-                    SwitchListTile.adaptive(
-                      title: const Text('启用服务'),
-                      value: _enabled,
-                      onChanged: _busy || deleting
-                          ? null
-                          : (value) {
-                              _enabled = value;
-                              _changed();
-                            },
+                        if (_kind.usesModel ||
+                            _kind == WebSearchProviderKind.deepseek ||
+                            _kind == WebSearchProviderKind.exa ||
+                            _kind == WebSearchProviderKind.tavily ||
+                            _kind == WebSearchProviderKind.duckDuckGo ||
+                            _kind == WebSearchProviderKind.brave ||
+                            _kind == WebSearchProviderKind.searxng ||
+                            _kind == WebSearchProviderKind.bing ||
+                            _kind == WebSearchProviderKind.serper) ...[
+                          const SizedBox(height: AppSpacing.xl),
+                          AppSection(
+                            title: '搜索行为与参数',
+                            subtitle: '定制搜索模式、模型或检索条件',
+                            child: AppCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (_kind.usesModel) ...[
+                                    _textField(
+                                      _model,
+                                      '搜索模型',
+                                      prefixIcon: LucideIcons.cpu,
+                                      required: true,
+                                    ),
+                                    WebNumberField(
+                                      controller: _maxTokens,
+                                      label: '搜索回答 token 上限',
+                                      prefixIcon: LucideIcons.coins,
+                                      suffixText: 'tokens',
+                                      minimum: 256,
+                                      maximum: 32768,
+                                      enabled: !_busy && !deleting,
+                                      onChanged: _changed,
+                                    ),
+                                  ],
+                                  if (_kind == WebSearchProviderKind.deepseek)
+                                    WebNumberField(
+                                      controller: _maxUses,
+                                      label: '单个查询最多原生搜索次数',
+                                      prefixIcon: LucideIcons.refreshCw,
+                                      suffixText: '次',
+                                      minimum: 1,
+                                      maximum: 20,
+                                      helperText:
+                                          '单次查询中 DeepSeek 最多调用的原生搜索次数 (1–20)',
+                                      enabled: !_busy && !deleting,
+                                      onChanged: _changed,
+                                    ),
+                                  if (_kind == WebSearchProviderKind.exa) ...[
+                                    AppDropdown<String>(
+                                      label: '检索模式',
+                                      value: _searchType,
+                                      options: const {
+                                        'auto': '自动 (Auto)',
+                                        'keyword': '关键词 (Keyword)',
+                                        'neural': '语义 (Neural)',
+                                      },
+                                      onChanged: _busy || deleting
+                                          ? null
+                                          : (value) {
+                                              if (value == _searchType) return;
+                                              setState(() {
+                                                _searchType = value;
+                                                _changed();
+                                              });
+                                            },
+                                    ),
+                                    const SizedBox(height: AppSpacing.l),
+                                  ],
+                                  if (_kind ==
+                                      WebSearchProviderKind.tavily) ...[
+                                    AppDropdown<String>(
+                                      label: '搜索深度',
+                                      value: _searchDepth,
+                                      options: const {
+                                        'basic': '标准深度 (Basic)',
+                                        'advanced': '深入检索 (Advanced)',
+                                      },
+                                      onChanged: _busy || deleting
+                                          ? null
+                                          : (value) {
+                                              if (value == _searchDepth) return;
+                                              setState(() {
+                                                _searchDepth = value;
+                                                _changed();
+                                              });
+                                            },
+                                    ),
+                                    const SizedBox(height: AppSpacing.l),
+                                  ],
+                                  if (_kind ==
+                                          WebSearchProviderKind.duckDuckGo ||
+                                      _kind == WebSearchProviderKind.brave)
+                                    _textField(
+                                      _region,
+                                      _kind == WebSearchProviderKind.brave
+                                          ? '国家代码（可选，如 cn）'
+                                          : '地区（可选，如 cn-zh）',
+                                      prefixIcon: LucideIcons.mapPin,
+                                    ),
+                                  if (_kind == WebSearchProviderKind.brave ||
+                                      _kind == WebSearchProviderKind.searxng ||
+                                      _kind == WebSearchProviderKind.bing ||
+                                      _kind == WebSearchProviderKind.serper)
+                                    _textField(
+                                      _language,
+                                      _kind == WebSearchProviderKind.serper
+                                          ? '地区代码（可选，如 cn、us）'
+                                          : '语言代码（可选，如 zh-CN、zh）',
+                                      prefixIcon: LucideIcons.languages,
+                                    ),
+                                  if (_kind == WebSearchProviderKind.searxng)
+                                    _textField(
+                                      _engines,
+                                      '搜索引擎（可选，逗号分隔，如 google,bing）',
+                                      prefixIcon: LucideIcons.layers,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: AppSpacing.xl),
+                        AppSection(
+                          title: '连通性测试',
+                          subtitle: '在保存前发送测试请求验证接口地址与密钥是否可用',
+                          child: AppCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            '接口测试',
+                                            style: theme.textTheme.titleSmall,
+                                          ),
+                                          const SizedBox(height: AppSpacing.xs),
+                                          Text(
+                                            '发送测试请求验证接口地址与密钥是否可用',
+                                            style: theme.textTheme.bodyMedium
+                                                ?.copyWith(
+                                                  color:
+                                                      colors.onSurfaceVariant,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: AppSpacing.m),
+                                    FilledButton.tonalIcon(
+                                      onPressed: deleting || _saving
+                                          ? null
+                                          : _checking
+                                          ? () => _checkCancellation?.cancel()
+                                          : _check,
+                                      icon: _checking
+                                          ? const AppLoadingIndicator.small()
+                                          : const Icon(
+                                              LucideIcons.plugZap,
+                                              size: 18,
+                                            ),
+                                      label: Text(_checking ? '停止' : '测试连接'),
+                                    ),
+                                  ],
+                                ),
+                                if (_notice != null) ...[
+                                  const SizedBox(height: AppSpacing.m),
+                                  Container(
+                                    padding: const EdgeInsets.all(AppSpacing.m),
+                                    decoration: BoxDecoration(
+                                      color: brand.tealContainer,
+                                      borderRadius: AppRadius.smallAll,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.circleCheck,
+                                          color: brand.onTealContainer,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: AppSpacing.m),
+                                        Expanded(
+                                          child: Text(
+                                            _notice!,
+                                            style: TextStyle(
+                                              color: brand.onTealContainer,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                                if (_error != null) ...[
+                                  const SizedBox(height: AppSpacing.m),
+                                  Container(
+                                    padding: const EdgeInsets.all(AppSpacing.m),
+                                    decoration: BoxDecoration(
+                                      color: colors.errorContainer,
+                                      borderRadius: AppRadius.smallAll,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          LucideIcons.circleAlert,
+                                          color: colors.onErrorContainer,
+                                          size: 20,
+                                        ),
+                                        const SizedBox(width: AppSpacing.m),
+                                        Expanded(
+                                          child: Text(
+                                            _error!,
+                                            style: TextStyle(
+                                              color: colors.onErrorContainer,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: AppSpacing.l),
-                    OutlinedButton.icon(
-                      onPressed: deleting || _saving
-                          ? null
-                          : _checking
-                          ? () => _checkCancellation?.cancel()
-                          : _check,
-                      icon: _checking
-                          ? const Icon(LucideIcons.square)
-                          : const Icon(LucideIcons.plug),
-                      label: Text(_checking ? '停止检查' : '检查连接'),
-                    ),
-                    const SizedBox(height: AppSpacing.m),
-                    if (_notice != null)
-                      Text(
-                        _notice!,
-                        style: TextStyle(color: colors.onSurfaceVariant),
-                      ),
-                    if (_error != null)
-                      Text(_error!, style: TextStyle(color: colors.error)),
-                  ],
+                  ),
                 ),
               ),
       ),
