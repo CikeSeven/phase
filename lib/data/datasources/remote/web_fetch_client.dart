@@ -46,11 +46,15 @@ class WebFetchClient {
             '网页读取仅支持公网地址，不访问本机、私网或保留地址',
           );
         }
-        final client = HttpClient()..autoUncompress = true;
-        // Socket 固定审查过的 IP；HttpClient 仍按原 hostname 校验 TLS 和发送 Host。
+        final client = HttpClient()
+          ..autoUncompress = true
+          // 连接固定到已审查的目标 IP，不让环境代理改变连接协议。
+          ..findProxy = null;
+        // 自定义 factory 必须提供已完成 TLS 握手的 HTTPS socket；
+        // HttpClient 不会为 factory 返回的普通 Socket 自动启用 TLS。
         client.connectionFactory = (target, proxyHost, proxyPort) async {
           scope.check();
-          return _connect(addresses, target.port, scope);
+          return _connect(addresses, target, scope);
         };
         var active = true;
         scope.whenAborted.then((_) {
@@ -191,18 +195,21 @@ class WebFetchClient {
 
   static ConnectionTask<Socket> _connect(
     List<InternetAddress> addresses,
-    int port,
+    Uri uri,
     WebRequestScope scope,
   ) {
     ConnectionTask<Socket>? pending;
     var cancelled = false;
     Future<Socket> dial() async {
-      // 已审查 IP 之间回退，不重新解析 hostname，也不绕过 TLS 主机校验。
+      // lookup 返回的 InternetAddress 保留原始 host：连接固定 IP，
+      // SecureSocket 仍以原域名发送 SNI 并校验证书，不再查询 DNS。
       for (final address in addresses) {
         scope.check();
         if (cancelled) throw const WebFailure('cancelled', '网页请求已停止');
         try {
-          final task = await Socket.startConnect(address, port);
+          final ConnectionTask<Socket> task = uri.isScheme('https')
+              ? await SecureSocket.startConnect(address, uri.port)
+              : await Socket.startConnect(address, uri.port);
           pending = task;
           if (cancelled) task.cancel();
           final socket = await scope.guard(
