@@ -18,7 +18,7 @@ const _key = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
 
 void main() {
   for (final background in [false, true]) {
-    test('12 → 13 只增审计列，保留工具和运行，重复重开 $background', () async {
+    test('12 → 14 增加审计列与任务表，保留工具和运行，重复重开 $background', () async {
       final directory = Directory.systemTemp.createTempSync(
         'phase_permission_schema',
       );
@@ -64,9 +64,10 @@ void main() {
       );
       await db.close();
 
-      // schema 12 与 13 的结构差异只有该列；删除新列构造这一明确的升级边界。
+      // Remove the post-12 structures to reconstruct the supported upgrade boundary.
       final fixture = raw.sqlite3.open(path)..execute(sqliteKeyPragma(_key));
       fixture.execute('ALTER TABLE tool_calls DROP COLUMN permission_json');
+      fixture.execute('DROP TABLE command_tasks');
       fixture.execute('PRAGMA user_version = 12');
       final old = fixture.select('SELECT * FROM tool_calls').single;
       final before = Map<String, Object?>.from(old);
@@ -87,7 +88,7 @@ void main() {
                 .data
                 .values
                 .single,
-            13,
+            14,
           );
           expect(
             (await db.customSelect('PRAGMA quick_check').getSingle())

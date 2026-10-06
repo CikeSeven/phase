@@ -15,6 +15,7 @@ String presentToolOutput(ToolCallRecord record, String result) {
       decoded is Map<String, dynamic>) {
     switch (record.toolName) {
       case 'shell':
+        if (decoded['taskId'] is String) return _taskOutput(decoded);
         if (decoded case {
           'stdout': final String out,
           'stderr': final String err,
@@ -40,6 +41,19 @@ String presentToolOutput(ToolCallRecord record, String result) {
             if (decoded['error'] case final String error) error,
             if (decoded['warning'] case final String warning) warning,
           ].join('\n\n');
+        }
+      case 'task_output':
+      case 'task_stop':
+        return _taskOutput(decoded);
+      case 'task_list':
+        if (decoded['tasks'] case final List tasks) {
+          return tasks.isEmpty
+              ? '没有后台任务'
+              : [
+                  for (final task in tasks)
+                    if (task is Map<String, dynamic>) _taskOutput(task),
+                  if (decoded['nextOffset'] != null) '还有更多任务',
+                ].join('\n\n');
         }
       case 'read_file':
         if (decoded['text'] case final String content) {
@@ -84,6 +98,33 @@ String presentToolOutput(ToolCallRecord record, String result) {
   return decoded is Map || decoded is List
       ? const JsonEncoder.withIndent('  ').convert(decoded)
       : result;
+}
+
+String _taskOutput(Map<String, dynamic> task) {
+  final status = switch (task['status']) {
+    'starting' => '启动中',
+    'running' => '运行中',
+    'stopping' => '停止中',
+    'succeeded' => '已完成',
+    'failed' => '已失败',
+    'cancelled' => '已停止',
+    'timedOut' => '已超时',
+    'interrupted' => '已中断',
+    _ => task['status'],
+  };
+  return [
+    '${task['title'] ?? '后台任务'} · $status',
+    '任务 ID：${task['taskId']}',
+    for (final stream in ['stdout', 'stderr'])
+      if (task[stream] case final Map output) ...[
+        if (output['truncated'] == true) '$stream 较早的日志已省略',
+        if (output['text'] case final String text when text.isNotEmpty)
+          '$stream:\n$text',
+      ],
+    if (task['exitCode'] != null) '退出码：${task['exitCode']}',
+    if (task['signal'] != null) '终止信号：${task['signal']}',
+    if (task['error'] case final String error) error,
+  ].join('\n\n');
 }
 
 String? _fileList(Map<String, dynamic> result) {

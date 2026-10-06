@@ -282,6 +282,21 @@ class WorkspaceCopies extends Table {
   Set<Column> get primaryKey => {workspaceId, relativePath};
 }
 
+@DataClassName('CommandTaskRow')
+class CommandTasks extends Table {
+  TextColumn get id => text()();
+  TextColumn get conversationId =>
+      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get workspaceId =>
+      text().references(Workspaces, #id, onDelete: KeyAction.cascade)();
+  TextColumn get configurationJson => text()();
+  BlobColumn get stdoutTail => blob().nullable()();
+  BlobColumn get stderrTail => blob().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 /// 派生摘要与独立请求用量，不替代消息树。
 @DataClassName('ContextSummaryRow')
 class ContextSummaries extends Table {
@@ -402,20 +417,21 @@ class MemoryEntries extends Table {
     UsageArchives,
     AgentPlans,
     MemoryEntries,
+    CommandTasks,
   ],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话工作区与文件来源；11 MCP 按服务整体启用；12 Ubuntu 会话工作区结构；13 调用级权限判定与授权审计。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话工作区与文件来源；11 MCP 按服务整体启用；12 Ubuntu 会话工作区结构；13 调用级权限判定与授权审计；14 后台命令任务与有界日志。
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (migrator, from, to) async {
-      if ((from != 10 && from != 11 && from != 12) || to != 13) {
+      if (from < 10 || from > 13 || to != 14) {
         throw const OperationFailure('此安装的数据结构不支持直接升级，请保留原数据');
       }
       // 重建被引用的表前关闭外键，事务内校验引用，提交后恢复约束。
@@ -424,18 +440,25 @@ class AppDatabase extends _$AppDatabase {
         await transaction(() async {
           if (from == 10) await upgradeMcpServerScope(this);
           if (from < 12) await upgradeWorkspaceSchema(this, migrator);
-          await migrator.addColumn(toolCalls, toolCalls.permissionJson);
+          if (from < 13) {
+            await migrator.addColumn(toolCalls, toolCalls.permissionJson);
+          }
+          await migrator.createTable(commandTasks);
         });
       } finally {
         await customStatement('PRAGMA foreign_keys = ON');
       }
-      AppLogger.info('数据库 $from → 13 保数据升级已提交');
+      AppLogger.info('数据库 $from → 14 保数据升级已提交');
     },
     beforeOpen: _prepareDatabase,
   );
 
   /// 每次打开都确保外键与索引就绪（建表、升级后都会执行）。
   Future<void> _prepareDatabase(OpeningDetails details) async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_command_tasks_conversation '
+      'ON command_tasks (conversation_id, created_at DESC)',
+    );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_model_requests_conversation ON model_requests (conversation_id, created_at DESC)',
     );

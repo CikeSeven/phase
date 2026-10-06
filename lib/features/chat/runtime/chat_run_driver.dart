@@ -137,6 +137,9 @@ class ChatRunDriver implements AgentLoopHost {
             _sendFromPanel(run.id, run.conversationId, text, cancellation),
       );
       await _execution.ensureBackgroundHost(run.id);
+      await _tools?.tasks?.releaseCompletionHosts(
+        conversationId: run.conversationId,
+      );
       _attachments = await _contexts.attachments(run.conversationId);
       _observe(ChatRunStarted(run.id, run.conversationId, _attachments));
       if (onPanelAccepted != null) {
@@ -186,6 +189,10 @@ class ChatRunDriver implements AgentLoopHost {
       await AgentLoop(
         this,
         maxTurns: run.maxTurns == 0 ? null : run.maxTurns - run.turnCount,
+        continueAfterAnswer: () async =>
+            !_submittedPlan &&
+            (_tools?.tasks?.pendingCompletions(run.conversationId).isNotEmpty ??
+                false),
       ).run();
     } on StorageFailure {
       await _operation.cleanup(
@@ -252,8 +259,61 @@ class ChatRunDriver implements AgentLoopHost {
 
   @override
   Future<StreamedTurn> streamTurn() async {
-    final thread = await _repository.getThread(_run.conversationId);
+    var thread = await _repository.getThread(_run.conversationId);
     if (thread == null) throw const UnknownFailure('会话不存在或已删除');
+    final initialNotice =
+        _run.turnCount == 0 &&
+        thread.branch.any(
+          (message) =>
+              message.id == _run.inputMessageId &&
+              message.parts.whereType<RuntimeContextPart>().any(
+                (part) => part.section == 'task_completion',
+              ),
+        );
+    if (!initialNotice &&
+        await _tools?.tasks?.deliverCompletions(
+              _run.conversationId,
+              _run.id,
+              _repository,
+            ) ==
+            true) {
+      thread = await _repository.getThread(_run.conversationId);
+      if (thread == null) throw const OperationFailure('会话已不存在');
+    }
+    await _tools?.tasks?.releaseCompletionHosts(
+      conversationId: _run.conversationId,
+    );
+    final tasks = await _tools!.taskContext();
+    if (tasks != null) {
+      final changed = RuntimeContextPart.changes(
+        thread.branch
+            .where((message) => message.role == ChatRole.system)
+            .expand((message) => message.parts),
+        [
+          RuntimeContextPart(
+            section: 'tasks',
+            text:
+                '<phase_runtime_context section="tasks">\n$tasks\n</phase_runtime_context>',
+          ),
+        ],
+      );
+      if (changed.isNotEmpty) {
+        _cancellation.throwIfCancelled();
+        final message = ChatMessage(
+          id: generateId(),
+          conversationId: _run.conversationId,
+          parentId: thread.currentMessageId,
+          runId: _run.id,
+          role: ChatRole.system,
+          parts: changed,
+          createdAt: DateTime.now(),
+        );
+        await _repository.appendMessage(message);
+        _turnTailId = message.id;
+        thread = await _repository.getThread(_run.conversationId);
+        if (thread == null) throw const OperationFailure('会话已不存在');
+      }
+    }
     _run = await _runs.beginTurn(_run.id);
     final messages = await _contexts.resolve(
       messages: thread.branch,

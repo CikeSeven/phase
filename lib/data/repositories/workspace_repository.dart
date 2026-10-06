@@ -42,12 +42,17 @@ class WorkspaceRepository {
   final Directory root;
   final UbuntuFilesystem filesystem;
   final Set<String> _leases = {};
+  final Map<String, int> _taskUsers = {};
+  final Set<String> _fileMutations = {};
   bool _mutatingEnvironment = false;
   bool _installingDependencies = false;
   int _environmentUsers = 0;
   bool get busy =>
-      _mutatingEnvironment || _leases.isNotEmpty || _environmentUsers > 0;
-  bool inUse(String id) => _leases.contains(id);
+      _mutatingEnvironment ||
+      _leases.isNotEmpty ||
+      _taskUsers.isNotEmpty ||
+      _environmentUsers > 0;
+  bool inUse(String id) => _leases.contains(id) || _taskUsers.containsKey(id);
   bool environmentReady(RuntimeEnvironment environment) =>
       environment.ready && environment.rootPath == filesystem.layout.rootfs;
   static const environmentId = 'ubuntu-arm64';
@@ -195,6 +200,10 @@ class WorkspaceRepository {
   /// 复制会话文件，副本目录与来源记录均独立；不复制共享 Ubuntu 环境。
   Future<void> copyFiles(String sourceId, Workspace target) async {
     final release = retainEnvironment();
+    if (_taskUsers.containsKey(sourceId) || _taskUsers.containsKey(target.id)) {
+      release();
+      throw const OperationFailure('请先停止后台任务，再复制会话');
+    }
     if (!_leases.add(sourceId)) {
       release();
       throw const OperationFailure('工作区正在使用，请先结束任务再复制会话');
@@ -204,6 +213,7 @@ class WorkspaceRepository {
       release();
       throw const OperationFailure('目标工作区正在使用，无法复制');
     }
+    _fileMutations.addAll([sourceId, target.id]);
     try {
       final source = await get(sourceId);
       if (source == null || source.deleting) {
@@ -261,6 +271,7 @@ class WorkspaceRepository {
     } finally {
       _leases.remove(sourceId);
       _leases.remove(target.id);
+      _fileMutations.removeAll([sourceId, target.id]);
       release();
     }
   }
@@ -268,10 +279,15 @@ class WorkspaceRepository {
   /// 删除先撤销新使用，再处理文件。失败保留 deleting 行供显式重试。
   Future<void> delete(String id, {Future<void> Function()? deleteOwner}) async {
     final release = retainEnvironment();
+    if (_taskUsers.containsKey(id)) {
+      release();
+      throw const OperationFailure('请先在任务管理中停止此会话的后台任务');
+    }
     if (!_leases.add(id)) {
       release();
       throw const OperationFailure('工作区正在使用，请先停止所属任务');
     }
+    _fileMutations.add(id);
     try {
       final workspace = await get(id);
       if (workspace == null) {
@@ -296,6 +312,7 @@ class WorkspaceRepository {
       );
     } finally {
       _leases.remove(id);
+      _fileMutations.remove(id);
       release();
     }
   }
@@ -324,6 +341,39 @@ class WorkspaceRepository {
       released = true;
       _environmentUsers--;
     };
+  }
+
+  /// Background services share files with model runs but prevent destructive workspace changes.
+  Future<WorkspaceLease> retainTask(WorkspaceSnapshot expected) async {
+    if (_fileMutations.contains(expected.id)) {
+      throw const OperationFailure('工作区正在删除或复制，请稍候');
+    }
+    final release = retainEnvironment();
+    final id = expected.id;
+    _taskUsers[id] = (_taskUsers[id] ?? 0) + 1;
+    void close() {
+      final count = _taskUsers[id]! - 1;
+      if (count == 0) {
+        _taskUsers.remove(id);
+      } else {
+        _taskUsers[id] = count;
+      }
+      release();
+    }
+
+    try {
+      final current = await snapshot(id);
+      if (!current.executable ||
+          current.rootPath != expected.rootPath ||
+          current.environmentRoot != expected.environmentRoot ||
+          current.environmentRevision != expected.environmentRevision) {
+        throw const OperationFailure('任务所用工作区或环境已改变');
+      }
+      return WorkspaceLease(current, close);
+    } catch (_) {
+      close();
+      rethrow;
+    }
   }
 
   /// 依赖安装与环境级变更互斥；不替换 rootfs，因此不阻断运行租约，

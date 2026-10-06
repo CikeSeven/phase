@@ -26,3 +26,21 @@ class ChatModelSelection {
 
   final ReasoningEffort effort;
 }
+
+ChatModelSelection describeChatModelSelection({
+  required ProviderProfile profile,
+  required String model,
+  required ReasoningEffort effort,
+}) {
+  final configured = profile.models
+      .where((candidate) => candidate.id == model)
+      .firstOrNull;
+  return ChatModelSelection(
+    profile: profile,
+    model: model,
+    effort: effort,
+    supportsReasoning: configured?.supportsReasoning ?? true,
+    supportsImages: configured?.supportsImages ?? true,
+    supportsTools: configured?.supportsTools ?? true,
+  );
+}

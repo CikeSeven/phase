@@ -108,12 +108,13 @@ enum AgentFinishReason { completed, cancelled, turnLimit }
 ///
 /// 聊天（无工具）与工具任务走同一条循环，每次运行有独立状态。
 class AgentLoop {
-  AgentLoop(this._host, {this.maxTurns});
+  AgentLoop(this._host, {this.maxTurns, this.continueAfterAnswer});
 
   final AgentLoopHost _host;
 
   /// 本次驱动剩余的轮次；null 不限轮次，非正数表示已耗尽。
   final int? maxTurns;
+  final Future<bool> Function()? continueAfterAnswer;
 
   Future<void> run() async {
     var turns = 0;
@@ -127,6 +128,10 @@ class AgentLoop {
         return _host.finish(turn.finishReason ?? AgentFinishReason.completed);
       }
       if (turn.toolCalls.isEmpty) {
+        if (await continueAfterAnswer?.call() ?? false) {
+          await _host.finishTurn(turn);
+          continue;
+        }
         return _host.finish(AgentFinishReason.completed);
       }
 

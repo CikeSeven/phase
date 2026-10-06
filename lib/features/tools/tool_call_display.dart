@@ -58,6 +58,7 @@ class ToolCallDisplay {
       'wait_for_user' =>
         args['prompt'] is String ? args['prompt'] as String : null,
       'shell' => args['command'] is String ? '\$ ${args['command']}' : null,
+      'task_output' || 'task_stop' => args['taskId'] as String?,
       'install_packages' => null,
       'write_file' ||
       'edit_file' ||
@@ -115,6 +116,10 @@ class ToolCallDisplay {
             final metadata = [
               if (args['cwd'] case final String cwd) cwd,
               if (args['timeout'] case final num seconds) '超时 ${seconds}s',
+              if (args['background'] == true) '后台运行',
+              if (args['yieldMs'] case final int milliseconds)
+                '等待 ${milliseconds}ms',
+              if (args['title'] case final String title) title,
             ];
             return ToolCallDisplay(
               call: '\$ $command',

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import '../../../data/datasources/local/settings_storage.dart';
 import '../../../data/models/agent_run.dart';
@@ -50,6 +51,8 @@ import '../../workspace/process_driver.dart';
 import '../../workspace/shell_tool.dart';
 import '../../workspace/workspace_files.dart';
 import '../../workspace/workspace_search.dart';
+import '../../tasks/command_task_controller.dart';
+import '../../tasks/task_tools.dart';
 import '../../../data/models/chat_request.dart';
 
 const _environmentTools = {'shell', 'install_packages', 'grep', 'find'};
@@ -109,6 +112,7 @@ class ChatToolRuntimeFactory {
     required this.connections,
     required this.commandSnapshots,
     this.web,
+    this.tasks,
   });
   final ToolRegistry builtIns;
   final WebSearchRepository? web;
@@ -125,6 +129,7 @@ class ChatToolRuntimeFactory {
   final ChannelDriver Function() platform;
   final CommandChannelDriver Function() commands;
   final ProcessDriver Function() processes;
+  final CommandTaskController Function()? tasks;
   final McpConnections Function() connections;
   final Future<List<CommandChannelSnapshot>> Function() commandSnapshots;
 
@@ -298,9 +303,19 @@ class ChatToolRuntimeFactory {
         ...buildWebTools(web!, config.webSearch!),
       for (final tool in builtIns.tools)
         if (!_environmentTools.contains(tool.name))
-          if (tool is WaitForUserTool) WaitForUserTool(waitForUser) else tool,
+          if (tool is WaitForUserTool)
+            WaitForUserTool(waitForUser)
+          else if (tool is TaskTool)
+            TaskTool(tool.action, controller: tasks?.call())
+          else
+            tool,
       if (binding?.executable == true)
-        ShellTool(workspace: binding, driver: processDriver, files: files),
+        ShellTool(
+          workspace: binding,
+          driver: processDriver,
+          files: files,
+          tasks: tasks?.call(),
+        ),
       if (binding?.executable == true)
         for (final findFiles in [false, true])
           WorkspaceSearchTool(
@@ -389,7 +404,9 @@ class ChatToolRuntimeFactory {
                 status: '准备${ToolPresentation.toolLabel(tool.name)}',
               ),
         );
-        if (tool is ShellTool ||
+        if ((tool is ShellTool &&
+                arguments['background'] != true &&
+                arguments['yieldMs'] == null) ||
             tool is WorkspaceSearchTool ||
             tool is ShizukuDisplayTool) {
           await processDriver!.beginTask(
@@ -419,6 +436,7 @@ class ChatToolRuntimeFactory {
       mcp,
       processDriver,
       workspaces,
+      tasks?.call(),
     );
   }
 }
@@ -431,15 +449,40 @@ class ChatToolRuntime {
     this.executor,
     this.mcp,
     this.processDriver,
-    this.workspaces,
-  );
+    this.workspaces, [
+    this.tasks,
+  ]);
   final AgentRun run;
   final ToolRegistry registry;
   final ToolExecutor executor;
   final McpRunRuntime? mcp;
   final ProcessDriver? processDriver;
   final WorkspaceRepository? workspaces;
+  final CommandTaskController? tasks;
   StreamSubscription<String>? _processStops;
+
+  Future<String?> taskContext() async {
+    final controller = tasks;
+    if (controller == null ||
+        !run.configuration.enabledTools.contains('task_list')) {
+      return null;
+    }
+    await controller.initialize();
+    final owned = controller.tasks
+        .where((task) => task.conversationId == run.conversationId)
+        .toList();
+    final visible = [
+      ...owned.where((task) => task.status.active),
+      ...owned.where((task) => !task.status.active).take(10),
+    ];
+    return jsonEncode({
+      'tasks': [
+        for (final task in visible) task.summary(includeCommand: false),
+      ],
+      'total': owned.length,
+      'instruction': '这是当前会话任务的最新状态。后台任务跨模型轮次保留；使用 task_output 读取日志、task_stop 停止，不重复启动运行中的服务。',
+    });
+  }
 
   List<ToolDefinition> get definitions => run.configuration.supportsTools
       ? registry.definitionsFor(

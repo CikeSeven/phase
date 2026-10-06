@@ -1,6 +1,7 @@
 import '../execution/wait_for_user_tool.dart';
 import '../workspace/install_tool.dart';
 import '../workspace/shell_tool.dart';
+import '../tasks/task_tools.dart';
 import 'file_tools.dart';
 import 'http_tool.dart';
 import 'search_tools.dart';
@@ -22,6 +23,7 @@ ToolRegistry buildBuiltInRegistry({
     const SystemInfoTool(),
     const WaitForUserTool(),
     const ShellTool(),
+    for (final action in TaskToolAction.values) TaskTool(action),
     const InstallTool(),
     const WorkspaceSearchTool(findFiles: false),
     const WorkspaceSearchTool(findFiles: true),

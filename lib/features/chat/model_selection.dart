@@ -142,27 +142,11 @@ class ModelSelection extends _$ModelSelection {
     required ProviderProfile profile,
     required String model,
     required ReasoningEffort effort,
-  }) {
-    var supportsReasoning = true;
-    var supportsImages = true;
-    var supportsTools = true;
-    for (final candidate in profile.models) {
-      if (candidate.id == model) {
-        supportsReasoning = candidate.supportsReasoning;
-        supportsImages = candidate.supportsImages;
-        supportsTools = candidate.supportsTools;
-        break;
-      }
-    }
-    return ChatModelSelection(
-      profile: profile,
-      model: model,
-      supportsReasoning: supportsReasoning,
-      supportsImages: supportsImages,
-      supportsTools: supportsTools,
-      effort: effort,
-    );
-  }
+  }) => describeChatModelSelection(
+    profile: profile,
+    model: model,
+    effort: effort,
+  );
 
   /// 自动保存一份完整选择；串行写入，目标会话在点击时固定。
   Future<void> saveSelection(model.ModelSelection selection) {

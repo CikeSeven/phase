@@ -62,11 +62,12 @@ void main() {
     final records = await (await h.toolCalls()).getByRun(run.id);
     expect(records.single.status, ToolCallStatus.cancelled);
     expect(records.single.result, contains('partial'));
-    expect(records.single.artifacts, hasLength(1));
+    expect(records.single.artifacts, hasLength(2));
     expect(processes.calls, hasLength(1));
     expect(processes.active, isEmpty);
     expect(repository.busy, isFalse);
     final attachments = await chats.attachmentsFor(chat.id);
     expect(attachments.any((a) => a.name == 'saved.txt'), isTrue);
+    expect(attachments.any((a) => a.name == 'started'), isTrue);
   });
 }

@@ -56,7 +56,9 @@ void main() {
     expect(record.result, contains('第一行'));
 
     // 消息树：助手消息只引用记录 id，结果另起一条 role: tool 的消息。
-    final branch = await harness.branch();
+    final branch = (await harness.branch())
+        .where((message) => message.role != ChatRole.system)
+        .toList();
     expect(branch.map((message) => message.role), [
       ChatRole.user,
       ChatRole.assistant,
@@ -136,7 +138,9 @@ void main() {
     expect(await harness.resultTextOf(first), 'echo:A');
     expect(await harness.resultTextOf(second), 'echo:B');
 
-    final branch = await harness.branch();
+    final branch = (await harness.branch())
+        .where((message) => message.role != ChatRole.system)
+        .toList();
     expect(
       branch[1].parts.whereType<ToolCallPart>().map((part) => part.toolCallId),
       [first.id, second.id],
@@ -529,7 +533,10 @@ void main() {
     expect(record.status, ToolCallStatus.failed);
     expect(record.resultMessageId, isNotNull);
     expect((await harness.latestRun()).status, RunStatus.completed);
-    expect(harness.provider.requests, hasLength(2));
+    expect(
+      harness.provider.requests.where((request) => request.tools.isNotEmpty),
+      hasLength(2),
+    );
     expect(
       (await harness.branch())
           .where((m) => m.role == ChatRole.tool)

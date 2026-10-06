@@ -14,6 +14,7 @@ import '../web_search/web_tools.dart';
 import '../workspace/install_tool.dart';
 import '../workspace/prepare_skill_tool.dart';
 import '../workspace/shell_tool.dart';
+import '../tasks/task_tools.dart';
 import 'file_tools.dart';
 import 'http_tool.dart';
 import 'search_tools.dart';
@@ -69,6 +70,10 @@ ToolPermissionRequest permissionRequestFor(
     EditFileTool() ||
     PrepareSkillTool() => ToolEffect.fileWrite,
     ShellTool() || InstallTool() => ToolEffect.codeExecution,
+    TaskTool(:final action) =>
+      action == TaskToolAction.stop
+          ? ToolEffect.stateWrite
+          : ToolEffect.informationRead,
     HttpRequestTool() ||
     WebSearchTool() ||
     WebFetchTool() => ToolEffect.networkRequest,

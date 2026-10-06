@@ -10,6 +10,7 @@ import '../../execution/platform_tools.dart';
 import '../../execution/execution_api.g.dart';
 import '../../skills/read_skill_tool.dart';
 import '../../web_search/web_tools.dart';
+import '../../tasks/task_tools.dart';
 
 /// 宿主类型白名单，不信任服务器的 effect/readOnly 标记或工具名。
 bool allowedInPlan(Tool tool) =>
@@ -23,6 +24,7 @@ bool allowedInPlan(Tool tool) =>
     tool is ReadSkillTool ||
     tool is ReadHistoryTool ||
     tool is SubmitPlanTool ||
+    (tool is TaskTool && tool.action != TaskToolAction.stop) ||
     (tool is ApplicationTool && tool.action == ExecutionAction.listApps) ||
     (tool is ScopedFileTool &&
         (tool.name == 'read_file' || tool.name == 'list_files'));

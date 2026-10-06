@@ -9,6 +9,8 @@ import 'core/theme/app_theme.dart';
 import 'features/settings/theme_mode_controller.dart';
 import 'features/tools/run_recovery_controller.dart';
 import 'features/chat/tool_confirmation_host.dart';
+import 'features/tasks/command_task_controller.dart';
+import 'features/chat/chat_controller.dart';
 
 /// 应用根组件：装配主题与路由。
 class PhaseApp extends ConsumerStatefulWidget {
@@ -28,6 +30,18 @@ class _PhaseAppState extends ConsumerState<PhaseApp> {
       unawaited(
         ref
             .read(runRecoveryControllerProvider.notifier)
+            .initialize()
+            .catchError((Object _) {}),
+      );
+      unawaited(
+        ref
+            .read(chatControllerProvider.notifier)
+            .initializeTaskContinuations()
+            .catchError((Object _) {}),
+      );
+      unawaited(
+        ref
+            .read(commandTaskControllerProvider.notifier)
             .initialize()
             .catchError((Object _) {}),
       );

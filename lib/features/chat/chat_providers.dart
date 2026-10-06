@@ -15,6 +15,7 @@ import '../commands/command_channel_driver.dart';
 import '../commands/command_channels_controller.dart';
 import '../mcp/mcp_connections.dart';
 import '../workspace/process_driver.dart';
+import '../tasks/command_task_controller.dart';
 import 'context/chat_context_coordinator.dart';
 import 'runtime/chat_run_factory.dart';
 import 'runtime/chat_tool_runtime.dart';
@@ -170,6 +171,7 @@ Future<ChatToolRuntimeFactory> chatToolRuntimeFactory(Ref ref) async {
     platform: () => ref.read(channelDriverProvider),
     commands: () => ref.read(commandChannelDriverProvider),
     processes: () => ref.read(processDriverProvider),
+    tasks: () => ref.read(commandTaskControllerProvider.notifier),
     connections: () => ref.read(mcpConnectionsProvider),
     commandSnapshots: () => commandSnapshots(ref),
   );

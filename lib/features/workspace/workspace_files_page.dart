@@ -37,6 +37,11 @@ class WorkspaceFilesPage extends ConsumerWidget {
       title: path == '.' ? workspace.value?.name ?? '工作区文件' : path,
       actions: [
         IconButton(
+          tooltip: '会话任务',
+          onPressed: () => context.push('/background-tasks?conversationId=$id'),
+          icon: const Icon(LucideIcons.terminal),
+        ),
+        IconButton(
           tooltip: '刷新',
           onPressed: () => ref.invalidate(workspaceEntriesProvider(id, path)),
           icon: const Icon(LucideIcons.rotateCw),

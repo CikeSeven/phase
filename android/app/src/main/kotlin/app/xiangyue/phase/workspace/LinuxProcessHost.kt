@@ -114,6 +114,7 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
         val running = Running(spec, rootfs)
         tasks[spec.processId] = running
         scope.launch { running.run() }
+        withTimeout(10000) { running.awaitStarted() }
     }
     private fun owned(owner: String, id: String): Running = tasks[id]?.takeIf { it.spec.ownerId == owner } ?: throw IllegalStateException("processUnavailable")
     override suspend fun writeStdin(ownerId: String, processId: String, bytes: ByteArray) {
@@ -159,6 +160,7 @@ class LinuxProcessHost(private val context: Context, private val flutter: LinuxP
             }
             // The supervisor sends TERM, then KILL, and reaps the entire group.
         }
+        suspend fun awaitStarted() { started.await() }
         suspend fun write(bytes: ByteArray) {
             started.await()
             inputMutex.withLock {

@@ -91,7 +91,12 @@ String _commandPreview(
 }
 
 int _previewLimit(ToolCallRecord record) =>
-    const {'read_file', 'list_files'}.contains(record.toolName)
+    const {'task_output', 'task_list'}.contains(record.toolName) ||
+        (record.toolName == 'shell' &&
+            (record.arguments['background'] == true ||
+                record.arguments['yieldMs'] != null))
+    ? 256 * 1024
+    : const {'read_file', 'list_files'}.contains(record.toolName)
     // A 50 KiB text page can expand sixfold inside a JSON result; keep its cursor.
     ? ToolOutputLimits.maxBytes * 6 + 2 * 1024
     : const {'grep', 'find'}.contains(record.toolName)

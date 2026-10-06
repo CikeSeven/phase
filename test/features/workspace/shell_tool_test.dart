@@ -77,8 +77,10 @@ void main() {
             'limit' => 'head -c 10000000 /dev/zero',
             'independent' => 'export PHASE_TRANSIENT=1; cd /tmp; printf first',
             'empty' => 'true',
-            'previewBoundary' => 'head -c 65536 /dev/zero',
-            'largeStderr' => 'head -c 65537 /dev/zero >&2',
+            'previewBoundary' =>
+              'head -c ${ShellLimits.previewBytes} /dev/zero',
+            'largeStderr' =>
+              'head -c ${ShellLimits.previewBytes + 1} /dev/zero >&2',
             'noTimeout' => 'sleep 1; printf done',
             _ => 'printf partial; sleep 60',
           },

@@ -11408,6 +11408,498 @@ class MemoryEntriesCompanion extends UpdateCompanion<MemoryEntryRow> {
   }
 }
 
+class $CommandTasksTable extends CommandTasks
+    with TableInfo<$CommandTasksTable, CommandTaskRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $CommandTasksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _conversationIdMeta = const VerificationMeta(
+    'conversationId',
+  );
+  @override
+  late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
+    'conversation_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES conversations (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES workspaces (id) ON DELETE CASCADE',
+    ),
+  );
+  static const VerificationMeta _configurationJsonMeta = const VerificationMeta(
+    'configurationJson',
+  );
+  @override
+  late final GeneratedColumn<String> configurationJson =
+      GeneratedColumn<String>(
+        'configuration_json',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _stdoutTailMeta = const VerificationMeta(
+    'stdoutTail',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> stdoutTail = GeneratedColumn<Uint8List>(
+    'stdout_tail',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _stderrTailMeta = const VerificationMeta(
+    'stderrTail',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> stderrTail = GeneratedColumn<Uint8List>(
+    'stderr_tail',
+    aliasedName,
+    true,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    conversationId,
+    workspaceId,
+    configurationJson,
+    stdoutTail,
+    stderrTail,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'command_tasks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<CommandTaskRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('conversation_id')) {
+      context.handle(
+        _conversationIdMeta,
+        conversationId.isAcceptableOrUnknown(
+          data['conversation_id']!,
+          _conversationIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('configuration_json')) {
+      context.handle(
+        _configurationJsonMeta,
+        configurationJson.isAcceptableOrUnknown(
+          data['configuration_json']!,
+          _configurationJsonMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_configurationJsonMeta);
+    }
+    if (data.containsKey('stdout_tail')) {
+      context.handle(
+        _stdoutTailMeta,
+        stdoutTail.isAcceptableOrUnknown(data['stdout_tail']!, _stdoutTailMeta),
+      );
+    }
+    if (data.containsKey('stderr_tail')) {
+      context.handle(
+        _stderrTailMeta,
+        stderrTail.isAcceptableOrUnknown(data['stderr_tail']!, _stderrTailMeta),
+      );
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  CommandTaskRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return CommandTaskRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      conversationId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}conversation_id'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      configurationJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}configuration_json'],
+      )!,
+      stdoutTail: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}stdout_tail'],
+      ),
+      stderrTail: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}stderr_tail'],
+      ),
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $CommandTasksTable createAlias(String alias) {
+    return $CommandTasksTable(attachedDatabase, alias);
+  }
+}
+
+class CommandTaskRow extends DataClass implements Insertable<CommandTaskRow> {
+  final String id;
+  final String conversationId;
+  final String workspaceId;
+  final String configurationJson;
+  final Uint8List? stdoutTail;
+  final Uint8List? stderrTail;
+  final DateTime createdAt;
+  const CommandTaskRow({
+    required this.id,
+    required this.conversationId,
+    required this.workspaceId,
+    required this.configurationJson,
+    this.stdoutTail,
+    this.stderrTail,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['conversation_id'] = Variable<String>(conversationId);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['configuration_json'] = Variable<String>(configurationJson);
+    if (!nullToAbsent || stdoutTail != null) {
+      map['stdout_tail'] = Variable<Uint8List>(stdoutTail);
+    }
+    if (!nullToAbsent || stderrTail != null) {
+      map['stderr_tail'] = Variable<Uint8List>(stderrTail);
+    }
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  CommandTasksCompanion toCompanion(bool nullToAbsent) {
+    return CommandTasksCompanion(
+      id: Value(id),
+      conversationId: Value(conversationId),
+      workspaceId: Value(workspaceId),
+      configurationJson: Value(configurationJson),
+      stdoutTail: stdoutTail == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stdoutTail),
+      stderrTail: stderrTail == null && nullToAbsent
+          ? const Value.absent()
+          : Value(stderrTail),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory CommandTaskRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return CommandTaskRow(
+      id: serializer.fromJson<String>(json['id']),
+      conversationId: serializer.fromJson<String>(json['conversationId']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      configurationJson: serializer.fromJson<String>(json['configurationJson']),
+      stdoutTail: serializer.fromJson<Uint8List?>(json['stdoutTail']),
+      stderrTail: serializer.fromJson<Uint8List?>(json['stderrTail']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'conversationId': serializer.toJson<String>(conversationId),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'configurationJson': serializer.toJson<String>(configurationJson),
+      'stdoutTail': serializer.toJson<Uint8List?>(stdoutTail),
+      'stderrTail': serializer.toJson<Uint8List?>(stderrTail),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  CommandTaskRow copyWith({
+    String? id,
+    String? conversationId,
+    String? workspaceId,
+    String? configurationJson,
+    Value<Uint8List?> stdoutTail = const Value.absent(),
+    Value<Uint8List?> stderrTail = const Value.absent(),
+    DateTime? createdAt,
+  }) => CommandTaskRow(
+    id: id ?? this.id,
+    conversationId: conversationId ?? this.conversationId,
+    workspaceId: workspaceId ?? this.workspaceId,
+    configurationJson: configurationJson ?? this.configurationJson,
+    stdoutTail: stdoutTail.present ? stdoutTail.value : this.stdoutTail,
+    stderrTail: stderrTail.present ? stderrTail.value : this.stderrTail,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  CommandTaskRow copyWithCompanion(CommandTasksCompanion data) {
+    return CommandTaskRow(
+      id: data.id.present ? data.id.value : this.id,
+      conversationId: data.conversationId.present
+          ? data.conversationId.value
+          : this.conversationId,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      configurationJson: data.configurationJson.present
+          ? data.configurationJson.value
+          : this.configurationJson,
+      stdoutTail: data.stdoutTail.present
+          ? data.stdoutTail.value
+          : this.stdoutTail,
+      stderrTail: data.stderrTail.present
+          ? data.stderrTail.value
+          : this.stderrTail,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CommandTaskRow(')
+          ..write('id: $id, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('configurationJson: $configurationJson, ')
+          ..write('stdoutTail: $stdoutTail, ')
+          ..write('stderrTail: $stderrTail, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    conversationId,
+    workspaceId,
+    configurationJson,
+    $driftBlobEquality.hash(stdoutTail),
+    $driftBlobEquality.hash(stderrTail),
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is CommandTaskRow &&
+          other.id == this.id &&
+          other.conversationId == this.conversationId &&
+          other.workspaceId == this.workspaceId &&
+          other.configurationJson == this.configurationJson &&
+          $driftBlobEquality.equals(other.stdoutTail, this.stdoutTail) &&
+          $driftBlobEquality.equals(other.stderrTail, this.stderrTail) &&
+          other.createdAt == this.createdAt);
+}
+
+class CommandTasksCompanion extends UpdateCompanion<CommandTaskRow> {
+  final Value<String> id;
+  final Value<String> conversationId;
+  final Value<String> workspaceId;
+  final Value<String> configurationJson;
+  final Value<Uint8List?> stdoutTail;
+  final Value<Uint8List?> stderrTail;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const CommandTasksCompanion({
+    this.id = const Value.absent(),
+    this.conversationId = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.configurationJson = const Value.absent(),
+    this.stdoutTail = const Value.absent(),
+    this.stderrTail = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  CommandTasksCompanion.insert({
+    required String id,
+    required String conversationId,
+    required String workspaceId,
+    required String configurationJson,
+    this.stdoutTail = const Value.absent(),
+    this.stderrTail = const Value.absent(),
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       conversationId = Value(conversationId),
+       workspaceId = Value(workspaceId),
+       configurationJson = Value(configurationJson),
+       createdAt = Value(createdAt);
+  static Insertable<CommandTaskRow> custom({
+    Expression<String>? id,
+    Expression<String>? conversationId,
+    Expression<String>? workspaceId,
+    Expression<String>? configurationJson,
+    Expression<Uint8List>? stdoutTail,
+    Expression<Uint8List>? stderrTail,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (conversationId != null) 'conversation_id': conversationId,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (configurationJson != null) 'configuration_json': configurationJson,
+      if (stdoutTail != null) 'stdout_tail': stdoutTail,
+      if (stderrTail != null) 'stderr_tail': stderrTail,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  CommandTasksCompanion copyWith({
+    Value<String>? id,
+    Value<String>? conversationId,
+    Value<String>? workspaceId,
+    Value<String>? configurationJson,
+    Value<Uint8List?>? stdoutTail,
+    Value<Uint8List?>? stderrTail,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return CommandTasksCompanion(
+      id: id ?? this.id,
+      conversationId: conversationId ?? this.conversationId,
+      workspaceId: workspaceId ?? this.workspaceId,
+      configurationJson: configurationJson ?? this.configurationJson,
+      stdoutTail: stdoutTail ?? this.stdoutTail,
+      stderrTail: stderrTail ?? this.stderrTail,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (conversationId.present) {
+      map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (configurationJson.present) {
+      map['configuration_json'] = Variable<String>(configurationJson.value);
+    }
+    if (stdoutTail.present) {
+      map['stdout_tail'] = Variable<Uint8List>(stdoutTail.value);
+    }
+    if (stderrTail.present) {
+      map['stderr_tail'] = Variable<Uint8List>(stderrTail.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('CommandTasksCompanion(')
+          ..write('id: $id, ')
+          ..write('conversationId: $conversationId, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('configurationJson: $configurationJson, ')
+          ..write('stdoutTail: $stdoutTail, ')
+          ..write('stderrTail: $stderrTail, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -11437,6 +11929,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $UsageArchivesTable usageArchives = $UsageArchivesTable(this);
   late final $AgentPlansTable agentPlans = $AgentPlansTable(this);
   late final $MemoryEntriesTable memoryEntries = $MemoryEntriesTable(this);
+  late final $CommandTasksTable commandTasks = $CommandTasksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -11460,6 +11953,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     usageArchives,
     agentPlans,
     memoryEntries,
+    commandTasks,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -11539,6 +12033,20 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         limitUpdateKind: UpdateKind.delete,
       ),
       result: [TableUpdate('agent_plans', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'conversations',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('command_tasks', kind: UpdateKind.delete)],
+    ),
+    WritePropagation(
+      on: TableUpdateQuery.onTableName(
+        'workspaces',
+        limitUpdateKind: UpdateKind.delete,
+      ),
+      result: [TableUpdate('command_tasks', kind: UpdateKind.delete)],
     ),
   ]);
 }
@@ -12695,6 +13203,24 @@ final class $$WorkspacesTableReferences
       manager.$state.copyWith(prefetchedData: cache),
     );
   }
+
+  static MultiTypedResultKey<$CommandTasksTable, List<CommandTaskRow>>
+  _commandTasksRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.commandTasks,
+    aliasName: 'workspaces__id__command_tasks__workspace_id',
+  );
+
+  $$CommandTasksTableProcessedTableManager get commandTasksRefs {
+    final manager = $$CommandTasksTableTableManager(
+      $_db,
+      $_db.commandTasks,
+    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_commandTasksRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 }
 
 class $$WorkspacesTableFilterComposer
@@ -12772,6 +13298,31 @@ class $$WorkspacesTableFilterComposer
           }) => $$WorkspaceCopiesTableFilterComposer(
             $db: $db,
             $table: $db.workspaceCopies,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> commandTasksRefs(
+    Expression<bool> Function($$CommandTasksTableFilterComposer f) f,
+  ) {
+    final $$CommandTasksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.commandTasks,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CommandTasksTableFilterComposer(
+            $db: $db,
+            $table: $db.commandTasks,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -12892,6 +13443,31 @@ class $$WorkspacesTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> commandTasksRefs<T extends Object>(
+    Expression<T> Function($$CommandTasksTableAnnotationComposer a) f,
+  ) {
+    final $$CommandTasksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.commandTasks,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CommandTasksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.commandTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$WorkspacesTableTableManager
@@ -12910,6 +13486,7 @@ class $$WorkspacesTableTableManager
           PrefetchHooks Function({
             bool conversationsRefs,
             bool workspaceCopiesRefs,
+            bool commandTasksRefs,
           })
         > {
   $$WorkspacesTableTableManager(_$AppDatabase db, $WorkspacesTable table)
@@ -12964,12 +13541,17 @@ class $$WorkspacesTableTableManager
               )
               .toList(),
           prefetchHooksCallback:
-              ({conversationsRefs = false, workspaceCopiesRefs = false}) {
+              ({
+                conversationsRefs = false,
+                workspaceCopiesRefs = false,
+                commandTasksRefs = false,
+              }) {
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
                     if (conversationsRefs) db.conversations,
                     if (workspaceCopiesRefs) db.workspaceCopies,
+                    if (commandTasksRefs) db.commandTasks,
                   ],
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
@@ -13016,6 +13598,27 @@ class $$WorkspacesTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (commandTasksRefs)
+                        await $_getPrefetchedData<
+                          WorkspaceRow,
+                          $WorkspacesTable,
+                          CommandTaskRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WorkspacesTableReferences
+                              ._commandTasksRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WorkspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).commandTasksRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.workspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -13036,7 +13639,11 @@ typedef $$WorkspacesTableProcessedTableManager =
       $$WorkspacesTableUpdateCompanionBuilder,
       (WorkspaceRow, $$WorkspacesTableReferences),
       WorkspaceRow,
-      PrefetchHooks Function({bool conversationsRefs, bool workspaceCopiesRefs})
+      PrefetchHooks Function({
+        bool conversationsRefs,
+        bool workspaceCopiesRefs,
+        bool commandTasksRefs,
+      })
     >;
 typedef $$ConversationsTableCreateCompanionBuilder =
     ConversationsCompanion Function({
@@ -13218,6 +13825,24 @@ final class $$ConversationsTableReferences
     ).filter((f) => f.conversationId.id.sqlEquals($_itemColumn<String>('id')!));
 
     final cache = $_typedResult.readTableOrNull(_agentPlansRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$CommandTasksTable, List<CommandTaskRow>>
+  _commandTasksRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.commandTasks,
+    aliasName: 'conversations__id__command_tasks__conversation_id',
+  );
+
+  $$CommandTasksTableProcessedTableManager get commandTasksRefs {
+    final manager = $$CommandTasksTableTableManager(
+      $_db,
+      $_db.commandTasks,
+    ).filter((f) => f.conversationId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_commandTasksRefsTable($_db));
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: cache),
     );
@@ -13474,6 +14099,31 @@ class $$ConversationsTableFilterComposer
           }) => $$AgentPlansTableFilterComposer(
             $db: $db,
             $table: $db.agentPlans,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> commandTasksRefs(
+    Expression<bool> Function($$CommandTasksTableFilterComposer f) f,
+  ) {
+    final $$CommandTasksTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.commandTasks,
+      getReferencedColumn: (t) => t.conversationId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CommandTasksTableFilterComposer(
+            $db: $db,
+            $table: $db.commandTasks,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -13815,6 +14465,31 @@ class $$ConversationsTableAnnotationComposer
     );
     return f(composer);
   }
+
+  Expression<T> commandTasksRefs<T extends Object>(
+    Expression<T> Function($$CommandTasksTableAnnotationComposer a) f,
+  ) {
+    final $$CommandTasksTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.commandTasks,
+      getReferencedColumn: (t) => t.conversationId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$CommandTasksTableAnnotationComposer(
+            $db: $db,
+            $table: $db.commandTasks,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 }
 
 class $$ConversationsTableTableManager
@@ -13839,6 +14514,7 @@ class $$ConversationsTableTableManager
             bool modelRequestsRefs,
             bool usageArchivesRefs,
             bool agentPlansRefs,
+            bool commandTasksRefs,
           })
         > {
   $$ConversationsTableTableManager(_$AppDatabase db, $ConversationsTable table)
@@ -13926,6 +14602,7 @@ class $$ConversationsTableTableManager
                 modelRequestsRefs = false,
                 usageArchivesRefs = false,
                 agentPlansRefs = false,
+                commandTasksRefs = false,
               }) {
                 return PrefetchHooks(
                   db: db,
@@ -13937,6 +14614,7 @@ class $$ConversationsTableTableManager
                     if (modelRequestsRefs) db.modelRequests,
                     if (usageArchivesRefs) db.usageArchives,
                     if (agentPlansRefs) db.agentPlans,
+                    if (commandTasksRefs) db.commandTasks,
                   ],
                   addJoins:
                       <
@@ -14117,6 +14795,27 @@ class $$ConversationsTableTableManager
                               ),
                           typedResults: items,
                         ),
+                      if (commandTasksRefs)
+                        await $_getPrefetchedData<
+                          ConversationRow,
+                          $ConversationsTable,
+                          CommandTaskRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ConversationsTableReferences
+                              ._commandTasksRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ConversationsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).commandTasksRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.conversationId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                     ];
                   },
                 );
@@ -14146,6 +14845,7 @@ typedef $$ConversationsTableProcessedTableManager =
         bool modelRequestsRefs,
         bool usageArchivesRefs,
         bool agentPlansRefs,
+        bool commandTasksRefs,
       })
     >;
 typedef $$MessagesTableCreateCompanionBuilder = MessagesCompanion Function({
@@ -19402,6 +20102,451 @@ typedef $$MemoryEntriesTableProcessedTableManager =
       MemoryEntryRow,
       PrefetchHooks Function()
     >;
+typedef $$CommandTasksTableCreateCompanionBuilder =
+    CommandTasksCompanion Function({
+      required String id,
+      required String conversationId,
+      required String workspaceId,
+      required String configurationJson,
+      Value<Uint8List?> stdoutTail,
+      Value<Uint8List?> stderrTail,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$CommandTasksTableUpdateCompanionBuilder =
+    CommandTasksCompanion Function({
+      Value<String> id,
+      Value<String> conversationId,
+      Value<String> workspaceId,
+      Value<String> configurationJson,
+      Value<Uint8List?> stdoutTail,
+      Value<Uint8List?> stderrTail,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+final class $$CommandTasksTableReferences
+    extends BaseReferences<_$AppDatabase, $CommandTasksTable, CommandTaskRow> {
+  $$CommandTasksTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $ConversationsTable _conversationIdTable(_$AppDatabase db) => db
+      .conversations
+      .createAlias('command_tasks__conversation_id__conversations__id');
+
+  $$ConversationsTableProcessedTableManager get conversationId {
+    final $_column = $_itemColumn<String>('conversation_id')!;
+
+    final manager = $$ConversationsTableTableManager(
+      $_db,
+      $_db.conversations,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_conversationIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
+      db.workspaces.createAlias('command_tasks__workspace_id__workspaces__id');
+
+  $$WorkspacesTableProcessedTableManager get workspaceId {
+    final $_column = $_itemColumn<String>('workspace_id')!;
+
+    final manager = $$WorkspacesTableTableManager(
+      $_db,
+      $_db.workspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+}
+
+class $$CommandTasksTableFilterComposer
+    extends Composer<_$AppDatabase, $CommandTasksTable> {
+  $$CommandTasksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get configurationJson => $composableBuilder(
+    column: $table.configurationJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get stdoutTail => $composableBuilder(
+    column: $table.stdoutTail,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get stderrTail => $composableBuilder(
+    column: $table.stderrTail,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$ConversationsTableFilterComposer get conversationId {
+    final $$ConversationsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableFilterComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$WorkspacesTableFilterComposer get workspaceId {
+    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CommandTasksTableOrderingComposer
+    extends Composer<_$AppDatabase, $CommandTasksTable> {
+  $$CommandTasksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get configurationJson => $composableBuilder(
+    column: $table.configurationJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get stdoutTail => $composableBuilder(
+    column: $table.stdoutTail,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get stderrTail => $composableBuilder(
+    column: $table.stderrTail,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$ConversationsTableOrderingComposer get conversationId {
+    final $$ConversationsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableOrderingComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$WorkspacesTableOrderingComposer get workspaceId {
+    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CommandTasksTableAnnotationComposer
+    extends Composer<_$AppDatabase, $CommandTasksTable> {
+  $$CommandTasksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get configurationJson => $composableBuilder(
+    column: $table.configurationJson,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get stdoutTail => $composableBuilder(
+    column: $table.stdoutTail,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<Uint8List> get stderrTail => $composableBuilder(
+    column: $table.stderrTail,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$ConversationsTableAnnotationComposer get conversationId {
+    final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.conversationId,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$WorkspacesTableAnnotationComposer get workspaceId {
+    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$CommandTasksTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $CommandTasksTable,
+          CommandTaskRow,
+          $$CommandTasksTableFilterComposer,
+          $$CommandTasksTableOrderingComposer,
+          $$CommandTasksTableAnnotationComposer,
+          $$CommandTasksTableCreateCompanionBuilder,
+          $$CommandTasksTableUpdateCompanionBuilder,
+          (CommandTaskRow, $$CommandTasksTableReferences),
+          CommandTaskRow,
+          PrefetchHooks Function({bool conversationId, bool workspaceId})
+        > {
+  $$CommandTasksTableTableManager(_$AppDatabase db, $CommandTasksTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$CommandTasksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$CommandTasksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$CommandTasksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> conversationId = const Value.absent(),
+                Value<String> workspaceId = const Value.absent(),
+                Value<String> configurationJson = const Value.absent(),
+                Value<Uint8List?> stdoutTail = const Value.absent(),
+                Value<Uint8List?> stderrTail = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => CommandTasksCompanion(
+                id: id,
+                conversationId: conversationId,
+                workspaceId: workspaceId,
+                configurationJson: configurationJson,
+                stdoutTail: stdoutTail,
+                stderrTail: stderrTail,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String conversationId,
+                required String workspaceId,
+                required String configurationJson,
+                Value<Uint8List?> stdoutTail = const Value.absent(),
+                Value<Uint8List?> stderrTail = const Value.absent(),
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => CommandTasksCompanion.insert(
+                id: id,
+                conversationId: conversationId,
+                workspaceId: workspaceId,
+                configurationJson: configurationJson,
+                stdoutTail: stdoutTail,
+                stderrTail: stderrTail,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$CommandTasksTable, CommandTaskRow>(table),
+                  $$CommandTasksTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({conversationId = false, workspaceId = false}) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (conversationId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.conversationId,
+                            referencedTable: $$CommandTasksTableReferences
+                                ._conversationIdTable(db),
+                            referencedColumn: $$CommandTasksTableReferences
+                                ._conversationIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+                        if (workspaceId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.workspaceId,
+                            referencedTable: $$CommandTasksTableReferences
+                                ._workspaceIdTable(db),
+                            referencedColumn: $$CommandTasksTableReferences
+                                ._workspaceIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$CommandTasksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $CommandTasksTable,
+      CommandTaskRow,
+      $$CommandTasksTableFilterComposer,
+      $$CommandTasksTableOrderingComposer,
+      $$CommandTasksTableAnnotationComposer,
+      $$CommandTasksTableCreateCompanionBuilder,
+      $$CommandTasksTableUpdateCompanionBuilder,
+      (CommandTaskRow, $$CommandTasksTableReferences),
+      CommandTaskRow,
+      PrefetchHooks Function({bool conversationId, bool workspaceId})
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -19442,6 +20587,8 @@ class $AppDatabaseManager {
       $$AgentPlansTableTableManager(_db, _db.agentPlans);
   $$MemoryEntriesTableTableManager get memoryEntries =>
       $$MemoryEntriesTableTableManager(_db, _db.memoryEntries);
+  $$CommandTasksTableTableManager get commandTasks =>
+      $$CommandTasksTableTableManager(_db, _db.commandTasks);
 }
 
 // **************************************************************************

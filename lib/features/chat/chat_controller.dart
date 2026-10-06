@@ -18,6 +18,10 @@ import '../../data/models/memory_entry.dart';
 import '../../data/models/message_part.dart';
 import '../../data/models/model_selection.dart' as model;
 import '../../data/models/permission_mode.dart';
+import '../../data/models/conversation.dart';
+import '../../data/models/command_task.dart';
+import '../../data/models/reasoning_effort.dart';
+import '../../data/repositories/provider_profile_repository.dart';
 import '../../data/repositories/agent_run_repository.dart';
 import '../../data/repositories/assistant_repository.dart';
 import '../../data/repositories/conversation_repository.dart';
@@ -26,6 +30,7 @@ import '../../providers/provider_factory.dart';
 import '../execution/execution_controller.dart';
 import '../tools/run_recovery_controller.dart';
 import '../tools/tool.dart';
+import '../tasks/command_task_controller.dart';
 import 'active_conversation.dart';
 import 'chat_operation.dart';
 import 'chat_providers.dart';
@@ -67,6 +72,10 @@ class ChatController extends _$ChatController {
   final Map<ChatOperation, ChatRunDriver> _drivers = {};
   final Set<String> _titleGenerationConversations = {};
   int _viewRevision = 0;
+  bool _taskContinuationsInitialized = false;
+  final _completionTimers = <String, Timer>{};
+  final _blockedCompletions = <String>{};
+  final _pausedCompletions = <String>{};
   bool _busyFor(String? conversationId) =>
       conversationId != null &&
       _conversationOperations.containsKey(conversationId);
@@ -74,6 +83,9 @@ class ChatController extends _$ChatController {
   @override
   ChatState build() {
     ref.onDispose(() {
+      for (final timer in _completionTimers.values) {
+        timer.cancel();
+      }
       for (final operation in _operations) {
         operation.cancel();
       }
@@ -272,6 +284,8 @@ class ChatController extends _$ChatController {
     if (isBusy) return;
     final operation = _beginOperation(activeId);
     try {
+      await initializeTaskContinuations();
+      if (activeId != null) _resumeTaskReplies(activeId);
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
       await _send(
         text,
@@ -319,6 +333,7 @@ class ChatController extends _$ChatController {
   }
 
   void _releaseOperation(ChatOperation operation) {
+    final wasCancelled = operation.wasCancelled;
     try {
       _operations.remove(operation);
       _drivers.remove(operation);
@@ -327,7 +342,6 @@ class ChatController extends _$ChatController {
           identical(_conversationOperations[conversationId], operation)) {
         _conversationOperations.remove(conversationId);
         if (ref.mounted) {
-          final wasCancelled = operation.wasCancelled;
           state = state.updateConversation(
             conversationId,
             (session) => session.copyWith(
@@ -349,6 +363,12 @@ class ChatController extends _$ChatController {
       }
     } finally {
       operation.settle();
+      if (ref.mounted && operation.conversationId != null) {
+        if (wasCancelled) {
+          _pausedCompletions.add(operation.conversationId!);
+        }
+        _scheduleTaskReply(operation.conversationId!);
+      }
     }
   }
 
@@ -765,6 +785,7 @@ class ChatController extends _$ChatController {
     AgentPlan? approvedPlan,
     RunCancellation? panelCancellation,
     void Function()? onPanelAccepted,
+    Future<bool> Function(AgentRun run)? beforeDrive,
   }) async {
     final runs = await ref.read(agentRunRepositoryProvider.future);
     final factory = await ref.read(chatRunFactoryProvider.future);
@@ -778,7 +799,9 @@ class ChatController extends _$ChatController {
       approvedPlan: approvedPlan,
       operation: operation,
       checkCurrent: () {
-        if (!ref.mounted) throw const CancelledFailure('创建运行前已退出');
+        if (!ref.mounted || operation.isCancelled) {
+          throw const CancelledFailure('创建运行前已停止');
+        }
         if (panelCancellation != null) {
           _checkPanelCancellation(panelCancellation);
         }
@@ -787,6 +810,14 @@ class ChatController extends _$ChatController {
     final run = prepared.run;
     try {
       try {
+        if (beforeDrive != null && !await beforeDrive(run)) {
+          await runs.finish(
+            run.id,
+            status: RunStatus.completed,
+            finishReason: RunFinishReason.completed,
+          );
+          return;
+        }
         await _driveRun(
           operation: operation,
           run: run,
@@ -999,6 +1030,8 @@ class ChatController extends _$ChatController {
   }
 
   void stopConversation(String conversationId) {
+    _pausedCompletions.add(conversationId);
+    _completionTimers.remove(conversationId)?.cancel();
     final operation = _conversationOperations[conversationId];
     if (operation == null) return;
     operation.cancel();
@@ -1007,6 +1040,190 @@ class ChatController extends _$ChatController {
     if (runId != null) {
       ref.read(executionControllerProvider.notifier).stopRun(runId);
     }
+  }
+
+  Future<void> initializeTaskContinuations() async {
+    if (!_taskContinuationsInitialized) {
+      _taskContinuationsInitialized = true;
+      ref.listen(commandTaskControllerProvider, (previous, next) {
+        if (previous?.completionRetryRevision != next.completionRetryRevision) {
+          _blockedCompletions.clear();
+          _pausedCompletions.clear();
+        }
+        for (final task in next.pendingCompletions) {
+          _scheduleTaskReply(task.conversationId);
+        }
+      });
+    }
+    await ref.read(commandTaskControllerProvider.notifier).initialize();
+    if (!ref.mounted) return;
+    for (final task
+        in ref.read(commandTaskControllerProvider).pendingCompletions) {
+      _scheduleTaskReply(task.conversationId);
+    }
+  }
+
+  void _resumeTaskReplies(String conversationId) {
+    _blockedCompletions.remove(conversationId);
+    _pausedCompletions.remove(conversationId);
+    ref
+        .read(commandTaskControllerProvider.notifier)
+        .reportCompletionError(conversationId, null);
+  }
+
+  void _scheduleTaskReply(String conversationId) {
+    if (!_taskContinuationsInitialized ||
+        !ref.mounted ||
+        _busyFor(conversationId)) {
+      return;
+    }
+    if (_blockedCompletions.contains(conversationId) ||
+        _pausedCompletions.contains(conversationId)) {
+      unawaited(
+        ref
+            .read(commandTaskControllerProvider.notifier)
+            .releaseCompletionHosts(
+              conversationId: conversationId,
+              pending: true,
+            )
+            .catchError((Object _) {
+              AppLogger.warning('暂停续答的宿主释放未收到回执');
+            }),
+      );
+      return;
+    }
+    _completionTimers.putIfAbsent(
+      conversationId,
+      () => Timer(Duration.zero, () {
+        _completionTimers.remove(conversationId);
+        unawaited(_replyToTasks(conversationId));
+      }),
+    );
+  }
+
+  Future<void> _replyToTasks(String conversationId) async {
+    if (!ref.mounted ||
+        _busyFor(conversationId) ||
+        _blockedCompletions.contains(conversationId) ||
+        _pausedCompletions.contains(conversationId)) {
+      return;
+    }
+    final tasks = ref.read(commandTaskControllerProvider.notifier);
+    final pending = tasks.pendingCompletions(conversationId);
+    if (pending.isEmpty) return;
+    final operation = _beginOperation(conversationId);
+    try {
+      await ref.read(runRecoveryControllerProvider.notifier).initialize();
+      _checkRecoveredConversation(conversationId);
+      final repository = await ref.read(conversationRepositoryProvider.future);
+      final thread = await repository.getThread(conversationId);
+      if (thread == null) {
+        await tasks.refresh();
+        return;
+      }
+      final assistants = await ref.read(assistantsProvider.future);
+      final assistant = resolveAssistant(
+        assistants,
+        boundAssistantId: thread.conversation.assistantId,
+      );
+      final selection = await _taskReplySelection(
+        thread.conversation,
+        assistant,
+        pending.first,
+      );
+      if (!ref.mounted || operation.isCancelled) return;
+      _claimOperation(operation, conversationId);
+      final noticeId = generateId();
+      await _startRun(
+        operation: operation,
+        repository: repository,
+        conversationId: conversationId,
+        inputMessageId: noticeId,
+        selection: selection,
+        assistant: assistant,
+        mode: thread.conversation.permissions.mode,
+        planExecutionMode: thread.conversation.permissions.lastExecutionMode,
+        beforeDrive: (run) => tasks.deliverCompletions(
+          conversationId,
+          run.id,
+          repository,
+          messageId: noticeId,
+        ),
+      );
+    } catch (error) {
+      if (ref.mounted) {
+        _blockedCompletions.add(conversationId);
+        tasks.reportCompletionError(
+          conversationId,
+          error is Failure ? error : const OperationFailure('后台任务续答失败，请重试'),
+        );
+      }
+    } finally {
+      if (ref.mounted) {
+        await operation.cleanup(
+          () => tasks.releaseCompletionHosts(
+            conversationId: conversationId,
+            pending:
+                _blockedCompletions.contains(conversationId) ||
+                _pausedCompletions.contains(conversationId) ||
+                operation.wasCancelled,
+          ),
+          failureMessage: '任务续答宿主释放未收到回执',
+        );
+      }
+      _releaseOperation(operation);
+    }
+  }
+
+  Future<ChatModelSelection> _taskReplySelection(
+    Conversation conversation,
+    Assistant? assistant,
+    CommandTask task,
+  ) async {
+    final profiles = await (await ref.read(
+      providerProfileRepositoryProvider.future,
+    )).listProfiles();
+    final origin = task.runId == null
+        ? null
+        : await (await ref.read(agentRunRepositoryProvider.future))
+              .getById(task.runId!);
+    for (final selected in [
+      conversation.modelSelectionOverride,
+      assistant?.defaultModelSelection,
+      origin?.configuration.modelSelection,
+    ]) {
+      if (selected == null) continue;
+      final profile = profiles
+          .where((entry) => entry.id == selected.profileId)
+          .firstOrNull;
+      if (profile == null) continue;
+      return describeChatModelSelection(
+        profile: profile,
+        model: selected.modelId,
+        effort: selected.reasoningEffort,
+      );
+    }
+    if (task.runId == null && profiles.isNotEmpty) {
+      final settings = ref.read(settingsStorageProvider);
+      final profile =
+          profiles
+              .where((entry) => entry.id == settings.readLastProfileId())
+              .firstOrNull ??
+          profiles.first;
+      final modelId = profile.id == settings.readLastProfileId()
+          ? settings.readLastModel() ??
+                profile.defaultModel ??
+                profile.enabledModels.firstOrNull?.id
+          : profile.defaultModel ?? profile.enabledModels.firstOrNull?.id;
+      if (modelId != null) {
+        return describeChatModelSelection(
+          profile: profile,
+          model: modelId,
+          effort: ReasoningEffort.fromName(settings.readLastReasoningEffort()),
+        );
+      }
+    }
+    throw const OperationFailure('任务所属会话没有可用模型，请配置后重试续答');
   }
 
   void _checkRecoveredConversation(String? id) {

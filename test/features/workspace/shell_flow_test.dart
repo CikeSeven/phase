@@ -14,6 +14,12 @@ import '../tools/tool_loop_harness.dart';
 import 'local_process_driver.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    final overrides = HttpOverrides.current;
+    HttpOverrides.global = null;
+    addTearDown(() => HttpOverrides.global = overrides);
+  });
   for (final protocol in ApiProtocol.values) {
     test(
       '${protocol.name}: real process stdout/stderr, nonzero exit, artifact, saved result and next model turn',
