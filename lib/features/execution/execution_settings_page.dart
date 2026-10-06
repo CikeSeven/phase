@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
@@ -89,6 +90,16 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
           data: (value) => ListView(
             padding: const EdgeInsets.all(AppSpacing.l),
             children: [
+              AppListTile(
+                leading: const Icon(LucideIcons.shieldCheck),
+                title: const Text('工具规则'),
+                subtitle: const Text('工具与具体动作的执行策略'),
+                trailing: const Icon(LucideIcons.chevronRight),
+                onTap: _busy
+                    ? null
+                    : () => context.push('/settings/execution/tool-rules'),
+              ),
+              const SizedBox(height: AppSpacing.m),
               _PermissionTile(
                 title: '任务通知',
                 statusKey: const ValueKey('notifications-permission-status'),

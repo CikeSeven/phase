@@ -1,5 +1,6 @@
 import 'tool_policy.dart';
 import 'tool_source.dart';
+import 'tool_permission.dart';
 
 /// 一次工具调用的执行状态（design 第二部分 §5）。
 enum ToolCallStatus {
@@ -13,7 +14,12 @@ enum ToolCallStatus {
 }
 
 /// 用户对一次确认的决定。
-enum ToolDecision { approved, rejected, expired }
+enum ToolDecision { approved, approvedForRun, rejected, expired }
+
+extension ToolDecisionApproval on ToolDecision {
+  bool get isApproved =>
+      this == ToolDecision.approved || this == ToolDecision.approvedForRun;
+}
 
 /// 工具执行通道；无法识别的历史通道保留为 unknown。
 enum ExecutionChannel { app, accessibility, shizuku, unknown }
@@ -36,6 +42,7 @@ class ToolCallRecord {
     this.providerData,
     this.target,
     this.source,
+    this.permission,
     this.status = ToolCallStatus.prepared,
     this.decision,
     this.confirmationRequestedAt,
@@ -63,6 +70,7 @@ class ToolCallRecord {
 
   final String toolName;
   final ToolSource? source;
+  final ToolPermissionDecision? permission;
   final Map<String, dynamic> arguments;
 
   /// 该调用需要回传给模型的协议状态（如 Anthropic 的 tool_use 块结构）。
@@ -92,6 +100,7 @@ class ToolCallRecord {
 
   /// 状态流转的局部更新；未提供的字段保持不变（含可空字段）。
   ToolCallRecord copyWith({
+    ToolPermissionDecision? permission,
     String? resultMessageId,
     ToolCallStatus? status,
     ToolDecision? decision,
@@ -112,6 +121,7 @@ class ToolCallRecord {
       providerCallId: providerCallId,
       toolName: toolName,
       source: source,
+      permission: permission ?? this.permission,
       arguments: arguments,
       providerData: providerData,
       target: target,

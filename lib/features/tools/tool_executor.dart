@@ -8,10 +8,14 @@ import '../../../core/error/failure.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/permission_mode.dart';
+import '../../../data/models/tool_permission.dart';
 import '../../../data/models/tool_source.dart';
 import '../../../data/repositories/agent_run_repository.dart';
 import '../../../data/repositories/tool_call_repository.dart';
 import 'tool.dart';
+import 'tool_permission_policy.dart';
+import 'tool_permission_grants.dart';
 
 /// 一次工具调用的执行请求。
 class ToolExecutionRequest {
@@ -66,6 +70,7 @@ class ToolConfirmationRequest {
     required this.policy,
     required this.expiresAt,
     this.applicationOperationsForRun = false,
+    this.permission,
   });
 
   final ToolCallRecord record;
@@ -78,6 +83,7 @@ class ToolConfirmationRequest {
 
   /// 批准后允许本轮后续应用操作；不扩大系统授权或运行工具范围。
   final bool applicationOperationsForRun;
+  final ToolPermissionDecision? permission;
 
   /// 期限；到点未决定按拒绝处理。
   final DateTime expiresAt;
@@ -107,12 +113,18 @@ class ToolExecutor {
     this.onConfirmationRequired,
     this.prepareChannel,
     this.currentPolicy,
+    this.permissionMode = PermissionMode.basic,
+    this.permissionRules = const [],
+    this.currentRules,
     this.onExecuting,
     this.confirmationTimeout = ToolCallRepository.confirmationTimeout,
   });
 
   /// 动态来源的最新撤权检查；只能收紧固定快照。
   final Future<ToolPolicy> Function(Tool tool)? currentPolicy;
+  final PermissionMode permissionMode;
+  final List<ToolPermissionRule> permissionRules;
+  final List<ToolPermissionRule> Function()? currentRules;
   final ToolRegistry registry;
   final ToolCallRepository toolCalls;
   final void Function(
@@ -131,8 +143,9 @@ class ToolExecutor {
 
   final Duration confirmationTimeout;
 
-  // 执行器随一次运行驱动创建；恢复驱动使用新实例，不从历史批准恢复授权。
-  (String, RunCancellation)? _applicationOperationsApproval;
+  final _permissionGrants = ToolPermissionGrants();
+
+  void revokeGrants() => _permissionGrants.clear();
 
   /// 策略和参数有效后才准备平台宿主；禁止的调用不触发服务或权限交互。
   final Future<void> Function(Tool tool, Map<String, dynamic> arguments)?
@@ -144,6 +157,7 @@ class ToolExecutor {
     RunCancellation cancellation, {
     ToolProgress? onProgress,
   }) async {
+    _permissionGrants.bind(request.runId, cancellation);
     final existing = request.recordId == null
         ? null
         : await toolCalls.getById(request.recordId!);
@@ -159,7 +173,7 @@ class ToolExecutor {
       return ToolExecutionResult(record: existing, outcome: null);
     }
     final tool = registry.byName(request.toolName);
-    final arguments = existing?.arguments ?? request.arguments;
+    final arguments = freezeJson(existing?.arguments ?? request.arguments);
     if (tool == null) {
       // 未注册的工具名不会被"就近执行"。
       return _rejected(
@@ -184,14 +198,19 @@ class ToolExecutor {
       }
     }
 
-    var policy = registry.policyFor(
+    final snapshotPolicy = registry.policyFor(
       tool,
       request.enabledTools,
       request.toolPolicies,
     );
+    late ToolPermissionDecision permission;
+    late String rulesRevision;
     try {
-      final latest = await currentPolicy?.call(tool);
-      if (latest != null && latest.index > policy.index) policy = latest;
+      (permission, rulesRevision) = await _permissionFor(
+        tool,
+        arguments,
+        snapshotPolicy,
+      );
     } on StorageFailure {
       rethrow;
     } on Failure catch (failure) {
@@ -202,12 +221,13 @@ class ToolExecutor {
         policy: ToolPolicy.deny,
       );
     }
-    if (policy == ToolPolicy.deny) {
+    if (permission.policy == ToolPolicy.deny) {
       return _rejected(
         request,
-        reason: '工具「${tool.name}」未被允许使用',
+        reason: permission.reason,
         errorCode: 'policyDenied',
-        policy: policy,
+        policy: permission.policy,
+        permission: permission,
       );
     }
 
@@ -234,7 +254,12 @@ class ToolExecutor {
       request,
       tool,
       status: ToolCallStatus.prepared,
+      arguments: arguments,
+      permission: permission,
     );
+    if (existing != null) {
+      await toolCalls.recordPermission(record.id, permission);
+    }
     if (cancellation.isCancelled) {
       return ToolExecutionResult(
         record: await toolCalls.markCancelled(record.id),
@@ -262,18 +287,20 @@ class ToolExecutor {
         outcome: null,
       );
     }
-    final applicationOperationsForRun =
-        tool.source.kind == ToolSourceKind.builtIn &&
-        tool.policyKey == applicationOperationsPolicyKey;
-    final approvalKey = (request.runId, cancellation);
-    if (policy == ToolPolicy.ask &&
-        (!applicationOperationsForRun ||
-            _applicationOperationsApproval != approvalKey)) {
+    PermissionGrant? grant = permission.policy == ToolPolicy.ask
+        ? _permissionGrants.find(
+            record: record,
+            tool: tool,
+            decision: permission,
+            rulesRevision: rulesRevision,
+          )
+        : null;
+    if (permission.policy == ToolPolicy.ask && grant == null) {
       final decision = await _confirm(
         record,
         tool,
         cancellation,
-        applicationOperationsForRun: applicationOperationsForRun,
+        permission: permission,
       );
       if (decision == null) {
         // 等待确认期间用户停止：结束等待，本次确认不再生效。
@@ -285,15 +312,31 @@ class ToolExecutor {
       // 决定已落库：批准与拒绝都让运行回到运行中（拒绝在返回结果前），
       // 界面上的运行状态与循环的实际进度保持一致。
       await runs?.resume(request.runId);
-      if (decision != ToolDecision.approved) {
+      if (!decision.isApproved) {
         return ToolExecutionResult(
           record: await toolCalls.getById(record.id),
           outcome: ToolOutcome.failure('用户拒绝了本次动作', errorCode: 'userRejected'),
         );
       }
-      if (applicationOperationsForRun && !cancellation.isCancelled) {
-        _applicationOperationsApproval = approvalKey;
+      if (decision == ToolDecision.approvedForRun &&
+          !permission.canApproveForRun) {
+        return _rejectRecord(
+          record.id,
+          reason: '此操作不支持本轮授权',
+          errorCode: 'invalidGrantScope',
+        );
       }
+      grant = _permissionGrants.issue(
+        record: record,
+        tool: tool,
+        decision: permission,
+        scope: decision == ToolDecision.approvedForRun
+            ? PermissionGrantScope.run
+            : PermissionGrantScope.once,
+        rulesRevision: rulesRevision,
+        registry: registry,
+        enabledTools: request.enabledTools,
+      );
     }
 
     if (cancellation.isCancelled) {
@@ -304,15 +347,29 @@ class ToolExecutor {
     }
 
     try {
-      final latest = await currentPolicy?.call(tool);
-      if (latest == ToolPolicy.deny ||
-          (latest == ToolPolicy.ask && policy == ToolPolicy.allow)) {
+      final (latest, revision) = await _permissionFor(
+        tool,
+        arguments,
+        snapshotPolicy,
+      );
+      if (latest.policy == ToolPolicy.deny ||
+          (latest.policy == ToolPolicy.ask &&
+              (grant == null ||
+                  !_permissionGrants.covers(
+                    grant,
+                    record: record,
+                    tool: tool,
+                    decision: latest,
+                    rulesRevision: revision,
+                  )))) {
         return await _rejectRecord(
           record.id,
           reason: '工具权限已收紧，本次调用未派发',
           errorCode: 'policyChanged',
+          permission: latest,
         );
       }
+      permission = latest;
     } on StorageFailure {
       rethrow;
     } on Failure catch (failure) {
@@ -331,6 +388,10 @@ class ToolExecutor {
     }
 
     // 先记录 executing 再派发：外部动作可能已经开始。
+    await toolCalls.recordPermission(
+      record.id,
+      grant == null ? permission : permission.withGrant(grant),
+    );
     await toolCalls.markExecuting(record.id);
 
     final context = ToolContext(
@@ -341,7 +402,28 @@ class ToolExecutor {
       attachments: request.attachments,
       workspaceDirectory: request.workspaceDirectory,
       fileAccess: request.fileAccess,
-      confirmed: policy == ToolPolicy.ask,
+      confirmed: grant != null,
+      permissionGrant: grant,
+      checkPermission: () async {
+        cancellation.throwIfCancelled();
+        final (latest, revision) = await _permissionFor(
+          tool,
+          arguments,
+          snapshotPolicy,
+        );
+        if (latest.policy == ToolPolicy.deny ||
+            (latest.policy == ToolPolicy.ask &&
+                (grant == null ||
+                    !_permissionGrants.covers(
+                      grant,
+                      record: record,
+                      tool: tool,
+                      decision: latest,
+                      rulesRevision: revision,
+                    )))) {
+          throw const OperationFailure('工具权限已收紧，本次操作未派发');
+        }
+      },
     );
 
     ToolOutcome outcome;
@@ -351,6 +433,7 @@ class ToolExecutor {
         cancellation.throwIfCancelled();
         onExecuting?.call(tool, arguments, record.id);
         cancellation.throwIfCancelled();
+        await context.checkPermission?.call();
         outcome = await tool.execute(
           arguments,
           context,
@@ -413,15 +496,79 @@ class ToolExecutor {
     return ToolExecutionResult(record: updated, outcome: outcome);
   }
 
+  Future<(ToolPermissionDecision, String)> _permissionFor(
+    Tool tool,
+    Map<String, dynamic> arguments,
+    ToolPolicy snapshotPolicy,
+  ) async {
+    var latestRules = currentRules?.call() ?? permissionRules;
+    var decision = evaluateToolPermission(
+      mode: permissionMode,
+      tool: tool,
+      arguments: arguments,
+      snapshotPolicy: snapshotPolicy,
+      rules: permissionRules,
+    );
+    final latest = evaluateToolPermission(
+      mode: permissionMode,
+      tool: tool,
+      arguments: arguments,
+      snapshotPolicy: snapshotPolicy,
+      rules: latestRules,
+    );
+    if (latest.policy.index > decision.policy.index ||
+        (latest.policy == decision.policy &&
+            latest.ruleKey != null &&
+            decision.ruleKey == null)) {
+      decision = latest;
+    }
+    if (decision.policy != ToolPolicy.deny) {
+      final livePolicy = await currentPolicy?.call(tool);
+      // 来源检查可能等待数据库或连接状态；规则读取放在这些异步等待之后。
+      latestRules = currentRules?.call() ?? permissionRules;
+      final refreshed = evaluateToolPermission(
+        mode: permissionMode,
+        tool: tool,
+        arguments: arguments,
+        snapshotPolicy: snapshotPolicy,
+        rules: latestRules,
+      );
+      if (refreshed.policy.index > decision.policy.index ||
+          (refreshed.policy == decision.policy &&
+              refreshed.ruleKey != null &&
+              decision.ruleKey == null)) {
+        decision = refreshed;
+      }
+      if (livePolicy != null && livePolicy.index > decision.policy.index) {
+        decision = ToolPermissionDecision(
+          policy: livePolicy,
+          request: decision.request,
+          reason: '工具来源的授权已收紧',
+          ruleKey: 'sourcePolicy',
+        );
+      }
+    }
+    List<Map<String, dynamic>> documents(List<ToolPermissionRule> rules) =>
+        (rules.toList()..sort((a, b) => a.key.compareTo(b.key)))
+            .map((rule) => rule.toJson())
+            .toList();
+    return (
+      decision,
+      definitionDigest([documents(permissionRules), documents(latestRules)]),
+    );
+  }
+
   Future<ToolExecutionResult> _rejectRecord(
     String id, {
     required String reason,
     required String errorCode,
+    ToolPermissionDecision? permission,
   }) async => ToolExecutionResult(
     record: await toolCalls.markRejected(
       id,
       result: reason,
       errorCode: errorCode,
+      permission: permission,
     ),
     outcome: ToolOutcome.failure(reason, errorCode: errorCode),
   );
@@ -453,7 +600,7 @@ class ToolExecutor {
     ToolCallRecord record,
     Tool tool,
     RunCancellation cancellation, {
-    required bool applicationOperationsForRun,
+    required ToolPermissionDecision permission,
   }) async {
     final awaiting = await toolCalls.requestConfirmation(record.id);
     final expiresAt =
@@ -480,7 +627,8 @@ class ToolExecutor {
               summary: tool.describeAction(record.arguments),
               policy: ToolPolicy.ask,
               expiresAt: expiresAt,
-              applicationOperationsForRun: applicationOperationsForRun,
+              applicationOperationsForRun: permission.canApproveForRun,
+              permission: permission,
             ),
           ),
         expired.future,
@@ -546,6 +694,8 @@ class ToolExecutor {
     ToolExecutionRequest request,
     Tool tool, {
     required ToolCallStatus status,
+    Map<String, dynamic>? arguments,
+    ToolPermissionDecision? permission,
   }) {
     if (request.recordId != null) return toolCalls.getById(request.recordId!);
     return toolCalls.create(
@@ -556,7 +706,8 @@ class ToolExecutor {
         providerCallId: request.providerCallId,
         toolName: tool.name,
         source: tool.source,
-        arguments: request.arguments,
+        permission: permission,
+        arguments: arguments ?? freezeJson(request.arguments),
         providerData: request.providerData,
         target: request.target ?? tool.describeAction(request.arguments),
         channel: request.channel,
@@ -573,6 +724,7 @@ class ToolExecutor {
     required String reason,
     required String errorCode,
     required ToolPolicy policy,
+    ToolPermissionDecision? permission,
   }) async {
     if (request.recordId case final id?) {
       return ToolExecutionResult(
@@ -580,6 +732,7 @@ class ToolExecutor {
           id,
           result: reason,
           errorCode: errorCode,
+          permission: permission,
         ),
         outcome: ToolOutcome.failure(reason, errorCode: errorCode),
       );
@@ -591,7 +744,9 @@ class ToolExecutor {
         assistantMessageId: request.assistantMessageId,
         providerCallId: request.providerCallId,
         toolName: request.toolName,
-        arguments: request.arguments,
+        source: registry.byName(request.toolName)?.source,
+        permission: permission,
+        arguments: freezeJson(request.arguments),
         target: request.target,
         channel: request.channel,
         defaultPolicy: policy,

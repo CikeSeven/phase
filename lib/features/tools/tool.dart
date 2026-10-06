@@ -5,6 +5,7 @@ import 'dart:async';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_request.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/tool_permission.dart';
 import '../../../data/models/tool_source.dart';
 import '../../../data/models/tool_call_record.dart';
 
@@ -46,9 +47,13 @@ class ToolContext {
     this.workspaceDirectory = '',
     this.fileAccess,
     this.confirmed = false,
+    this.permissionGrant,
+    this.checkPermission,
   });
 
   final bool confirmed;
+  final PermissionGrant? permissionGrant;
+  final Future<void> Function()? checkPermission;
   final String conversationId;
   final String runId;
 

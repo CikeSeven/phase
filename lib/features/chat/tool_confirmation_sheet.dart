@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/widgets/app_dropdown.dart';
+import '../../../data/models/tool_permission.dart';
 import '../tools/tool_executor.dart';
 import '../tools/tool_presentation.dart';
 
@@ -62,10 +64,14 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
   late Duration _remaining;
   Timer? _ticker;
   bool _decided = false;
+  late PermissionGrantScope _grantScope;
 
   @override
   void initState() {
     super.initState();
+    _grantScope = widget.request.applicationOperationsForRun
+        ? PermissionGrantScope.run
+        : PermissionGrantScope.once;
     _remaining = _timeLeft();
     if (_remaining <= Duration.zero) {
       // 迟到的请求不再等待：直接按未决定收口，不留下过期面板。
@@ -152,12 +158,12 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
           FilledButton(
             key: const ValueKey('tool-confirm-allow'),
             onPressed: () => _decide(
-              widget.request.applicationOperationsForRun
+              _grantScope == PermissionGrantScope.run
                   ? ToolConfirmationOutcome.allowApplicationOperationsForRun
                   : ToolConfirmationOutcome.allowOnce,
             ),
             child: Text(
-              widget.request.applicationOperationsForRun ? '允许本轮操作应用' : '允许一次',
+              _grantScope == PermissionGrantScope.run ? '允许本轮操作应用' : '允许一次',
             ),
           ),
           // 再留一点底部内边距：三个按钮贴着面板下沿和手势条太近，容易误触。
@@ -177,6 +183,16 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
             label: '策略',
             value: ToolPresentation.policyLabel(widget.request.policy),
           ),
+          if (widget.request.permission case final permission?) ...[
+            _InfoLine(
+              label: '操作',
+              value: ToolPresentation.actionLabel(
+                record.toolName,
+                permission.request.action,
+              ),
+            ),
+            _InfoLine(label: '确认原因', value: permission.reason),
+          ],
           const SizedBox(height: AppSpacing.m),
           Text('本次动作的实际参数', style: theme.textTheme.labelLarge),
           if (details.isEmpty)
@@ -191,8 +207,22 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
             ),
           for (final detail in details) _ParameterBlock(detail: detail),
           const SizedBox(height: AppSpacing.l),
+          if (widget.request.applicationOperationsForRun) ...[
+            AppDropdown<PermissionGrantScope>(
+              label: '允许范围',
+              value: _grantScope,
+              options: const {
+                PermissionGrantScope.once: '仅本次',
+                PermissionGrantScope.run: '本轮应用操作',
+              },
+              onChanged: _decided
+                  ? null
+                  : (scope) => setState(() => _grantScope = scope),
+            ),
+            const SizedBox(height: AppSpacing.m),
+          ],
           Text(
-            widget.request.applicationOperationsForRun
+            _grantScope == PermissionGrantScope.run
                 ? '允许本轮后续应用操作，本轮结束后失效。'
                 : '允许只对本次动作生效；目标或参数变化会重新确认。',
             style: theme.textTheme.bodySmall?.copyWith(

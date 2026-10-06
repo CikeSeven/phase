@@ -111,7 +111,7 @@ void main() {
         return ToolDecision.approved;
       };
       await h.controller().send('记住我喜欢茶');
-      expect(asks, 0);
+      expect(asks, mode == PermissionMode.basic ? 1 : 0);
       final entries = await MemoryRepository(h.database).watch().first;
       if (mode != PermissionMode.plan) {
         expect(entries, hasLength(1));

@@ -8,6 +8,15 @@ import 'visual_tools.dart';
 
 /// Explicit virtual-display backend; never falls back to the physical display.
 class ShizukuDisplayTool extends Tool {
+  static const actions = [
+    'launch',
+    'capture',
+    'tap',
+    'swipe',
+    'key',
+    'text',
+    'close',
+  ];
   const ShizukuDisplayTool(this.binding, this.driver);
   final CommandChannelSnapshot binding;
   final ChannelDriver Function() driver;
@@ -42,10 +51,7 @@ class ShizukuDisplayTool extends Tool {
     'type': 'object',
     'additionalProperties': false,
     'properties': {
-      'action': {
-        'type': 'string',
-        'enum': ['launch', 'capture', 'tap', 'swipe', 'key', 'text', 'close'],
-      },
+      'action': {'type': 'string', 'enum': actions},
       'packageName': {
         'type': 'string',
         'description': '除 close 外必填；launch 指定要启动的应用，其余操作必须匹配虚拟屏实际前台应用',

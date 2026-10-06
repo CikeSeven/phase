@@ -5246,6 +5246,17 @@ class $ToolCallsTable extends ToolCalls
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _permissionJsonMeta = const VerificationMeta(
+    'permissionJson',
+  );
+  @override
+  late final GeneratedColumn<String> permissionJson = GeneratedColumn<String>(
+    'permission_json',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _providerDataJsonMeta = const VerificationMeta(
     'providerDataJson',
   );
@@ -5410,6 +5421,7 @@ class $ToolCallsTable extends ToolCalls
     toolName,
     argumentsJson,
     sourceJson,
+    permissionJson,
     providerDataJson,
     target,
     channel,
@@ -5503,6 +5515,15 @@ class $ToolCallsTable extends ToolCalls
       context.handle(
         _sourceJsonMeta,
         sourceJson.isAcceptableOrUnknown(data['source_json']!, _sourceJsonMeta),
+      );
+    }
+    if (data.containsKey('permission_json')) {
+      context.handle(
+        _permissionJsonMeta,
+        permissionJson.isAcceptableOrUnknown(
+          data['permission_json']!,
+          _permissionJsonMeta,
+        ),
       );
     }
     if (data.containsKey('provider_data_json')) {
@@ -5626,6 +5647,10 @@ class $ToolCallsTable extends ToolCalls
         DriftSqlType.string,
         data['${effectivePrefix}source_json'],
       ),
+      permissionJson: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}permission_json'],
+      ),
       providerDataJson: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}provider_data_json'],
@@ -5729,6 +5754,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
   final String toolName;
   final String argumentsJson;
   final String? sourceJson;
+  final String? permissionJson;
   final String? providerDataJson;
   final String? target;
   final ExecutionChannel channel;
@@ -5755,6 +5781,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     required this.toolName,
     required this.argumentsJson,
     this.sourceJson,
+    this.permissionJson,
     this.providerDataJson,
     this.target,
     required this.channel,
@@ -5787,6 +5814,9 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     map['arguments_json'] = Variable<String>(argumentsJson);
     if (!nullToAbsent || sourceJson != null) {
       map['source_json'] = Variable<String>(sourceJson);
+    }
+    if (!nullToAbsent || permissionJson != null) {
+      map['permission_json'] = Variable<String>(permissionJson);
     }
     if (!nullToAbsent || providerDataJson != null) {
       map['provider_data_json'] = Variable<String>(providerDataJson);
@@ -5860,6 +5890,9 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
       sourceJson: sourceJson == null && nullToAbsent
           ? const Value.absent()
           : Value(sourceJson),
+      permissionJson: permissionJson == null && nullToAbsent
+          ? const Value.absent()
+          : Value(permissionJson),
       providerDataJson: providerDataJson == null && nullToAbsent
           ? const Value.absent()
           : Value(providerDataJson),
@@ -5914,6 +5947,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
       toolName: serializer.fromJson<String>(json['toolName']),
       argumentsJson: serializer.fromJson<String>(json['argumentsJson']),
       sourceJson: serializer.fromJson<String?>(json['sourceJson']),
+      permissionJson: serializer.fromJson<String?>(json['permissionJson']),
       providerDataJson: serializer.fromJson<String?>(json['providerDataJson']),
       target: serializer.fromJson<String?>(json['target']),
       channel: $ToolCallsTable.$converterchannel.fromJson(
@@ -5955,6 +5989,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
       'toolName': serializer.toJson<String>(toolName),
       'argumentsJson': serializer.toJson<String>(argumentsJson),
       'sourceJson': serializer.toJson<String?>(sourceJson),
+      'permissionJson': serializer.toJson<String?>(permissionJson),
       'providerDataJson': serializer.toJson<String?>(providerDataJson),
       'target': serializer.toJson<String?>(target),
       'channel': serializer.toJson<String>(
@@ -5994,6 +6029,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     String? toolName,
     String? argumentsJson,
     Value<String?> sourceJson = const Value.absent(),
+    Value<String?> permissionJson = const Value.absent(),
     Value<String?> providerDataJson = const Value.absent(),
     Value<String?> target = const Value.absent(),
     ExecutionChannel? channel,
@@ -6022,6 +6058,9 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     toolName: toolName ?? this.toolName,
     argumentsJson: argumentsJson ?? this.argumentsJson,
     sourceJson: sourceJson.present ? sourceJson.value : this.sourceJson,
+    permissionJson: permissionJson.present
+        ? permissionJson.value
+        : this.permissionJson,
     providerDataJson: providerDataJson.present
         ? providerDataJson.value
         : this.providerDataJson,
@@ -6064,6 +6103,9 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
       sourceJson: data.sourceJson.present
           ? data.sourceJson.value
           : this.sourceJson,
+      permissionJson: data.permissionJson.present
+          ? data.permissionJson.value
+          : this.permissionJson,
       providerDataJson: data.providerDataJson.present
           ? data.providerDataJson.value
           : this.providerDataJson,
@@ -6105,6 +6147,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
           ..write('toolName: $toolName, ')
           ..write('argumentsJson: $argumentsJson, ')
           ..write('sourceJson: $sourceJson, ')
+          ..write('permissionJson: $permissionJson, ')
           ..write('providerDataJson: $providerDataJson, ')
           ..write('target: $target, ')
           ..write('channel: $channel, ')
@@ -6134,6 +6177,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
     toolName,
     argumentsJson,
     sourceJson,
+    permissionJson,
     providerDataJson,
     target,
     channel,
@@ -6162,6 +6206,7 @@ class ToolCallRow extends DataClass implements Insertable<ToolCallRow> {
           other.toolName == this.toolName &&
           other.argumentsJson == this.argumentsJson &&
           other.sourceJson == this.sourceJson &&
+          other.permissionJson == this.permissionJson &&
           other.providerDataJson == this.providerDataJson &&
           other.target == this.target &&
           other.channel == this.channel &&
@@ -6188,6 +6233,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
   final Value<String> toolName;
   final Value<String> argumentsJson;
   final Value<String?> sourceJson;
+  final Value<String?> permissionJson;
   final Value<String?> providerDataJson;
   final Value<String?> target;
   final Value<ExecutionChannel> channel;
@@ -6213,6 +6259,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     this.toolName = const Value.absent(),
     this.argumentsJson = const Value.absent(),
     this.sourceJson = const Value.absent(),
+    this.permissionJson = const Value.absent(),
     this.providerDataJson = const Value.absent(),
     this.target = const Value.absent(),
     this.channel = const Value.absent(),
@@ -6239,6 +6286,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     required String toolName,
     required String argumentsJson,
     this.sourceJson = const Value.absent(),
+    this.permissionJson = const Value.absent(),
     this.providerDataJson = const Value.absent(),
     this.target = const Value.absent(),
     required ExecutionChannel channel,
@@ -6273,6 +6321,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     Expression<String>? toolName,
     Expression<String>? argumentsJson,
     Expression<String>? sourceJson,
+    Expression<String>? permissionJson,
     Expression<String>? providerDataJson,
     Expression<String>? target,
     Expression<String>? channel,
@@ -6300,6 +6349,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
       if (toolName != null) 'tool_name': toolName,
       if (argumentsJson != null) 'arguments_json': argumentsJson,
       if (sourceJson != null) 'source_json': sourceJson,
+      if (permissionJson != null) 'permission_json': permissionJson,
       if (providerDataJson != null) 'provider_data_json': providerDataJson,
       if (target != null) 'target': target,
       if (channel != null) 'channel': channel,
@@ -6330,6 +6380,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     Value<String>? toolName,
     Value<String>? argumentsJson,
     Value<String?>? sourceJson,
+    Value<String?>? permissionJson,
     Value<String?>? providerDataJson,
     Value<String?>? target,
     Value<ExecutionChannel>? channel,
@@ -6356,6 +6407,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
       toolName: toolName ?? this.toolName,
       argumentsJson: argumentsJson ?? this.argumentsJson,
       sourceJson: sourceJson ?? this.sourceJson,
+      permissionJson: permissionJson ?? this.permissionJson,
       providerDataJson: providerDataJson ?? this.providerDataJson,
       target: target ?? this.target,
       channel: channel ?? this.channel,
@@ -6403,6 +6455,9 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
     }
     if (sourceJson.present) {
       map['source_json'] = Variable<String>(sourceJson.value);
+    }
+    if (permissionJson.present) {
+      map['permission_json'] = Variable<String>(permissionJson.value);
     }
     if (providerDataJson.present) {
       map['provider_data_json'] = Variable<String>(providerDataJson.value);
@@ -6478,6 +6533,7 @@ class ToolCallsCompanion extends UpdateCompanion<ToolCallRow> {
           ..write('toolName: $toolName, ')
           ..write('argumentsJson: $argumentsJson, ')
           ..write('sourceJson: $sourceJson, ')
+          ..write('permissionJson: $permissionJson, ')
           ..write('providerDataJson: $providerDataJson, ')
           ..write('target: $target, ')
           ..write('channel: $channel, ')
@@ -15583,6 +15639,7 @@ typedef $$ToolCallsTableCreateCompanionBuilder = ToolCallsCompanion Function({
   required String toolName,
   required String argumentsJson,
   Value<String?> sourceJson,
+  Value<String?> permissionJson,
   Value<String?> providerDataJson,
   Value<String?> target,
   required ExecutionChannel channel,
@@ -15609,6 +15666,7 @@ typedef $$ToolCallsTableUpdateCompanionBuilder = ToolCallsCompanion Function({
   Value<String> toolName,
   Value<String> argumentsJson,
   Value<String?> sourceJson,
+  Value<String?> permissionJson,
   Value<String?> providerDataJson,
   Value<String?> target,
   Value<ExecutionChannel> channel,
@@ -15690,6 +15748,11 @@ class $$ToolCallsTableFilterComposer
 
   ColumnFilters<String> get sourceJson => $composableBuilder(
     column: $table.sourceJson,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get permissionJson => $composableBuilder(
+    column: $table.permissionJson,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -15840,6 +15903,11 @@ class $$ToolCallsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get permissionJson => $composableBuilder(
+    column: $table.permissionJson,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get providerDataJson => $composableBuilder(
     column: $table.providerDataJson,
     builder: (column) => ColumnOrderings(column),
@@ -15979,6 +16047,11 @@ class $$ToolCallsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get permissionJson => $composableBuilder(
+    column: $table.permissionJson,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get providerDataJson => $composableBuilder(
     column: $table.providerDataJson,
     builder: (column) => column,
@@ -16097,6 +16170,7 @@ class $$ToolCallsTableTableManager
                 Value<String> toolName = const Value.absent(),
                 Value<String> argumentsJson = const Value.absent(),
                 Value<String?> sourceJson = const Value.absent(),
+                Value<String?> permissionJson = const Value.absent(),
                 Value<String?> providerDataJson = const Value.absent(),
                 Value<String?> target = const Value.absent(),
                 Value<ExecutionChannel> channel = const Value.absent(),
@@ -16122,6 +16196,7 @@ class $$ToolCallsTableTableManager
                 toolName: toolName,
                 argumentsJson: argumentsJson,
                 sourceJson: sourceJson,
+                permissionJson: permissionJson,
                 providerDataJson: providerDataJson,
                 target: target,
                 channel: channel,
@@ -16149,6 +16224,7 @@ class $$ToolCallsTableTableManager
                 required String toolName,
                 required String argumentsJson,
                 Value<String?> sourceJson = const Value.absent(),
+                Value<String?> permissionJson = const Value.absent(),
                 Value<String?> providerDataJson = const Value.absent(),
                 Value<String?> target = const Value.absent(),
                 required ExecutionChannel channel,
@@ -16174,6 +16250,7 @@ class $$ToolCallsTableTableManager
                 toolName: toolName,
                 argumentsJson: argumentsJson,
                 sourceJson: sourceJson,
+                permissionJson: permissionJson,
                 providerDataJson: providerDataJson,
                 target: target,
                 channel: channel,

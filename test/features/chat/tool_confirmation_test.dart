@@ -5,6 +5,8 @@ import 'package:phase/core/widgets/app_sheet.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/tool_policy.dart';
+import 'package:phase/data/models/tool_permission.dart';
+import 'package:phase/core/widgets/app_dropdown.dart';
 import 'package:phase/features/chat/tool_confirmation_sheet.dart';
 import 'package:phase/features/tools/tool_executor.dart';
 
@@ -220,6 +222,118 @@ void main() {
     expect(outcome.value, ToolConfirmationOutcome.allowOnce);
     expect(find.byKey(const ValueKey('tool-confirmation-body')), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('应用操作默认批准本轮，展示真实操作和确认原因', (tester) async {
+    final value = record(
+      toolName: 'open_app',
+      arguments: {'packageName': 'fixture.app'},
+      channel: ExecutionChannel.accessibility,
+    );
+    final outcome = await openSheet(
+      tester,
+      confirmation: ToolConfirmationRequest(
+        record: value,
+        summary: '打开 fixture.app',
+        policy: ToolPolicy.ask,
+        expiresAt: DateTime.now().add(const Duration(seconds: 60)),
+        applicationOperationsForRun: true,
+        permission: ToolPermissionDecision(
+          policy: ToolPolicy.ask,
+          request: ToolPermissionRequest(
+            action: 'open_app',
+            effects: {ToolEffect.deviceInteraction},
+            approvalCategory: applicationOperationsPolicyKey,
+          ),
+          reason: '本轮应用操作需要授权',
+        ),
+      ),
+    );
+    expect(find.textContaining('确认原因：本轮应用操作需要授权'), findsOneWidget);
+    expect(find.textContaining('操作：打开应用'), findsOneWidget);
+    final selector = find.byType(AppDropdown<PermissionGrantScope>);
+    await tester.scrollUntilVisible(
+      selector,
+      120,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('tool-confirmation-body')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    await tester.pump();
+    expect(
+      tester.widget<AppDropdown<PermissionGrantScope>>(selector).value,
+      PermissionGrantScope.run,
+    );
+    expect(find.text('允许本轮操作应用'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('tool-confirm-allow')));
+    await tester.pumpAndSettle();
+    expect(
+      outcome.value,
+      ToolConfirmationOutcome.allowApplicationOperationsForRun,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('应用操作可以改为仅本次，按钮和返回结果跟随选择', (tester) async {
+    final value = record(
+      toolName: 'open_app',
+      arguments: {'packageName': 'fixture.app'},
+    );
+    final outcome = await openSheet(
+      tester,
+      confirmation: ToolConfirmationRequest(
+        record: value,
+        summary: '打开应用',
+        policy: ToolPolicy.ask,
+        expiresAt: DateTime.now().add(const Duration(seconds: 60)),
+        applicationOperationsForRun: true,
+      ),
+    );
+    final selector = find.byType(AppDropdown<PermissionGrantScope>);
+    await tester.ensureVisible(selector);
+    await tester.pump();
+    await tester.tap(selector);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('仅本次').last);
+    await tester.pumpAndSettle();
+    expect(find.text('允许一次'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('tool-confirm-allow')));
+    await tester.pumpAndSettle();
+    expect(outcome.value, ToolConfirmationOutcome.allowOnce);
+  });
+
+  testWidgets('显式每次确认不提供本轮范围，关闭不返回批准', (tester) async {
+    final value = record(
+      toolName: 'open_app',
+      arguments: {'packageName': 'fixture.app'},
+    );
+    final outcome = await openSheet(
+      tester,
+      confirmation: ToolConfirmationRequest(
+        record: value,
+        summary: '打开应用',
+        policy: ToolPolicy.ask,
+        expiresAt: DateTime.now().add(const Duration(seconds: 60)),
+        permission: ToolPermissionDecision(
+          policy: ToolPolicy.ask,
+          request: ToolPermissionRequest(
+            action: 'open_app',
+            effects: {ToolEffect.deviceInteraction},
+            approvalCategory: applicationOperationsPolicyKey,
+          ),
+          ruleKey: 'explicit',
+          reason: '工具规则要求每次确认此操作',
+        ),
+      ),
+    );
+    expect(find.byType(AppDropdown<PermissionGrantScope>), findsNothing);
+    expect(find.text('允许一次'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(outcome.value, ToolConfirmationOutcome.expired);
   });
 
   testWidgets('拒绝返回对应决定并关闭面板', (tester) async {

@@ -3,6 +3,7 @@ import 'package:phase/features/workspace/process_driver.dart';
 import 'package:phase/data/repositories/workspace_repository.dart';
 
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:phase/features/mcp/mcp_connections.dart';
 import 'package:phase/data/repositories/skill_repository.dart';
@@ -32,6 +33,8 @@ import 'package:phase/data/models/profile_model.dart';
 import 'package:phase/data/models/provider_profile.dart';
 import 'package:phase/data/models/tool_call_record.dart';
 import 'package:phase/data/models/tool_policy.dart';
+import 'package:phase/data/models/tool_permission.dart';
+import 'package:phase/data/models/tool_source.dart';
 import 'package:phase/data/repositories/agent_run_repository.dart';
 import 'package:phase/data/repositories/conversation_repository.dart';
 import 'package:phase/data/repositories/provider_profile_repository.dart';
@@ -243,9 +246,34 @@ class ToolLoopHarness {
     ModelRetryPolicy retryPolicy = const ModelRetryPolicy(
       baseDelay: Duration.zero,
     ),
+    List<ToolPermissionRule> permissionRules = const [],
   }) async {
     TestWidgetsFlutterBinding.ensureInitialized();
-    SharedPreferences.setMockInitialValues({});
+    // 旧循环测试的 RecordingTool 明确声明预期 allow；由显式规则模拟，
+    // 不把未知实现自动当成宿主只读工具。
+    final rules = [
+      for (final tool in registry?.tools ?? const <Tool>[])
+        if (tool is RecordingTool &&
+            tool.policy == ToolPolicy.allow &&
+            !permissionRules.any(
+              (rule) =>
+                  rule.toolName == tool.name &&
+                  rule.sourceKind == ToolSourceKind.builtIn,
+            ))
+          ToolPermissionRule(
+            sourceKind: ToolSourceKind.builtIn,
+            sourceId: 'builtIn',
+            toolName: tool.name,
+            policy: ToolPolicy.allow,
+          ),
+      ...permissionRules,
+    ];
+    SharedPreferences.setMockInitialValues({
+      if (rules.isNotEmpty)
+        'tool_permission_rules_v1': jsonEncode(
+          rules.map((rule) => rule.toJson()).toList(),
+        ),
+    });
     final preferences = await SharedPreferences.getInstance();
     final tempDir = Directory.systemTemp.createTempSync('phase_tool_loop');
     final database = openAppDatabase(

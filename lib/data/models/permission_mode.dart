@@ -10,8 +10,8 @@ extension PermissionModeLabel on PermissionMode {
 
   String get description => switch (this) {
     PermissionMode.plan => '仅开放只读工具',
-    PermissionMode.basic => '写文件、命令和应用操作需确认',
-    PermissionMode.fullAccess => '已开放工具直接执行',
+    PermissionMode.basic => '写入、命令与外部操作需确认',
+    PermissionMode.fullAccess => '默认直接执行，遵守工具规则',
   };
 }
 

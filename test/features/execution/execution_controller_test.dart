@@ -22,6 +22,7 @@ void main() {
     String id = 'call',
     String runId = 'run',
     Duration remaining = const Duration(seconds: 60),
+    bool applicationOperationsForRun = false,
   }) => ToolConfirmationRequest(
     record: ToolCallRecord(
       id: id,
@@ -37,6 +38,7 @@ void main() {
     summary: '点击预置条目',
     policy: ToolPolicy.ask,
     expiresAt: DateTime.now().add(remaining),
+    applicationOperationsForRun: applicationOperationsForRun,
   );
 
   setUp(() {
@@ -278,6 +280,26 @@ void main() {
     expect(controller.decide('run', 'call', ToolDecision.approved), isFalse);
     expect(container.read(executionControllerProvider).confirmation, isNull);
   });
+
+  for (final runScope in [false, true]) {
+    test('原生后台批准按明确展示的范围落为 once/run $runScope', () async {
+      await controller.ensureDeviceHost('run');
+      final result = controller.confirm(
+        request(applicationOperationsForRun: runScope),
+        cancellation,
+      );
+      controller.setForeground(false);
+      await Future<void>.delayed(Duration.zero);
+      expect(driver.confirmations.last!.applicationOperationsForRun, runScope);
+      driver.eventsController.add(
+        NativeDecision('run', 'call', ConfirmationDecision.approve),
+      );
+      expect(
+        await result,
+        runScope ? ToolDecision.approvedForRun : ToolDecision.approved,
+      );
+    });
+  }
 
   test('原生停止先取消任务；迟到批准与旧任务停止不影响新任务', () async {
     await controller.ensureDeviceHost('run');

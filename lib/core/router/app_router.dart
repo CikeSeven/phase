@@ -17,6 +17,7 @@ import '../../features/settings/settings_page.dart';
 import '../../features/tools/run_recovery_page.dart';
 import '../../features/tools/tool_records_page.dart';
 import '../../features/execution/execution_settings_page.dart';
+import '../../features/tools/tool_permission_rules_page.dart';
 import '../../features/mcp/mcp_servers_page.dart';
 import '../../features/mcp/mcp_edit_page.dart';
 import '../../features/settings/extensions_page.dart';
@@ -190,6 +191,13 @@ GoRouter appRouter(Ref ref) {
             path: 'execution',
             pageBuilder: (context, state) =>
                 materialPage(state, const ExecutionSettingsPage()),
+            routes: [
+              GoRoute(
+                path: 'tool-rules',
+                pageBuilder: (context, state) =>
+                    materialPage(state, const ToolPermissionRulesPage()),
+              ),
+            ],
           ),
           GoRoute(
             path: 'providers',

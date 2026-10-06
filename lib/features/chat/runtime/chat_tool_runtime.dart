@@ -6,6 +6,7 @@ import '../../../data/models/command_channel.dart';
 import '../../../data/models/mcp_server_profile.dart';
 import '../../../data/models/memory_entry.dart';
 import '../../../data/models/permission_mode.dart';
+import '../../../data/models/tool_permission.dart';
 import '../../../data/models/skill_installation.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
@@ -70,6 +71,7 @@ class ChatToolCatalog {
     required this.policies,
     required this.mcpServers,
     this.webSearch,
+    this.permissionRules = const [],
   });
   final ToolRegistry registry;
   final List<ToolSnapshot> snapshots;
@@ -77,6 +79,7 @@ class ChatToolCatalog {
   final Map<String, ToolPolicy> policies;
   final List<McpServerProfile> mcpServers;
   final WebSearchSettings? webSearch;
+  final List<ToolPermissionRule> permissionRules;
 
   List<ToolDefinition> get definitions => [
     ...registry.definitionsFor(enabledTools, policies, includeDenied: true),
@@ -226,6 +229,7 @@ class ChatToolRuntimeFactory {
     ];
     final fixedEnabled = {for (final snapshot in snapshots) snapshot.name};
     return ChatToolCatalog(
+      permissionRules: settings.readToolPermissionRules(),
       webSearch: webSettings,
       registry: registry,
       snapshots: snapshots,
@@ -237,6 +241,8 @@ class ChatToolRuntimeFactory {
                 if (snapshot.source.kind == ToolSourceKind.mcp)
                   snapshot.name: mode == PermissionMode.plan
                       ? ToolPolicy.deny
+                      : mode == PermissionMode.basic
+                      ? ToolPolicy.ask
                       : ToolPolicy.allow,
             }
           : const {},
@@ -314,6 +320,9 @@ class ChatToolRuntimeFactory {
       ?skill,
     ]);
     final executor = ToolExecutor(
+      permissionMode: config.mode,
+      permissionRules: config.permissionRules,
+      currentRules: settings.readToolPermissionRules,
       registry: registry,
       toolCalls: calls,
       runs: runs,
@@ -365,7 +374,7 @@ class ChatToolRuntimeFactory {
           return ToolPolicy.deny;
         }
         if (tool.source.kind != ToolSourceKind.mcp) {
-          return policyForMode(config.mode, tool);
+          return ToolPolicy.allow;
         }
         await mcp!.checkAvailable(tool.snapshot);
         return mcp.currentPolicy(tool.snapshot);
@@ -451,6 +460,7 @@ class ChatToolRuntime {
   }
 
   Future<void> close(ChatOperation operation) async {
+    executor.revokeGrants();
     await operation.cleanup(
       () async => mcp?.close(),
       failureMessage: 'MCP 连接未能完整关闭',

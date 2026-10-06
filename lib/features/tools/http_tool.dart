@@ -8,6 +8,7 @@ import 'tool.dart';
 /// 只做"取任务需要的数据"这一件事：不改方法、不跟随重定向之外的自动重试，
 /// 也不替模型解释网页内容；返回的正文按不可信数据处理。
 class HttpRequestTool extends Tool {
+  static const methods = ['GET', 'POST', 'PUT', 'DELETE'];
   HttpRequestTool({
     required this.fetch,
     this.maxBytes = 512 * 1024,
@@ -39,11 +40,7 @@ class HttpRequestTool extends Tool {
     'type': 'object',
     'properties': {
       'url': {'type': 'string', 'description': '完整 URL，含协议'},
-      'method': {
-        'type': 'string',
-        'enum': ['GET', 'POST', 'PUT', 'DELETE'],
-        'description': '默认 GET',
-      },
+      'method': {'type': 'string', 'enum': methods, 'description': '默认 GET'},
       'headers': {'type': 'object', 'description': '附加请求头，键值都为字符串'},
       'body': {'type': 'string', 'description': '请求正文（POST/PUT 使用）'},
     },
@@ -55,7 +52,22 @@ class HttpRequestTool extends Tool {
   Set<String> get requiredCapabilities => const {'network'};
 
   @override
-  ToolPolicy get defaultPolicy => ToolPolicy.allow;
+  ToolPolicy get defaultPolicy => ToolPolicy.ask;
+
+  @override
+  String? validateArguments(Map<String, dynamic> arguments) {
+    final method = (arguments['method'] as String? ?? 'GET').toUpperCase();
+    if (!methods.contains(method)) {
+      return '不支持的 HTTP 请求方法';
+    }
+    final uri = Uri.tryParse((arguments['url'] as String? ?? '').trim());
+    if (uri == null ||
+        uri.host.isEmpty ||
+        (uri.scheme != 'http' && uri.scheme != 'https')) {
+      return '请求地址须包含 http/https 协议与主机';
+    }
+    return null;
+  }
 
   @override
   String describeAction(Map<String, dynamic> arguments) {
@@ -75,7 +87,7 @@ class HttpRequestTool extends Tool {
     final args = ToolArguments(arguments, name);
     final rawUrl = args.string('url').trim();
     final method = (args.optionalString('method') ?? 'GET').toUpperCase();
-    if (!const {'GET', 'POST', 'PUT', 'DELETE'}.contains(method)) {
+    if (!methods.contains(method)) {
       return ToolOutcome.failure(
         '不支持的请求方法「$method」',
         errorCode: 'invalidMethod',

@@ -81,7 +81,7 @@ class MemoryTool extends Tool {
   @override
   Set<String> get requiredCapabilities => const {};
   @override
-  ToolPolicy get defaultPolicy => ToolPolicy.allow;
+  ToolPolicy get defaultPolicy => write ? ToolPolicy.ask : ToolPolicy.allow;
   @override
   String describeAction(Map<String, dynamic> arguments) => write
       ? '保存${arguments['scope'] == 'global' ? '全局' : '助手'}记忆：${arguments['content']}'

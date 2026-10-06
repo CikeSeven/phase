@@ -5,6 +5,7 @@ import '../../core/error/failure.dart';
 import '../../core/utils/logger.dart';
 import '../datasources/local/app_database.dart';
 import '../models/tool_call_record.dart';
+import '../models/tool_permission.dart';
 import 'row_mappers.dart';
 
 part 'tool_call_repository.g.dart';
@@ -86,17 +87,31 @@ class ToolCallRepository {
         decision: decision,
         decidedAt: now,
         status: switch (decision) {
-          ToolDecision.approved => ToolCallStatus.prepared,
+          ToolDecision.approved ||
+          ToolDecision.approvedForRun => ToolCallStatus.prepared,
           ToolDecision.rejected => ToolCallStatus.rejected,
           ToolDecision.expired => ToolCallStatus.rejected,
         },
-        result: decision == ToolDecision.approved
+        result: decision.isApproved
             ? null
             : (decision == ToolDecision.expired
                   ? '确认已过期，没有执行。'
                   : '用户拒绝了本次动作，没有执行。'),
-        finishedAt: decision == ToolDecision.approved ? null : now,
+        finishedAt: decision.isApproved ? null : now,
       );
+    });
+  }
+
+  Future<ToolCallRecord> recordPermission(
+    String id,
+    ToolPermissionDecision permission,
+  ) {
+    return _apply(id, '保存工具权限判定失败', (record) {
+      if (record.status != ToolCallStatus.prepared &&
+          record.status != ToolCallStatus.awaitingConfirmation) {
+        throw const OperationFailure('此动作已不再等待权限判定');
+      }
+      return record.copyWith(permission: permission);
     });
   }
 
@@ -161,6 +176,7 @@ class ToolCallRepository {
   Future<ToolCallRecord> markRejected(
     String id, {
     ToolDecision? decision,
+    ToolPermissionDecision? permission,
     String? result,
     String? errorCode,
   }) {
@@ -168,6 +184,7 @@ class ToolCallRepository {
       return record.copyWith(
         status: ToolCallStatus.rejected,
         decision: decision,
+        permission: permission,
         result: result,
         errorCode: errorCode,
         finishedAt: DateTime.now(),

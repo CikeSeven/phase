@@ -91,7 +91,10 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
         _displayed = null;
         _empty = widget.conversationId == null;
       }
-      _close();
+      // Overlay 不允许在构建期间修改。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _close();
+      });
     }
   }
 

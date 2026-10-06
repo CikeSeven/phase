@@ -482,7 +482,7 @@ void main() {
       return ToolDecision.approved;
     };
     await h.controller().send('回显月相');
-    expect(confirmed, 0);
+    expect(confirmed, 1);
     final record = (await h.recordsByCall()).values.single;
     expect(record.status, ToolCallStatus.succeeded);
     expect(record.source?.originalName, 'echo');

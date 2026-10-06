@@ -136,7 +136,7 @@ void main() {
           return ToolDecision.approved;
         };
         await h.controller().send('读取样本文档');
-        expect(confirmed, 0);
+        expect(confirmed, 1);
         expect(transport.calls, 1);
         expect(model.payloads, hasLength(2));
         expect(jsonEncode(model.payloads.last), contains('月相记录'));
@@ -214,7 +214,7 @@ void main() {
 
       h.provider.turns.addAll([changedTurn(), textTurn('已处理')]);
       await h.controller().send('读取');
-      expect(confirmations, 0);
+      expect(confirmations, change == 'definition' ? 1 : 0);
       final record = (await h.recordsByCall()).values.single;
       expect(transport.calls, 0);
       expect(
@@ -225,7 +225,7 @@ void main() {
       );
       expect(
         (await h.latestRun()).configuration.toolPolicies[name],
-        change == 'allowLater' ? isNull : ToolPolicy.allow,
+        change == 'allowLater' ? isNull : ToolPolicy.ask,
       );
     });
   }

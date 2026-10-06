@@ -59,6 +59,7 @@ class McpRunRuntime {
               };
               cancellation.throwIfCancelled();
               if (_closed) throw const ToolCancelled();
+              await context.checkPermission?.call();
               client = await connections.create(
                 profile,
                 bearer: bearer,
@@ -83,6 +84,7 @@ class McpRunRuntime {
                     (!context.confirmed && policy == ToolPolicy.ask)) {
                   throw const McpFailure('policyChanged', '工具权限已收紧，本次调用未派发');
                 }
+                await context.checkPermission?.call();
               },
             );
           },

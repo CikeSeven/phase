@@ -258,9 +258,11 @@ class ChatController extends _$ChatController {
   ///
   /// 前置失败（未选择模型、落库失败）抛出 [Failure] 由 UI 提示；
   /// 流式期间的错误写入助手消息（failed 状态）并保留已收内容。
+  /// [onAccepted] 在用户消息成功入库后触发，不等待模型回复结束。
   Future<void> send(
     String text, {
     List<Attachment> attachments = const [],
+    void Function()? onAccepted,
   }) async {
     _checkPermissionSave();
     final activeId = ref.read(activeConversationProvider).conversationId;
@@ -271,7 +273,12 @@ class ChatController extends _$ChatController {
     final operation = _beginOperation(activeId);
     try {
       await ref.read(runRecoveryControllerProvider.notifier).initialize();
-      await _send(text, operation: operation, attachments: attachments);
+      await _send(
+        text,
+        operation: operation,
+        attachments: attachments,
+        onAccepted: onAccepted,
+      );
     } finally {
       _releaseOperation(operation);
     }
@@ -437,6 +444,7 @@ class ChatController extends _$ChatController {
     String text, {
     required ChatOperation operation,
     List<Attachment> attachments = const [],
+    void Function()? onAccepted,
     RunCancellation? panelCancellation,
     void Function()? onPanelAccepted,
   }) async {
@@ -538,6 +546,7 @@ class ChatController extends _$ChatController {
     await repository.appendMessage(userMessage, updateTitle: parentId == null);
 
     _claimOperation(operation, conversationId);
+    onAccepted?.call();
     await _startRun(
       operation: operation,
       repository: repository,

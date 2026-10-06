@@ -308,6 +308,7 @@ Map<String, dynamic> _toolCallJson(
     'defaultPolicy': record.defaultPolicy.name,
     'status': record.status.name,
     'decision': record.decision?.name,
+    if (record.permission != null) 'permission': record.permission!.toJson(),
     'confirmationRequestedAt': record.confirmationRequestedAt
         ?.toIso8601String(),
     'confirmationExpiresAt': record.confirmationExpiresAt?.toIso8601String(),

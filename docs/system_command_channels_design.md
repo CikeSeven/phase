@@ -15,7 +15,7 @@ shell、文件工具、文件页和 Skill 工作副本共用所属会话的 Ubun
 ## 通用命令与文件
 
 - `shell(command, cwd?, timeout?)` 使用 Ubuntu，默认 cwd 为 `/sessions/<session_id>`。`install_packages` 在 Ubuntu 就绪时开放。每次独立非交互执行，不加载 rc，不保留变量与 cd；可指定 timeout 秒数，默认不设命令总时限。grep/find 使用 Ubuntu 中的 rg，按只读工具执行。
-- 命令共用命令策略：计划 deny、基础 ask、全权限 allow。准备通知不依赖无障碍，实际执行和写入在确认之后。
+- 命令共用模式默认策略：计划 deny、基础 ask、全权限 allow；显式工具规则可要求确认或拒绝，全权限不覆盖这些限制。准备通知不依赖无障碍，实际执行和写入在获准之后。
 
 ## 授权与快照
 

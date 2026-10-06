@@ -131,6 +131,7 @@ class ChatRunFactory {
         webSearch: catalog.webSearch,
         enabledTools: catalog.enabledTools,
         toolPolicies: catalog.policies,
+        permissionRules: catalog.permissionRules,
         supportsReasoning: selection.supportsReasoning,
         supportsImages: selection.supportsImages,
         supportsTools: selection.supportsTools,

@@ -1,5 +1,6 @@
 import '../models/memory_entry.dart';
 import '../models/permission_mode.dart';
+import '../models/tool_permission.dart';
 import 'model_request_repository.dart';
 
 import 'dart:convert';
@@ -94,7 +95,10 @@ ToolCallRecord toolCallFromRow(ToolCallRow row) => ToolCallRecord(
   source: row.sourceJson == null
       ? null
       : ToolSource.fromJson(_decodeMap(row.sourceJson!)),
-  arguments: _decodeMap(row.argumentsJson),
+  permission: row.permissionJson == null
+      ? null
+      : ToolPermissionDecision.fromJson(_decodeMap(row.permissionJson!)),
+  arguments: freezeJson(_decodeMap(row.argumentsJson)),
   providerData: row.providerDataJson == null
       ? null
       : _decodeMap(row.providerDataJson!),
@@ -250,6 +254,11 @@ ToolCallsCompanion toolCallCompanion(ToolCallRecord record) =>
       toolName: Value(record.toolName),
       sourceJson: Value(
         record.source == null ? null : jsonEncode(record.source!.toJson()),
+      ),
+      permissionJson: Value(
+        record.permission == null
+            ? null
+            : jsonEncode(record.permission!.toJson()),
       ),
       argumentsJson: Value(jsonEncode(record.arguments)),
       providerDataJson: Value(

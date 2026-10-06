@@ -421,7 +421,9 @@ class ExecutionController extends _$ExecutionController {
             runId,
             toolCallId,
             decision == ConfirmationDecision.approve
-                ? ToolDecision.approved
+                ? state.confirmation?.applicationOperationsForRun == true
+                      ? ToolDecision.approvedForRun
+                      : ToolDecision.approved
                 : ToolDecision.rejected,
           );
         }
@@ -584,7 +586,9 @@ class ExecutionController extends _$ExecutionController {
             runId: request.record.runId,
             toolCallId: request.record.id,
             toolName: request.record.toolName,
-            summary: request.summary,
+            summary: request.permission == null
+                ? request.summary
+                : '${request.summary}\n${request.permission!.reason}',
             arguments: request.record.arguments,
             targetLabel: request.record.target,
             expiresAtMs: request.expiresAt.millisecondsSinceEpoch,

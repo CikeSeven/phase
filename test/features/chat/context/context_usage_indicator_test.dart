@@ -372,6 +372,25 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('切换会话在构建之后关闭已展开浮层，不在 layout 中修改 Overlay', (tester) async {
+    final container = ProviderContainer(
+      overrides: [
+        contextPreviewProvider('c').overrideWith((_) async => _preview()),
+        conversationRequestsProvider('c').overrideWith((_) => Stream.value([])),
+      ],
+    );
+    addTearDown(container.dispose);
+    await _pump(tester, container);
+    await tester.tap(_button);
+    await tester.pumpAndSettle();
+    expect(_popup, findsOneWidget);
+    await _pump(tester, container, conversationId: null);
+    expect(_popup, findsNothing);
+    expect(find.text('0%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('非零小占用不四舍五入为零，减少动画时直接更新', (tester) async {
     var next = _preview(used: 1);
     final container = ProviderContainer(

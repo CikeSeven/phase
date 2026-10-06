@@ -18,6 +18,12 @@ import 'mcp_test_server.dart';
 import 'mcp_model_fixtures.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setUp(() {
+    final overrides = HttpOverrides.current;
+    HttpOverrides.global = null;
+    addTearDown(() => HttpOverrides.global = overrides);
+  });
   for (final protocol in ApiProtocol.values) {
     for (final images in [true, false]) {
       test('${protocol.name} 原始 SSE → MCP 确认/HTTP/保存/回填/最终回答，图片 $images', () async {
@@ -96,7 +102,7 @@ void main() {
             .controller()
             .send('读取样本文档')
             .timeout(const Duration(seconds: 15));
-        expect(confirmations, 0);
+        expect(confirmations, 1);
         expect(mcp.calls, 1);
         expect(payloads, hasLength(2));
         expect(jsonEncode(payloads.first), contains(toolName));
@@ -126,15 +132,15 @@ void main() {
           final encoded = base64Encode(
             await File(artifacts.single.localPath).readAsBytes(),
           );
-          expect(jsonEncode(payloads.last), contains(encoded));
+          expect(jsonEncode(payloads[1]), contains(encoded));
           expect(
-            jsonEncode(payloads.last),
+            jsonEncode(payloads[1]),
             isNot(contains(artifacts.single.localPath)),
           );
         } else {
           expect(artifacts, isEmpty);
           expect(record.artifacts, isEmpty);
-          expect(jsonEncode(payloads.last), isNot(contains(png)));
+          expect(jsonEncode(payloads[1]), isNot(contains(png)));
         }
         expect(mcp.closed, 2);
       });

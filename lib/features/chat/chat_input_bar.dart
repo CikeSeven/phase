@@ -42,7 +42,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
   final _contextUsageKey = GlobalKey();
   bool _canSend = false;
   bool _submitting = false;
-  String? _pendingText;
   List<Attachment> _attachments = const [];
 
   @override
@@ -81,23 +80,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
         }
         return state.isConversationRunning(conversationId);
       }),
-    );
-    ref.listen(
-      chatControllerProvider.select((state) {
-        if (conversationId == null) {
-          return state.activeConversationId == null && state.isGenerating;
-        }
-        return state.isConversationRunning(conversationId);
-      }),
-      (_, generating) {
-        if (!generating || _pendingText == null) return;
-        // 生成状态意味着 controller 已接收并落库，之前的草稿不能提前清掉。
-        if (_pendingText != null && _controller.text == _pendingText) {
-          _controller.clear();
-        }
-        _pendingText = null;
-        if (_attachments.isNotEmpty) setState(() => _attachments = const []);
-      },
     );
     final savingMode = ref.watch(
       chatControllerProvider.select((s) => s.savingPermissionMode),
@@ -281,6 +263,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
 
   Future<void> _send() async {
     final text = _controller.text;
+    final attachments = List<Attachment>.unmodifiable(_attachments);
     final activeId = ref.read(activeConversationProvider).conversationId;
     final isCurrentGenerating = activeId == null
         ? (ref.read(chatControllerProvider).activeConversationId == null &&
@@ -314,10 +297,29 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
                 ref.read(chatControllerProvider).isGenerating)
           : ref.read(chatControllerProvider).isConversationRunning(activeId);
       if (isStillGenerating) return;
-      _pendingText = text;
       await ref
           .read(chatControllerProvider.notifier)
-          .send(text, attachments: _attachments);
+          .send(
+            text,
+            attachments: attachments,
+            onAccepted: () {
+              if (!mounted) return;
+              // 明确的入库回执不依赖新会话 ID 接管与生成状态通知的先后。
+              if (_controller.text == text) _controller.clear();
+              final sentIds = attachments
+                  .map((attachment) => attachment.id)
+                  .toSet();
+              setState(() {
+                _attachments = [
+                  for (final attachment in _attachments)
+                    if (!sentIds.contains(attachment.id)) attachment,
+                ];
+                _canSend =
+                    _controller.text.trim().isNotEmpty ||
+                    _attachments.isNotEmpty;
+              });
+            },
+          );
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -331,7 +333,6 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           );
       }
     } finally {
-      _pendingText = null;
       if (mounted) setState(() => _submitting = false);
     }
   }

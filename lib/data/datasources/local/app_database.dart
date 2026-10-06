@@ -206,6 +206,7 @@ class ToolCalls extends Table {
   TextColumn get toolName => text()();
   TextColumn get argumentsJson => text()();
   TextColumn get sourceJson => text().nullable()();
+  TextColumn get permissionJson => text().nullable()();
   TextColumn get providerDataJson => text().nullable()();
   TextColumn get target => text().nullable()();
   TextColumn get channel => textEnum<ExecutionChannel>()();
@@ -407,14 +408,14 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话工作区与文件来源；11 MCP 按服务整体启用；12 Ubuntu 会话工作区结构。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话工作区与文件来源；11 MCP 按服务整体启用；12 Ubuntu 会话工作区结构；13 调用级权限判定与授权审计。
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (migrator, from, to) async {
-      if ((from != 10 && from != 11) || to != 12) {
+      if ((from != 10 && from != 11 && from != 12) || to != 13) {
         throw const OperationFailure('此安装的数据结构不支持直接升级，请保留原数据');
       }
       // 重建被引用的表前关闭外键，事务内校验引用，提交后恢复约束。
@@ -422,12 +423,13 @@ class AppDatabase extends _$AppDatabase {
       try {
         await transaction(() async {
           if (from == 10) await upgradeMcpServerScope(this);
-          await upgradeWorkspaceSchema(this, migrator);
+          if (from < 12) await upgradeWorkspaceSchema(this, migrator);
+          await migrator.addColumn(toolCalls, toolCalls.permissionJson);
         });
       } finally {
         await customStatement('PRAGMA foreign_keys = ON');
       }
-      AppLogger.info('数据库 $from → 12 保数据升级已提交，工作区与引用检查通过');
+      AppLogger.info('数据库 $from → 13 保数据升级已提交');
     },
     beforeOpen: _prepareDatabase,
   );

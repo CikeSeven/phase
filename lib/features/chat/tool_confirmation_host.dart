@@ -112,11 +112,16 @@ class _ToolConfirmationHostState extends ConsumerState<ToolConfirmationHost>
         if (!ref.read(executionControllerProvider).foreground) return;
         switch (outcome) {
           case ToolConfirmationOutcome.allowOnce:
-          case ToolConfirmationOutcome.allowApplicationOperationsForRun:
             controller.decide(
               request.record.runId,
               request.record.id,
               ToolDecision.approved,
+            );
+          case ToolConfirmationOutcome.allowApplicationOperationsForRun:
+            controller.decide(
+              request.record.runId,
+              request.record.id,
+              ToolDecision.approvedForRun,
             );
           case ToolConfirmationOutcome.reject:
             controller.decide(

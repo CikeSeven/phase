@@ -7,6 +7,7 @@ import 'workspace.dart';
 import 'skill_installation.dart';
 import 'model_selection.dart';
 import 'tool_policy.dart';
+import 'tool_permission.dart';
 import 'openai_compat.dart';
 import 'execution_scope.dart';
 import 'tool_source.dart';
@@ -87,6 +88,7 @@ class RunConfiguration {
     this.approvedPlan,
     this.memoryScope = MemoryScope.disabled,
     this.toolPolicies = const {},
+    this.permissionRules = const [],
     this.supportsReasoning = false,
     this.supportsImages = true,
     this.supportsTools = true,
@@ -130,6 +132,7 @@ class RunConfiguration {
 
   /// 由会话模式解析的实际策略快照，不接受助手级覆盖。
   final Map<String, ToolPolicy> toolPolicies;
+  final List<ToolPermissionRule> permissionRules;
   final bool supportsReasoning;
   final bool supportsImages;
   final bool supportsTools;
@@ -162,6 +165,7 @@ class RunConfiguration {
     'toolPolicies': {
       for (final entry in toolPolicies.entries) entry.key: entry.value.name,
     },
+    'permissionRules': permissionRules.map((rule) => rule.toJson()).toList(),
     'supportsReasoning': supportsReasoning,
     'supportsImages': supportsImages,
     'supportsTools': supportsTools,
@@ -240,6 +244,10 @@ class RunConfiguration {
               .entries)
         entry.key: toolPolicyFromName(entry.value as String?),
     },
+    permissionRules: List.unmodifiable([
+      for (final rule in json['permissionRules'] as List? ?? const [])
+        ToolPermissionRule.fromJson(rule as Map<String, dynamic>),
+    ]),
   );
 }
 

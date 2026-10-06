@@ -114,6 +114,8 @@ class ReadHistoryTool extends Tool {
         'errorCode': record.errorCode,
         'artifacts': record.artifacts,
         'decision': record.decision?.name,
+        if (record.permission != null)
+          'permission': record.permission!.toJson(),
       };
     }
     cancellation.throwIfCancelled();

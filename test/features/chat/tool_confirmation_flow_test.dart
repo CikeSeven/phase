@@ -16,6 +16,12 @@ import 'package:phase/features/chat/tool_confirmation_host.dart';
 import 'package:phase/features/chat/tool_confirmation_sheet.dart';
 import 'package:phase/features/tools/tool_card.dart';
 import 'package:phase/features/execution/execution_controller.dart';
+import 'package:phase/features/execution/channel_driver.dart';
+import 'package:phase/features/execution/execution_api.g.dart';
+import 'package:phase/data/models/tool_permission.dart';
+import 'package:phase/core/widgets/app_dropdown.dart';
+
+import '../../support/fake_channel_driver.dart';
 
 import '../tools/tool_loop_harness.dart';
 
@@ -165,6 +171,100 @@ void main() {
     expect(artifactFile(harness).existsSync(), isTrue);
     expect((await harness.recordsByCall()).values, hasLength(1));
   });
+
+  for (final scope in PermissionGrantScope.values) {
+    testWidgets('确认宿主 ${scope.name} 决定落库并按批准范围处理后续动作', (tester) async {
+      final harness = await pumpChat(tester);
+      final driver =
+          harness.container.read(channelDriverProvider) as FakeChannelDriver;
+      var dispatched = 0;
+      driver.executeHandler = (request, _) async {
+        dispatched++;
+        return ExecutionResult(
+          toolCallId: request.toolCallId,
+          status: ExecutionStatus.succeeded,
+          result: {},
+          artifacts: [],
+        );
+      };
+      harness.provider.turns.addAll([
+        multiToolTurn([
+          (
+            callId: 'first-app',
+            toolName: 'open_app',
+            arguments: '{"packageName":"fixture.app"}',
+          ),
+          (
+            callId: 'second-app',
+            toolName: 'open_app',
+            arguments: '{"packageName":"fixture.other"}',
+          ),
+        ]),
+        textTurn('已完成'),
+      ]);
+      await send(tester, '依次打开应用');
+      await waitForPanel(tester);
+      expect(dispatched, 0);
+      if (scope == PermissionGrantScope.once) {
+        final selector = find.byType(AppDropdown<PermissionGrantScope>);
+        await tester.scrollUntilVisible(
+          selector,
+          100,
+          scrollable: find
+              .descendant(
+                of: find.byKey(const ValueKey('tool-confirmation-body')),
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pump();
+        await tester.tap(selector);
+        await _settle(tester);
+        await tester.tap(find.text('仅本次').last);
+        await _settle(tester);
+      }
+      await tester.tap(find.byKey(const ValueKey('tool-confirm-allow')));
+      if (scope == PermissionGrantScope.once) {
+        await _until(
+          tester,
+          () =>
+              harness.container
+                  .read(executionControllerProvider)
+                  .confirmation
+                  ?.record
+                  .providerCallId ==
+              'second-app',
+          reason: '第二次确认未出现',
+        );
+        await _settle(tester);
+        await tester.tap(find.byKey(const ValueKey('tool-confirm-reject')));
+      }
+      await _until(
+        tester,
+        () => !harness.state().isGenerating,
+        reason: '运行未结束',
+      );
+      final records = await harness.recordsByCall();
+      expect(
+        records['first-app']!.decision,
+        scope == PermissionGrantScope.run
+            ? ToolDecision.approvedForRun
+            : ToolDecision.approved,
+      );
+      expect(records['first-app']!.permission!.grantScope, scope);
+      if (scope == PermissionGrantScope.run) {
+        expect(records['second-app']!.decision, isNull);
+        expect(
+          records['second-app']!.permission!.grantSourceCallId,
+          records['first-app']!.id,
+        );
+        expect(dispatched, 2);
+      } else {
+        expect(records['second-app']!.decision, ToolDecision.rejected);
+        expect(dispatched, 1);
+      }
+    });
+  }
 
   testWidgets('应用级确认在设置路由仍可操作，返回聊天保留执行结果', (tester) async {
     final harness = await pumpChat(tester);

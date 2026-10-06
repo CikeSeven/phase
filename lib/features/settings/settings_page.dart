@@ -54,7 +54,7 @@ class SettingsPage extends ConsumerWidget {
             icon: LucideIcons.pointer,
             tone: AppTone.gold,
             title: '执行与权限',
-            subtitle: '后台通知与设备权限',
+            subtitle: '工具规则、后台通知与设备权限',
             onTap: () => context.push('/settings/execution'),
           ),
           const SizedBox(height: AppSpacing.s),

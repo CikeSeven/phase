@@ -5,6 +5,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
+import '../../../data/models/tool_permission.dart';
 import '../../../data/models/tool_source.dart';
 import 'tool_output_presentation.dart';
 
@@ -13,6 +14,22 @@ import 'tool_output_presentation.dart';
 /// 工具卡片、确认面板与执行记录页共用它，避免各写一份状态文案。
 class ToolPresentation {
   const ToolPresentation._();
+
+  static String actionLabel(String toolName, String action) =>
+      toolName == 'shizuku_display'
+      ? switch (action) {
+          'launch' => '启动应用',
+          'capture' => '截图观察',
+          'tap' => '点击',
+          'swipe' => '滑动',
+          'key' => '按键',
+          'text' => '输入文本',
+          'close' => '关闭虚拟屏',
+          _ => action,
+        }
+      : toolName == 'http_request'
+      ? action
+      : toolLabel(toolName);
 
   static IconData icon(String toolName) => switch (toolName) {
     'submit_plan' => LucideIcons.listChecks,
@@ -140,14 +157,19 @@ class ToolPresentation {
   /// 用户决定文案；未要求确认时为 null。
   static String decisionLabel(ToolCallRecord record) =>
       switch (record.decision) {
+        ToolDecision.approvedForRun => '允许本轮操作应用',
         ToolDecision.approved =>
-          record.source?.kind != ToolSourceKind.mcp &&
+          record.permission == null &&
+                  record.source?.kind != ToolSourceKind.mcp &&
                   applicationOperationTools.contains(record.toolName)
               ? '已允许'
               : '允许一次',
         ToolDecision.rejected => '拒绝',
         ToolDecision.expired => '超时未决定',
-        null => '未要求确认',
+        null =>
+          record.permission?.grantScope == PermissionGrantScope.run
+              ? '沿用本轮授权'
+              : '未要求确认',
       };
 
   /// 确认面板展示的参数：标签 + 真实值。

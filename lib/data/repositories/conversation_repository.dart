@@ -459,6 +459,20 @@ class ConversationRepository {
                       .toCompanion(false)
                       .copyWith(
                         id: Value(callIds[row.id]!),
+                        permissionJson: Value(
+                          record.permission == null
+                              ? null
+                              : jsonEncode({
+                                  ...record.permission!.toJson(),
+                                  if (record.permission!.grantSourceCallId
+                                      case final sourceCallId?)
+                                    'grantSourceCallId':
+                                        callIds[sourceCallId] ??
+                                        (throw const OperationFailure(
+                                          '授权记录引用不完整，无法复制',
+                                        )),
+                                }),
+                        ),
                         runId: Value(runIds[row.runId]!),
                         assistantMessageId: Value(
                           mappedMessage(row.assistantMessageId),

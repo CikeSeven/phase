@@ -7,6 +7,7 @@ import 'dart:convert';
 import '../../models/execution_scope.dart';
 import '../../models/command_channel.dart';
 import '../../models/web_search_settings.dart';
+import '../../models/tool_permission.dart';
 import '../../../core/error/failure.dart';
 
 part 'settings_storage.g.dart';
@@ -16,6 +17,53 @@ class SettingsStorage {
   SettingsStorage(this._prefs);
 
   final SharedPreferences _prefs;
+  List<ToolPermissionRule>? _permissionRules;
+  bool _writingPermissionRules = false;
+
+  List<ToolPermissionRule> readToolPermissionRules() {
+    if (_permissionRules case final cached?) return cached;
+    try {
+      final value = _prefs.getString('tool_permission_rules_v1');
+      if (value == null) return _permissionRules = const [];
+      final rules = [
+        for (final entry in jsonDecode(value) as List)
+          ToolPermissionRule.fromJson(entry as Map<String, dynamic>),
+      ];
+      if (rules.map((rule) => rule.key).toSet().length != rules.length) {
+        throw const FormatException('Duplicate tool permission rules');
+      }
+      return _permissionRules = List.unmodifiable(rules);
+    } on Object {
+      throw const StorageFailure('工具规则读取失败，任务未获授权');
+    }
+  }
+
+  Future<void> writeToolPermissionRules(List<ToolPermissionRule> rules) async {
+    if (_writingPermissionRules) throw const OperationFailure('工具规则正在保存');
+    // SharedPreferences 先改内存缓存再提交；执行器只能读取已成功提交的规则。
+    readToolPermissionRules();
+    final next = List<ToolPermissionRule>.unmodifiable(rules);
+    _writingPermissionRules = true;
+    try {
+      for (final rule in next) {
+        ToolPermissionRule.fromJson(rule.toJson());
+      }
+      if (next.map((rule) => rule.key).toSet().length != next.length ||
+          !await _prefs.setString(
+            'tool_permission_rules_v1',
+            jsonEncode(next.map((rule) => rule.toJson()).toList()),
+          )) {
+        throw const StorageFailure('工具规则保存失败');
+      }
+      _permissionRules = next;
+    } on Failure {
+      rethrow;
+    } on Object {
+      throw const StorageFailure('工具规则保存失败');
+    } finally {
+      _writingPermissionRules = false;
+    }
+  }
 
   WebSearchSettings readWebSearch() {
     final value = _prefs.getString('web_search_v1');
