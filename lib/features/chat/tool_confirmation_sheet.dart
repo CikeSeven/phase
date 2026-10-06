@@ -247,9 +247,6 @@ class _ToolConfirmationSheetState extends State<ToolConfirmationSheet> {
         command: record.arguments['command'] as String? ?? '',
         cwd: record.arguments['cwd'] as String?,
         timeout: record.arguments['timeout'] as num?,
-        background: record.arguments['background'] == true,
-        yieldMs: record.arguments['yieldMs'] as int?,
-        notifyOnCompletion: record.arguments['notifyOnCompletion'] != false,
       ),
       'write_file' || 'edit_file' => _FileOperationCard(record: record),
       'http_request' => _HttpRequestCard(record: record),
@@ -300,21 +297,11 @@ class _CountdownBadge extends StatelessWidget {
 
 /// 终端命令展示卡片。
 class _ShellCommandCard extends StatelessWidget {
-  const _ShellCommandCard({
-    required this.command,
-    this.cwd,
-    this.timeout,
-    this.background = false,
-    this.yieldMs,
-    this.notifyOnCompletion = true,
-  });
+  const _ShellCommandCard({required this.command, this.cwd, this.timeout});
 
   final String command;
   final String? cwd;
   final num? timeout;
-  final bool background;
-  final int? yieldMs;
-  final bool notifyOnCompletion;
 
   @override
   Widget build(BuildContext context) {
@@ -406,28 +393,7 @@ class _ShellCommandCard extends StatelessWidget {
               ),
             ),
           ),
-          if (background || yieldMs != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.m,
-                vertical: AppSpacing.s,
-              ),
-              child: Text(
-                background ? '后台任务 · 本轮结束后继续运行' : '等待 $yieldMs 毫秒 · 未结束则转为后台任务',
-                style: theme.textTheme.labelSmall?.copyWith(color: metaFg),
-              ),
-            ),
-          if (background || yieldMs != null)
-            Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.m,
-                vertical: AppSpacing.s,
-              ),
-              child: Text(
-                notifyOnCompletion ? '完成后自动继续 AI 回复' : '完成后仅保存结果',
-                style: theme.textTheme.labelSmall?.copyWith(color: metaFg),
-              ),
-            ),
+
           if (timeout != null)
             Container(
               padding: const EdgeInsets.symmetric(

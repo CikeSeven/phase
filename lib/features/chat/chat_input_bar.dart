@@ -17,6 +17,7 @@ import 'attachment_picker.dart';
 import 'attachment_source_sheet.dart';
 import 'chat_controller.dart';
 import 'chat_input_surface.dart';
+import 'chat_running_jobs_panel.dart';
 import 'chat_send_button.dart';
 import 'model_selection.dart';
 import 'context/context_usage_indicator.dart';
@@ -166,96 +167,103 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           AppSpacing.m,
           AppSpacing.xs,
         ),
-        child: ChatInputSurface(
-          focused: _focusNode.hasFocus,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final scaler = MediaQuery.textScalerOf(context);
-              // 大字窄屏将模式和圆环移到单独一行，不挤压发送与附件触区。
-              final stacked =
-                  constraints.maxWidth <
-                  scaler.scale(14) * 5 +
-                      math.max(
-                        48,
-                        scaler.scale(ContextUsageIndicator.diameter) + 8,
-                      ) +
-                      128 +
-                      AppSpacing.s;
-              final actions = stacked
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Row(children: [attachment, const Spacer(), send]),
-                        Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const ChatRunningJobsPanel(),
+            ChatInputSurface(
+              focused: _focusNode.hasFocus,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final scaler = MediaQuery.textScalerOf(context);
+                  // 大字窄屏将模式和圆环移到单独一行，不挤压发送与附件触区。
+                  final stacked =
+                      constraints.maxWidth <
+                      scaler.scale(14) * 5 +
+                          math.max(
+                            48,
+                            scaler.scale(ContextUsageIndicator.diameter) + 8,
+                          ) +
+                          128 +
+                          AppSpacing.s;
+                  final actions = stacked
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
+                            Row(children: [attachment, const Spacer(), send]),
+                            Row(
+                              children: [
+                                Expanded(child: mode),
+                                const SizedBox(width: AppSpacing.s),
+                                usage,
+                              ],
+                            ),
+                          ],
+                        )
+                      : Row(
+                          children: [
+                            attachment,
                             Expanded(child: mode),
                             const SizedBox(width: AppSpacing.s),
                             usage,
+                            const SizedBox(width: AppSpacing.s),
+                            send,
                           ],
-                        ),
-                      ],
-                    )
-                  : Row(
-                      children: [
-                        attachment,
-                        Expanded(child: mode),
-                        const SizedBox(width: AppSpacing.s),
-                        usage,
-                        const SizedBox(width: AppSpacing.s),
-                        send,
-                      ],
-                    );
-              final actionHeight = needsConfiguration
-                  ? (scaler.scale(14) * 1.25 + AppSpacing.xl).clamp(
-                      AppControlStyle.mediumHeight,
-                      double.infinity,
-                    )
-                  : AppControlStyle.mediumHeight;
-              final minimumHeight =
-                  math.max(
-                    AppControlStyle.touchTarget,
-                    scaler.scale(16) * 1.5 + _textPadding.vertical,
-                  ) +
-                  actionHeight +
-                  (stacked
-                      ? math.max(
-                          48,
-                          scaler.scale(ContextUsageIndicator.diameter) + 8,
+                        );
+                  final actionHeight = needsConfiguration
+                      ? (scaler.scale(14) * 1.25 + AppSpacing.xl).clamp(
+                          AppControlStyle.mediumHeight,
+                          double.infinity,
                         )
-                      : 0);
-              return SingleChildScrollView(
-                // 极短可用高度时优先保留底部操作，输入内容仍可向上滚动。
-                reverse: true,
-                primary: false,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxHeight: constraints.maxHeight.clamp(
-                      minimumHeight,
-                      double.infinity,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      if (_attachments.isNotEmpty)
-                        AttachmentChips(
-                          attachments: _attachments,
-                          onRemove: (attachment) => setState(() {
-                            _attachments = [
-                              for (final entry in _attachments)
-                                if (entry.id != attachment.id) entry,
-                            ];
-                            _onDraftChanged();
-                          }),
+                      : AppControlStyle.mediumHeight;
+                  final minimumHeight =
+                      math.max(
+                        AppControlStyle.touchTarget,
+                        scaler.scale(16) * 1.5 + _textPadding.vertical,
+                      ) +
+                      actionHeight +
+                      (stacked
+                          ? math.max(
+                              48,
+                              scaler.scale(ContextUsageIndicator.diameter) + 8,
+                            )
+                          : 0);
+                  return SingleChildScrollView(
+                    // 极短可用高度时优先保留底部操作，输入内容仍可向上滚动。
+                    reverse: true,
+                    primary: false,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: constraints.maxHeight.clamp(
+                          minimumHeight,
+                          double.infinity,
                         ),
-                      Flexible(child: field),
-                      actions,
-                    ],
-                  ),
-                ),
-              );
-            },
-          ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_attachments.isNotEmpty)
+                            AttachmentChips(
+                              attachments: _attachments,
+                              onRemove: (attachment) => setState(() {
+                                _attachments = [
+                                  for (final entry in _attachments)
+                                    if (entry.id != attachment.id) entry,
+                                ];
+                                _onDraftChanged();
+                              }),
+                            ),
+                          Flexible(child: field),
+                          actions,
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
         ),
       ),
     );

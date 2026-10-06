@@ -27,8 +27,6 @@ import '../../features/skills/skill_detail_page.dart';
 import '../../features/skills/skill_resource_page.dart';
 import '../../features/web_search/web_search_page.dart';
 import '../../features/web_search/web_search_profile_page.dart';
-import '../../features/tasks/tasks_page.dart';
-import '../../features/tasks/task_detail_page.dart';
 
 part 'app_router.g.dart';
 
@@ -46,24 +44,6 @@ GoRouter appRouter(Ref ref) {
   return GoRouter(
     initialLocation: '/',
     routes: [
-      GoRoute(
-        path: '/background-tasks',
-        pageBuilder: (context, state) => materialPage(
-          state,
-          TasksPage(
-            conversationId: state.uri.queryParameters['conversationId'],
-          ),
-        ),
-        routes: [
-          GoRoute(
-            path: ':id',
-            pageBuilder: (context, state) => materialPage(
-              state,
-              TaskDetailPage(id: state.pathParameters['id']!),
-            ),
-          ),
-        ],
-      ),
       GoRoute(
         path: '/tasks',
         pageBuilder: (context, state) =>

@@ -8,7 +8,6 @@ import '../tools/run_recovery_controller.dart';
 import '../execution/execution_controller.dart';
 import 'chat_controller.dart';
 import 'tool_confirmation_host.dart';
-import '../tasks/command_task_controller.dart';
 
 /// 切换查看位置后仍能回到根任务；启动失败与中断任务都有可达入口。
 class ChatRunBanner extends ConsumerWidget {
@@ -23,9 +22,6 @@ class ChatRunBanner extends ConsumerWidget {
     );
     final recovery = ref.watch(runRecoveryControllerProvider);
     final count = recovery.value?.length ?? 0;
-    final tasks = ref.watch(commandTaskControllerProvider);
-    final activeTasks = tasks.tasks.where((task) => task.status.active).length;
-    final pendingReplies = tasks.pendingCompletions.length;
     final execution = ref.watch(
       executionControllerProvider.select(
         (state) =>
@@ -38,9 +34,6 @@ class ChatRunBanner extends ConsumerWidget {
     final canConfirm = pending != null && reopen != null;
     final retry = chat.retry;
     if (count == 0 &&
-        activeTasks == 0 &&
-        tasks.error == null &&
-        pendingReplies == 0 &&
         !recovery.hasError &&
         !canConfirm &&
         userAction == null &&
@@ -57,26 +50,6 @@ class ChatRunBanner extends ConsumerWidget {
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.xs,
             children: [
-              if (pendingReplies > 0)
-                TextButton.icon(
-                  onPressed: () => ref
-                      .read(commandTaskControllerProvider.notifier)
-                      .retryCompletionDelivery(),
-                  icon: const Icon(LucideIcons.messageCircle, size: 18),
-                  label: Text(
-                    tasks.completionErrors.isNotEmpty
-                        ? '任务续答失败 · 重试'
-                        : '继续任务回复（$pendingReplies）',
-                  ),
-                ),
-              if (activeTasks > 0 || tasks.error != null)
-                TextButton.icon(
-                  onPressed: () => context.push('/background-tasks'),
-                  icon: const Icon(LucideIcons.terminal, size: 18),
-                  label: Text(
-                    tasks.error != null ? '后台任务需要处理' : '后台任务（$activeTasks）',
-                  ),
-                ),
               if (chat.summarizing) const Text('正在整理上下文摘要 · 可停止'),
               if (userAction != null)
                 Semantics(

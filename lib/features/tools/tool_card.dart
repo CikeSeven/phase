@@ -692,8 +692,8 @@ class _ToolCardState extends State<ToolCard>
 
                           // 输入/调用视窗（Diff、命令、调用参数，无多重嵌套卡片）
                           if (hasInput) ...[
-                            // 顶部轻量操作栏（Diff 已在卡片头部展示增删统计，删除此行与复制按钮；命令与参数仍保留操作栏）
-                            if (!hasDiff)
+                            // 顶部轻量操作栏（Diff 已在卡片头部展示增删统计；终端命令直接展示命令，删除该行；其他工具参数保留操作栏）
+                            if (!hasDiff && !command)
                               Row(
                                 children: [
                                   Row(

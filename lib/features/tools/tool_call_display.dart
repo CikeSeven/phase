@@ -58,7 +58,7 @@ class ToolCallDisplay {
       'wait_for_user' =>
         args['prompt'] is String ? args['prompt'] as String : null,
       'shell' => args['command'] is String ? '\$ ${args['command']}' : null,
-      'task_output' || 'task_stop' => args['taskId'] as String?,
+      'task_output' || 'task_stop' => null,
       'install_packages' => null,
       'write_file' ||
       'edit_file' ||
@@ -113,22 +113,20 @@ class ToolCallDisplay {
           }
         case 'shell':
           if (args['command'] case final String command) {
-            final metadata = [
-              if (args['cwd'] case final String cwd) cwd,
-              if (args['timeout'] case final num seconds) '超时 ${seconds}s',
-              if (args['background'] == true) '后台运行',
-              if (args['yieldMs'] case final int milliseconds)
-                '等待 ${milliseconds}ms',
-              if (args['title'] case final String title) title,
-            ];
             return ToolCallDisplay(
               call: '\$ $command',
-              metadata: metadata.isEmpty ? null : metadata.join(' · '),
               copyText: command,
               copyLabel: '复制命令',
-              output: output,
+              output: output.isEmpty ? null : output,
             );
           }
+        case 'task_output':
+          return ToolCallDisplay(
+            call: null,
+            output: output.isEmpty ? '（无日志输出）' : output,
+            copyText: output,
+            copyLabel: '复制日志',
+          );
         case 'install_packages':
           return ToolCallDisplay(call: '安装开发依赖', output: output);
         case 'write_file':

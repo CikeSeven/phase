@@ -15,7 +15,15 @@ String presentToolOutput(ToolCallRecord record, String result) {
       decoded is Map<String, dynamic>) {
     switch (record.toolName) {
       case 'shell':
-        if (decoded['taskId'] is String) return _taskOutput(decoded);
+        if (decoded['taskId'] is String) {
+          final status = decoded['status'] as String?;
+          if (status == 'starting' ||
+              status == 'running' ||
+              status == 'stopping') {
+            return '';
+          }
+          return _taskOutput(decoded);
+        }
         if (decoded case {
           'stdout': final String out,
           'stderr': final String err,
@@ -101,30 +109,23 @@ String presentToolOutput(ToolCallRecord record, String result) {
 }
 
 String _taskOutput(Map<String, dynamic> task) {
-  final status = switch (task['status']) {
-    'starting' => '启动中',
-    'running' => '运行中',
-    'stopping' => '停止中',
-    'succeeded' => '已完成',
-    'failed' => '已失败',
-    'cancelled' => '已停止',
-    'timedOut' => '已超时',
-    'interrupted' => '已中断',
-    _ => task['status'],
-  };
-  return [
-    '${task['title'] ?? '后台任务'} · $status',
-    '任务 ID：${task['taskId']}',
-    for (final stream in ['stdout', 'stderr'])
-      if (task[stream] case final Map output) ...[
-        if (output['truncated'] == true) '$stream 较早的日志已省略',
-        if (output['text'] case final String text when text.isNotEmpty)
-          '$stream:\n$text',
-      ],
-    if (task['exitCode'] != null) '退出码：${task['exitCode']}',
-    if (task['signal'] != null) '终止信号：${task['signal']}',
-    if (task['error'] case final String error) error,
-  ].join('\n\n');
+  final out = task['stdout'] is Map
+      ? (task['stdout']['text'] as String? ?? '')
+      : (task['stdout'] is String ? task['stdout'] as String : '');
+  final err = task['stderr'] is Map
+      ? (task['stderr']['text'] as String? ?? '')
+      : (task['stderr'] is String ? task['stderr'] as String : '');
+  final error = task['error'] as String?;
+
+  final logParts = [
+    if (out.isNotEmpty || err.isNotEmpty)
+      '$out${out.isNotEmpty && !out.endsWith('\n') && err.isNotEmpty ? '\n' : ''}$err',
+    if (out.isEmpty && err.isEmpty && error == null) '（无日志输出）',
+    if (task['exitCode'] case final num code when code != 0) '退出码：$code',
+    if (task['signal'] case final num signal) '终止信号：$signal',
+    ?error,
+  ];
+  return logParts.join('\n\n');
 }
 
 String? _fileList(Map<String, dynamic> result) {

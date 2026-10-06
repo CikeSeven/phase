@@ -65,14 +65,7 @@ class SettingsPage extends ConsumerWidget {
             subtitle: '沙盒环境与依赖管理',
             onTap: () => context.push('/settings/workspaces'),
           ),
-          const SizedBox(height: AppSpacing.s),
-          SettingsEntry(
-            icon: LucideIcons.terminal,
-            tone: AppTone.teal,
-            title: '任务管理',
-            subtitle: '后台命令与运行记录',
-            onTap: () => context.push('/background-tasks'),
-          ),
+
           const SizedBox(height: AppSpacing.s),
           SettingsEntry(
             icon: LucideIcons.puzzle,
