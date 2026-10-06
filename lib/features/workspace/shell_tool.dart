@@ -36,23 +36,20 @@ class ShellTool extends Tool {
   String get policyKey => commandExecutionPolicyKey;
   @override
   String get description =>
-      '在 Ubuntu 中执行 shell 命令，返回 stdout、stderr、退出码和产物。'
+      '在 Ubuntu 中执行 shell 命令；前台命令返回 stdout、stderr、退出码和产物。'
       '支持当前环境中的绝对文件路径和绝对 cwd；默认目录：${workspace?.executionRoot ?? '当前会话目录'}。'
-      '输出预览保留最后 2000 行或 50 KiB，以先达到的上限为准；截断时已收完整输出保存为附件。'
-      'timeout 可指定秒级执行超时，默认没有命令总时限。'
-      'background=true 启动后台任务并立即返回 taskId；yieldMs 只等待指定毫秒，'
-      '仍在运行则返回 taskId，使用 task_output 挂起等待完成或在结束后拉起读取、task_stop 停止。';
+      '前台输出预览保留最后 2000 行或 50 KiB，以先达到的上限为准；截断时已收完整输出保存为附件。'
+      'background=true 或指定 yieldMs 时交由任务管理；后台日志仅保留有界尾部，用 task_output 读取。'
+      '后台产物留在工作区，用 read_file 读取。';
   @override
   String get promptSnippet => '在当前环境执行 shell 命令';
   @override
   List<String> get promptGuidelines => const [
     '文件查看、搜索、定位和局部修改优先使用 read_file、grep、find、list_files、edit_file；shell 用于执行程序或组合操作。',
     'shell 支持当前环境绝对路径，cwd 仅影响本次命令；默认无超时，需要时设置 timeout（秒）。',
-    '命令预览保留尾部，完整输出附件使用 read_file 的 attachment:<ID> 按页读取。',
+    '前台命令预览保留尾部，完整输出附件使用 read_file 的 attachment:<ID> 按页读取。',
     '模型结果带 sourceId 的进一步裁剪可用 read_history 续读原始记录，不重跑有副作用命令来取日志。',
     '需要持续运行的服务用 background=true，并让服务保持前台运行；不要用 &、nohup 或服务自守护模式，主进程退出会清理子进程。',
-    'yieldMs 控制工具等待窗口，timeout 控制实际执行时限；后台任务会跨本轮运行保留，服务日志仅保留有界尾部。',
-    '后台任务支持两种模式：可在启动后调用 task_output(waitMs: ...) 挂起阻塞当前会话等待任务完成；也可结束当前轮次，后台任务默认在完成后通知并自动拉起会话的 AI 回复，无需重复轮询。notifyOnCompletion=false 可仅保存结果。',
   ];
   @override
   Map<String, dynamic> get inputSchema => const {
@@ -63,17 +60,17 @@ class ShellTool extends Tool {
       'timeout': {
         'type': 'number',
         'exclusiveMinimum': 0,
-        'description': '超时秒数，可选；默认不设总时限',
+        'description': '执行时限（秒），前台与后台均适用；默认不设总时限',
       },
       'background': {
         'type': 'boolean',
-        'description': '后台运行并立即返回任务 ID，默认 false',
+        'description': '后台运行并立即返回 taskId，默认 false',
       },
       'yieldMs': {
         'type': 'integer',
         'minimum': 0,
         'maximum': 30000,
-        'description': '最长等待毫秒数，超出后任务继续运行；与执行 timeout 独立',
+        'description': '本次等待的最长毫秒数；未结束时返回 taskId，命令继续运行，与执行 timeout 独立',
       },
       'title': {
         'type': 'string',
@@ -83,7 +80,7 @@ class ShellTool extends Tool {
       },
       'notifyOnCompletion': {
         'type': 'boolean',
-        'description': '后台任务结束后自动唤醒当前会话的 AI，默认 true；false 仅保存结果',
+        'description': '完成后通知并继续处理当前会话，默认 true；false 仅保存结果',
       },
     },
     'required': ['command'],
@@ -197,7 +194,6 @@ class ShellTool extends Tool {
           ...output.toJson(),
           'background': running,
           'importedFiles': imported,
-          'knownEffects': '任务属于当前会话并跨本轮保留；产物留在工作区，使用 read_file 读取。停止任务不撤销文件变化。',
         }),
         errorCode: running || succeeded ? null : 'commandFailed',
       );

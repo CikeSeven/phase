@@ -124,7 +124,8 @@ class CommandTaskRepository {
         'tasks': [
           for (final task in tasks) task.summary(includeCommand: false),
         ],
-        'instruction': '这些后台任务已结束。请使用 task_output 读取所需日志，处理结果并向用户回复。不要重复执行已完成的命令；停止或失败不代表文件变化已撤销。',
+        'instruction':
+            '这些后台命令已结束。使用 task_output 读取所需日志，继续处理用户原请求；需要回复时说明实际成果或失败原因。',
       });
       await conversations.appendMessage(
         ChatMessage(

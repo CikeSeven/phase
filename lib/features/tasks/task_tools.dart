@@ -20,13 +20,10 @@ class TaskTool extends Tool {
   };
   @override
   String get description => switch (action) {
-    TaskToolAction.list => '列出当前会话的后台命令任务，返回任务 ID、状态和退出信息。支持分页。',
+    TaskToolAction.list => '列出当前会话的后台命令任务及状态，支持分页。',
     TaskToolAction.output =>
-      '读取当前会话后台任务的 stdout、stderr 与状态。'
-          '设置 waitMs 可挂起阻塞当前会话等待任务完成；'
-          '后台任务在后台结束后拉起会话时，使用本工具读取任务输出和终态。'
-          '默认读取最新尾部；分别传 stdoutOffset、stderrOffset 从绝对字节位置续读。'
-          '日志有界保留，过旧的读取位置返回 truncated。waitMs 只控制本次等待，不终止任务。',
+      '读取当前会话后台任务的 stdout、stderr 与状态，默认返回最新尾部。'
+          '日志有界保留，过旧的读取位置返回 truncated 和 oldestOffset。',
     TaskToolAction.stop => '停止当前会话的后台命令任务及其子进程，等待退出回执。已结束的任务返回已有状态。',
   };
   @override
@@ -38,14 +35,11 @@ class TaskTool extends Tool {
   @override
   List<String> get promptGuidelines => switch (action) {
     TaskToolAction.list => const [
-      '后台任务属于当前会话，跨本轮模型运行保留；默认结束后自动通知并唤醒 AI。应用进程重启后运行中的任务变为 interrupted，不自动重跑。',
-      '记住 shell 返回的 taskId；开始新轮次或忘记 ID 时用 task_list 查看。需要结果时使用 task_output，不重复启动同一服务。',
-      '停止不再需要的任务用 task_stop；等待日志可设置 waitMs，等待结束不代表进程被停止。',
+      '后台任务跨轮次运行，默认完成后通知；等待期间继续独立工作，仅在必须等待结果时设置 waitMs，避免重复轮询。',
+      '使用 shell 或 task_list 返回的 taskId 查询或停止任务；回复用户时说明实际成果或失败原因，除非用户索要，否则不展示任务 ID。',
+      '不要重复启动运行中的服务或为取日志重跑已完成的命令；停止不再需要的任务用 task_stop。停止或失败不撤销文件变化。',
     ],
-    TaskToolAction.output => const [
-      '后台任务支持两种模式：若需阻塞当前会话等待任务执行结束，可传入 waitMs（毫秒）；若需后台静默执行，则结束本轮回复，任务完成后系统会自动拉起并唤醒会话调用本工具。',
-    ],
-    TaskToolAction.stop => const [],
+    TaskToolAction.output || TaskToolAction.stop => const [],
   };
   @override
   Map<String, dynamic> get inputSchema => {
@@ -57,9 +51,20 @@ class TaskTool extends Tool {
         'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50},
       },
       TaskToolAction.output => {
-        'taskId': {'type': 'string', 'description': '后台任务 ID'},
-        'stdoutOffset': {'type': 'integer', 'minimum': 0},
-        'stderrOffset': {'type': 'integer', 'minimum': 0},
+        'taskId': {
+          'type': 'string',
+          'description': 'shell 或 task_list 返回的任务句柄',
+        },
+        'stdoutOffset': {
+          'type': 'integer',
+          'minimum': 0,
+          'description': 'stdout 的绝对字节位置；用上次 stdout.nextOffset 续读，省略时读取尾部',
+        },
+        'stderrOffset': {
+          'type': 'integer',
+          'minimum': 0,
+          'description': 'stderr 的绝对字节位置；用上次 stderr.nextOffset 续读，省略时读取尾部',
+        },
         'maxBytes': {
           'type': 'integer',
           'minimum': 4,
@@ -70,11 +75,14 @@ class TaskTool extends Tool {
           'type': 'integer',
           'minimum': 0,
           'maximum': 30000,
-          'description': '挂起阻塞会话等待后台任务完成的最长毫秒数，默认 0',
+          'description': '本次等待任务结束的最长毫秒数，默认 0；等待超时不停止任务',
         },
       },
       TaskToolAction.stop => {
-        'taskId': {'type': 'string'},
+        'taskId': {
+          'type': 'string',
+          'description': 'shell 或 task_list 返回的任务句柄',
+        },
       },
     },
     if (action != TaskToolAction.list) 'required': ['taskId'],

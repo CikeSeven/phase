@@ -482,7 +482,6 @@ class ChatToolRuntime {
         for (final task in visible) task.summary(includeCommand: false),
       ],
       'total': owned.length,
-      'instruction': '这是当前会话任务的最新状态。后台任务跨模型轮次保留；使用 task_output 读取日志、task_stop 停止，不重复启动运行中的服务。',
     });
   }
 
