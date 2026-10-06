@@ -201,8 +201,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(ToolDiffView), findsOneWidget);
-    expect(find.text('+1 −1'), findsOneWidget);
-    expect(find.byTooltip('复制差异'), findsOneWidget);
+    // 验证头部右侧具有红绿区分的增删行数数字
+    expect(find.text('+1'), findsOneWidget);
+    expect(find.text('−1'), findsOneWidget);
+    // 验证已删除展开区内的多余操作栏和复制差异按钮
+    expect(find.byTooltip('复制差异'), findsNothing);
   });
 
   testWidgets('存储错误告警横幅（storageError）结构化展示', (tester) async {

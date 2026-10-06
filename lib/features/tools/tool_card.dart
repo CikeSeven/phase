@@ -349,7 +349,7 @@ class _ToolCardState extends State<ToolCard>
       _ => ToolPresentation.statusColor(context, record.status),
     };
 
-    if (_expanded && !identical(record, _displayRecord)) {
+    if (!identical(record, _displayRecord)) {
       _display = ToolCallDisplay.fromRecord(record);
       _displayRecord = record;
     }
@@ -410,6 +410,55 @@ class _ToolCardState extends State<ToolCard>
     final hasInput = hasDiff || hasCall;
     final hasOutput = display?.output != null;
 
+    final diffLines = display?.diff;
+    final diffAdded =
+        diffLines?.where((l) => l.kind == ToolDiffKind.added).length ?? 0;
+    final diffRemoved =
+        diffLines?.where((l) => l.kind == ToolDiffKind.removed).length ?? 0;
+
+    final Widget? diffBadge = hasDiff && diffLines != null
+        ? Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+            decoration: BoxDecoration(
+              color:
+                  (isDark
+                          ? colors.surfaceContainerHighest
+                          : colors.surfaceContainerHigh)
+                      .withValues(alpha: isDark ? 0.45 : 0.65),
+              borderRadius: AppRadius.extraSmallAll,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Text(
+                  '+$diffAdded',
+                  key: ValueKey('tool-diff-added-${record.id}'),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11.5,
+                    color: isDark
+                        ? const Color(0xFF7EE787)
+                        : const Color(0xFF146C36),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '−$diffRemoved',
+                  key: ValueKey('tool-diff-removed-${record.id}'),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 11.5,
+                    color: isDark
+                        ? const Color(0xFFFFA198)
+                        : const Color(0xFFD32F2F),
+                  ),
+                ),
+              ],
+            ),
+          )
+        : null;
+
     return Padding(
       padding: widget.grouped
           ? EdgeInsets.zero
@@ -452,12 +501,23 @@ class _ToolCardState extends State<ToolCard>
                         final titleColumn = Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              ToolCallDisplay.title(record),
-                              style: theme.textTheme.titleSmall?.copyWith(
-                                color: colors.onSurface,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    ToolCallDisplay.title(record),
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      color: colors.onSurface,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                if (diffBadge != null) ...[
+                                  const SizedBox(width: AppSpacing.s),
+                                  diffBadge,
+                                ],
+                              ],
                             ),
                             if (detail != null && (!command || !_expanded))
                               Padding(
@@ -632,33 +692,10 @@ class _ToolCardState extends State<ToolCard>
 
                           // 输入/调用视窗（Diff、命令、调用参数，无多重嵌套卡片）
                           if (hasInput) ...[
-                            // 顶部轻量操作栏
-                            Row(
-                              children: [
-                                if (hasDiff)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: colors.surfaceContainerHighest
-                                          .withValues(
-                                            alpha: isDark ? 0.35 : 0.6,
-                                          ),
-                                      borderRadius: AppRadius.extraSmallAll,
-                                    ),
-                                    child: Text(
-                                      '+${display.diff!.where((l) => l.kind == ToolDiffKind.added).length} '
-                                      '−${display.diff!.where((l) => l.kind == ToolDiffKind.removed).length}',
-                                      style: theme.textTheme.labelSmall
-                                          ?.copyWith(
-                                            fontWeight: FontWeight.w600,
-                                            color: colors.onSurfaceVariant,
-                                          ),
-                                    ),
-                                  )
-                                else
+                            // 顶部轻量操作栏（Diff 已在卡片头部展示增删统计，删除此行与复制按钮；命令与参数仍保留操作栏）
+                            if (!hasDiff)
+                              Row(
+                                children: [
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -680,22 +717,25 @@ class _ToolCardState extends State<ToolCard>
                                       ),
                                     ],
                                   ),
-                                const Spacer(),
-                                IconButton(
-                                  tooltip: display.copyLabel,
-                                  constraints: const BoxConstraints(
-                                    minWidth: 48,
-                                    minHeight: 48,
+                                  const Spacer(),
+                                  IconButton(
+                                    tooltip: display.copyLabel,
+                                    constraints: const BoxConstraints(
+                                      minWidth: 48,
+                                      minHeight: 48,
+                                    ),
+                                    onPressed: () => _copy(
+                                      context,
+                                      display.copyText ?? display.call ?? '',
+                                      display.copyLabel,
+                                    ),
+                                    icon: const Icon(
+                                      LucideIcons.copy,
+                                      size: 18,
+                                    ),
                                   ),
-                                  onPressed: () => _copy(
-                                    context,
-                                    display.copyText ?? display.call ?? '',
-                                    display.copyLabel,
-                                  ),
-                                  icon: const Icon(LucideIcons.copy, size: 18),
-                                ),
-                              ],
-                            ),
+                                ],
+                              ),
 
                             // 内容区（支持完整语法高亮，充分利用手机屏幕宽度）
                             ConstrainedBox(
