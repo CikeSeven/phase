@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_control_style.dart';
-import '../../../core/theme/app_motion.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
@@ -53,10 +52,12 @@ class ToolCard extends StatefulWidget {
 class _ToolCardState extends State<ToolCard>
     with AutomaticKeepAliveClientMixin {
   final _headerKey = GlobalKey();
-  final _contentController = ScrollController();
+  final _inputController = ScrollController();
+  final _outputController = ScrollController();
   bool _expanded = false;
   bool _userToggled = false;
-  bool _followContent = true;
+  bool _followInput = true;
+  bool _followOutput = true;
   bool _scrollToEndScheduled = false;
   ToolCallRecord? _displayRecord;
   ToolCallDisplay? _display;
@@ -73,6 +74,10 @@ class _ToolCardState extends State<ToolCard>
       _display = null;
       _displayRecord = null;
       updateKeepAlive();
+    } else if (_expanded &&
+        ToolPresentation.isInFlight(widget.record.status) &&
+        oldWidget.record.result != widget.record.result) {
+      _scheduleScrollToEnd();
     }
   }
 
@@ -84,28 +89,33 @@ class _ToolCardState extends State<ToolCard>
       _userToggled = true;
     });
     updateKeepAlive();
-    if (_expanded) {
-      _followContent = true;
+    if (_expanded && ToolPresentation.isInFlight(widget.record.status)) {
+      _followInput = true;
+      _followOutput = true;
       _scheduleScrollToEnd();
     }
   }
 
   void _scheduleScrollToEnd() {
-    if (!mounted || !_expanded || !_followContent || _scrollToEndScheduled) {
+    if (!mounted || !_expanded || _scrollToEndScheduled) {
       return;
     }
     _scrollToEndScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _scrollToEndScheduled = false;
-      if (!mounted ||
-          !_expanded ||
-          !_followContent ||
-          !_contentController.hasClients) {
-        return;
+      if (!mounted || !_expanded) return;
+
+      if (_followInput && _inputController.hasClients) {
+        final pos = _inputController.position;
+        if ((pos.maxScrollExtent - pos.pixels).abs() > 0.5) {
+          pos.jumpTo(pos.maxScrollExtent);
+        }
       }
-      final position = _contentController.position;
-      if ((position.maxScrollExtent - position.pixels).abs() > 0.5) {
-        position.jumpTo(position.maxScrollExtent);
+      if (_followOutput && _outputController.hasClients) {
+        final pos = _outputController.position;
+        if ((pos.maxScrollExtent - pos.pixels).abs() > 0.5) {
+          pos.jumpTo(pos.maxScrollExtent);
+        }
       }
     });
     WidgetsBinding.instance.ensureVisualUpdate();
@@ -113,17 +123,27 @@ class _ToolCardState extends State<ToolCard>
 
   @override
   void dispose() {
-    _contentController.dispose();
+    _inputController.dispose();
+    _outputController.dispose();
     super.dispose();
   }
 
-  bool _onContentScroll(ScrollNotification notification) {
+  bool _onInputScroll(ScrollNotification notification) =>
+      _handleOverscroll(notification, (follow) => _followInput = follow);
+
+  bool _onOutputScroll(ScrollNotification notification) =>
+      _handleOverscroll(notification, (follow) => _followOutput = follow);
+
+  bool _handleOverscroll(
+    ScrollNotification notification,
+    void Function(bool) setFollow,
+  ) {
     if (notification.depth != 0) return false;
     if (notification is UserScrollNotification &&
         notification.direction != ScrollDirection.idle) {
-      _followContent = false;
+      setFollow(false);
     } else if (notification is ScrollEndNotification) {
-      _followContent = notification.metrics.extentAfter <= 1;
+      setFollow(notification.metrics.extentAfter <= 1);
     }
     if (notification is! OverscrollNotification) return false;
     // 内容滚到边界后，继续拖动交给聊天列表，避免手势卡在卡片内。
@@ -144,52 +164,137 @@ class _ToolCardState extends State<ToolCard>
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final brand = context.brandColors;
+    final isDark = theme.brightness == Brightness.dark;
+
     final failed = record.status == ToolCallStatus.failed;
-    final cardForeground = failed
-        ? brand.onLavenderContainer
-        : brand.onTealContainer;
-    // 有色底面上的中性状态用辅助文字色，避免 outline 对比度不足。
+    final succeeded = record.status == ToolCallStatus.succeeded;
+    final inFlight = ToolPresentation.isInFlight(record.status);
+
+    // 月色玻璃表面色彩层级
+    final baseSurface = isDark
+        ? colors.surfaceContainerLow
+        : colors.surfaceContainerLowest;
+
+    final Color cardBackground;
+    final Color cardBorderColor;
+    final Color badgeAccent;
+
+    if (failed) {
+      cardBackground = isDark
+          ? Color.alphaBlend(
+              colors.errorContainer.withValues(alpha: 0.16),
+              baseSurface,
+            )
+          : Color.alphaBlend(
+              colors.errorContainer.withValues(alpha: 0.26),
+              baseSurface,
+            );
+      cardBorderColor = colors.error.withValues(alpha: isDark ? 0.35 : 0.40);
+      badgeAccent = colors.error;
+    } else if (inFlight) {
+      cardBackground = isDark
+          ? Color.alphaBlend(
+              colors.primaryContainer.withValues(alpha: 0.14),
+              baseSurface,
+            )
+          : Color.alphaBlend(
+              colors.primaryContainer.withValues(alpha: 0.20),
+              baseSurface,
+            );
+      cardBorderColor = colors.primary.withValues(alpha: isDark ? 0.30 : 0.35);
+      badgeAccent = colors.primary;
+    } else if (succeeded) {
+      cardBackground = isDark
+          ? Color.alphaBlend(
+              brand.tealContainer.withValues(alpha: 0.14),
+              baseSurface,
+            )
+          : Color.alphaBlend(
+              brand.tealContainer.withValues(alpha: 0.24),
+              baseSurface,
+            );
+      cardBorderColor = brand.teal.withValues(alpha: isDark ? 0.25 : 0.32);
+      badgeAccent = brand.teal;
+    } else {
+      cardBackground = baseSurface;
+      cardBorderColor = colors.outlineVariant.withValues(
+        alpha: isDark ? 0.25 : 0.35,
+      );
+      badgeAccent = colors.onSurfaceVariant;
+    }
+
     final statusColor = switch (record.status) {
       ToolCallStatus.rejected ||
       ToolCallStatus.cancelled => colors.onSurfaceVariant,
       _ => ToolPresentation.statusColor(context, record.status),
     };
-    final inFlight = ToolPresentation.isInFlight(record.status);
+
     if (_expanded && !identical(record, _displayRecord)) {
       _display = ToolCallDisplay.fromRecord(record);
       _displayRecord = record;
     }
-    // 收起动画继续呈现最后一次展开的内容，不在动画开始时清空。
     final display = _display;
     final detail = ToolCallDisplay.detail(record, appName: widget.appName);
     final command = (record.toolName == 'shell');
+
     final artifacts = [
       for (final artifact in widget.artifacts)
         if (ToolCallDisplay.artifactLabel(record, artifact)
             case final String label)
           (artifact: artifact, label: label),
     ];
-    final status = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (inFlight)
-          AppLoadingIndicator.small(
-            color: statusColor,
-            semanticsLabel: ToolPresentation.statusLabel(record.status),
-          )
-        else
-          Icon(
-            ToolPresentation.statusIcon(record.status),
-            size: 16,
-            color: statusColor,
-          ),
-        const SizedBox(width: AppSpacing.xs),
-        Text(
-          ToolPresentation.statusLabel(record.status),
-          key: ValueKey('tool-status-${record.id}'),
-          style: theme.textTheme.labelMedium?.copyWith(color: statusColor),
+
+    // 精致的状态药丸徽标
+    final statusPill = Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.s,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: isDark ? 0.14 : 0.08),
+        borderRadius: AppRadius.fullAll,
+        border: Border.all(
+          color: statusColor.withValues(alpha: isDark ? 0.25 : 0.18),
+          width: 1,
         ),
-      ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (inFlight)
+            AppLoadingIndicator.small(
+              color: statusColor,
+              semanticsLabel: ToolPresentation.statusLabel(record.status),
+            )
+          else
+            Icon(
+              ToolPresentation.statusIcon(record.status),
+              size: 14,
+              color: statusColor,
+            ),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            ToolPresentation.statusLabel(record.status),
+            key: ValueKey('tool-status-${record.id}'),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: statusColor,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    final hasDiff = display?.diff != null;
+    final hasCall = display?.call != null && display!.call!.isNotEmpty;
+    final hasInput = hasDiff || hasCall;
+    final hasOutput = display?.output != null;
+
+    final consoleBackground = isDark
+        ? const Color(0xFF090E17)
+        : const Color(0xFFF1F5FA);
+    final consoleBorderColor = colors.outlineVariant.withValues(
+      alpha: isDark ? 0.25 : 0.38,
     );
 
     return Padding(
@@ -198,8 +303,13 @@ class _ToolCardState extends State<ToolCard>
           : const EdgeInsets.only(bottom: AppSpacing.xs),
       child: Material(
         key: ValueKey('tool-card-${record.id}'),
-        color: failed ? brand.lavenderContainer : brand.tealContainer,
-        borderRadius: widget.grouped ? BorderRadius.zero : AppRadius.mediumAll,
+        color: cardBackground,
+        shape: widget.grouped
+            ? null
+            : RoundedRectangleBorder(
+                borderRadius: AppRadius.mediumAll,
+                side: BorderSide(color: cardBorderColor, width: 1),
+              ),
         clipBehavior: Clip.antiAlias,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -213,90 +323,100 @@ class _ToolCardState extends State<ToolCard>
                 onTap: _toggle,
                 radius: widget.grouped ? 0 : AppRadius.medium,
                 animateShape: !widget.grouped,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.m,
-                    vertical: AppSpacing.s,
-                  ),
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      // 大字号或窄容器把状态放到下一行，避免工具名被挤成竖排。
-                      final stacked =
-                          constraints.maxWidth <
-                          MediaQuery.textScalerOf(context).scale(14) * 18;
-                      final title = Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            ToolCallDisplay.title(record),
-                            style: theme.textTheme.labelLarge?.copyWith(
-                              color: cardForeground,
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.m,
+                      vertical: AppSpacing.s,
+                    ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final stacked =
+                            constraints.maxWidth <
+                            MediaQuery.textScalerOf(context).scale(14) * 18;
+
+                        final titleColumn = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              ToolCallDisplay.title(record),
+                              style: theme.textTheme.titleSmall?.copyWith(
+                                color: colors.onSurface,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                          ),
-                          if (detail != null)
-                            AppExpansionBody(
-                              expanded: !command || !_expanded,
-                              builder: (context) => Padding(
-                                padding: const EdgeInsets.only(
-                                  top: AppSpacing.xs,
-                                ),
-                                child: AnimatedSize(
-                                  duration: AppMotion.reduce(context)
-                                      ? Duration.zero
-                                      : _expanded
-                                      ? AppMotion.expansionOpen
-                                      : AppMotion.expansionClose,
-                                  curve: AppMotion.expansionCurve,
-                                  alignment: Alignment.topLeft,
-                                  child: Text(
-                                    detail,
-                                    key: ValueKey('tool-detail-${record.id}'),
-                                    maxLines: _expanded && !command ? null : 2,
-                                    overflow: _expanded && !command
-                                        ? null
-                                        : TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall?.copyWith(
-                                      color: colors.onSurfaceVariant,
-                                    ),
+                            if (detail != null && (!command || !_expanded))
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: Text(
+                                  detail,
+                                  key: ValueKey('tool-detail-${record.id}'),
+                                  maxLines: _expanded && !command ? null : 2,
+                                  overflow: _expanded && !command
+                                      ? null
+                                      : TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: colors.onSurfaceVariant,
+                                    height: 1.35,
                                   ),
                                 ),
                               ),
-                            ),
-                        ],
-                      );
-                      return Row(
-                        children: [
-                          Icon(
-                            ToolPresentation.icon(record.toolName),
-                            size: 18,
-                            color: cardForeground,
-                          ),
-                          const SizedBox(width: AppSpacing.s),
-                          Expanded(
-                            child: stacked
-                                ? Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      title,
-                                      const SizedBox(height: AppSpacing.xs),
-                                      status,
-                                    ],
-                                  )
-                                : title,
-                          ),
-                          if (!stacked) ...[
-                            const SizedBox(width: AppSpacing.s),
-                            status,
                           ],
-                          const SizedBox(width: AppSpacing.s),
-                          AppExpansionArrow(
-                            expanded: _expanded,
-                            color: cardForeground,
-                          ),
-                        ],
-                      );
-                    },
+                        );
+
+                        return Row(
+                          children: [
+                            // 工具图标徽章容器
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: badgeAccent.withValues(
+                                  alpha: isDark ? 0.14 : 0.09,
+                                ),
+                                borderRadius: AppRadius.smallAll,
+                                border: Border.all(
+                                  color: badgeAccent.withValues(
+                                    alpha: isDark ? 0.25 : 0.18,
+                                  ),
+                                  width: 1,
+                                ),
+                              ),
+                              alignment: Alignment.center,
+                              child: Icon(
+                                ToolPresentation.icon(record.toolName),
+                                size: 18,
+                                color: badgeAccent,
+                              ),
+                            ),
+                            const SizedBox(width: AppSpacing.m),
+                            Expanded(
+                              child: stacked
+                                  ? Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        titleColumn,
+                                        const SizedBox(height: AppSpacing.xs),
+                                        statusPill,
+                                      ],
+                                    )
+                                  : titleColumn,
+                            ),
+                            if (!stacked) ...[
+                              const SizedBox(width: AppSpacing.s),
+                              statusPill,
+                            ],
+                            const SizedBox(width: AppSpacing.s),
+                            AppExpansionArrow(
+                              expanded: _expanded,
+                              color: colors.onSurfaceVariant,
+                            ),
+                          ],
+                        );
+                      },
+                    ),
                   ),
                 ),
               ),
@@ -304,166 +424,458 @@ class _ToolCardState extends State<ToolCard>
             AppExpansionBody(
               key: ValueKey('tool-expansion-${record.id}'),
               expanded: _expanded,
-              builder: (context) => display == null
-                  ? const SizedBox.shrink()
-                  : Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        AppSpacing.m,
-                        0,
-                        AppSpacing.m,
-                        AppSpacing.s,
+              builder: (context) {
+                if (display == null) return const SizedBox.shrink();
+
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Divider(
+                      height: 1,
+                      thickness: 1,
+                      color: colors.outlineVariant.withValues(
+                        alpha: isDark ? 0.20 : 0.35,
                       ),
-                      child: _ToolCardContent(
-                        scrollKey: PageStorageKey('tool-content-${record.id}'),
-                        controller: _contentController,
-                        onScroll: _onContentScroll,
-                        onMetricsChanged: _scheduleScrollToEnd,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(AppSpacing.m),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          // 严重存储错误说明横幅
                           if (record.errorCode == 'storageError' &&
                               display.output !=
                                   ToolPresentation.storageFailureMessage) ...[
-                            Text(
-                              ToolPresentation.storageFailureMessage,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: colors.error,
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.m,
+                                vertical: AppSpacing.s,
+                              ),
+                              decoration: BoxDecoration(
+                                color: colors.errorContainer.withValues(
+                                  alpha: isDark ? 0.25 : 0.45,
+                                ),
+                                borderRadius: AppRadius.extraSmallAll,
+                                border: Border.all(
+                                  color: colors.error.withValues(
+                                    alpha: isDark ? 0.3 : 0.4,
+                                  ),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    LucideIcons.circleAlert,
+                                    size: 16,
+                                    color: colors.error,
+                                  ),
+                                  const SizedBox(width: AppSpacing.s),
+                                  Expanded(
+                                    child: Text(
+                                      ToolPresentation.storageFailureMessage,
+                                      style: theme.textTheme.bodySmall
+                                          ?.copyWith(
+                                            color: colors.error,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(height: AppSpacing.s),
+                            const SizedBox(height: AppSpacing.m),
                           ],
+
+                          // 元数据标签信息
                           if (display.metadata case final String metadata
-                              when metadata.isNotEmpty)
+                              when metadata.isNotEmpty) ...[
                             Padding(
                               padding: const EdgeInsets.only(
                                 bottom: AppSpacing.s,
                               ),
-                              child: Text(
-                                metadata,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: colors.onSurfaceVariant,
-                                ),
-                              ),
-                            ),
-                          if (display.diff != null)
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    '+${display.diff!.where((l) => l.kind == ToolDiffKind.added).length} '
-                                    '−${display.diff!.where((l) => l.kind == ToolDiffKind.removed).length}',
-                                    style: theme.textTheme.labelMedium,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    LucideIcons.info,
+                                    size: 14,
+                                    color: colors.onSurfaceVariant,
                                   ),
-                                ),
-                                IconButton(
-                                  tooltip: display.copyLabel,
-                                  onPressed: () => _copy(
-                                    context,
-                                    display.copyText!,
-                                    display.copyLabel,
-                                  ),
-                                  icon: const Icon(LucideIcons.copy, size: 18),
-                                ),
-                              ],
-                            ),
-                          if (display.diff case final diff?)
-                            if (diff.isEmpty)
-                              const Text('（空文件）')
-                            else
-                              ToolDiffView(lines: diff)
-                          else if (display.call case final String call
-                              when call.isNotEmpty)
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: Padding(
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: AppSpacing.s,
-                                    ),
+                                  const SizedBox(width: AppSpacing.xs),
+                                  Expanded(
                                     child: Text(
-                                      call,
-                                      key: ValueKey(
-                                        'tool-arguments-${record.id}',
-                                      ),
+                                      metadata,
                                       style: theme.textTheme.bodySmall
                                           ?.copyWith(
-                                            fontFamily: 'monospace',
-                                            fontWeight: FontWeight.w600,
-                                            height: 1.6,
+                                            color: colors.onSurfaceVariant,
                                           ),
                                     ),
                                   ),
-                                ),
-                                IconButton(
-                                  tooltip: display.copyLabel,
-                                  onPressed: () => _copy(
-                                    context,
-                                    display.copyText ?? call,
-                                    display.copyLabel,
-                                  ),
-                                  icon: const Icon(LucideIcons.copy, size: 18),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          if (display.output case final String output) ...[
-                            if (display.diff == null &&
-                                !(display.call?.isNotEmpty ?? false))
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: IconButton(
-                                  tooltip: '复制输出',
-                                  onPressed: () =>
-                                      _copy(context, output, '复制输出'),
-                                  icon: const Icon(LucideIcons.copy, size: 18),
-                                ),
-                              ),
-                            if (display.diff != null ||
-                                (display.call?.isNotEmpty ?? false))
-                              Divider(
-                                height: AppSpacing.xl,
-                                thickness: 2,
-                                radius: AppRadius.fullAll,
-                                color: cardForeground.withValues(alpha: 0.2),
-                              ),
-                            if (display.webSearch != null ||
-                                display.webFetch != null)
-                              WebToolResultView(
-                                search: display.webSearch,
-                                fetch: display.webFetch,
-                              )
-                            else
-                              Text(
-                                output,
-                                key: ValueKey('tool-result-${record.id}'),
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  height: 1.5,
-                                  color: record.status == ToolCallStatus.failed
-                                      ? colors.error
-                                      : colors.onSurface,
-                                ),
-                              ),
                           ],
+
+                          // 输入/调用视窗（Diff、命令、调用参数）
+                          if (hasInput) ...[
+                            Container(
+                              decoration: BoxDecoration(
+                                color: consoleBackground,
+                                borderRadius: AppRadius.smallAll,
+                                border: Border.all(
+                                  color: consoleBorderColor,
+                                  width: 1,
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // 控制台顶部栏
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.m,
+                                      vertical: 2,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: colors.surfaceContainerHighest
+                                          .withValues(
+                                            alpha: isDark ? 0.15 : 0.35,
+                                          ),
+                                      border: Border(
+                                        bottom: BorderSide(
+                                          color: consoleBorderColor,
+                                          width: 1,
+                                        ),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        if (hasDiff)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: colors
+                                                  .surfaceContainerHighest
+                                                  .withValues(alpha: 0.6),
+                                              borderRadius:
+                                                  AppRadius.extraSmallAll,
+                                            ),
+                                            child: Text(
+                                              '+${display.diff!.where((l) => l.kind == ToolDiffKind.added).length} '
+                                              '−${display.diff!.where((l) => l.kind == ToolDiffKind.removed).length}',
+                                              style: theme.textTheme.labelSmall
+                                                  ?.copyWith(
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        colors.onSurfaceVariant,
+                                                  ),
+                                            ),
+                                          )
+                                        else
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(
+                                                command
+                                                    ? LucideIcons.terminal
+                                                    : LucideIcons.code,
+                                                size: 14,
+                                                color: colors.onSurfaceVariant,
+                                              ),
+                                              const SizedBox(
+                                                width: AppSpacing.xs,
+                                              ),
+                                              Text(
+                                                command ? '终端命令' : '调用参数',
+                                                style: theme
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color: colors
+                                                          .onSurfaceVariant,
+                                                      fontWeight:
+                                                          FontWeight.w500,
+                                                    ),
+                                              ),
+                                            ],
+                                          ),
+                                        const Spacer(),
+                                        IconButton(
+                                          tooltip: display.copyLabel,
+                                          constraints: const BoxConstraints(
+                                            minWidth: 48,
+                                            minHeight: 48,
+                                          ),
+                                          onPressed: () => _copy(
+                                            context,
+                                            display.copyText ??
+                                                display.call ??
+                                                '',
+                                            display.copyLabel,
+                                          ),
+                                          icon: const Icon(
+                                            LucideIcons.copy,
+                                            size: 18,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                  // 控制台内容区
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 240,
+                                    ),
+                                    child: Scrollbar(
+                                      controller: _inputController,
+                                      thumbVisibility: true,
+                                      child:
+                                          NotificationListener<
+                                            ScrollNotification
+                                          >(
+                                            onNotification: _onInputScroll,
+                                            child: SingleChildScrollView(
+                                              key: PageStorageKey(
+                                                'tool-input-${record.id}',
+                                              ),
+                                              controller: _inputController,
+                                              primary: false,
+                                              child: SelectionArea(
+                                                child: Padding(
+                                                  padding: const EdgeInsets.all(
+                                                    AppSpacing.m,
+                                                  ),
+                                                  child: hasDiff
+                                                      ? (display.diff!.isEmpty
+                                                            ? const Text(
+                                                                '（空文件）',
+                                                              )
+                                                            : ToolDiffView(
+                                                                lines: display
+                                                                    .diff!,
+                                                              ))
+                                                      : Text(
+                                                          display.call ?? '',
+                                                          key: ValueKey(
+                                                            'tool-arguments-${record.id}',
+                                                          ),
+                                                          style: theme
+                                                              .textTheme
+                                                              .bodySmall
+                                                              ?.copyWith(
+                                                                fontFamily:
+                                                                    'monospace',
+                                                                fontWeight:
+                                                                    FontWeight
+                                                                        .w500,
+                                                                height: 1.6,
+                                                                color: colors
+                                                                    .onSurface,
+                                                              ),
+                                                        ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          // 两个视窗之间的间距
+                          if (hasInput && hasOutput)
+                            const SizedBox(height: AppSpacing.m),
+
+                          // 输出/结果视窗
+                          if (hasOutput) ...[
+                            Container(
+                              decoration: BoxDecoration(
+                                color: consoleBackground,
+                                borderRadius: AppRadius.smallAll,
+                                border: Border.all(
+                                  color: consoleBorderColor,
+                                  width: 1,
+                                ),
+                              ),
+                              clipBehavior: Clip.antiAlias,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  // 输出顶部栏
+                                  if (display.webSearch == null &&
+                                      display.webFetch == null)
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: AppSpacing.m,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: colors.surfaceContainerHighest
+                                            .withValues(
+                                              alpha: isDark ? 0.15 : 0.35,
+                                            ),
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: consoleBorderColor,
+                                            width: 1,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            record.status ==
+                                                    ToolCallStatus.failed
+                                                ? LucideIcons.circleAlert
+                                                : LucideIcons.cornerDownRight,
+                                            size: 14,
+                                            color:
+                                                record.status ==
+                                                    ToolCallStatus.failed
+                                                ? colors.error
+                                                : colors.onSurfaceVariant,
+                                          ),
+                                          const SizedBox(width: AppSpacing.xs),
+                                          Text(
+                                            record.status ==
+                                                    ToolCallStatus.failed
+                                                ? '错误输出'
+                                                : '执行结果',
+                                            style: theme.textTheme.labelSmall
+                                                ?.copyWith(
+                                                  color:
+                                                      record.status ==
+                                                          ToolCallStatus.failed
+                                                      ? colors.error
+                                                      : colors.onSurfaceVariant,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                          ),
+                                          const Spacer(),
+                                          IconButton(
+                                            tooltip: '复制输出',
+                                            constraints: const BoxConstraints(
+                                              minWidth: 48,
+                                              minHeight: 48,
+                                            ),
+                                            onPressed: () => _copy(
+                                              context,
+                                              display.output!,
+                                              '复制输出',
+                                            ),
+                                            icon: const Icon(
+                                              LucideIcons.copy,
+                                              size: 18,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+
+                                  // 输出内容区
+                                  ConstrainedBox(
+                                    constraints: const BoxConstraints(
+                                      maxHeight: 240,
+                                    ),
+                                    child: Scrollbar(
+                                      controller: _outputController,
+                                      thumbVisibility: true,
+                                      child: NotificationListener<ScrollNotification>(
+                                        onNotification: _onOutputScroll,
+                                        child: SingleChildScrollView(
+                                          key: PageStorageKey(
+                                            'tool-output-${record.id}',
+                                          ),
+                                          controller: _outputController,
+                                          primary: false,
+                                          child: SelectionArea(
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(
+                                                AppSpacing.m,
+                                              ),
+                                              child:
+                                                  display.webSearch != null ||
+                                                      display.webFetch != null
+                                                  ? WebToolResultView(
+                                                      search: display.webSearch,
+                                                      fetch: display.webFetch,
+                                                    )
+                                                  : Text(
+                                                      display.output!,
+                                                      key: ValueKey(
+                                                        'tool-result-${record.id}',
+                                                      ),
+                                                      style: theme
+                                                          .textTheme
+                                                          .bodyMedium
+                                                          ?.copyWith(
+                                                            height: 1.5,
+                                                            color:
+                                                                record.status ==
+                                                                    ToolCallStatus
+                                                                        .failed
+                                                                ? colors.error
+                                                                : colors
+                                                                      .onSurface,
+                                                          ),
+                                                    ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+
+                          // 截图附件预览
                           if (display.showScreenshots) ...[
                             for (final (:artifact, label: _) in artifacts)
                               if (artifact.isImage)
-                                ToolScreenshotPreview(
-                                  key: ValueKey('tool-artifact-${artifact.id}'),
-                                  attachment: artifact,
-                                  onOpen: widget.onOpenArtifact == null
-                                      ? null
-                                      : () => widget.onOpenArtifact!(artifact),
+                                Padding(
+                                  padding: const EdgeInsets.only(
+                                    top: AppSpacing.s,
+                                  ),
+                                  child: ToolScreenshotPreview(
+                                    key: ValueKey(
+                                      'tool-artifact-${artifact.id}',
+                                    ),
+                                    attachment: artifact,
+                                    onOpen: widget.onOpenArtifact == null
+                                        ? null
+                                        : () =>
+                                              widget.onOpenArtifact!(artifact),
+                                  ),
                                 ),
                             if (record.artifacts.isNotEmpty &&
                                 !artifacts.any(
                                   (entry) => entry.artifact.isImage,
                                 ))
-                              const Text('截图附件暂不可用'),
+                              const Padding(
+                                padding: EdgeInsets.only(top: AppSpacing.s),
+                                child: Text('截图附件暂不可用'),
+                              ),
                           ],
+
+                          // 文件/非图片附件按钮组
                           if (artifacts.any(
                             (entry) =>
                                 !display.showScreenshots ||
                                 !entry.artifact.isImage,
                           )) ...[
-                            const SizedBox(height: AppSpacing.xs),
+                            const SizedBox(height: AppSpacing.m),
                             Wrap(
                               spacing: AppSpacing.s,
                               runSpacing: AppSpacing.xs,
@@ -509,58 +921,15 @@ class _ToolCardState extends State<ToolCard>
                         ],
                       ),
                     ),
+                  ],
+                );
+              },
             ),
           ],
         ),
       ),
     );
   }
-}
-
-class _ToolCardContent extends StatelessWidget {
-  const _ToolCardContent({
-    required this.children,
-    required this.scrollKey,
-    required this.controller,
-    required this.onScroll,
-    required this.onMetricsChanged,
-  });
-
-  final List<Widget> children;
-  final PageStorageKey<String> scrollKey;
-  final ScrollController controller;
-  final bool Function(ScrollNotification) onScroll;
-  final VoidCallback onMetricsChanged;
-
-  @override
-  Widget build(BuildContext context) => ConstrainedBox(
-    constraints: const BoxConstraints(maxHeight: 320),
-    child: Scrollbar(
-      controller: controller,
-      thumbVisibility: true,
-      child: NotificationListener<ScrollMetricsNotification>(
-        onNotification: (notification) {
-          if (notification.depth == 0) onMetricsChanged();
-          return false;
-        },
-        child: NotificationListener<ScrollNotification>(
-          onNotification: onScroll,
-          child: SingleChildScrollView(
-            key: scrollKey,
-            controller: controller,
-            primary: false,
-            child: SelectionArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: children,
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
 }
 
 Future<void> _copy(BuildContext context, String text, String label) async {
