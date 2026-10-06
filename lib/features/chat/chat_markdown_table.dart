@@ -20,32 +20,44 @@ class ChatMarkdownTable extends StatelessWidget {
     if (rows.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final textStyle = theme.textTheme.bodyLarge!.copyWith(
-      fontSize: 15,
-      height: 1.5,
+    final textStyle = theme.textTheme.bodyMedium!.copyWith(
+      fontSize: 14,
+      height: 1.45,
       color: colors.onSurface,
     );
     final headerColor = Color.alphaBlend(
       colors.primary.withValues(alpha: 0.08),
-      colors.surfaceContainerLow,
+      colors.surfaceContainerHigh,
     );
-    // 块嵌在 Markdown 的 WidgetSpan 中，由外层段落统一缩放一次。
+
+    // 表格块嵌在 Markdown 的 WidgetSpan 中，由外层统一缩放。
     return MediaQuery.withNoTextScaling(
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.s),
         child: Material(
           color: colors.surfaceContainerLowest,
-          borderRadius: AppRadius.controlAll,
+          shape: RoundedRectangleBorder(
+            borderRadius: AppRadius.controlAll,
+            side: BorderSide(
+              color: colors.outlineVariant.withValues(alpha: 0.45),
+              width: 1,
+            ),
+          ),
           clipBehavior: Clip.antiAlias,
           child: ChatMarkdownScrollView(
             child: Table(
               textDirection: config.textDirection,
-              // 横向约束无上限，使用自然列宽而不是挤窄或截断单元格。
+              // 使用自然列宽，配合横向滚动视图保证单元格内容清晰可读。
               defaultColumnWidth: const IntrinsicColumnWidth(),
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
               border: TableBorder(
                 horizontalInside: BorderSide(
-                  color: colors.outlineVariant.withValues(alpha: 0.6),
+                  color: colors.outlineVariant.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+                verticalInside: BorderSide(
+                  color: colors.outlineVariant.withValues(alpha: 0.15),
+                  width: 1,
                 ),
               ),
               children: [
@@ -55,15 +67,15 @@ class ChatMarkdownTable extends StatelessWidget {
                       color: row.isHeader
                           ? headerColor
                           : index.isEven
-                          ? colors.surfaceContainerLow
-                          : colors.surfaceContainerLowest,
+                          ? colors.surfaceContainerLowest
+                          : colors.surfaceContainerLow.withValues(alpha: 0.45),
                     ),
                     children: [
                       for (final field in row.fields)
                         Padding(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.m,
-                            vertical: AppSpacing.s,
+                            horizontal: AppSpacing.l,
+                            vertical: AppSpacing.m,
                           ),
                           child: MdWidget(
                             context,
@@ -76,6 +88,9 @@ class ChatMarkdownTable extends StatelessWidget {
                                 fontWeight: row.isHeader
                                     ? FontWeight.w600
                                     : FontWeight.w400,
+                                color: row.isHeader
+                                    ? colors.onSurface
+                                    : colors.onSurface.withValues(alpha: 0.9),
                               ),
                             ),
                           ),
