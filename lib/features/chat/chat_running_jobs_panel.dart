@@ -16,22 +16,63 @@ import '../tasks/task_presentation.dart';
 /// 拥有与编辑框区分的高级色块背景与边距，顶部标题与列表之间具有清晰分割。
 /// 单任务展示命令、耗时与停止按钮；多任务收起时展示运行中数量，点击面板直接展开；展开时点击标题直接收起。
 class ChatRunningJobsPanel extends ConsumerStatefulWidget {
-  const ChatRunningJobsPanel({super.key});
+  const ChatRunningJobsPanel({super.key, this.isInputFocused = false});
+
+  /// 输入框是否处于聚焦状态；聚焦输入时自动收起展开的任务面板，避免挤压输入法。
+  final bool isInputFocused;
 
   @override
   ConsumerState<ChatRunningJobsPanel> createState() =>
       _ChatRunningJobsPanelState();
 }
 
-class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel> {
+class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel>
+    with WidgetsBindingObserver {
   Timer? _timer;
   bool _expanded = false;
   final Set<String> _expandedCommands = <String>{};
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    // 当键盘弹起且当前焦点处于输入树中时，主动收起展开面板，防止编辑框被挤到键盘下方。
+    final bottomInset = View.of(context).viewInsets.bottom;
+    if (bottomInset > 0 && (_expanded || _expandedCommands.isNotEmpty)) {
+      if (FocusScope.of(context).hasFocus) {
+        setState(() {
+          _expanded = false;
+          _expandedCommands.clear();
+        });
+      }
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatRunningJobsPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 用户点击编辑框获取焦点时，自动收起任务详情，确保输入法弹出后编辑框完全可见。
+    if (widget.isInputFocused && !oldWidget.isInputFocused) {
+      if (_expanded || _expandedCommands.isNotEmpty) {
+        setState(() {
+          _expanded = false;
+          _expandedCommands.clear();
+        });
+      }
+    }
   }
 
   void _syncTimer(bool hasActive) {
@@ -141,7 +182,10 @@ class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel> {
         type: MaterialType.transparency,
         child: InkWell(
           key: const ValueKey('running-jobs-compact-multi'),
-          onTap: () => setState(() => _expanded = true),
+          onTap: () {
+            FocusScope.of(context).unfocus();
+            setState(() => _expanded = true);
+          },
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.m + 2,
@@ -179,7 +223,10 @@ class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel> {
           type: MaterialType.transparency,
           child: InkWell(
             key: ValueKey('running-job-compact-${task.id}'),
-            onTap: () => _toggleCommand(task.id),
+            onTap: () {
+              FocusScope.of(context).unfocus();
+              _toggleCommand(task.id);
+            },
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.m + 2,
@@ -323,7 +370,9 @@ class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel> {
 
         // 任务列表部分：背景保持一致
         ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 180),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.viewInsetsOf(context).bottom > 0 ? 100 : 180,
+          ),
           child: ListView.separated(
             shrinkWrap: true,
             padding: const EdgeInsets.symmetric(
@@ -351,7 +400,10 @@ class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel> {
                         Expanded(
                           child: InkWell(
                             borderRadius: AppRadius.extraSmallAll,
-                            onTap: () => _toggleCommand(task.id),
+                            onTap: () {
+                              FocusScope.of(context).unfocus();
+                              _toggleCommand(task.id);
+                            },
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 vertical: AppSpacing.xs,

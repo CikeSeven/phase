@@ -296,7 +296,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                         scaler.scale(16) * 1.5 +
                             96 +
                             MediaQuery.paddingOf(context).bottom,
-                        availableHeight * 0.5,
+                        availableHeight * 0.85,
                       ),
                     );
                     return MediaQuery.removePadding(

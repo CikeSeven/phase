@@ -171,7 +171,7 @@ class _ChatInputBarState extends ConsumerState<ChatInputBar> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const ChatRunningJobsPanel(),
+            ChatRunningJobsPanel(isInputFocused: _focusNode.hasFocus),
             ChatInputSurface(
               focused: _focusNode.hasFocus,
               child: LayoutBuilder(
