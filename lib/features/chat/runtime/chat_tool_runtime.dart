@@ -344,19 +344,21 @@ class ChatToolRuntimeFactory {
       onConfirmationRequired: confirm,
       onExecuting: (tool, arguments, callId) {
         if (cancellation.isCancelled) return;
+        final label = tool.name == 'task_output'
+            ? ((arguments['waitMs'] as num? ?? 0) > 0 ? '正在等待后台任务' : '后台任务完成')
+            : (tool.name == 'shell' && (arguments['yieldMs'] as num? ?? 0) > 0
+                  ? '正在等待后台任务'
+                  : '正在${ToolPresentation.toolLabel(tool.name)}');
         execution.updateActivity(
           run.id,
           execution
               .activityFor(run.id)
-              .copyWith(
-                phase: TaskPanelPhase.executingTool,
-                status: '正在${ToolPresentation.toolLabel(tool.name)}',
-              )
+              .copyWith(phase: TaskPanelPhase.executingTool, status: label)
               .upsert(
                 TaskMessage(
                   id: 'tool/$callId',
                   kind: TaskPanelMessageKind.tool,
-                  label: '正在${ToolPresentation.toolLabel(tool.name)}',
+                  label: label,
                   text: toolActivity(tool, arguments),
                 ),
               ),

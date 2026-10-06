@@ -438,7 +438,14 @@ class ChatRunDriver implements AgentLoopHost {
                 TaskMessage(
                   id: 'tool/${call.recordId}',
                   kind: TaskPanelMessageKind.tool,
-                  label: '正在${ToolPresentation.toolLabel(call.toolName)}',
+                  label: call.toolName == 'task_output'
+                      ? ((call.arguments['waitMs'] as num? ?? 0) > 0
+                            ? '正在等待后台任务'
+                            : '后台任务完成')
+                      : (call.toolName == 'shell' &&
+                                (call.arguments['yieldMs'] as num? ?? 0) > 0
+                            ? '正在等待后台任务'
+                            : '正在${ToolPresentation.toolLabel(call.toolName)}'),
                   text:
                       '${toolActivity(_tools!.registry.byName(call.toolName)!, call.arguments)}\n${panelExcerpt(message, limit: 160)}',
                 ),
@@ -455,7 +462,9 @@ class ChatRunDriver implements AgentLoopHost {
     final label = ToolPresentation.recordLabel(record);
     final status = switch (record.status) {
       ToolCallStatus.succeeded =>
-        '执行了${(record.toolName == 'shell') ? '命令' : label}',
+        record.toolName == 'task_output'
+            ? label
+            : '执行了${(record.toolName == 'shell') ? '命令' : label}',
       ToolCallStatus.rejected => '已拒绝$label',
       ToolCallStatus.cancelled => '已取消$label',
       _ => '$label失败',

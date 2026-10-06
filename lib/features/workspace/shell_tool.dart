@@ -41,7 +41,7 @@ class ShellTool extends Tool {
       '输出预览保留最后 2000 行或 50 KiB，以先达到的上限为准；截断时已收完整输出保存为附件。'
       'timeout 可指定秒级执行超时，默认没有命令总时限。'
       'background=true 启动后台任务并立即返回 taskId；yieldMs 只等待指定毫秒，'
-      '仍在运行则返回 taskId，使用 task_output 查询、task_stop 停止。';
+      '仍在运行则返回 taskId，使用 task_output 挂起等待完成或在结束后拉起读取、task_stop 停止。';
   @override
   String get promptSnippet => '在当前环境执行 shell 命令';
   @override
@@ -52,7 +52,7 @@ class ShellTool extends Tool {
     '模型结果带 sourceId 的进一步裁剪可用 read_history 续读原始记录，不重跑有副作用命令来取日志。',
     '需要持续运行的服务用 background=true，并让服务保持前台运行；不要用 &、nohup 或服务自守护模式，主进程退出会清理子进程。',
     'yieldMs 控制工具等待窗口，timeout 控制实际执行时限；后台任务会跨本轮运行保留，服务日志仅保留有界尾部。',
-    '后台任务默认在完成后通知并自动继续当前会话的 AI 回复，无需重复轮询或要求用户再次发送；notifyOnCompletion=false 可仅保存结果。',
+    '后台任务支持两种模式：可在启动后调用 task_output(waitMs: ...) 挂起阻塞当前会话等待任务完成；也可结束当前轮次，后台任务默认在完成后通知并自动拉起会话的 AI 回复，无需重复轮询。notifyOnCompletion=false 可仅保存结果。',
   ];
   @override
   Map<String, dynamic> get inputSchema => const {

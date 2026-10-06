@@ -22,25 +22,31 @@ class TaskTool extends Tool {
   String get description => switch (action) {
     TaskToolAction.list => '列出当前会话的后台命令任务，返回任务 ID、状态和退出信息。支持分页。',
     TaskToolAction.output =>
-      '读取当前会话任务的 stdout、stderr 与状态。默认读取最新尾部；'
-          '分别传 stdoutOffset、stderrOffset 从绝对字节位置续读。日志有界保留，'
-          '过旧的读取位置返回 truncated。waitMs 只控制本次等待，不终止任务。',
+      '读取当前会话后台任务的 stdout、stderr 与状态。'
+          '设置 waitMs 可挂起阻塞当前会话等待任务完成；'
+          '后台任务在后台结束后拉起会话时，使用本工具读取任务输出和终态。'
+          '默认读取最新尾部；分别传 stdoutOffset、stderrOffset 从绝对字节位置续读。'
+          '日志有界保留，过旧的读取位置返回 truncated。waitMs 只控制本次等待，不终止任务。',
     TaskToolAction.stop => '停止当前会话的后台命令任务及其子进程，等待退出回执。已结束的任务返回已有状态。',
   };
   @override
   String get promptSnippet => switch (action) {
     TaskToolAction.list => '查看当前会话的后台任务',
-    TaskToolAction.output => '读取后台任务日志和状态',
+    TaskToolAction.output => '等待或读取后台任务结果',
     TaskToolAction.stop => '停止后台任务',
   };
   @override
-  List<String> get promptGuidelines => action == TaskToolAction.list
-      ? const [
-          '后台任务属于当前会话，跨本轮模型运行保留；默认结束后自动通知并唤醒 AI。应用进程重启后运行中的任务变为 interrupted，不自动重跑。',
-          '记住 shell 返回的 taskId；开始新轮次或忘记 ID 时用 task_list 查看。需要结果时使用 task_output，不重复启动同一服务。',
-          '停止不再需要的任务用 task_stop；等待日志可设置 waitMs，等待结束不代表进程被停止。',
-        ]
-      : const [];
+  List<String> get promptGuidelines => switch (action) {
+    TaskToolAction.list => const [
+      '后台任务属于当前会话，跨本轮模型运行保留；默认结束后自动通知并唤醒 AI。应用进程重启后运行中的任务变为 interrupted，不自动重跑。',
+      '记住 shell 返回的 taskId；开始新轮次或忘记 ID 时用 task_list 查看。需要结果时使用 task_output，不重复启动同一服务。',
+      '停止不再需要的任务用 task_stop；等待日志可设置 waitMs，等待结束不代表进程被停止。',
+    ],
+    TaskToolAction.output => const [
+      '后台任务支持两种模式：若需阻塞当前会话等待任务执行结束，可传入 waitMs（毫秒）；若需后台静默执行，则结束本轮回复，任务完成后系统会自动拉起并唤醒会话调用本工具。',
+    ],
+    TaskToolAction.stop => const [],
+  };
   @override
   Map<String, dynamic> get inputSchema => {
     'type': 'object',
@@ -51,7 +57,7 @@ class TaskTool extends Tool {
         'limit': {'type': 'integer', 'minimum': 1, 'maximum': 50},
       },
       TaskToolAction.output => {
-        'taskId': {'type': 'string'},
+        'taskId': {'type': 'string', 'description': '后台任务 ID'},
         'stdoutOffset': {'type': 'integer', 'minimum': 0},
         'stderrOffset': {'type': 'integer', 'minimum': 0},
         'maxBytes': {
@@ -64,7 +70,7 @@ class TaskTool extends Tool {
           'type': 'integer',
           'minimum': 0,
           'maximum': 30000,
-          'description': '等待任务结束的最长毫秒数，默认 0',
+          'description': '挂起阻塞会话等待后台任务完成的最长毫秒数，默认 0',
         },
       },
       TaskToolAction.stop => {
@@ -79,8 +85,16 @@ class TaskTool extends Tool {
   @override
   ToolPolicy get defaultPolicy => ToolPolicy.allow;
   @override
-  String describeAction(Map<String, dynamic> arguments) =>
-      '$promptSnippet ${arguments['taskId'] ?? ''}'.trim();
+  String describeAction(Map<String, dynamic> arguments) {
+    if (action == TaskToolAction.output) {
+      final isWaiting = (arguments['waitMs'] as int? ?? 0) > 0;
+      return isWaiting
+          ? '正在等待后台任务 ${arguments['taskId'] ?? ''}'.trim()
+          : '后台任务完成 ${arguments['taskId'] ?? ''}'.trim();
+    }
+    return '$promptSnippet ${arguments['taskId'] ?? ''}'.trim();
+  }
+
   @override
   String? validateArguments(Map<String, dynamic> arguments) {
     for (final key in [

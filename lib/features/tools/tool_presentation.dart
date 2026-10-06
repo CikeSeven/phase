@@ -59,10 +59,23 @@ class ToolPresentation {
     _ => LucideIcons.wrench,
   };
 
-  static String recordLabel(ToolCallRecord record) =>
-      record.source?.kind == ToolSourceKind.mcp
-      ? record.target ?? record.source!.originalName
-      : toolLabel(record.toolName);
+  static String recordLabel(ToolCallRecord record) {
+    if (record.source?.kind == ToolSourceKind.mcp) {
+      return record.target ?? record.source!.originalName;
+    }
+    if (record.toolName == 'task_output') {
+      final isWaiting =
+          isInFlight(record.status) &&
+          (record.arguments['waitMs'] as num? ?? 0) > 0;
+      return isWaiting ? '正在等待后台任务' : '后台任务完成';
+    }
+    if (record.toolName == 'shell' &&
+        (record.arguments['yieldMs'] as num? ?? 0) > 0) {
+      final isWaiting = isInFlight(record.status);
+      return isWaiting ? '正在等待后台任务' : '后台任务完成';
+    }
+    return toolLabel(record.toolName);
+  }
 
   static String recordChannelLabel(ToolCallRecord record) =>
       record.source?.kind == ToolSourceKind.mcp
@@ -80,7 +93,7 @@ class ToolPresentation {
     'read_skill' => '读取 Skill',
     'shell' => '执行命令',
     'task_list' => '查看后台任务',
-    'task_output' => '读取任务日志',
+    'task_output' => '后台任务完成',
     'task_stop' => '停止后台任务',
     'install_packages' => '安装依赖',
     'prepare_skill' => '准备 Skill 资源',
