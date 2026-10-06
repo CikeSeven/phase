@@ -137,6 +137,12 @@ abstract final class ChatCodeHighlighter {
     'less': 'less',
     'ini': 'ini',
     'toml': 'ini',
+    'properties': 'ini',
+    'conf': 'ini',
+    'gradle': 'java',
+    'groovy': 'java',
+    'lock': 'yaml',
+    'mod': 'go',
     'lua': 'lua',
     'php': 'php',
     'dart': 'dart',
@@ -219,22 +225,28 @@ abstract final class ChatCodeHighlighter {
     }
   }
 
-  static HighlightResult? parse(String language, String code) {
-    var name = language.trim().toLowerCase().split(RegExp(r'\s+')).first;
-    if (name.isEmpty || code.isEmpty) {
-      return null;
+  static HighlightResult? parse(String? language, String code) {
+    if (code.isEmpty) return null;
+    if (language != null && language.isNotEmpty) {
+      var name = language.trim().toLowerCase().split(RegExp(r'\s+')).first;
+      name = _aliases[name] ?? name;
+      if (_highlight.getLanguage(name) != null) {
+        try {
+          return _highlight.highlight(code: code, language: name);
+        } catch (_) {
+          // 语法着色失败不能阻止阅读；不记录可能包含用户数据的异常和代码。
+          AppLogger.warning('Markdown code highlighting failed.');
+        }
+      }
     }
-    name = _aliases[name] ?? name;
-    if (_highlight.getLanguage(name) == null) {
-      return null;
-    }
+    // 未指定语言或找不到语言时，尝试自动高亮识别常用语言
     try {
-      return _highlight.highlight(code: code, language: name);
-    } catch (_) {
-      // 语法着色失败不能阻止阅读；不记录可能包含用户数据的异常和代码。
-      AppLogger.warning('Markdown code highlighting failed.');
-      return null;
-    }
+      final autoResult = _highlight.highlightAuto(code);
+      if (autoResult.relevance > 0 && autoResult.language != null) {
+        return autoResult;
+      }
+    } catch (_) {}
+    return null;
   }
 
   static TextSpan render(

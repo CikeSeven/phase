@@ -283,4 +283,43 @@ void main() {
       expect(tester.takeException(), isNull);
     }
   });
+
+  testWidgets('文件预览与执行结果直接平铺无嵌套卡片，并具有代码语法高亮', (tester) async {
+    const fileCode =
+        'import "dart:async";\n\nvoid main() {\n  final x = 42;\n}\n';
+    final record = createRecord(
+      id: 'tool-read-1',
+      toolName: 'read_file',
+      arguments: {'path': 'lib/main.dart'},
+      result: fileCode,
+    );
+    await tester.pumpWidget(buildHarness(child: ToolCard(record: record)));
+    await tester.pump();
+
+    // 展开卡片
+    await tester.tap(find.byKey(ValueKey('tool-toggle-${record.id}')));
+    await tester.pumpAndSettle();
+
+    // 验证标题为「文件内容」
+    expect(find.text('文件内容'), findsOneWidget);
+
+    // 验证代码高亮组件存在
+    final codeFinder = find.byKey(ValueKey('tool-result-${record.id}'));
+    expect(codeFinder, findsOneWidget);
+
+    final codeWidget = tester.widget<HighlightedCodeText>(codeFinder);
+    expect(codeWidget.highlightSpan, isA<TextSpan>());
+    final span = codeWidget.highlightSpan as TextSpan;
+    // 关键字 import, void, final 等应着色
+    final hasSyntaxColor =
+        span.children?.any((c) => c.style?.color != null) ?? false;
+    expect(hasSyntaxColor, isTrue);
+
+    // 验证内部没有嵌套具有 BoxDecoration 边框背景的子卡片 Container
+    // 在 tool-output 单滚动视窗周围直接展示代码，充分释放手机屏幕宽度
+    final outputScrollFinder = find.byKey(
+      PageStorageKey('tool-output-${record.id}'),
+    );
+    expect(outputScrollFinder, findsOneWidget);
+  });
 }

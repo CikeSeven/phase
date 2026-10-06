@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:gpt_markdown/gpt_markdown.dart';
 
 import '../../../core/theme/app_spacing.dart';
+import '../chat/chat_code_highlighter.dart';
+import 'tool_card.dart';
 import 'tool_diff.dart';
 
-/// 整行背景区分增删；同类连续行合并排版，长文件不创建逐行 Widget。
+/// 整行背景区分增删；同类连续行合并排版，支持代码语法高亮。
 class ToolDiffView extends StatelessWidget {
-  const ToolDiffView({required this.lines, super.key});
+  const ToolDiffView({required this.lines, this.language, super.key});
 
   final List<ToolDiffLine> lines;
+  final String? language;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final dark = theme.brightness == Brightness.dark;
+    final colors = theme.colorScheme;
     final groups = <({ToolDiffKind kind, String text})>[];
     for (var i = 0; i < lines.length;) {
       final kind = lines[i].kind;
@@ -34,27 +39,51 @@ class ToolDiffView extends StatelessWidget {
             key: ValueKey('diff-${groups[i].kind.name}-$i'),
             color: switch (groups[i].kind) {
               ToolDiffKind.added =>
-                dark ? const Color(0xFF174B2D) : const Color(0xFFB9EDC8),
+                dark ? const Color(0xFF10281B) : const Color(0xFFE6F6ED),
               ToolDiffKind.removed =>
-                dark ? const Color(0xFF622B33) : const Color(0xFFFFC2C2),
+                dark ? const Color(0xFF331419) : const Color(0xFFFDE8E8),
               _ => Colors.transparent,
             },
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s),
-              child: Text(
-                groups[i].text,
-                style: theme.textTheme.bodySmall?.copyWith(
-                  fontFamily: 'monospace',
-                  color: switch (groups[i].kind) {
-                    ToolDiffKind.added =>
-                      dark ? const Color(0xFFBEF4CB) : const Color(0xFF0D4A25),
-                    ToolDiffKind.removed =>
-                      dark ? const Color(0xFFFFE0E0) : const Color(0xFF761B24),
-                    _ => theme.colorScheme.onSurface,
-                  },
-                  height: 1.6,
-                ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.s,
+                vertical: 2,
               ),
+              child: () {
+                final groupText = groups[i].text;
+                final baseColor = switch (groups[i].kind) {
+                  ToolDiffKind.added =>
+                    dark ? const Color(0xFF7EE787) : const Color(0xFF146C36),
+                  ToolDiffKind.removed =>
+                    dark ? const Color(0xFFFFA198) : const Color(0xFF991B1B),
+                  _ => colors.onSurface,
+                };
+                final baseStyle = theme.textTheme.bodySmall?.copyWith(
+                  fontFamily: kGptMarkdownMonoFontFamily,
+                  package: kGptMarkdownFontPackage,
+                  fontSize: 13,
+                  fontWeight: groups[i].kind != ToolDiffKind.context
+                      ? FontWeight.w500
+                      : FontWeight.w400,
+                  color: baseColor,
+                  height: 1.6,
+                );
+                final parsed = ChatCodeHighlighter.parse(
+                  language ?? 'diff',
+                  groupText,
+                );
+                final span = ChatCodeHighlighter.render(
+                  context,
+                  parsed,
+                  groupText,
+                  baseStyle!,
+                );
+                return HighlightedCodeText(
+                  groupText,
+                  highlightSpan: span,
+                  style: baseStyle,
+                );
+              }(),
             ),
           ),
       ],

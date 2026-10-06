@@ -1,5 +1,8 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:phase/features/tools/tool_card.dart';
 import 'package:phase/features/tools/tool_diff.dart';
+import 'package:phase/features/tools/tool_diff_view.dart';
 
 void main() {
   test('编辑 diff 对齐上下文、删除和新增，而非重复整段旧新文本', () {
@@ -54,5 +57,24 @@ void main() {
       (ToolDiffKind.added, '第三行\n'),
     ]);
     expect(toolWriteDiff(''), isEmpty);
+  });
+
+  testWidgets('ToolDiffView 在指定语言下能正确生成语法高亮 span', (tester) async {
+    final diff = toolWriteDiff('class Foo {\n  final int x = 1;\n}\n');
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ToolDiffView(lines: diff, language: 'dart'),
+        ),
+      ),
+    );
+    final highlightedFinder = find.byType(HighlightedCodeText);
+    expect(highlightedFinder, findsWidgets);
+    final widget = tester.widget<HighlightedCodeText>(highlightedFinder.first);
+    expect(widget.highlightSpan, isA<TextSpan>());
+    final span = widget.highlightSpan as TextSpan;
+    expect(span.children, isNotEmpty);
+    final hasColor = span.children!.any((c) => c.style?.color != null);
+    expect(hasColor, isTrue);
   });
 }
