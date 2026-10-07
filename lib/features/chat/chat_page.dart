@@ -453,6 +453,7 @@ class _ConversationMessages extends ConsumerWidget {
           state.isGenerating,
           state.runningConversationId,
           state.savingPermissionMode,
+          state.streamingMessageId,
         ),
       ),
     );
@@ -468,6 +469,7 @@ class _ConversationMessages extends ConsumerWidget {
                   isGenerating: state.$3,
                   runningConversationId: state.$4,
                   savingPermissionMode: state.$5,
+                  streamingMessageId: state.$6,
                 ),
               );
         if (messages.isEmpty) {
