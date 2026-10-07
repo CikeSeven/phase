@@ -223,8 +223,7 @@ class WorkspaceFiles {
 
 String workspacePrompt(WorkspaceSnapshot? workspace) {
   if (workspace == null) return '';
-  return '\n\n本会话环境：Ubuntu。'
-      'shell 默认目录：${workspace.executionRoot}。'
-      '文件工具支持当前环境的绝对路径或相对于当前会话目录的路径；~ 指向当前环境 HOME。'
-      '${workspace.executable ? '附件副本路径：imports/<附件ID>/<原文件名>。' : 'Ubuntu 环境未就绪。'}';
+  return '\n\n<cwd>\n${workspace.executionRoot}\n</cwd>\n'
+      '当前工作区目录为 <cwd>。会话文件优先使用相对路径（如 foo.txt），也可使用绝对路径；~ 指向 HOME。'
+      '${workspace.executable ? ' 附件副本位于 imports/<附件ID>/<原文件名>。' : ''}';
 }

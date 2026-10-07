@@ -56,7 +56,7 @@ class ShellTool extends Tool {
     'type': 'object',
     'properties': {
       'command': {'type': 'string', 'description': '完整 shell 命令'},
-      'cwd': {'type': 'string', 'description': 'Ubuntu 中的绝对工作目录，默认当前会话工作区'},
+      'cwd': {'type': 'string', 'description': '工作目录，默认为当前会话工作区'},
       'timeout': {
         'type': 'number',
         'exclusiveMinimum': 0,

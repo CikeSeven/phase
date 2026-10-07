@@ -21,9 +21,9 @@ String executionScopePrompt(
   bool applicationOperations = false,
   bool toolExecution = false,
 }) {
-  return '${!toolExecution ? '' : '\n工具响应和错误由你处理；需要判断效果时读取当前界面或文件，不要求用户核验普通操作或填写状态。失败或取消不代表外部效果已撤销，不要无条件重发有副作用动作；无法继续时说明错误。必要的授权和敏感输入由用户提供。'}'
-      '${scope.fileUris.isEmpty ? '' : '\n本次授权文件句柄：${jsonEncode(scope.fileUris)}。'}'
-      '${!applicationOperations ? '' : '\n打开应用前用 list_apps 查询真实包名，再调用 open_app。动作后按返回的实际前台观察继续，不沿用旧窗口的控件和坐标。观察失败时重新读取当前界面，不重放已完成或已派发的动作。系统接受动作不等于任务完成。支付、密码、验证码由用户手动处理。'}';
+  return '${!toolExecution ? '' : '\n依据工具返回结果或界面状态判断执行效果。'}'
+      '${scope.fileUris.isEmpty ? '' : '\n授权文件句柄：${jsonEncode(scope.fileUris)}。'}'
+      '${!applicationOperations ? '' : '\n应用操作：通过 list_apps 获取包名后调用 open_app，根据最新的前台界面进行后续交互。'}';
 }
 
 ToolOutcome platformOutcome(ExecutionResult result) {

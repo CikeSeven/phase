@@ -11,8 +11,7 @@ import '../../../data/models/tool_policy.dart';
 import 'file_text.dart';
 import 'tool.dart';
 
-const fileToolPathDescription =
-    '当前环境内的绝对路径或相对于本会话目录的路径，支持 ~；Ubuntu 路径按 guest 文件系统解释。';
+const fileToolPathDescription = '文件路径（相对路径或绝对路径，优先使用相对路径），支持 ~。';
 
 class ReadFileTool extends Tool {
   const ReadFileTool();
@@ -27,7 +26,7 @@ class ReadFileTool extends Tool {
   String get promptSnippet => '读取文件内容';
   @override
   List<String> get promptGuidelines => const [
-    '使用 read_file 查看文件，而不是通过 shell 调用 cat 或 sed；大文件按 offset 续读。',
+    '查看文件使用 read_file 而不是 cat/sed；优先使用相对路径；大文件按 offset 续读。',
   ];
   @override
   Map<String, dynamic> get inputSchema => const {
