@@ -5,7 +5,9 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../core/error/failure.dart';
 import '../../core/theme/app_spacing.dart';
+import '../../core/widgets/app_card.dart';
 import '../../core/widgets/app_empty_state.dart';
+import '../../core/widgets/app_icon_badge.dart';
 import '../../core/widgets/app_list_tile.dart';
 import '../../core/widgets/app_loading_indicator.dart';
 import '../../core/widgets/app_scaffold.dart';
@@ -13,8 +15,8 @@ import '../../core/widgets/app_section.dart';
 import '../../core/widgets/app_snack_bar.dart';
 import '../../data/models/conversation.dart';
 import '../../data/models/project.dart';
-import '../../data/models/ubuntu_filesystem_layout.dart';
 import '../chat/conversation_tile.dart';
+import '../workspace/workspace_actions.dart';
 import 'project_navigation.dart';
 import 'project_providers.dart';
 
@@ -63,8 +65,22 @@ class _ProjectPageState extends ConsumerState<ProjectPage> {
   @override
   Widget build(BuildContext context) {
     final project = ref.watch(projectProvider(widget.id));
+    final projectValue = project.value;
+
     return AppScaffold(
-      title: project.value?.name ?? '项目',
+      title: projectValue?.name ?? '项目',
+      subtitle: projectValue == null
+          ? null
+          : '创建于 ${projectValue.createdAt.year}年${projectValue.createdAt.month}月${projectValue.createdAt.day}日',
+      actions: projectValue == null
+          ? const []
+          : [
+              IconButton(
+                tooltip: '新会话',
+                onPressed: _opening ? null : () => _openChat(),
+                icon: const Icon(LucideIcons.plus),
+              ),
+            ],
       body: project.when(
         loading: () => const Center(child: AppLoadingIndicator()),
         error: (error, _) => AppEmptyState(
@@ -88,9 +104,14 @@ class _ProjectPageState extends ConsumerState<ProjectPage> {
   }
 
   Widget _content(Project project) {
-    final conversations = ref.watch(projectConversationsProvider(widget.id));
+    final conversations = ref.watch(projectConversationsProvider(project.id));
+    final rootEntries = ref.watch(
+      workspaceEntriesProvider(project.workspaceId, '.'),
+    );
+    final attachments = ref.watch(projectAttachmentsProvider(project.id));
     final theme = Theme.of(context);
     final date = project.createdAt;
+
     return CustomScrollView(
       key: PageStorageKey('project-${project.id}'),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -101,33 +122,74 @@ class _ProjectPageState extends ConsumerState<ProjectPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Semantics(
-                  header: true,
-                  child: Text(
-                    project.name,
-                    style: theme.textTheme.headlineSmall,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.s),
-                Text(
-                  '创建于 ${date.year}年${date.month}月${date.day}日',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.l),
-                AppListTile(
-                  key: const ValueKey('project-files'),
-                  title: const Text('项目文件'),
-                  subtitle: Text(
-                    UbuntuFilesystemLayout.projectGuestPath(
-                      project.workspaceId,
-                    ),
-                  ),
-                  leading: const Icon(LucideIcons.folderOpen),
-                  trailing: const Icon(LucideIcons.chevronRight),
-                  onTap: () => context.push(
-                    '/settings/workspaces/${project.workspaceId}',
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const AppIconBadge(
+                            icon: LucideIcons.folderKanban,
+                            tone: AppTone.primary,
+                            size: 48,
+                            iconSize: 24,
+                          ),
+                          const SizedBox(width: AppSpacing.m),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  project.name,
+                                  style: theme.textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: AppSpacing.xs),
+                                Text(
+                                  '创建于 ${date.year}年${date.month}月${date.day}日',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      Wrap(
+                        spacing: AppSpacing.s,
+                        runSpacing: AppSpacing.xs,
+                        children: [
+                          AppBadge(
+                            label: '${conversations.value?.length ?? 0} 个会话',
+                            tone: AppTone.primary,
+                          ),
+                          AppBadge(
+                            label: '${rootEntries.value?.length ?? 0} 个文件项',
+                            tone: AppTone.teal,
+                          ),
+                          AppBadge(
+                            label: '${attachments.value?.length ?? 0} 份资料',
+                            tone: AppTone.lavender,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.m),
+                      AppListTile(
+                        key: const ValueKey('project-files'),
+                        title: const Text('项目文件'),
+                        subtitle: const Text('项目根目录 · 浏览工作区文件与资料'),
+                        leading: const Icon(LucideIcons.folderOpen),
+                        trailing: const Icon(LucideIcons.chevronRight),
+                        onTap: () => context.push(
+                          '/settings/workspaces/${project.workspaceId}',
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: AppSpacing.xl),
@@ -189,6 +251,7 @@ class _ProjectPageState extends ConsumerState<ProjectPage> {
                   error is Failure ? error.userMessage : '读取会话失败，请重试',
                   style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
+                const SizedBox(height: AppSpacing.s),
                 TextButton(
                   onPressed: () =>
                       ref.invalidate(projectConversationsProvider(widget.id)),
@@ -208,12 +271,59 @@ class _ProjectPageState extends ConsumerState<ProjectPage> {
             return SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.l),
-                child: Text(
-                  query.isEmpty ? '还没有会话' : '没有匹配的会话',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
+                child: query.isEmpty
+                    ? AppCard(
+                        padding: const EdgeInsets.all(AppSpacing.xl),
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const AppIconBadge(
+                                icon: LucideIcons.messageSquarePlus,
+                                tone: AppTone.primary,
+                                size: 56,
+                                iconSize: 28,
+                              ),
+                              const SizedBox(height: AppSpacing.m),
+                              Text(
+                                '暂无会话',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: AppSpacing.xs),
+                              Text(
+                                '在此项目中发起新会话，与模型探讨项目代码或资料。',
+                                style: Theme.of(context).textTheme.bodyMedium
+                                    ?.copyWith(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: AppSpacing.l),
+                              FilledButton.icon(
+                                onPressed: _opening ? null : () => _openChat(),
+                                icon: const Icon(LucideIcons.plus),
+                                label: const Text('发起新会话'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.xl),
+                          child: Text(
+                            '没有匹配的会话',
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                          ),
+                        ),
+                      ),
               ),
             );
           }

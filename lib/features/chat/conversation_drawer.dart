@@ -423,10 +423,18 @@ class _ProjectTile extends StatelessWidget {
       key: ValueKey('project-row-${project.id}'),
       onTap: onOpen,
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.m),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.m,
+          vertical: AppSpacing.s,
+        ),
         child: Row(
           children: [
-            const Icon(LucideIcons.folder, size: 24),
+            const AppIconBadge(
+              icon: LucideIcons.folderKanban,
+              tone: AppTone.primary,
+              size: 40,
+              iconSize: 20,
+            ),
             const SizedBox(width: AppSpacing.m),
             Expanded(
               child: Column(
@@ -436,7 +444,9 @@ class _ProjectTile extends StatelessWidget {
                     project.name,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.titleSmall,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
@@ -448,7 +458,11 @@ class _ProjectTile extends StatelessWidget {
                 ],
               ),
             ),
-            const Icon(LucideIcons.chevronRight, size: 20),
+            Icon(
+              LucideIcons.chevronRight,
+              size: 18,
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ],
         ),
       ),

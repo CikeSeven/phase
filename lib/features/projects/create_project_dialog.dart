@@ -63,6 +63,7 @@ class _CreateProjectDialogState extends ConsumerState<_CreateProjectDialog> {
     canPop: !_saving,
     child: AppDialog(
       title: '新建项目',
+      description: '为任务或代码库创建专属工作区，统一管理会话、代码与资料。',
       icon: LucideIcons.folderPlus,
       content: TextField(
         key: const ValueKey('project-name-input'),
@@ -73,6 +74,7 @@ class _CreateProjectDialogState extends ConsumerState<_CreateProjectDialog> {
         textInputAction: TextInputAction.done,
         decoration: InputDecoration(
           labelText: '项目名称',
+          hintText: '例如：相月移动端开发',
           counterText: '',
           errorText: _error,
           errorMaxLines: 4,

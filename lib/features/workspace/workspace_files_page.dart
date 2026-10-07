@@ -5,12 +5,14 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
+import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/workspace.dart';
 import '../chat/tool_artifact_viewer.dart';
+import '../projects/project_path_display.dart';
 import '../projects/project_providers.dart';
 import 'workspace_actions.dart';
 
@@ -39,7 +41,9 @@ class WorkspaceFilesPage extends ConsumerWidget {
       }
     });
     final page = AppScaffold(
-      title: path == '.' ? workspace.value?.name ?? '工作区文件' : path,
+      title: path == '.'
+          ? workspace.value?.name ?? '工作区文件'
+          : formatProjectPath(path, projectId: id),
       appBarBottom: showProjectMaterials
           ? const TabBar(
               tabs: [
@@ -90,26 +94,34 @@ class WorkspaceFilesPage extends ConsumerWidget {
   ) => entries.when(
     loading: () => const Center(child: AppLoadingIndicator()),
     error: (error, _) => Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(error is Failure ? error.userMessage : '无法读取工作区文件'),
+      child: AppEmptyState(
+        icon: LucideIcons.folderX,
+        title: '无法读取工作区文件',
+        message: error is Failure ? error.userMessage : '读取工作区文件失败，请重试',
+        action: TextButton(
+          onPressed: () => ref.invalidate(workspaceEntriesProvider(id, path)),
+          child: const Text('重试'),
+        ),
       ),
     ),
     data: (values) => values.isEmpty
-        ? const Center(child: Text('此目录还没有文件'))
+        ? const AppEmptyState(
+            icon: LucideIcons.folderOpen,
+            title: '目录为空',
+            message: '此目录中还没有任何文件或子目录。',
+          )
         : ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(AppSpacing.l),
             itemCount: values.length,
             itemBuilder: (context, index) {
               final entry = values[index];
               final directory = entry.$2 < 0;
+              final fileName = entry.$1.split('/').last;
               return AppListTile(
-                title: Text(entry.$1.split('/').last),
-                subtitle: directory
-                    ? null
-                    : Text('${(entry.$2 / 1024).toStringAsFixed(1)} KiB'),
+                title: Text(fileName),
+                subtitle: directory ? null : Text(formatFileSize(entry.$2)),
                 leading: Icon(
-                  directory ? LucideIcons.folder : LucideIcons.fileText,
+                  directory ? LucideIcons.folder : projectFileIcon(fileName),
                 ),
                 trailing: directory
                     ? null
@@ -159,23 +171,23 @@ class _ProjectMaterials extends ConsumerWidget {
     return attachments.when(
       loading: () => const Center(child: AppLoadingIndicator()),
       error: (error, _) => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.l),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(error is Failure ? error.userMessage : '无法读取项目资料'),
-              TextButton(
-                onPressed: () =>
-                    ref.invalidate(projectAttachmentsProvider(workspaceId)),
-                child: const Text('重试'),
-              ),
-            ],
+        child: AppEmptyState(
+          icon: LucideIcons.paperclip,
+          title: '无法读取项目资料',
+          message: error is Failure ? error.userMessage : '读取项目资料失败，请重试',
+          action: TextButton(
+            onPressed: () =>
+                ref.invalidate(projectAttachmentsProvider(workspaceId)),
+            child: const Text('重试'),
           ),
         ),
       ),
       data: (items) => items.isEmpty
-          ? const Center(child: Text('还没有项目资料'))
+          ? const AppEmptyState(
+              icon: LucideIcons.paperclip,
+              title: '暂无项目资料',
+              message: '在与模型对话中上传或生成的项目资料将汇总展示在此。',
+            )
           : ListView.builder(
               padding: const EdgeInsets.all(AppSpacing.l),
               itemCount: items.length,
@@ -184,9 +196,7 @@ class _ProjectMaterials extends ConsumerWidget {
                 return AppListTile(
                   key: ValueKey(attachment.id),
                   title: Text(attachment.name),
-                  subtitle: Text(
-                    '${(attachment.size / 1024).toStringAsFixed(1)} KiB',
-                  ),
+                  subtitle: Text(formatFileSize(attachment.size)),
                   leading: Icon(
                     attachment.isImage
                         ? LucideIcons.image
