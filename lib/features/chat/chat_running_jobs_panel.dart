@@ -16,7 +16,13 @@ import '../tasks/task_presentation.dart';
 /// 拥有与编辑框区分的高级色块背景与边距，顶部标题与列表之间具有清晰分割。
 /// 单任务展示命令、耗时与停止按钮；多任务收起时展示运行中数量，点击面板直接展开；展开时点击标题直接收起。
 class ChatRunningJobsPanel extends ConsumerStatefulWidget {
-  const ChatRunningJobsPanel({super.key, this.isInputFocused = false});
+  const ChatRunningJobsPanel({
+    super.key,
+    this.conversationId,
+    this.isInputFocused = false,
+  });
+
+  final String? conversationId;
 
   /// 输入框是否处于聚焦状态；聚焦输入时自动收起展开的任务面板，避免挤压输入法。
   final bool isInputFocused;
@@ -64,8 +70,9 @@ class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel>
   @override
   void didUpdateWidget(covariant ChatRunningJobsPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 用户点击编辑框获取焦点时，自动收起任务详情，确保输入法弹出后编辑框完全可见。
-    if (widget.isInputFocused && !oldWidget.isInputFocused) {
+    // 详情状态不跨会话保留，输入聚焦时也收起以留出键盘空间。
+    if (widget.conversationId != oldWidget.conversationId ||
+        (widget.isInputFocused && !oldWidget.isInputFocused)) {
       if (_expanded || _expandedCommands.isNotEmpty) {
         setState(() {
           _expanded = false;
@@ -100,7 +107,11 @@ class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel>
   Widget build(BuildContext context) {
     final tasksState = ref.watch(commandTaskControllerProvider);
     final activeTasks = tasksState.tasks
-        .where((task) => task.status.active)
+        .where(
+          (task) =>
+              task.conversationId == widget.conversationId &&
+              task.status.active,
+        )
         .toList();
 
     _syncTimer(activeTasks.isNotEmpty);
@@ -288,7 +299,7 @@ class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel>
                     ),
                     onPressed: () => ref
                         .read(commandTaskControllerProvider.notifier)
-                        .stop(task.id),
+                        .stop(task.id, conversationId: task.conversationId),
                   ),
                 ],
               ),
@@ -462,7 +473,10 @@ class _ChatRunningJobsPanelState extends ConsumerState<ChatRunningJobsPanel>
                           ),
                           onPressed: () => ref
                               .read(commandTaskControllerProvider.notifier)
-                              .stop(task.id),
+                              .stop(
+                                task.id,
+                                conversationId: task.conversationId,
+                              ),
                         ),
                       ],
                     ),
