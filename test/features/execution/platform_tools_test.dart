@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:phase/core/error/failure.dart';
 import 'package:phase/data/datasources/local/settings_storage.dart';
 import 'package:phase/data/models/agent_run.dart';
@@ -155,6 +156,57 @@ void main() {
     expect(result['uri'], document);
     expect(result['text'], contains('AI Agent'));
     expect(h.provider.requests.last.systemPrompt, contains(root));
+  });
+
+  test('外部授权图片读取后登记为图片附件并回填图片结果', () async {
+    final h = await ToolLoopHarness.create();
+    final driver = h.container.read(channelDriverProvider) as FakeChannelDriver;
+    await h.container
+        .read(settingsStorageProvider)
+        .writeExecutionScope(const ExecutionScope(fileUris: [root]));
+    final source = File('${h.tempDir.path}/native-image')
+      ..writeAsBytesSync(
+        img.encodePng(img.Image(width: 12, height: 7, numChannels: 4)),
+      );
+    driver.executeHandler = (request, _) async => ExecutionResult(
+      toolCallId: request.toolCallId,
+      status: ExecutionStatus.succeeded,
+      result: {'uri': document.replaceFirst('notes.txt', 'diagram.png')},
+      artifacts: [
+        ExecutionArtifact(
+          uri: document.replaceFirst('notes.txt', 'diagram.png'),
+          name: 'diagram.png',
+          size: source.lengthSync(),
+          localPath: source.path,
+        ),
+      ],
+    );
+    h.provider.turns.addAll([
+      toolTurn(
+        callId: 'read_image',
+        toolName: 'read_file',
+        arguments: jsonEncode({
+          'path': document.replaceFirst('notes.txt', 'diagram.png'),
+        }),
+      ),
+      textTurn('已读取图片'),
+    ]);
+
+    await h.controller().send('读取授权图片');
+
+    final record = (await h.recordsByCall())['read_image']!;
+    expect(record.status, ToolCallStatus.succeeded);
+    final result = jsonDecode(record.result!) as Map<String, dynamic>;
+    expect(result['type'], 'image');
+    expect(result['mimeType'], 'image/png');
+    expect(result['width'], 12);
+    expect(result['height'], 7);
+    final attachments = await (await h.conversations()).attachmentsFor(
+      h.conversationId()!,
+    );
+    expect(attachments, hasLength(1));
+    expect(attachments.single.isImage, isTrue);
+    expect(attachments.single.mimeType, 'image/png');
   });
 
   test('外部文件已经写入，预览文件丢失不改写实际结果或重新执行写入', () async {

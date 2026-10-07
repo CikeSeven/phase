@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as p;
@@ -33,6 +34,11 @@ abstract class WorkspaceFileAccess {
   Future<FileTextPage> readPage(
     String path,
     Map<String, dynamic> arguments,
+    RunCancellation cancellation,
+  );
+  Future<Uint8List> readPrefix(
+    String path,
+    int byteCount,
     RunCancellation cancellation,
   );
   Future<void> ensure(RunCancellation cancellation);
@@ -215,6 +221,23 @@ class LocalWorkspaceFileAccess extends WorkspaceFileAccess {
     Map<String, dynamic> arguments,
     RunCancellation cancellation,
   ) async => readFilePage(File(await _path(path)), arguments, cancellation);
+
+  @override
+  Future<Uint8List> readPrefix(
+    String path,
+    int byteCount,
+    RunCancellation cancellation,
+  ) async {
+    cancellation.throwIfCancelled();
+    final handle = await File(await _path(path)).open();
+    try {
+      cancellation.throwIfCancelled();
+      return await handle.read(byteCount);
+    } finally {
+      await handle.close();
+    }
+  }
+
   @override
   Future<void> exportPath(
     String path,

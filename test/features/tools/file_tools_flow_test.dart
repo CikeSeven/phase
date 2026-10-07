@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:phase/data/datasources/local/attachment_storage.dart';
 import 'package:phase/data/models/attachment.dart';
@@ -83,6 +84,44 @@ void main() {
     expect(run.turnCount, 4);
     expect((await harness.branch()).last.text, '已保存');
   });
+
+  test(
+    'read_file image results stay attached in the next model request',
+    () async {
+      final harness = await ToolLoopHarness.create();
+      final storage = await harness.container.read(
+        attachmentStorageProvider.future,
+      );
+      final source = await storage.save(
+        name: 'diagram.png',
+        mimeType: 'image/png',
+        kind: AttachmentKind.image,
+        bytes: img.encodePng(img.Image(width: 8, height: 4)),
+      );
+      harness.provider.turns.addAll([
+        toolTurn(
+          callId: 'read_image',
+          toolName: 'read_file',
+          arguments: jsonEncode({'path': source.name}),
+        ),
+        textTurn('图像已读取'),
+      ]);
+
+      await harness.controller().send('查看图表', attachments: [source]);
+
+      final record = (await harness.recordsByCall())['read_image']!;
+      expect(record.status, ToolCallStatus.succeeded);
+      expect(record.artifacts, hasLength(1));
+      final toolResult = harness.provider.requests
+          .expand((request) => request.messages)
+          .expand((message) => message.parts)
+          .whereType<ResolvedToolResult>()
+          .singleWhere((result) => result.callId == 'read_image');
+      expect(toolResult.images, hasLength(1));
+      expect(toolResult.images.single.isImage, isTrue);
+      expect(toolResult.content, contains('"type":"image"'));
+    },
+  );
 
   test('write_file 拒绝绝对路径与上跳路径，不落盘到产物目录之外', () async {
     final harness = await ToolLoopHarness.create();

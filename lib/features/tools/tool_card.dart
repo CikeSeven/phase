@@ -978,6 +978,10 @@ class _ToolCardState extends State<ToolCard>
                                       'tool-artifact-${artifact.id}',
                                     ),
                                     attachment: artifact,
+                                    semanticsLabel:
+                                        record.toolName == 'read_file'
+                                        ? '查看图片'
+                                        : '查看截图',
                                     onOpen: widget.onOpenArtifact == null
                                         ? null
                                         : () =>

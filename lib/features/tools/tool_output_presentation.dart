@@ -64,6 +64,15 @@ String presentToolOutput(ToolCallRecord record, String result) {
                 ].join('\n\n');
         }
       case 'read_file':
+        if (decoded['type'] == 'image') {
+          return _contentWithDetails('已读取图片', decoded, const {
+            'type',
+            'name',
+            'mimeType',
+            'width',
+            'height',
+          });
+        }
         if (decoded['text'] case final String content) {
           return _contentWithDetails(content, decoded, const {
             'text',

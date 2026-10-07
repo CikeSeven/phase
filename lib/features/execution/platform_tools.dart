@@ -13,6 +13,7 @@ import '../chat/document_extractor.dart';
 import '../tools/tool.dart';
 import '../tools/file_text.dart';
 import '../tools/file_tools.dart';
+import '../tools/file_image.dart';
 import 'channel_driver.dart';
 import 'execution_api.g.dart';
 
@@ -193,33 +194,46 @@ class ScopedFileTool extends Tool {
         await File(source).copy(target.path);
         String? extractedPath;
         String? extractionError;
+        ToolOutcome? imageOutcome;
         if (name == 'read_file') {
           try {
-            final extension = p
-                .extension(artifact.name)
-                .replaceFirst('.', '')
-                .toLowerCase();
-            if (DocumentExtractor.supports(extension)) {
-              final text = await Isolate.run(
-                () async => (await const DocumentExtractor().extract(
-                  path: target.path,
-                  extension: extension,
-                )).text,
-              );
-              extractedPath = '${target.path}.extracted.txt';
-              await File(extractedPath).writeAsString(text);
-            }
-            final page = await readFilePage(
-              File(extractedPath ?? target.path),
-              arguments,
+            imageOutcome = await readImageFileOnDisk(
+              File(target.path),
+              artifact.name,
+              context,
               cancellation,
             );
-            details.addAll(page.toJson());
+            if (imageOutcome == null) {
+              final extension = p
+                  .extension(artifact.name)
+                  .replaceFirst('.', '')
+                  .toLowerCase();
+              if (DocumentExtractor.supports(extension)) {
+                final text = await Isolate.run(
+                  () async => (await const DocumentExtractor().extract(
+                    path: target.path,
+                    extension: extension,
+                  )).text,
+                );
+                extractedPath = '${target.path}.extracted.txt';
+                await File(extractedPath).writeAsString(text);
+              }
+              final page = await readFilePage(
+                File(extractedPath ?? target.path),
+                arguments,
+                cancellation,
+              );
+              details.addAll(page.toJson());
+            }
           } on DocumentExtractionException {
             extractionError = '无法抽取文字，可能是扫描件或损坏文档';
           } on FormatException {
             extractionError = '不是可解码文本，已保留私有文件副本';
           }
+        }
+        if (imageOutcome != null) {
+          await _discardCopy(target);
+          return imageOutcome;
         }
         if (extractionError != null) {
           details['extractionError'] = extractionError;

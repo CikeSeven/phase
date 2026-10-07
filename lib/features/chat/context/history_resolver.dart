@@ -62,7 +62,9 @@ class HistoryResolver {
               ? record.assistantMessageId
               : null,
           images:
-              visualOperationTools.contains(record.toolName) ||
+              (record.source?.kind != ToolSourceKind.mcp &&
+                      record.toolName == 'read_file') ||
+                  visualOperationTools.contains(record.toolName) ||
                   record.source?.kind == ToolSourceKind.mcp
               ? [
                   for (final id in record.artifacts)

@@ -11,17 +11,19 @@ class ToolScreenshotPreview extends StatelessWidget {
   const ToolScreenshotPreview({
     required this.attachment,
     this.onOpen,
+    this.semanticsLabel = '查看截图',
     super.key,
   });
 
   final Attachment attachment;
   final VoidCallback? onOpen;
+  final String semanticsLabel;
 
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(top: AppSpacing.s),
     child: Semantics(
-      label: '查看截图',
+      label: semanticsLabel,
       button: onOpen != null,
       child: AppInteractiveSurface(
         onTap: onOpen,

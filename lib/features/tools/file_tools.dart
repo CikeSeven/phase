@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 
 import '../../../core/error/failure.dart';
 import '../../../data/models/tool_policy.dart';
+import 'file_image.dart';
 import 'file_text.dart';
 import 'tool.dart';
 
@@ -19,14 +20,13 @@ class ReadFileTool extends Tool {
   String get name => 'read_file';
   @override
   String get description =>
-      '读取 UTF-8 文本或附件已抽取的文本。'
-      '最多返回 2000 行或 50 KiB 完整行，以先达到的上限为准。大文件使用 offset/limit，'
-      '需要完整文件时按返回的 nextOffset/offset 继续读取到结尾。';
+      '读取文件内容，支持 UTF-8 文本、附件抽取文本及图片（JPEG、PNG、GIF、WebP、BMP）。'
+      '图片作为图像内容返回；文本文件最多返回 2000 行或 50 KiB，大文件使用 offset/limit 分页续读。';
   @override
   String get promptSnippet => '读取文件内容';
   @override
   List<String> get promptGuidelines => const [
-    '查看文件使用 read_file 而不是 cat/sed；优先使用相对路径；大文件按 offset 续读。',
+    '查看文本或图片使用 read_file；优先使用相对路径；文本大文件按 offset 续读。',
   ];
   @override
   Map<String, dynamic> get inputSchema => const {
@@ -36,11 +36,15 @@ class ReadFileTool extends Tool {
         'type': 'string',
         'description': '$fileToolPathDescription 附件可用 attachment:<ID> 或唯一文件名。',
       },
-      'offset': {'type': 'integer', 'minimum': 1, 'description': '起始行，默认 1'},
+      'offset': {
+        'type': 'integer',
+        'minimum': 1,
+        'description': '起始行（仅文本），默认 1',
+      },
       'limit': {
         'type': 'integer',
         'minimum': 1,
-        'description': '最多读取行数，默认 2000',
+        'description': '最多读取行数（仅文本），默认 2000',
       },
     },
     'required': ['path'],
@@ -67,15 +71,38 @@ class ReadFileTool extends Tool {
     cancellation.throwIfCancelled();
     final relative = path.startsWith('attachment:') ? null : _relative(path);
     final access = _access(context);
-    final page =
-        relative != null &&
-            (await access.stat(relative, cancellation)).type == 'file'
-        ? await access.readPage(relative, arguments, cancellation)
-        : await readFilePage(
-            _attachmentFile(path, context),
-            arguments,
+    if (relative != null &&
+        (await access.stat(relative, cancellation)).type == 'file') {
+      final prefix = await access.readPrefix(relative, 4100, cancellation);
+      if (readImageMimeType(prefix) != null) {
+        final temporary = await access.temporary();
+        try {
+          final imageFile = File(p.join(temporary.path, 'image'));
+          await access.exportPath(relative, imageFile.path, cancellation);
+          final image = await readImageFileOnDisk(
+            imageFile,
+            p.basename(relative),
+            context,
             cancellation,
           );
+          if (image != null) return image;
+        } finally {
+          await temporary.delete(recursive: true);
+        }
+      }
+      final page = await access.readPage(relative, arguments, cancellation);
+      return ToolOutcome.success(page.render());
+    }
+
+    final file = _attachmentFile(path, context);
+    final image = await readImageFileOnDisk(
+      file,
+      _attachmentName(path, context),
+      context,
+      cancellation,
+    );
+    if (image != null) return image;
+    final page = await readFilePage(file, arguments, cancellation);
     return ToolOutcome.success(page.render());
   });
 }
@@ -366,6 +393,18 @@ File _attachmentFile(String path, ToolContext context) {
     throw FileToolException('fileNotFound', '找不到文件「$path」，请用 list_files 查看路径');
   }
   return File(attachment.extractedTextPath ?? attachment.localPath);
+}
+
+String _attachmentName(String path, ToolContext context) {
+  final reference = path.startsWith('attachment:') ? path.substring(11) : path;
+  return context.attachments
+          .where(
+            (attachment) =>
+                attachment.id == reference || attachment.name == reference,
+          )
+          .singleOrNull
+          ?.name ??
+      path;
 }
 
 Future<ToolOutcome> _write(

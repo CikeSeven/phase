@@ -162,6 +162,7 @@ class ToolCallDisplay {
               if (args['limit'] != null) '最多 ${args['limit']} 项',
             ].where((s) => s.isNotEmpty).join(' · '),
             output: output,
+            showScreenshots: _isImageRead(record),
           );
         case 'list_files':
         case 'read_skill':
@@ -223,6 +224,15 @@ class ToolCallDisplay {
       // 本地文件成功回执是文本；警告和失败仍保留原文。
     }
     return raw.startsWith('已写入「') || raw.startsWith('已替换 ') ? null : output;
+  }
+
+  static bool _isImageRead(ToolCallRecord record) {
+    try {
+      final result = jsonDecode(record.result ?? '');
+      return result is Map<String, dynamic> && result['type'] == 'image';
+    } on FormatException {
+      return false;
+    }
   }
 
   /// 已完整显示的命令日志不再重复列成文件，用户生成的产物仍保留。

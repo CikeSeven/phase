@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as p;
 import 'package:phase/data/datasources/local/artifact_storage.dart';
 import 'package:phase/data/models/attachment.dart';
@@ -13,13 +14,14 @@ void main() {
   late Directory root;
   late Directory workspace;
   late ToolContext context;
+  late ArtifactStorage storage;
   late Map<String, Attachment> attachments;
   late RunCancellation cancellation;
   setUp(() async {
     root = await Directory.systemTemp.createTemp('phase_file_tools');
     workspace = await Directory(p.join(root.path, 'workspace')).create();
     attachments = {};
-    final storage = ArtifactStorage(
+    storage = ArtifactStorage(
       root: root,
       loadAttachments: (_) async => attachments.values.toList(),
       saveAttachment: (attachment) async =>
@@ -175,6 +177,99 @@ void main() {
     },
   );
 
+  test(
+    'read_file detects a workspace image and registers a model-sized artifact',
+    () async {
+      final bytes = img.encodePng(
+        img.Image(width: 24, height: 12, numChannels: 4),
+      );
+      await workspaceFile('picture.png').writeAsBytes(bytes);
+
+      final result = await read('picture.png');
+
+      expect(result.ok, isTrue);
+      expect(result.artifacts, hasLength(1));
+      final output = jsonDecode(result.content) as Map<String, dynamic>;
+      expect(output['type'], 'image');
+      expect(output['mimeType'], 'image/png');
+      expect(output['width'], 24);
+      expect(output['height'], 12);
+      final artifact = attachments[result.artifacts.single]!;
+      expect(artifact.isImage, isTrue);
+      expect(artifact.mimeType, 'image/png');
+      expect(
+        img.decodeImage(await File(artifact.localPath).readAsBytes()),
+        isNotNull,
+      );
+    },
+  );
+
+  test('read_file resolves an image attachment by attachment id', () async {
+    final bytes = img.encodeJpg(img.Image(width: 10, height: 6), quality: 90);
+    final source = await storage.registerBytes(
+      conversationId: 'conversation',
+      name: 'source.jpg',
+      mimeType: 'image/jpeg',
+      bytes: bytes,
+    );
+    context = ToolContext(
+      conversationId: 'conversation',
+      runId: 'run',
+      toolCallId: 'call',
+      storage: storage,
+      attachments: [source],
+      workspaceDirectory: workspace.path,
+    );
+
+    final result = await read('attachment:${source.id}');
+
+    expect(result.ok, isTrue);
+    expect(result.artifacts, hasLength(1));
+    final output = jsonDecode(result.content) as Map<String, dynamic>;
+    expect(output['type'], 'image');
+    expect(output['mimeType'], 'image/jpeg');
+    expect(output['width'], 10);
+    expect(output['height'], 6);
+    expect(attachments[result.artifacts.single]!.isImage, isTrue);
+  });
+
+  test('read_file recognizes every supported raster image format', () async {
+    final image = img.Image(width: 10, height: 6);
+    final fixtures = <String, List<int>>{
+      'picture.jpg': img.encodeJpg(image, quality: 90),
+      'picture.gif': img.encodeGif(image),
+      'picture.webp': img.encodeWebP(image),
+      'picture.bmp': img.encodeBmp(image),
+    };
+
+    for (final entry in fixtures.entries) {
+      await workspaceFile(entry.key).writeAsBytes(entry.value);
+
+      final result = await read(entry.key);
+
+      expect(result.ok, isTrue, reason: entry.key);
+      expect(result.artifacts, hasLength(1), reason: entry.key);
+      final output = jsonDecode(result.content) as Map<String, dynamic>;
+      expect(output['type'], 'image', reason: entry.key);
+      expect(output['width'], 10, reason: entry.key);
+      expect(output['height'], 6, reason: entry.key);
+      expect(attachments[result.artifacts.single]!.isImage, isTrue);
+    }
+  });
+
+  test(
+    'read_file reports malformed recognized images instead of throwing',
+    () async {
+      await workspaceFile('broken.png')
+          .writeAsBytes([137, 80, 78, 71, 13, 10, 26, 10]);
+
+      final result = await read('broken.png');
+
+      expect(result.ok, isFalse);
+      expect(result.errorCode, 'invalidImage');
+    },
+  );
+
   test('oversize lines and binary inputs have actionable errors', () async {
     await write('long', '月' * maxFileReadBytes);
     expect((await read('long')).errorCode, 'lineTooLong');
@@ -191,6 +286,8 @@ void main() {
     expect((await read('binary')).errorCode, 'notText');
     await workspaceFile('binary').writeAsBytes([65, 0, 66]);
     expect((await read('binary')).errorCode, 'notText');
+    await workspaceFile('unknown').writeAsBytes([0x00, 0x01, 0x02]);
+    expect((await read('unknown')).errorCode, 'notText');
   });
 
   test('workspace paths agree with shell, list supports directories and pagination', () async {
