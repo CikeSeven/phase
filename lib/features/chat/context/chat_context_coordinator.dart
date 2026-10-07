@@ -39,7 +39,9 @@ class ChatContextCoordinator {
   final AiProvider Function(ProviderProfile, String) buildProvider;
 
   Future<Map<String, Attachment>> attachments(String conversationId) async => {
-    for (final attachment in await conversations.attachmentsFor(conversationId))
+    for (final attachment in await conversations.availableAttachmentsFor(
+      conversationId,
+    ))
       attachment.id: attachment,
   };
 

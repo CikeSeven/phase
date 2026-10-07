@@ -345,6 +345,7 @@ class ShellTool extends Tool {
             id: binding.id,
             name: binding.name,
             rootPath: binding.rootPath,
+            kind: binding.kind,
             createdAt: DateTime.now(),
           ),
           attachment,

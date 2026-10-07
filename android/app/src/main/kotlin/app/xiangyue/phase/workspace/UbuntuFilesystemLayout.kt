@@ -7,6 +7,7 @@ object UbuntuFilesystemLayout {
     private val idPattern = Regex("[a-zA-Z0-9_-]{1,100}")
     fun rootfs(linuxRoot: File) = File(linuxRoot, "environments/ubuntu/rootfs")
     fun sessions(linuxRoot: File) = File(rootfs(linuxRoot), "sessions")
+    fun projects(linuxRoot: File) = File(rootfs(linuxRoot), "projects")
 
     fun managedRootfs(linuxRoot: File, path: String): File {
         val file = File(path).absoluteFile
@@ -19,11 +20,15 @@ object UbuntuFilesystemLayout {
     }
 
     private fun realDirectory(directory: File) = directory.isDirectory && directory.absolutePath == directory.canonicalPath
-    private fun inSession(linuxRoot: File, file: File): Boolean {
-        val base = sessions(linuxRoot)
-        if (!realDirectory(base) || !file.path.startsWith(base.path + File.separator)) return false
-        val id = file.relativeTo(base).path.substringBefore(File.separator)
-        return idPattern.matches(id)
+    private fun inWorkspace(linuxRoot: File, file: File): Boolean {
+        return listOf(sessions(linuxRoot), projects(linuxRoot)).any { base ->
+            if (!realDirectory(base) || !file.path.startsWith(base.path + File.separator)) {
+                false
+            } else {
+                val id = file.relativeTo(base).path.substringBefore(File.separator)
+                idPattern.matches(id)
+            }
+        }
     }
 
     private fun inStagedWorkspace(linuxRoot: File, file: File): Boolean {
@@ -34,7 +39,7 @@ object UbuntuFilesystemLayout {
 
     fun managedFile(linuxRoot: File, path: String): File {
         val file = File(path).canonicalFile
-        require(inSession(linuxRoot, file) || inStagedWorkspace(linuxRoot, file))
+        require(inWorkspace(linuxRoot, file) || inStagedWorkspace(linuxRoot, file))
         return file
     }
 

@@ -67,10 +67,28 @@ class ConversationExporter {
       if (thread == null) {
         throw const UnknownFailure('会话不存在或已删除');
       }
-      final attachments = await conversations.attachmentsFor(conversationId);
+      final available = await conversations.availableAttachmentsFor(
+        conversationId,
+      );
       final toolCalls = await conversations.toolCallsByIds(
         _referencedToolCallIds(thread.messages),
       );
+      final referenced = {
+        for (final message in thread.messages)
+          for (final part in message.parts)
+            ...switch (part) {
+              ImagePart(:final attachmentId) => [attachmentId],
+              DocumentPart(:final attachmentId) => [attachmentId],
+              _ => <String>[],
+            },
+        for (final call in toolCalls.values) ...call.artifacts,
+      };
+      final attachments = [
+        for (final attachment in available)
+          if (attachment.conversationId == conversationId ||
+              referenced.contains(attachment.id))
+            attachment,
+      ];
       final exportedAt = DateTime.now();
       final content = switch (format) {
         ConversationExportFormat.markdown => conversationMarkdown(

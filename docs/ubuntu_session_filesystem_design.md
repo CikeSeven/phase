@@ -4,6 +4,8 @@
 
 本文记录已实现的共享 Ubuntu 文件系统契约：会话文件实际位于固定 rootfs 的 `/sessions/<session_id>`，不再依赖会话目录 bind。代码实现、构建安装与行为验收分开记录，当前交付结果见 §11.3。
 
+项目模式在此布局上新增持久 `/projects/<project_id>`，项目内会话共享目录与资料，删除会话保留项目数据；新增契约见 [项目模式](./projects.md)。下文 `/sessions` 的会话独立目录生命周期适用于普通会话，安装与卸载同时保留 `projects/`。
+
 相关文档：[产品设计](./product_and_technical_design.md)、[扩展设计](./agent_extensions_design.md)、[系统命令通道](./system_command_channels_design.md)、[实施计划](./implementation_plan.md)。代码规范与界面规范分别遵循 [AGENTS.md](../AGENTS.md)、[DESIGN.md](../DESIGN.md)。
 
 ## 1. 已确认的方向

@@ -71,6 +71,7 @@ class ChatController extends _$ChatController {
   final Map<String, ChatOperation> _conversationOperations = {};
   final Map<ChatOperation, ChatRunDriver> _drivers = {};
   final Set<String> _titleGenerationConversations = {};
+  final Set<String> _deletingConversations = {};
   int _viewRevision = 0;
   bool _taskContinuationsInitialized = false;
   final _completionTimers = <String, Timer>{};
@@ -135,9 +136,9 @@ class ChatController extends _$ChatController {
     }
   }
 
-  void startNewConversation() {
+  void startNewConversation({String? projectId}) {
     _viewRevision++;
-    ref.read(activeConversationProvider.notifier).clear();
+    ref.read(activeConversationProvider.notifier).clear(projectId: projectId);
     state = state.selectConversation(null);
   }
 
@@ -146,15 +147,66 @@ class ChatController extends _$ChatController {
   }
 
   /// 切换到某个会话；消息由界面订阅仓储，附件索引进入时读取。
-  Future<void> openConversation(String conversationId) async {
+  Future<void> openConversation(
+    String conversationId, {
+    String? expectedProjectId,
+    bool Function()? isCurrent,
+  }) => _openConversation(
+    conversationId,
+    expectedProjectId: expectedProjectId,
+    isCurrent: isCurrent,
+  );
+
+  Future<void> restoreConversation(ActiveConversationState previous) async {
+    final id = previous.conversationId;
+    if (id != null) {
+      await _openConversation(id, restored: previous);
+      return;
+    }
+    _viewRevision++;
+    ref.read(activeConversationProvider.notifier).restore(previous);
+    state = state.selectConversation(null);
+    ref.invalidate(modelSelectionProvider);
+  }
+
+  Future<void> _openConversation(
+    String conversationId, {
+    String? expectedProjectId,
+    ActiveConversationState? restored,
+    bool Function()? isCurrent,
+  }) async {
     state = state.clearCompleted(conversationId);
     final revision = ++_viewRevision;
     final repository = await ref.read(conversationRepositoryProvider.future);
     final thread = await repository.getThread(conversationId);
-    if (thread == null || !ref.mounted || revision != _viewRevision) return;
+    if (!ref.mounted ||
+        revision != _viewRevision ||
+        isCurrent?.call() == false) {
+      return;
+    }
+    if (thread == null) {
+      if (restored != null) {
+        startNewConversation(projectId: restored.projectId);
+        return;
+      }
+      throw const OperationFailure('会话已不存在');
+    }
+    if (expectedProjectId != null &&
+        thread.conversation.projectId != expectedProjectId) {
+      throw const OperationFailure('此会话不属于当前项目');
+    }
     final attachments = await _attachmentIndex(conversationId, const []);
-    if (!ref.mounted || revision != _viewRevision) return;
-    ref.read(activeConversationProvider.notifier).open(conversationId);
+    if (!ref.mounted ||
+        revision != _viewRevision ||
+        isCurrent?.call() == false) {
+      return;
+    }
+    final active = ref.read(activeConversationProvider.notifier);
+    if (restored != null) {
+      active.restore(restored);
+    } else {
+      active.open(conversationId, projectId: thread.conversation.projectId);
+    }
     state = state
         .clearCompleted(conversationId)
         .selectConversation(conversationId)
@@ -299,6 +351,9 @@ class ChatController extends _$ChatController {
   }
 
   ChatOperation _beginOperation(String? conversationId) {
+    if (_deletingConversations.contains(conversationId)) {
+      throw const OperationFailure('会话正在删除，请稍候');
+    }
     if (_busyFor(conversationId)) {
       throw const OperationFailure('此会话已有任务正在运行');
     }
@@ -309,6 +364,9 @@ class ChatController extends _$ChatController {
   }
 
   void _reserveOperation(ChatOperation operation, String conversationId) {
+    if (_deletingConversations.contains(conversationId)) {
+      throw const OperationFailure('会话正在删除，请稍候');
+    }
     final current = _conversationOperations[conversationId];
     if (current != null && !identical(current, operation)) {
       throw const OperationFailure('此会话已有任务正在运行');
@@ -506,14 +564,21 @@ class ChatController extends _$ChatController {
       throw const OperationFailure('计划模式需要支持工具调用的模型');
     }
     if (conversationId == null) {
-      final conversation = await repository.createConversation(
-        permissions: permissions,
-        assistantId: assistant?.id,
-        modelSelectionOverride: ref
-            .read(activeConversationProvider)
-            .draftModelSelection,
-      );
+      final modelSelectionOverride = active.draftModelSelection;
+      final conversation = active.projectId == null
+          ? await repository.createConversation(
+              permissions: permissions,
+              assistantId: assistant?.id,
+              modelSelectionOverride: modelSelectionOverride,
+            )
+          : await repository.createProjectConversation(
+              active.projectId!,
+              permissions: permissions,
+              assistantId: assistant?.id,
+              modelSelectionOverride: modelSelectionOverride,
+            );
       conversationId = conversation.id;
+      _reserveOperation(operation, conversationId);
       if (revision == _viewRevision) {
         ref.read(activeConversationProvider.notifier).adopt(conversationId);
         state = state.selectConversation(conversationId);
@@ -643,10 +708,13 @@ class ChatController extends _$ChatController {
 
   /// 复制指定会话：副本带同样的助手、模型覆盖与全部消息/分支结构，
   /// 并切换到副本；原会话不受影响。
-  Future<String> duplicateFrom(String conversationId) async {
+  Future<String> duplicateFrom(
+    String conversationId, {
+    bool open = true,
+  }) async {
     final repository = await ref.read(conversationRepositoryProvider.future);
     final copy = await repository.duplicateConversation(conversationId);
-    await openConversation(copy.id);
+    if (open) await openConversation(copy.id);
     return copy.id;
   }
 
@@ -1052,6 +1120,39 @@ class ChatController extends _$ChatController {
     }
   }
 
+  Future<void> deleteConversation(String conversationId) async {
+    if (!_deletingConversations.add(conversationId)) {
+      throw const OperationFailure('会话正在删除，请稍候');
+    }
+    try {
+      final repository = await ref.read(conversationRepositoryProvider.future);
+      final thread = await repository.getThread(conversationId);
+      if (thread == null) return;
+      final operation = _conversationOperations[conversationId];
+      stopConversation(conversationId);
+      await operation?.whenSettled;
+      operation?.throwIfCleanupFailed();
+      if (!ref.mounted) throw const OperationFailure('删除会话已取消');
+      final tasks = ref.read(commandTaskControllerProvider.notifier);
+      await tasks.stopAll(conversationId: conversationId);
+      await tasks.releaseCompletionHosts(
+        conversationId: conversationId,
+        pending: true,
+      );
+      await repository.deleteConversation(conversationId);
+      if (!ref.mounted) return;
+      state = state.clearCompleted(conversationId);
+      if (ref.read(activeConversationProvider).conversationId ==
+          conversationId) {
+        startNewConversation(projectId: thread.conversation.projectId);
+      } else {
+        state = state.removeConversation(conversationId);
+      }
+    } finally {
+      _deletingConversations.remove(conversationId);
+    }
+  }
+
   Future<void> initializeTaskContinuations() async {
     if (!_taskContinuationsInitialized) {
       _taskContinuationsInitialized = true;
@@ -1250,7 +1351,7 @@ class ChatController extends _$ChatController {
     List<Attachment> justAdded,
   ) async {
     final repository = await ref.read(conversationRepositoryProvider.future);
-    final stored = await repository.attachmentsFor(conversationId);
+    final stored = await repository.availableAttachmentsFor(conversationId);
     return {
       for (final attachment in stored) attachment.id: attachment,
       for (final attachment in justAdded) attachment.id: attachment,

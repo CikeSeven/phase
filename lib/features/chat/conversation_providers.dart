@@ -11,6 +11,12 @@ Stream<List<Conversation>> conversations(Ref ref) async* {
   yield* repository.watchConversations();
 }
 
+@riverpod
+Stream<List<Conversation>> standaloneConversations(Ref ref) async* {
+  final repository = await ref.watch(conversationRepositoryProvider.future);
+  yield* repository.watchStandaloneConversations();
+}
+
 /// 某会话的当前分支视图。
 @riverpod
 Stream<ConversationThread?> conversationThread(

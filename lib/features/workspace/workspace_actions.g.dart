@@ -196,7 +196,7 @@ final class WorkspaceActionsProvider
   }
 }
 
-String _$workspaceActionsHash() => r'6f9b1898b5528defae158585e95e5d135a93d458';
+String _$workspaceActionsHash() => r'bb97b9a995117238f3e5ad25bc2f347541319ec8';
 
 abstract class _$WorkspaceActions extends $Notifier<AsyncValue<void>> {
   AsyncValue<void> build();

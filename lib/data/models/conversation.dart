@@ -13,6 +13,7 @@ class Conversation {
     required this.updatedAt,
     this.assistantId,
     this.workspaceId,
+    this.projectId,
     this.currentMessageId,
     this.modelSelectionOverride,
     this.pinned = false,
@@ -25,6 +26,7 @@ class Conversation {
   /// 会话使用的助手；助手被删除后为 null，可重新选择。
   final String? assistantId;
   final String? workspaceId;
+  final String? projectId;
 
   /// 当前分支末尾的消息 id。
   final String? currentMessageId;
@@ -51,6 +53,7 @@ class Conversation {
       title: title ?? this.title,
       assistantId: assistantId ?? this.assistantId,
       workspaceId: workspaceId,
+      projectId: projectId,
       currentMessageId: currentMessageId ?? this.currentMessageId,
       modelSelectionOverride:
           modelSelectionOverride ?? this.modelSelectionOverride,

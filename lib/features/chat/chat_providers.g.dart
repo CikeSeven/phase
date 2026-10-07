@@ -162,7 +162,7 @@ final class ArtifactStorageProvider
   }
 }
 
-String _$artifactStorageHash() => r'2bb76c2793cbd29413863ba40b56353cb59fb727';
+String _$artifactStorageHash() => r'f4da8ac5911f15d72fad7f51be70c8c0da5bfb28';
 
 /// 助手列表；先确保内置助手存在再发出。
 

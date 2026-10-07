@@ -12,11 +12,13 @@ import '../datasources/local/attachment_storage.dart';
 import '../models/attachment.dart';
 import '../models/chat_message.dart';
 import '../models/conversation.dart';
+import '../models/command_task.dart';
 import '../models/permission_mode.dart';
 import '../models/message_part.dart';
 import '../models/model_selection.dart';
 import '../models/tool_call_record.dart';
 import '../models/agent_run.dart';
+import '../models/workspace.dart';
 import 'row_mappers.dart';
 import 'workspace_repository.dart';
 
@@ -72,13 +74,26 @@ class ConversationRepository {
 
   // --- 会话 ---
 
-  Stream<List<Conversation>> watchConversations() {
-    final query = _db.select(_db.conversations)
-      ..orderBy([
+  Stream<List<Conversation>> watchConversations() => _watchConversations();
+
+  Stream<List<Conversation>> _watchConversations([
+    Expression<bool> Function(Conversations table)? filter,
+  ]) async* {
+    try {
+      final query = _db.select(_db.conversations);
+      if (filter != null) query.where(filter);
+      query.orderBy([
         (t) => OrderingTerm.desc(t.pinned),
         (t) => OrderingTerm.desc(t.updatedAt),
       ]);
-    return query.watch().map((rows) => rows.map(conversationFromRow).toList());
+      yield* query.watch().map(
+        (rows) => rows.map(conversationFromRow).toList(),
+      );
+    } on Failure {
+      rethrow;
+    } on Exception catch (error) {
+      throw StorageFailure('读取会话列表失败，请重试', cause: error);
+    }
   }
 
   /// 会话内容；会话不存在时为 null，供界面区分"空会话"与"已删除"。
@@ -98,16 +113,32 @@ class ConversationRepository {
     PermissionSelection permissions = const PermissionSelection(),
     String? assistantId,
     ModelSelection? modelSelectionOverride,
+  }) => _createConversation(
+    title: title,
+    permissions: permissions,
+    assistantId: assistantId,
+    modelSelectionOverride: modelSelectionOverride,
+  );
+
+  Future<Conversation> _createConversation({
+    String title = '新会话',
+    PermissionSelection permissions = const PermissionSelection(),
+    String? assistantId,
+    String? projectId,
+    ModelSelection? modelSelectionOverride,
   }) async {
     return _guardWorkspace('创建会话失败', () async {
       final now = DateTime.now();
       final sessionId = generateId();
-      final workspace = await workspaces.create('会话工作区', id: sessionId);
+      final workspace = projectId == null
+          ? await workspaces.create('会话工作区', id: sessionId)
+          : await _projectWorkspace(projectId);
       final conversation = Conversation(
         id: sessionId,
         title: title,
         permissions: permissions,
         workspaceId: workspace.id,
+        projectId: projectId,
         assistantId: assistantId,
         modelSelectionOverride: modelSelectionOverride,
         createdAt: now,
@@ -118,11 +149,25 @@ class ConversationRepository {
             .into(_db.conversations)
             .insert(conversationCompanion(conversation));
       } catch (_) {
-        await workspaces.delete(workspace.id);
+        if (projectId == null) await workspaces.delete(workspace.id);
         rethrow;
       }
       return conversation;
     });
+  }
+
+  Future<Workspace> _projectWorkspace(String projectId) async {
+    final project = await (_db.select(
+      _db.projects,
+    )..where((t) => t.id.equals(projectId))).getSingleOrNull();
+    if (project == null) throw const OperationFailure('项目已不存在');
+    final workspace = await workspaces.get(project.workspaceId);
+    if (workspace == null ||
+        workspace.deleting ||
+        workspace.kind != WorkspaceKind.project) {
+      throw const OperationFailure('项目工作区不可用，请重试');
+    }
+    return workspace;
   }
 
   Future<void> updateConversation(Conversation conversation) {
@@ -213,7 +258,7 @@ class ConversationRepository {
     });
   }
 
-  /// 文件清理完成后删除记录；失败保留会话与工作区标记，允许重试。
+  /// 普通会话清理独立文件；项目会话只解除资料关联并删除会话记录。
   Future<void> deleteConversation(String id) {
     return _guard('删除会话失败', () async {
       final thread = await getThread(id);
@@ -229,6 +274,23 @@ class ConversationRepository {
       )) {
         throw const OperationFailure('请先停止或处理此会话的任务，再删除会话');
       }
+      await _checkCommandTasksStopped(id, '删除会话');
+      if (thread.conversation.projectId case final projectId?) {
+        await _db.transaction(() async {
+          await (_db.update(
+            _db.attachments,
+          )..where((t) => t.conversationId.equals(id))).write(
+            AttachmentsCompanion(
+              conversationId: const Value(null),
+              projectId: Value(projectId),
+            ),
+          );
+          await (_db.delete(
+            _db.conversations,
+          )..where((t) => t.id.equals(id))).go();
+        });
+        return;
+      }
       final rows = await (_db.select(
         _db.attachments,
       )..where((t) => t.conversationId.equals(id))).get();
@@ -237,22 +299,38 @@ class ConversationRepository {
           for (final row in rows) ...[row.localPath, ?row.extractedTextPath],
         ]);
         await (_db.delete(
+          _db.attachments,
+        )..where((t) => t.conversationId.equals(id))).go();
+        await (_db.delete(
           _db.conversations,
         )..where((t) => t.id.equals(id))).go();
       }
 
       final workspaceId = thread.conversation.workspaceId;
       if (workspaceId == null) {
-        await removeOwner();
+        await _db.transaction(removeOwner);
       } else {
         await workspaces.delete(workspaceId, deleteOwner: removeOwner);
       }
     });
   }
 
+  Future<void> _checkCommandTasksStopped(String id, String operation) async {
+    final tasks = await (_db.select(
+      _db.commandTasks,
+    )..where((t) => t.conversationId.equals(id))).get();
+    if (tasks.any(
+      (row) => CommandTask.fromJson(
+        jsonDecode(row.configurationJson) as Map<String, dynamic>,
+      ).status.active,
+    )) {
+      throw OperationFailure('请先停止此会话的后台任务，再$operation');
+    }
+  }
+
   /// 复制会话：新会话带同样的助手、模型覆盖与全部消息（含其他分支）。
   ///
-  /// 副本拥有独立附件文件；消息父指针和所有分支中的附件引用一起重映射。
+  /// 普通会话复制独立文件；项目会话的副本复用项目目录及资料。
   Future<Conversation> duplicateConversation(String id) {
     return _guardWorkspace('复制会话失败', () async {
       final source = await getThread(id);
@@ -271,6 +349,7 @@ class ConversationRepository {
       )) {
         throw const OperationFailure('请先结束或处理此会话的任务，再复制会话');
       }
+      await _checkCommandTasksStopped(id, '复制会话');
       final runIds = {for (final run in runRows) run.id: generateId()};
       final planRows = await (_db.select(
         _db.agentPlans,
@@ -282,30 +361,42 @@ class ConversationRepository {
       final callIds = {for (final call in callRows) call.id: generateId()};
       final now = DateTime.now();
       final sessionId = generateId();
+      final projectId = source.conversation.projectId;
+      final attachmentRows = await (_db.select(
+        _db.attachments,
+      )..where((t) => t.conversationId.equals(id))).get();
+      if (projectId == null &&
+          attachmentRows.isNotEmpty &&
+          attachments == null) {
+        throw const UnknownFailure('复制会话需要附件存储');
+      }
+      final attachmentIds = <String, String>{
+        if (projectId != null)
+          for (final attachment in await availableAttachmentsFor(id))
+            attachment.id: attachment.id,
+      };
+      final copiedAttachments = <Attachment>[];
+      final workspace = projectId == null
+          ? await workspaces.create('会话工作区', id: sessionId)
+          : await _projectWorkspace(projectId);
       final copy = Conversation(
         id: sessionId,
         title: '${source.conversation.title}（副本）',
         assistantId: source.conversation.assistantId,
         permissions: source.conversation.permissions,
-        workspaceId: sessionId,
+        workspaceId: workspace.id,
+        projectId: projectId,
         modelSelectionOverride: source.conversation.modelSelectionOverride,
         createdAt: now,
         updatedAt: now,
       );
-      final attachmentRows = await (_db.select(
-        _db.attachments,
-      )..where((t) => t.conversationId.equals(id))).get();
-      if (attachmentRows.isNotEmpty && attachments == null) {
-        throw const UnknownFailure('复制会话需要附件存储');
-      }
-      final attachmentIds = <String, String>{};
-      final copiedAttachments = <Attachment>[];
-      final workspace = await workspaces.create('会话工作区', id: copy.workspaceId!);
       try {
-        if (source.conversation.workspaceId case final sourceWorkspace?) {
+        if (projectId == null && source.conversation.workspaceId != null) {
+          final sourceWorkspace = source.conversation.workspaceId!;
           await workspaces.copyFiles(sourceWorkspace, workspace);
         }
-        for (final row in attachmentRows) {
+        for (final row
+            in projectId == null ? attachmentRows : <AttachmentRow>[]) {
           final newId = generateId();
           final copied = await attachments!.copy(
             attachmentFromRow(row),
@@ -361,6 +452,7 @@ class ConversationRepository {
                 'id': workspace.id,
                 'name': workspace.name,
                 'rootPath': workspace.rootPath,
+                'kind': workspace.kind.name,
               };
             }
             await _db
@@ -513,6 +605,7 @@ class ConversationRepository {
           }
         });
       } catch (error, stack) {
+        if (projectId != null) Error.throwWithStackTrace(error, stack);
         try {
           await workspaces.delete(
             workspace.id,
@@ -734,22 +827,50 @@ class ConversationRepository {
 
   Future<void> saveAttachment(Attachment attachment) {
     return _guard('保存附件失败', () async {
+      String? projectId = attachment.projectId;
+      if (attachment.conversationId case final conversationId?) {
+        final owner = await (_db.select(
+          _db.conversations,
+        )..where((t) => t.id.equals(conversationId))).getSingleOrNull();
+        if (owner == null) throw const OperationFailure('附件所属会话已不存在');
+        if (projectId != null && projectId != owner.projectId) {
+          throw const OperationFailure('附件不属于当前项目');
+        }
+        projectId = owner.projectId;
+      } else if (projectId == null) {
+        throw const OperationFailure('附件需要所属会话或项目');
+      }
       await _db
           .into(_db.attachments)
-          .insertOnConflictUpdate(attachmentCompanion(attachment));
+          .insertOnConflictUpdate(
+            attachmentCompanion(attachment)
+                .copyWith(projectId: Value(projectId)),
+          );
     });
   }
 
   /// 更新附件的文本抽取结果（S2 的 PDF/DOCX 抽取落库）。
 
-  Future<List<Attachment>> attachmentsFor(String conversationId) {
-    return _guard('读取附件失败', () async {
-      final rows = await (_db.select(
-        _db.attachments,
-      )..where((t) => t.conversationId.equals(conversationId))).get();
-      return rows.map(attachmentFromRow).toList();
-    });
-  }
+  Future<List<Attachment>> attachmentsFor(String conversationId) =>
+      _availableAttachmentsFor(conversationId);
+
+  /// 项目资料不随来源会话消失；上下文仍只解析当前消息树中的引用。
+  Future<List<Attachment>> _availableAttachmentsFor(String conversationId) =>
+      _guard('读取会话资料失败', () async {
+        final owner = await (_db.select(
+          _db.conversations,
+        )..where((t) => t.id.equals(conversationId))).getSingleOrNull();
+        if (owner == null) throw const OperationFailure('会话已不存在');
+        final query = _db.select(_db.attachments)
+          ..where(
+            (t) =>
+                t.conversationId.equals(conversationId) |
+                (owner.projectId == null
+                    ? const Constant(false)
+                    : t.projectId.equals(owner.projectId!)),
+          );
+        return (await query.get()).map(attachmentFromRow).toList();
+      });
 
   /// 记录文档抽取结果：成功的文本路径或失败原因（二者互斥）。
   Future<void> updateAttachmentExtraction(
@@ -839,6 +960,36 @@ class ConversationRepository {
       throw StorageFailure(message, cause: e);
     }
   }
+}
+
+extension ProjectConversations on ConversationRepository {
+  Stream<List<Conversation>> watchStandaloneConversations() =>
+      watchConversations().map(
+        (items) => [
+          for (final item in items)
+            if (item.projectId == null) item,
+        ],
+      );
+
+  Stream<List<Conversation>> watchProjectConversations(String projectId) =>
+      _watchConversations((t) => t.projectId.equals(projectId));
+
+  Future<Conversation> createProjectConversation(
+    String projectId, {
+    String title = '新会话',
+    PermissionSelection permissions = const PermissionSelection(),
+    String? assistantId,
+    ModelSelection? modelSelectionOverride,
+  }) => _createConversation(
+    projectId: projectId,
+    title: title,
+    permissions: permissions,
+    assistantId: assistantId,
+    modelSelectionOverride: modelSelectionOverride,
+  );
+
+  Future<List<Attachment>> availableAttachmentsFor(String conversationId) =>
+      attachmentsFor(conversationId);
 }
 
 @Riverpod(keepAlive: true)

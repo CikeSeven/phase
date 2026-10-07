@@ -19,7 +19,10 @@ import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_snack_bar.dart';
 import '../../../core/widgets/app_top_bar.dart';
 import '../../../data/models/chat_message.dart';
+import '../../../data/models/conversation.dart';
 import '../../../data/models/reasoning_effort.dart';
+import '../projects/project_navigation.dart';
+import '../projects/project_providers.dart';
 import 'chat_controller.dart';
 import 'chat_empty_state.dart';
 import 'chat_horizontal_drag_priority.dart';
@@ -30,10 +33,13 @@ import 'chat_transcript.dart';
 import 'conversation_drawer.dart';
 import 'model_picker_sheet.dart';
 import 'model_selection.dart';
+import 'sidebar_mode.dart';
 
 /// 聊天页的玻璃顶栏、阅读区、输入栏与会话侧栏。
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key});
+  const ChatPage({this.projectId, super.key});
+
+  final String? projectId;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -93,13 +99,40 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     }
   }
 
+  Future<void> _openOrdinaryConversation(Conversation conversation) async {
+    try {
+      await ref
+          .read(chatControllerProvider.notifier)
+          .openConversation(
+            conversation.id,
+            isCurrent: () =>
+                mounted && ModalRoute.of(context)?.isCurrent == true,
+          );
+      if (mounted &&
+          ref.read(activeConversationProvider).conversationId ==
+              conversation.id) {
+        context.go('/');
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        buildAppSnackBar(
+          content: Text(error is Failure ? error.userMessage : '打开会话失败，请重试'),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final conversationId = ref.watch(
-      activeConversationProvider.select((active) => active.conversationId),
-    );
-    final workspaceId = conversationId == null
+    final active = ref.watch(activeConversationProvider);
+    final conversationId = active.conversationId;
+    final projectId = active.projectId;
+    final project = projectId == null
         ? null
+        : ref.watch(projectProvider(projectId));
+    final workspaceId = conversationId == null
+        ? project?.value?.workspaceId
         : ref
               .watch(conversationThreadProvider(conversationId))
               .value
@@ -171,9 +204,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 titleSpacing: 0,
                 automaticallyImplyLeading: false,
                 leading: IconButton(
-                  tooltip: '打开会话列表',
-                  onPressed: _openDrawer,
-                  icon: const Icon(LucideIcons.textAlignStart),
+                  tooltip: widget.projectId == null ? '打开侧栏' : '返回项目',
+                  onPressed: widget.projectId == null
+                      ? _openDrawer
+                      : () => context.pop(),
+                  icon: Icon(
+                    widget.projectId == null
+                        ? LucideIcons.textAlignStart
+                        : LucideIcons.arrowLeft,
+                  ),
                 ),
                 title: Tooltip(
                   message: '选择助手和模型',
@@ -195,7 +234,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               children: [
                                 Flexible(
                                   child: Text(
-                                    assistantName,
+                                    widget.projectId == null
+                                        ? assistantName
+                                        : project?.value?.name ?? '项目会话',
                                     key: const ValueKey('chat-assistant-name'),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -251,9 +292,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   ),
                 ),
                 actions: [
+                  if (widget.projectId != null)
+                    IconButton(
+                      tooltip: '打开侧栏',
+                      onPressed: _openDrawer,
+                      icon: const Icon(LucideIcons.textAlignStart, size: 20),
+                    ),
                   if (workspaceId != null)
                     IconButton(
-                      tooltip: '会话工作区',
+                      tooltip: projectId == null ? '会话工作区' : '项目文件',
                       icon: const Icon(LucideIcons.folderOpen, size: 20),
                       onPressed: () =>
                           context.push('/settings/workspaces/$workspaceId'),
@@ -262,7 +309,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     tooltip: '新会话',
                     onPressed: () => ref
                         .read(chatControllerProvider.notifier)
-                        .startNewConversation(),
+                        .startNewConversation(projectId: projectId),
                     icon: const Icon(LucideIcons.squarePen, size: 20),
                   ),
                 ],
@@ -273,6 +320,27 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             settings: contentGestureSettings,
             child: ConversationDrawer(
               width: math.min(MediaQuery.sizeOf(context).width * 0.88, 400),
+              onNewConversation: widget.projectId == null
+                  ? null
+                  : () => context.go('/'),
+              onOpenConversation: _openOrdinaryConversation,
+              onDuplicatedConversation: widget.projectId == null
+                  ? null
+                  : (_) => context.go('/'),
+              onOpenProject: (id) async {
+                ref
+                    .read(sidebarModeControllerProvider.notifier)
+                    .select(SidebarMode.projects);
+                if (widget.projectId == null) {
+                  await openProjectPage(context, ref, id);
+                } else {
+                  final router = GoRouter.of(context);
+                  router.pop();
+                  if (id != widget.projectId) {
+                    router.push<void>('/projects/$id');
+                  }
+                }
+              },
             ),
           ),
           body: _ChatContentGestureSettings(
@@ -306,14 +374,45 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child: conversationId == null
+                            child:
+                                project != null &&
+                                    (project.isLoading ||
+                                        project.hasError ||
+                                        project.value == null)
+                                ? Padding(
+                                    padding: EdgeInsets.only(
+                                      top: topPadding,
+                                      bottom: _composerExtent,
+                                    ),
+                                    child: project.isLoading
+                                        ? const Center(
+                                            child: AppLoadingIndicator(),
+                                          )
+                                        : AppEmptyState(
+                                            icon: LucideIcons.folder,
+                                            title: '无法读取项目',
+                                            message: project.error is Failure
+                                                ? (project.error as Failure)
+                                                      .userMessage
+                                                : '项目已不存在或暂时无法读取',
+                                            action: TextButton(
+                                              onPressed: () => ref.invalidate(
+                                                projectProvider(projectId!),
+                                              ),
+                                              child: const Text('重试'),
+                                            ),
+                                          ),
+                                  )
+                                : conversationId == null
                                 ? ChatEmptyState(
+                                    projectName: project?.value?.name,
                                     topPadding: topPadding,
                                     bottomPadding: _composerExtent,
                                   )
                                 : _ConversationMessages(
                                     key: ValueKey(conversationId),
                                     conversationId: conversationId,
+                                    projectName: project?.value?.name,
                                     topPadding: topPadding,
                                     bottomPadding: _composerExtent,
                                   ),
@@ -338,19 +437,30 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             left: 0,
                             right: 0,
                             bottom: 0,
-                            child: Center(
-                              child: ConstrainedBox(
-                                constraints: BoxConstraints(
-                                  maxWidth: _contentMaxWidth,
-                                  maxHeight: composerHeight,
-                                ),
-                                child: _ReportSize(
-                                  onChanged: (height) {
-                                    if (mounted && _composerExtent != height) {
-                                      setState(() => _composerExtent = height);
-                                    }
-                                  },
-                                  child: const ChatInputBar(),
+                            child: Visibility(
+                              visible:
+                                  project == null ||
+                                  (!project.isLoading &&
+                                      !project.hasError &&
+                                      project.value != null),
+                              maintainState: true,
+                              child: Center(
+                                child: ConstrainedBox(
+                                  constraints: BoxConstraints(
+                                    maxWidth: _contentMaxWidth,
+                                    maxHeight: composerHeight,
+                                  ),
+                                  child: _ReportSize(
+                                    onChanged: (height) {
+                                      if (mounted &&
+                                          _composerExtent != height) {
+                                        setState(
+                                          () => _composerExtent = height,
+                                        );
+                                      }
+                                    },
+                                    child: const ChatInputBar(),
+                                  ),
                                 ),
                               ),
                             ),
@@ -423,12 +533,14 @@ class _ConversationMessages extends ConsumerWidget {
     required this.conversationId,
     required this.topPadding,
     required this.bottomPadding,
+    this.projectName,
     super.key,
   });
 
   final String conversationId;
   final double topPadding;
   final double bottomPadding;
+  final String? projectName;
 
   /// 重新生成最后一整轮回答；失败按统一文案提示，旧记录留在历史分支。
   Future<void> _regenerate(BuildContext context, WidgetRef ref) async {
@@ -474,6 +586,7 @@ class _ConversationMessages extends ConsumerWidget {
               );
         if (messages.isEmpty) {
           return ChatEmptyState(
+            projectName: projectName,
             topPadding: topPadding,
             bottomPadding: bottomPadding,
           );

@@ -42,6 +42,7 @@ class WorkspaceRepository {
   final Directory root;
   final UbuntuFilesystem filesystem;
   final Set<String> _leases = {};
+  final Map<String, int> _sharedLeases = {};
   final Map<String, int> _taskUsers = {};
   final Set<String> _fileMutations = {};
   bool _mutatingEnvironment = false;
@@ -50,9 +51,13 @@ class WorkspaceRepository {
   bool get busy =>
       _mutatingEnvironment ||
       _leases.isNotEmpty ||
+      _sharedLeases.isNotEmpty ||
       _taskUsers.isNotEmpty ||
       _environmentUsers > 0;
-  bool inUse(String id) => _leases.contains(id) || _taskUsers.containsKey(id);
+  bool inUse(String id) =>
+      _leases.contains(id) ||
+      _sharedLeases.containsKey(id) ||
+      _taskUsers.containsKey(id);
   bool environmentReady(RuntimeEnvironment environment) =>
       environment.ready && environment.rootPath == filesystem.layout.rootfs;
   static const environmentId = 'ubuntu-arm64';
@@ -107,21 +112,38 @@ class WorkspaceRepository {
   Workspace _workspace(WorkspaceRow row, {String? name}) => Workspace(
     id: row.id,
     name: name ?? row.name,
-    rootPath: filesystem.layout.sessionDirectory(row.id),
+    rootPath: switch (row.kind) {
+      WorkspaceKind.session => filesystem.layout.sessionDirectory(row.id),
+      WorkspaceKind.project => filesystem.layout.projectDirectory(row.id),
+    },
+    kind: row.kind,
     createdAt: row.createdAt,
     deleting: row.deleting,
   );
   JoinedSelectStatement<HasResultSet, dynamic> _ownedWorkspaces() =>
       db.select(db.workspaces).join([
-        innerJoin(
-          db.conversations,
-          db.conversations.workspaceId.equalsExp(db.workspaces.id),
-        ),
-      ])..orderBy([OrderingTerm.desc(db.conversations.updatedAt)]);
+          leftOuterJoin(
+            db.conversations,
+            db.conversations.workspaceId.equalsExp(db.workspaces.id) &
+                db.workspaces.kind.equalsValue(WorkspaceKind.session),
+          ),
+          leftOuterJoin(
+            db.projects,
+            db.projects.workspaceId.equalsExp(db.workspaces.id) &
+                db.workspaces.kind.equalsValue(WorkspaceKind.project),
+          ),
+        ])
+        ..where(db.conversations.id.isNotNull() | db.projects.id.isNotNull())
+        ..orderBy([
+          OrderingTerm.desc(db.conversations.updatedAt),
+          OrderingTerm.desc(db.projects.createdAt),
+        ]);
 
   Workspace _ownedWorkspace(TypedResult row) => _workspace(
     row.readTable(db.workspaces),
-    name: row.readTable(db.conversations).title,
+    name:
+        row.readTableOrNull(db.projects)?.name ??
+        row.readTableOrNull(db.conversations)?.title,
   );
 
   Future<List<Workspace>> list() => _records(
@@ -144,7 +166,12 @@ class WorkspaceRepository {
     if (row == null) return null;
     return _workspace(row);
   });
-  Future<Workspace> create(String name, {String? id}) async {
+  Future<Workspace> create(
+    String name, {
+    String? id,
+    WorkspaceKind kind = WorkspaceKind.session,
+    Future<void> Function(Workspace workspace)? createOwner,
+  }) async {
     final release = retainEnvironment();
     Directory? directory;
     String? creatingId;
@@ -156,40 +183,54 @@ class WorkspaceRepository {
       }
       final workspaceId = id ?? generateId();
       if (!_leases.add(workspaceId)) {
-        throw const OperationFailure('此会话工作区正在创建或使用');
+        throw const OperationFailure('此工作区正在创建或使用');
       }
       creatingId = workspaceId;
       if (await get(workspaceId) != null) {
-        throw const OperationFailure('会话工作区已存在');
+        throw const OperationFailure('工作区已存在');
       }
-      directory = await filesystem.createSession(workspaceId);
+      directory = await switch (kind) {
+        WorkspaceKind.session => filesystem.createSession(workspaceId),
+        WorkspaceKind.project => filesystem.createProject(workspaceId),
+      };
       final now = DateTime.now();
-      await _records(
-        () => db
-            .into(db.workspaces)
-            .insert(
-              WorkspacesCompanion.insert(
-                id: workspaceId,
-                name: trimmed,
-                environmentId: environmentId,
-                createdAt: now,
-              ),
-            ),
-      );
-      saved = true;
-      return Workspace(
+      final workspace = Workspace(
         id: workspaceId,
         name: trimmed,
         rootPath: directory.path,
+        kind: kind,
         createdAt: now,
       );
+      await _records(
+        () => db.transaction(() async {
+          await db
+              .into(db.workspaces)
+              .insert(
+                WorkspacesCompanion.insert(
+                  id: workspaceId,
+                  name: trimmed,
+                  environmentId: environmentId,
+                  kind: Value(kind),
+                  createdAt: now,
+                ),
+              );
+          await createOwner?.call(workspace);
+        }),
+      );
+      saved = true;
+      return workspace;
     } finally {
       try {
         if (!saved && directory != null) {
-          await filesystem.deleteSession(creatingId!);
+          await switch (kind) {
+            WorkspaceKind.session => filesystem.deleteSession(creatingId!),
+            WorkspaceKind.project => filesystem.rollbackProjectCreation(
+              creatingId!,
+            ),
+          };
         }
       } on FileSystemException {
-        throw const OperationFailure('未完成会话的目录清理失败，请重试');
+        throw const OperationFailure('未完成工作区的目录清理失败，请重试');
       } finally {
         if (creatingId != null) _leases.remove(creatingId);
         release();
@@ -200,7 +241,10 @@ class WorkspaceRepository {
   /// 复制会话文件，副本目录与来源记录均独立；不复制共享 Ubuntu 环境。
   Future<void> copyFiles(String sourceId, Workspace target) async {
     final release = retainEnvironment();
-    if (_taskUsers.containsKey(sourceId) || _taskUsers.containsKey(target.id)) {
+    if (_taskUsers.containsKey(sourceId) ||
+        _taskUsers.containsKey(target.id) ||
+        _sharedLeases.containsKey(sourceId) ||
+        _sharedLeases.containsKey(target.id)) {
       release();
       throw const OperationFailure('请先停止后台任务，再复制会话');
     }
@@ -218,6 +262,10 @@ class WorkspaceRepository {
       final source = await get(sourceId);
       if (source == null || source.deleting) {
         throw const OperationFailure('原会话工作区不可用，无法复制');
+      }
+      if (source.kind != WorkspaceKind.session ||
+          target.kind != WorkspaceKind.session) {
+        throw const OperationFailure('项目会话共享目录，无需复制工作区');
       }
       if (target.rootPath != filesystem.layout.sessionDirectory(target.id) ||
           await filesystem.session(target.id) == null) {
@@ -279,7 +327,7 @@ class WorkspaceRepository {
   /// 删除先撤销新使用，再处理文件。失败保留 deleting 行供显式重试。
   Future<void> delete(String id, {Future<void> Function()? deleteOwner}) async {
     final release = retainEnvironment();
-    if (_taskUsers.containsKey(id)) {
+    if (_taskUsers.containsKey(id) || _sharedLeases.containsKey(id)) {
       release();
       throw const OperationFailure('请先在任务管理中停止此会话的后台任务');
     }
@@ -293,6 +341,9 @@ class WorkspaceRepository {
       if (workspace == null) {
         await deleteOwner?.call();
         return;
+      }
+      if (workspace.kind == WorkspaceKind.project) {
+        throw const OperationFailure('项目工作区不能通过会话删除');
       }
       await _records(
         () => (db.update(db.workspaces)..where((t) => t.id.equals(id))).write(
@@ -364,6 +415,7 @@ class WorkspaceRepository {
     try {
       final current = await snapshot(id);
       if (!current.executable ||
+          current.kind != expected.kind ||
           current.rootPath != expected.rootPath ||
           current.environmentRoot != expected.environmentRoot ||
           current.environmentRevision != expected.environmentRevision) {
@@ -407,6 +459,7 @@ class WorkspaceRepository {
       id: workspace.id,
       name: workspace.name,
       rootPath: workspace.rootPath,
+      kind: workspace.kind,
       environmentRoot: !_mutatingEnvironment && environmentReady(env)
           ? env.rootPath
           : null,
@@ -420,21 +473,40 @@ class WorkspaceRepository {
     String id, {
     WorkspaceSnapshot? expected,
   }) async {
-    if (_mutatingEnvironment) {
-      throw const OperationFailure('环境正在安装或卸载，请稍候');
-    }
-    if (!_leases.add(id)) throw const OperationFailure('此工作区正在使用');
+    final release = retainEnvironment();
     var retained = false;
+    WorkspaceKind? kind;
     try {
       final snapshot = await this.snapshot(id);
+      if (_fileMutations.contains(id) || _leases.contains(id)) {
+        throw const OperationFailure('此工作区正在使用');
+      }
       if (expected != null &&
           jsonEncode(expected.toJson()) != jsonEncode(snapshot.toJson())) {
         throw const OperationFailure('运行所用环境或工作区已改变，不能继续旧任务');
       }
+      kind = snapshot.kind;
+      if (kind == WorkspaceKind.project) {
+        _sharedLeases[id] = (_sharedLeases[id] ?? 0) + 1;
+      } else {
+        _leases.add(id);
+      }
       retained = true;
-      return WorkspaceLease(snapshot, () => _leases.remove(id));
+      return WorkspaceLease(snapshot, () {
+        if (kind == WorkspaceKind.project) {
+          final count = _sharedLeases[id]! - 1;
+          if (count == 0) {
+            _sharedLeases.remove(id);
+          } else {
+            _sharedLeases[id] = count;
+          }
+        } else {
+          _leases.remove(id);
+        }
+        release();
+      });
     } finally {
-      if (!retained) _leases.remove(id);
+      if (!retained) release();
     }
   }
 

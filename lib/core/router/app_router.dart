@@ -10,6 +10,9 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../features/assistants/assistant_edit_page.dart';
 import '../../features/assistants/assistants_page.dart';
 import '../../features/chat/chat_page.dart';
+import '../../features/projects/project_page.dart';
+import '../../features/projects/project_chat_page.dart';
+import '../../features/projects/project_navigation.dart';
 import '../../features/chat/html_preview_page.dart';
 import '../../features/providers_config/provider_edit_page.dart';
 import '../../features/providers_config/providers_page.dart';
@@ -59,6 +62,30 @@ GoRouter appRouter(Ref ref) {
       GoRoute(
         path: '/',
         pageBuilder: (context, state) => materialPage(state, const ChatPage()),
+      ),
+      GoRoute(
+        path: '/projects/:projectId',
+        pageBuilder: (context, state) => materialPage(
+          state,
+          ProjectPage(id: state.pathParameters['projectId']!),
+        ),
+        routes: [
+          GoRoute(
+            path: 'conversations/:conversationId',
+            pageBuilder: (context, state) => materialPage(
+              state,
+              ProjectChatPage(
+                projectId: state.pathParameters['projectId']!,
+                conversationId: state.pathParameters['conversationId'] == 'new'
+                    ? null
+                    : state.pathParameters['conversationId'],
+                navigation: state.extra is ProjectChatNavigation
+                    ? state.extra as ProjectChatNavigation
+                    : null,
+              ),
+            ),
+          ),
+        ],
       ),
       GoRoute(
         path: '/html-preview',

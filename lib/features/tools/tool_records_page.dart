@@ -36,7 +36,7 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
   Future<(List<ToolCallRecord>, Map<String, Attachment>)> _loadRecords() async {
     final conversations = await ref.read(conversationRepositoryProvider.future);
     final repository = await ref.read(toolCallRepositoryProvider.future);
-    final attachments = await conversations.attachmentsFor(
+    final attachments = await conversations.availableAttachmentsFor(
       widget.conversationId,
     );
     final runs = await _runIds(conversations);

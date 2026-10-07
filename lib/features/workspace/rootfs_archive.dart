@@ -119,7 +119,7 @@ class RootfsArchive {
         nextLink = null;
         if (name == '.') continue;
         if (reservedRootNames.contains(p.posix.split(name).first)) {
-          throw const WorkspaceFailure('archivePath', '环境镜像不能覆盖会话或服务目录');
+          throw const WorkspaceFailure('archivePath', '环境镜像不能覆盖工作区或服务目录');
         }
         if (!seen.add(name) ||
             seen.length > maxEntries ||

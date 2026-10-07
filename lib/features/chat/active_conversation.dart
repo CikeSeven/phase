@@ -13,6 +13,7 @@ part 'active_conversation.g.dart';
 class ActiveConversationState {
   const ActiveConversationState({
     this.conversationId,
+    this.projectId,
     this.draftAssistantId,
     this.draftModelSelection,
     this.draftPermissions = const PermissionSelection(),
@@ -20,6 +21,7 @@ class ActiveConversationState {
 
   /// 当前打开的会话；null 表示新会话（尚未落库）。
   final String? conversationId;
+  final String? projectId;
 
   /// 本次会话显式选定的助手，切到其他会话时清空。
   final String? draftAssistantId;
@@ -35,17 +37,24 @@ class ActiveConversation extends _$ActiveConversation {
   ActiveConversationState build() => const ActiveConversationState();
 
   /// 打开某个已有会话；草稿助手不再需要。
-  void open(String conversationId) {
-    state = ActiveConversationState(conversationId: conversationId);
+  void open(String conversationId, {String? projectId}) {
+    state = ActiveConversationState(
+      conversationId: conversationId,
+      projectId: projectId,
+    );
   }
 
   /// 回到新会话状态（或开始新的会话）。
-  void clear() => state = const ActiveConversationState();
+  void clear({String? projectId}) =>
+      state = ActiveConversationState(projectId: projectId);
+
+  void restore(ActiveConversationState previous) => state = previous;
 
   /// 发送后新会话已有 id：记录它，并保留本次会话选定的助手。
   void adopt(String conversationId) {
     state = ActiveConversationState(
       conversationId: conversationId,
+      projectId: state.projectId,
       draftAssistantId: state.draftAssistantId,
     );
   }
@@ -54,6 +63,7 @@ class ActiveConversation extends _$ActiveConversation {
   void draftAssistant(String assistantId) {
     state = ActiveConversationState(
       conversationId: state.conversationId,
+      projectId: state.projectId,
       draftAssistantId: assistantId,
       draftModelSelection: state.draftModelSelection,
       draftPermissions: state.draftPermissions,
@@ -65,6 +75,7 @@ class ActiveConversation extends _$ActiveConversation {
       throw StateError('Not a draft conversation');
     }
     state = ActiveConversationState(
+      projectId: state.projectId,
       draftAssistantId: state.draftAssistantId,
       draftModelSelection: state.draftModelSelection,
       draftPermissions: state.draftPermissions.select(mode),
@@ -74,6 +85,7 @@ class ActiveConversation extends _$ActiveConversation {
   void draftModel(model.ModelSelection selection) {
     state = ActiveConversationState(
       conversationId: state.conversationId,
+      projectId: state.projectId,
       draftAssistantId: state.draftAssistantId,
       draftModelSelection: selection,
       draftPermissions: state.draftPermissions,

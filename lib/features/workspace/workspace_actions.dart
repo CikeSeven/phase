@@ -14,6 +14,7 @@ import '../../../core/utils/id.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/workspace.dart';
 import '../../../data/repositories/workspace_repository.dart';
+import '../../../data/repositories/project_repository.dart';
 import '../tools/tool.dart';
 import 'workspace_files.dart';
 
@@ -80,12 +81,12 @@ class WorkspaceActions extends _$WorkspaceActions {
   Future<void> importFile(String id) async {
     await perform(() async {
       final repository = await ref.read(workspaceRepositoryProvider.future);
-      if (repository.inUse(id)) {
-        throw const OperationFailure('工作区正在使用，请结束任务后导入');
-      }
       final value = await repository.get(id);
       if (value == null || value.deleting) {
         throw const OperationFailure('工作区已删除');
+      }
+      if (value.kind == WorkspaceKind.session && repository.inUse(id)) {
+        throw const OperationFailure('工作区正在使用，请结束任务后导入');
       }
       final picked = await FilePicker.pickFiles();
       final file = picked.firstOrNull;
@@ -118,23 +119,56 @@ class WorkspaceActions extends _$WorkspaceActions {
   Future<void> exportFile(String id, String relative) async {
     await perform(() async {
       final file = await preview(id, relative);
-      if (file.size > WorkspaceFiles.maxCopyBytes) {
-        throw const OperationFailure('单次导出文件上限为 64 MiB');
-      }
-      try {
-        await ExecutionSetupApi().exportWorkspaceFile(
-          file.localPath,
-          file.name,
-          file.mimeType,
-        );
-      } on PlatformException catch (error) {
-        throw OperationFailure(
-          error.code == 'exportFailed'
-              ? '文件导出未完整保存，请检查目标位置后重试'
-              : '无法导出文件，请检查工作区文件和目标授权',
-        );
-      }
+      await _export(file);
       return true;
     });
+  }
+
+  Future<void> exportProjectAttachment(String id, String attachmentId) async {
+    await perform(() async {
+      final projects = await ref.read(projectRepositoryProvider.future);
+      final attachment = await projects.attachment(id, attachmentId);
+      final repository = await ref.read(workspaceRepositoryProvider.future);
+      final lease = await repository.acquire(id);
+      Directory? temporary;
+      try {
+        temporary = await repository.files(lease.snapshot).temporary();
+        final source = File(attachment.localPath);
+        if (await source.length() > WorkspaceFiles.maxCopyBytes) {
+          throw const OperationFailure('单次导出文件上限为 64 MiB');
+        }
+        final destination = p.join(temporary.path, p.basename(attachment.name));
+        await source.copy(destination);
+        await _export(attachment, localPath: destination);
+        return true;
+      } on FileSystemException {
+        throw const OperationFailure('无法读取项目资料，请刷新后重试');
+      } finally {
+        try {
+          await temporary?.delete(recursive: true);
+        } finally {
+          lease.close();
+        }
+      }
+    });
+  }
+
+  Future<void> _export(Attachment file, {String? localPath}) async {
+    if (file.size > WorkspaceFiles.maxCopyBytes) {
+      throw const OperationFailure('单次导出文件上限为 64 MiB');
+    }
+    try {
+      await ExecutionSetupApi().exportWorkspaceFile(
+        localPath ?? file.localPath,
+        file.name,
+        file.mimeType,
+      );
+    } on PlatformException catch (error) {
+      throw OperationFailure(
+        error.code == 'exportFailed'
+            ? '文件导出未完整保存，请检查目标位置后重试'
+            : '无法导出文件，请检查工作区文件和目标授权',
+      );
+    }
   }
 }

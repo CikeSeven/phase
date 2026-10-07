@@ -16,7 +16,7 @@ class UbuntuFilesystem {
     try {
       return await action();
     } on FormatException {
-      throw const OperationFailure('会话或服务目录 ID 无效');
+      throw const OperationFailure('工作区或服务目录 ID 无效');
     } on FileSystemException {
       throw const WorkspaceFailure('filesystem', 'Ubuntu 文件操作失败，请检查目录和可用空间后重试');
     }
@@ -49,19 +49,26 @@ class UbuntuFilesystem {
     return Directory(path);
   }
 
-  Future<Directory> createSession(String id) => _files(() async {
-    await _directory(layout.sessions, create: true);
-    final directory = Directory(layout.sessionDirectory(id));
+  Future<Directory> _createWorkspace(String path) => _files(() async {
+    await _directory(p.dirname(path), create: true);
+    final directory = Directory(path);
     if (await FileSystemEntity.type(directory.path, followLinks: false) !=
         FileSystemEntityType.notFound) {
-      throw const OperationFailure('会话目录已存在，不能覆盖已有文件');
+      throw const OperationFailure('工作区目录已存在，不能覆盖已有文件');
     }
     await directory.create();
     return directory;
   });
 
+  Future<Directory> createSession(String id) =>
+      _files(() => _createWorkspace(layout.sessionDirectory(id)));
+  Future<Directory> createProject(String id) =>
+      _files(() => _createWorkspace(layout.projectDirectory(id)));
+
   Future<Directory?> session(String id) =>
       _files(() => _directory(layout.sessionDirectory(id)));
+  Future<Directory?> project(String id) =>
+      _files(() => _directory(layout.projectDirectory(id)));
 
   Future<Directory> ensureMcpService(String id) => _files(
     () async => (await _directory(layout.mcpDirectory(id), create: true))!,
@@ -82,6 +89,8 @@ class UbuntuFilesystem {
 
   Future<void> deleteSession(String id) =>
       _files(() => _deleteOwnedDirectory(layout.sessionDirectory(id)));
+  Future<void> rollbackProjectCreation(String id) =>
+      _files(() => _deleteOwnedDirectory(layout.projectDirectory(id)));
   Future<void> deleteMcpService(String id) =>
       _files(() => _deleteOwnedDirectory(layout.mcpDirectory(id)));
 
@@ -120,7 +129,7 @@ class UbuntuFilesystem {
         p.basename(entry.path),
       ),
     )) {
-      throw const WorkspaceFailure('archivePath', '环境镜像不能覆盖会话或服务目录');
+      throw const WorkspaceFailure('archivePath', '环境镜像不能覆盖工作区或服务目录');
     }
     check();
     final rootfs = (await _directory(layout.rootfs, create: true))!;

@@ -28,6 +28,7 @@ import '../models/tool_source.dart';
 
 Conversation conversationFromRow(ConversationRow row) => Conversation(
   workspaceId: row.workspaceId,
+  projectId: row.projectId,
   id: row.id,
   title: row.title,
   assistantId: row.assistantId,
@@ -72,6 +73,7 @@ Assistant assistantFromRow(AssistantRow row) => Assistant(
 Attachment attachmentFromRow(AttachmentRow row) => Attachment(
   id: row.id,
   conversationId: row.conversationId,
+  projectId: row.projectId,
   kind: attachmentKindFromName(row.kind),
   name: row.name,
   mimeType: row.mimeType,
@@ -188,6 +190,7 @@ ConversationsCompanion conversationCompanion(Conversation conversation) =>
       id: Value(conversation.id),
       assistantId: Value(conversation.assistantId),
       workspaceId: Value(conversation.workspaceId),
+      projectId: Value(conversation.projectId),
       title: Value(conversation.title),
       currentMessageId: Value(conversation.currentMessageId),
       selectionJson: Value(
@@ -283,8 +286,8 @@ ToolCallsCompanion toolCallCompanion(ToolCallRecord record) =>
 AttachmentsCompanion attachmentCompanion(Attachment attachment) =>
     AttachmentsCompanion(
       id: Value(attachment.id),
-      // 附件落库前必须已认领会话（见 Attachment.withConversation）。
-      conversationId: Value(attachment.conversationId!),
+      conversationId: Value(attachment.conversationId),
+      projectId: Value(attachment.projectId),
       kind: Value(attachment.kind.name),
       name: Value(attachment.name),
       mimeType: Value(attachment.mimeType),

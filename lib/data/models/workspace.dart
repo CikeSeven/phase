@@ -102,18 +102,22 @@ class RuntimeEnvironment {
       );
 }
 
+enum WorkspaceKind { session, project }
+
 class Workspace {
   const Workspace({
     required this.id,
     required this.name,
     required this.rootPath,
     required this.createdAt,
+    this.kind = WorkspaceKind.session,
     this.deleting = false,
   });
   final String id;
   final String name;
   final String rootPath;
   final DateTime createdAt;
+  final WorkspaceKind kind;
   final bool deleting;
 }
 
@@ -126,13 +130,18 @@ class WorkspaceSnapshot {
     required this.rootPath,
     required this.environmentRoot,
     required this.environmentRevision,
+    this.kind = WorkspaceKind.session,
   });
   final String id;
   final String name;
   final String rootPath;
   final String? environmentRoot;
   final String? environmentRevision;
-  String get executionRoot => UbuntuFilesystemLayout.sessionGuestPath(id);
+  final WorkspaceKind kind;
+  String get executionRoot => switch (kind) {
+    WorkspaceKind.session => UbuntuFilesystemLayout.sessionGuestPath(id),
+    WorkspaceKind.project => UbuntuFilesystemLayout.projectGuestPath(id),
+  };
   bool get executable => linuxAvailable;
   bool get linuxAvailable =>
       environmentRoot != null && environmentRevision != null;
@@ -140,6 +149,7 @@ class WorkspaceSnapshot {
     'id': id,
     'name': name,
     'rootPath': rootPath,
+    'kind': kind.name,
     'environmentRoot': environmentRoot,
     'environmentRevision': environmentRevision,
   };
@@ -148,6 +158,9 @@ class WorkspaceSnapshot {
         id: json['id'] as String,
         name: json['name'] as String,
         rootPath: json['rootPath'] as String,
+        kind: WorkspaceKind.values.byName(
+          json['kind'] as String? ?? WorkspaceKind.session.name,
+        ),
         environmentRoot: json['environmentRoot'] as String?,
         environmentRevision: json['environmentRevision'] as String?,
       );

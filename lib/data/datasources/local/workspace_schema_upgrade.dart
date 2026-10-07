@@ -7,15 +7,41 @@ import 'app_database.dart';
 
 /// 重建会话工作区结构，保留业务记录与 Ubuntu 文件来源。
 Future<void> upgradeWorkspaceSchema(AppDatabase db, Migrator migrator) async {
+  final existingTables = {
+    for (final row
+        in await db
+            .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+            .get())
+      row.read<String>('name'),
+  };
+  final retainedColumns = <String, List<String>>{};
+  for (final table in <TableInfo<Table, Object?>>[
+    db.conversations,
+    db.workspaces,
+    db.workspaceCopies,
+  ]) {
+    final existingColumns = {
+      for (final row
+          in await db
+              .customSelect('PRAGMA table_info("${table.actualTableName}")')
+              .get())
+        row.read<String>('name'),
+    };
+    retainedColumns[table.actualTableName] = [
+      for (final column in table.$columns)
+        if (existingColumns.contains(column.name)) column.name,
+    ];
+  }
   Future<Map<String, int>> rowCounts() async => {
     for (final table in db.allTables)
-      table.actualTableName:
-          (await db
-                  .customSelect(
-                    'SELECT COUNT(*) AS n FROM "${table.actualTableName}"',
-                  )
-                  .getSingle())
-              .read<int>('n'),
+      if (existingTables.contains(table.actualTableName))
+        table.actualTableName:
+            (await db
+                    .customSelect(
+                      'SELECT COUNT(*) AS n FROM "${table.actualTableName}"',
+                    )
+                    .getSingle())
+                .read<int>('n'),
   };
   Future<Set<String>> retainedRows(
     TableInfo<Table, Object?> table, {
@@ -24,7 +50,7 @@ Future<void> upgradeWorkspaceSchema(AppDatabase db, Migrator migrator) async {
     for (final row
         in await db
             .customSelect(
-              'SELECT ${table.$columns.map((column) => '"${column.name}"').join(', ')} '
+              'SELECT ${retainedColumns[table.actualTableName]!.map((name) => '"$name"').join(', ')} '
               'FROM "${table.actualTableName}"${where == null ? '' : ' WHERE $where'}',
             )
             .get())
@@ -99,8 +125,12 @@ Future<void> upgradeWorkspaceSchema(AppDatabase db, Migrator migrator) async {
     "DELETE FROM workspace_copies WHERE environment != 'ubuntu'",
   );
   await migrator.alterTable(TableMigration(db.workspaceCopies));
-  await migrator.alterTable(TableMigration(db.workspaces));
-  await migrator.alterTable(TableMigration(db.conversations));
+  await migrator.alterTable(
+    TableMigration(db.workspaces, newColumns: [db.workspaces.kind]),
+  );
+  await migrator.alterTable(
+    TableMigration(db.conversations, newColumns: [db.conversations.projectId]),
+  );
 
   final migratedCounts = await rowCounts();
   final expectedCounts = {

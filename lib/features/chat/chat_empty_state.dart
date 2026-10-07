@@ -15,10 +15,12 @@ class ChatEmptyState extends StatelessWidget {
     super.key,
     this.topPadding = 0,
     this.bottomPadding = 0,
+    this.projectName,
   });
 
   final double topPadding;
   final double bottomPadding;
+  final String? projectName;
 
   @override
   Widget build(BuildContext context) {
@@ -50,24 +52,30 @@ class ChatEmptyState extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const AppIconBadge(
-                    icon: LucideIcons.moon,
-                    tone: AppTone.gold,
+                  AppIconBadge(
+                    icon: projectName == null
+                        ? LucideIcons.moon
+                        : LucideIcons.folder,
+                    tone: projectName == null ? AppTone.gold : AppTone.teal,
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   Semantics(
                     header: true,
                     child: Text(
-                      '向相月提问，或选择一个助手',
+                      projectName == null
+                          ? '向相月提问，或选择一个助手'
+                          : '让我们在「$projectName」中构建什么？',
                       style: theme.textTheme.titleMedium,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.xl),
-                  FilledButton.tonalIcon(
-                    onPressed: () => context.push('/assistants'),
-                    icon: const Icon(LucideIcons.bot),
-                    label: const Text('选择助手'),
-                  ),
+                  if (projectName == null) ...[
+                    const SizedBox(height: AppSpacing.xl),
+                    FilledButton.tonalIcon(
+                      onPressed: () => context.push('/assistants'),
+                      icon: const Icon(LucideIcons.bot),
+                      label: const Text('选择助手'),
+                    ),
+                  ],
                 ],
               ),
             ),

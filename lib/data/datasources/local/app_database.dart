@@ -14,12 +14,15 @@ import '../../models/chat_message.dart';
 import '../../models/tool_call_record.dart';
 import '../../models/tool_policy.dart';
 import '../../models/permission_mode.dart';
+import '../../models/workspace.dart';
 import 'database_key.dart';
 import 'key_store.dart';
 import 'mcp_server_scope_upgrade.dart';
 import 'workspace_schema_upgrade.dart';
+import 'project_schema_upgrade.dart';
 
 part 'app_database.g.dart';
+part 'attachment_companion.dart';
 
 /// 服务商配置；API Key 不入库，按 id 存 SecureKeyStorage。
 @DataClassName('ProviderProfileRow')
@@ -92,6 +95,11 @@ class Assistants extends Table {
 /// 会话；currentMessageId 指向当前分支末尾。
 @DataClassName('ConversationRow')
 class Conversations extends Table {
+  TextColumn get projectId => text().nullable().references(
+    Projects,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   TextColumn get workspaceId => text().nullable().references(
     Workspaces,
     #id,
@@ -143,11 +151,19 @@ class Messages extends Table {
 }
 
 /// 附件索引；二进制在 AttachmentStorage，抽取文本另有文件。
-@DataClassName('AttachmentRow')
+@DataClassName('AttachmentRow', companion: 'AttachmentChanges')
 class Attachments extends Table {
   TextColumn get id => text()();
-  TextColumn get conversationId =>
-      text().references(Conversations, #id, onDelete: KeyAction.cascade)();
+  TextColumn get conversationId => text().nullable().references(
+    Conversations,
+    #id,
+    onDelete: KeyAction.setNull,
+  )();
+  TextColumn get projectId => text().nullable().references(
+    Projects,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   TextColumn get kind => text()();
   TextColumn get name => text()();
   TextColumn get mimeType => text()();
@@ -266,7 +282,24 @@ class Workspaces extends Table {
   TextColumn get id => text()();
   TextColumn get name => text().withLength(min: 1, max: 100)();
   TextColumn get environmentId => text()();
+  TextColumn get kind => textEnum<WorkspaceKind>().withDefault(
+    Constant(WorkspaceKind.session.name),
+  )();
   BoolColumn get deleting => boolean().withDefault(const Constant(false))();
+  DateTimeColumn get createdAt => dateTime()();
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
+@DataClassName('ProjectRow')
+class Projects extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text().withLength(min: 1, max: 100)();
+  TextColumn get workspaceId => text().unique().references(
+    Workspaces,
+    #id,
+    onDelete: KeyAction.restrict,
+  )();
   DateTimeColumn get createdAt => dateTime()();
   @override
   Set<Column> get primaryKey => {id};
@@ -411,6 +444,7 @@ class MemoryEntries extends Table {
     SkillInstallations,
     RuntimeEnvironments,
     Workspaces,
+    Projects,
     WorkspaceCopies,
     ContextSummaries,
     ModelRequests,
@@ -424,37 +458,47 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
   /// schema 变更记录：
-  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话工作区与文件来源；11 MCP 按服务整体启用；12 Ubuntu 会话工作区结构；13 调用级权限判定与授权审计；14 后台命令任务与有界日志。
+  /// 1 初版契约；2 附件抽取错误；3 模型温度；4 MCP 配置与工具来源；5 Skills；6 Linux 环境与工作区；7 上下文、计划与记忆；8 请求用量与上下文检查点；9 会话权限模式与独立扩展启用集合；10 会话工作区与文件来源；11 MCP 按服务整体启用；12 Ubuntu 会话工作区结构；13 调用级权限判定与授权审计；14 后台命令任务与有界日志；15 项目与共享资料。
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onUpgrade: (migrator, from, to) async {
-      if (from < 10 || from > 13 || to != 14) {
+      if (from < 10 || from > 14 || to != 15) {
         throw const OperationFailure('此安装的数据结构不支持直接升级，请保留原数据');
       }
       // 重建被引用的表前关闭外键，事务内校验引用，提交后恢复约束。
       await customStatement('PRAGMA foreign_keys = OFF');
       try {
         await transaction(() async {
+          await migrator.createTable(projects);
           if (from == 10) await upgradeMcpServerScope(this);
           if (from < 12) await upgradeWorkspaceSchema(this, migrator);
           if (from < 13) {
             await migrator.addColumn(toolCalls, toolCalls.permissionJson);
           }
-          await migrator.createTable(commandTasks);
+          if (from < 14) await migrator.createTable(commandTasks);
+          await upgradeProjectSchema(this, migrator);
         });
       } finally {
         await customStatement('PRAGMA foreign_keys = ON');
       }
-      AppLogger.info('数据库 $from → 14 保数据升级已提交');
+      AppLogger.info('数据库 $from → 15 保数据升级已提交');
     },
     beforeOpen: _prepareDatabase,
   );
 
   /// 每次打开都确保外键与索引就绪（建表、升级后都会执行）。
   Future<void> _prepareDatabase(OpeningDetails details) async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_conversations_project '
+      'ON conversations (project_id, pinned DESC, updated_at DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_attachments_project '
+      'ON attachments (project_id, created_at)',
+    );
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_command_tasks_conversation '
       'ON command_tasks (conversation_id, created_at DESC)',

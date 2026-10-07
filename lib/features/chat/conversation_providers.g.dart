@@ -54,6 +54,48 @@ final class ConversationsProvider
 
 String _$conversationsHash() => r'2ac16e57c492917710a601ffe21e2efe7257c30a';
 
+@ProviderFor(standaloneConversations)
+final standaloneConversationsProvider = StandaloneConversationsProvider._();
+
+final class StandaloneConversationsProvider
+    extends
+        $FunctionalProvider<
+          AsyncValue<List<Conversation>>,
+          List<Conversation>,
+          Stream<List<Conversation>>
+        >
+    with
+        $FutureModifier<List<Conversation>>,
+        $StreamProvider<List<Conversation>> {
+  StandaloneConversationsProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'standaloneConversationsProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$standaloneConversationsHash();
+
+  @$internal
+  @override
+  $StreamProviderElement<List<Conversation>> $createElement(
+    $ProviderPointer pointer,
+  ) => $StreamProviderElement(pointer);
+
+  @override
+  Stream<List<Conversation>> create(Ref ref) {
+    return standaloneConversations(ref);
+  }
+}
+
+String _$standaloneConversationsHash() =>
+    r'5db89aeadb63d1157a73ee488a64412f3a9626c2';
+
 /// 某会话的当前分支视图。
 
 @ProviderFor(conversationThread)

@@ -19,6 +19,7 @@ class Attachment {
   const Attachment({
     required this.id,
     this.conversationId,
+    this.projectId,
     required this.kind,
     required this.name,
     required this.mimeType,
@@ -34,8 +35,9 @@ class Attachment {
 
   final String id;
 
-  /// 所属会话；选择附件时会话可能尚未创建，落库前必须认领。
+  /// 所属会话；项目资料在删除来源会话后仍由项目持有。
   final String? conversationId;
+  final String? projectId;
 
   final AttachmentKind kind;
   final String name;
@@ -68,6 +70,7 @@ class Attachment {
   Attachment withConversation(String conversationId) => Attachment(
     id: id,
     conversationId: this.conversationId ?? conversationId,
+    projectId: projectId,
     kind: kind,
     name: name,
     mimeType: mimeType,
@@ -90,6 +93,7 @@ class Attachment {
   }) => Attachment(
     id: id,
     conversationId: conversationId,
+    projectId: projectId,
     kind: kind,
     name: name,
     mimeType: mimeType,
@@ -107,6 +111,7 @@ class Attachment {
       Attachment(
         id: id,
         conversationId: conversationId,
+        projectId: projectId,
         kind: kind,
         name: name,
         mimeType: mimeType,

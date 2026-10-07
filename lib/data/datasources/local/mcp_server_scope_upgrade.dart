@@ -5,15 +5,23 @@ import 'app_database.dart';
 
 /// 仅本次获授权的 10 → 11 保数据安装，不改写历史运行的工具快照。
 Future<void> upgradeMcpServerScope(AppDatabase db) => db.transaction(() async {
+  final existingTables = {
+    for (final row
+        in await db
+            .customSelect("SELECT name FROM sqlite_master WHERE type = 'table'")
+            .get())
+      row.read<String>('name'),
+  };
   Future<Map<String, int>> rowCounts() async => {
     for (final table in db.allTables)
-      table.actualTableName:
-          (await db
-                  .customSelect(
-                    'SELECT COUNT(*) AS n FROM "${table.actualTableName}"',
-                  )
-                  .getSingle())
-              .read<int>('n'),
+      if (existingTables.contains(table.actualTableName))
+        table.actualTableName:
+            (await db
+                    .customSelect(
+                      'SELECT COUNT(*) AS n FROM "${table.actualTableName}"',
+                    )
+                    .getSingle())
+                .read<int>('n'),
   };
   final originalCounts = await rowCounts();
   final assistants = await db

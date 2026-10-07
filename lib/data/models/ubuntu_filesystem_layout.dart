@@ -5,16 +5,19 @@ class UbuntuFilesystemLayout {
   const UbuntuFilesystemLayout(this.linuxRoot);
 
   final String linuxRoot;
-  static const persistentRootNames = {'sessions', 'services'};
+  static const persistentRootNames = {'sessions', 'projects', 'services'};
 
   String get rootfs => p.join(linuxRoot, 'environments', 'ubuntu', 'rootfs');
   String get staging => p.join(linuxRoot, 'staging');
   String get sessions => p.join(rootfs, 'sessions');
+  String get projects => p.join(rootfs, 'projects');
   String get mcpServices => p.join(rootfs, 'services', 'mcp');
   String sessionDirectory(String id) => p.join(sessions, _id(id));
+  String projectDirectory(String id) => p.join(projects, _id(id));
   String mcpDirectory(String id) => p.join(mcpServices, _id(id));
 
   static String sessionGuestPath(String id) => '/sessions/${_id(id)}';
+  static String projectGuestPath(String id) => '/projects/${_id(id)}';
   static String mcpGuestPath(String id) => '/services/mcp/${_id(id)}';
 
   static String _id(String value) {

@@ -66,7 +66,7 @@ Future<ArtifactStorage> artifactStorage(Ref ref) async {
   final repository = await ref.watch(conversationRepositoryProvider.future);
   return ArtifactStorage(
     root: attachments.root,
-    loadAttachments: repository.attachmentsFor,
+    loadAttachments: repository.availableAttachmentsFor,
     saveAttachment: repository.saveAttachment,
   );
 }

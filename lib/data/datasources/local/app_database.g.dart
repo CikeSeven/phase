@@ -1831,6 +1831,16 @@ class $WorkspacesTable extends Workspaces
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  @override
+  late final GeneratedColumnWithTypeConverter<WorkspaceKind, String> kind =
+      GeneratedColumn<String>(
+        'kind',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: Constant(WorkspaceKind.session.name),
+      ).withConverter<WorkspaceKind>($WorkspacesTable.$converterkind);
   static const VerificationMeta _deletingMeta = const VerificationMeta(
     'deleting',
   );
@@ -1862,6 +1872,7 @@ class $WorkspacesTable extends Workspaces
     id,
     name,
     environmentId,
+    kind,
     deleting,
     createdAt,
   ];
@@ -1936,6 +1947,12 @@ class $WorkspacesTable extends Workspaces
         DriftSqlType.string,
         data['${effectivePrefix}environment_id'],
       )!,
+      kind: $WorkspacesTable.$converterkind.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}kind'],
+        )!,
+      ),
       deleting: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}deleting'],
@@ -1951,18 +1968,23 @@ class $WorkspacesTable extends Workspaces
   $WorkspacesTable createAlias(String alias) {
     return $WorkspacesTable(attachedDatabase, alias);
   }
+
+  static JsonTypeConverter2<WorkspaceKind, String, String> $converterkind =
+      const EnumNameConverter<WorkspaceKind>(WorkspaceKind.values);
 }
 
 class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   final String id;
   final String name;
   final String environmentId;
+  final WorkspaceKind kind;
   final bool deleting;
   final DateTime createdAt;
   const WorkspaceRow({
     required this.id,
     required this.name,
     required this.environmentId,
+    required this.kind,
     required this.deleting,
     required this.createdAt,
   });
@@ -1972,6 +1994,11 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['environment_id'] = Variable<String>(environmentId);
+    {
+      map['kind'] = Variable<String>(
+        $WorkspacesTable.$converterkind.toSql(kind),
+      );
+    }
     map['deleting'] = Variable<bool>(deleting);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -1982,6 +2009,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
       id: Value(id),
       name: Value(name),
       environmentId: Value(environmentId),
+      kind: Value(kind),
       deleting: Value(deleting),
       createdAt: Value(createdAt),
     );
@@ -1996,6 +2024,9 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       environmentId: serializer.fromJson<String>(json['environmentId']),
+      kind: $WorkspacesTable.$converterkind.fromJson(
+        serializer.fromJson<String>(json['kind']),
+      ),
       deleting: serializer.fromJson<bool>(json['deleting']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -2007,6 +2038,9 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'environmentId': serializer.toJson<String>(environmentId),
+      'kind': serializer.toJson<String>(
+        $WorkspacesTable.$converterkind.toJson(kind),
+      ),
       'deleting': serializer.toJson<bool>(deleting),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -2016,12 +2050,14 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
     String? id,
     String? name,
     String? environmentId,
+    WorkspaceKind? kind,
     bool? deleting,
     DateTime? createdAt,
   }) => WorkspaceRow(
     id: id ?? this.id,
     name: name ?? this.name,
     environmentId: environmentId ?? this.environmentId,
+    kind: kind ?? this.kind,
     deleting: deleting ?? this.deleting,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -2032,6 +2068,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
       environmentId: data.environmentId.present
           ? data.environmentId.value
           : this.environmentId,
+      kind: data.kind.present ? data.kind.value : this.kind,
       deleting: data.deleting.present ? data.deleting.value : this.deleting,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
@@ -2043,6 +2080,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('environmentId: $environmentId, ')
+          ..write('kind: $kind, ')
           ..write('deleting: $deleting, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -2050,7 +2088,8 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
   }
 
   @override
-  int get hashCode => Object.hash(id, name, environmentId, deleting, createdAt);
+  int get hashCode =>
+      Object.hash(id, name, environmentId, kind, deleting, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2058,6 +2097,7 @@ class WorkspaceRow extends DataClass implements Insertable<WorkspaceRow> {
           other.id == this.id &&
           other.name == this.name &&
           other.environmentId == this.environmentId &&
+          other.kind == this.kind &&
           other.deleting == this.deleting &&
           other.createdAt == this.createdAt);
 }
@@ -2066,6 +2106,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
   final Value<String> id;
   final Value<String> name;
   final Value<String> environmentId;
+  final Value<WorkspaceKind> kind;
   final Value<bool> deleting;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
@@ -2073,6 +2114,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.environmentId = const Value.absent(),
+    this.kind = const Value.absent(),
     this.deleting = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -2081,6 +2123,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
     required String id,
     required String name,
     required String environmentId,
+    this.kind = const Value.absent(),
     this.deleting = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
@@ -2092,6 +2135,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<String>? environmentId,
+    Expression<String>? kind,
     Expression<bool>? deleting,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
@@ -2100,6 +2144,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (environmentId != null) 'environment_id': environmentId,
+      if (kind != null) 'kind': kind,
       if (deleting != null) 'deleting': deleting,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
@@ -2110,6 +2155,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
     Value<String>? id,
     Value<String>? name,
     Value<String>? environmentId,
+    Value<WorkspaceKind>? kind,
     Value<bool>? deleting,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
@@ -2118,6 +2164,7 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
       id: id ?? this.id,
       name: name ?? this.name,
       environmentId: environmentId ?? this.environmentId,
+      kind: kind ?? this.kind,
       deleting: deleting ?? this.deleting,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
@@ -2135,6 +2182,11 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
     }
     if (environmentId.present) {
       map['environment_id'] = Variable<String>(environmentId.value);
+    }
+    if (kind.present) {
+      map['kind'] = Variable<String>(
+        $WorkspacesTable.$converterkind.toSql(kind.value),
+      );
     }
     if (deleting.present) {
       map['deleting'] = Variable<bool>(deleting.value);
@@ -2154,7 +2206,328 @@ class WorkspacesCompanion extends UpdateCompanion<WorkspaceRow> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('environmentId: $environmentId, ')
+          ..write('kind: $kind, ')
           ..write('deleting: $deleting, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $ProjectsTable extends Projects
+    with TableInfo<$ProjectsTable, ProjectRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $ProjectsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    additionalChecks: GeneratedColumn.checkTextLength(
+      minTextLength: 1,
+      maxTextLength: 100,
+    ),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
+    'workspaceId',
+  );
+  @override
+  late final GeneratedColumn<String> workspaceId = GeneratedColumn<String>(
+    'workspace_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'UNIQUE REFERENCES workspaces (id) ON DELETE RESTRICT',
+    ),
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, workspaceId, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'projects';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<ProjectRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('workspace_id')) {
+      context.handle(
+        _workspaceIdMeta,
+        workspaceId.isAcceptableOrUnknown(
+          data['workspace_id']!,
+          _workspaceIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_workspaceIdMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  ProjectRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return ProjectRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      workspaceId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}workspace_id'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $ProjectsTable createAlias(String alias) {
+    return $ProjectsTable(attachedDatabase, alias);
+  }
+}
+
+class ProjectRow extends DataClass implements Insertable<ProjectRow> {
+  final String id;
+  final String name;
+  final String workspaceId;
+  final DateTime createdAt;
+  const ProjectRow({
+    required this.id,
+    required this.name,
+    required this.workspaceId,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['workspace_id'] = Variable<String>(workspaceId);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  ProjectsCompanion toCompanion(bool nullToAbsent) {
+    return ProjectsCompanion(
+      id: Value(id),
+      name: Value(name),
+      workspaceId: Value(workspaceId),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory ProjectRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return ProjectRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      workspaceId: serializer.fromJson<String>(json['workspaceId']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'workspaceId': serializer.toJson<String>(workspaceId),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  ProjectRow copyWith({
+    String? id,
+    String? name,
+    String? workspaceId,
+    DateTime? createdAt,
+  }) => ProjectRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    workspaceId: workspaceId ?? this.workspaceId,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  ProjectRow copyWithCompanion(ProjectsCompanion data) {
+    return ProjectRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      workspaceId: data.workspaceId.present
+          ? data.workspaceId.value
+          : this.workspaceId,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('workspaceId: $workspaceId, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, workspaceId, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is ProjectRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.workspaceId == this.workspaceId &&
+          other.createdAt == this.createdAt);
+}
+
+class ProjectsCompanion extends UpdateCompanion<ProjectRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<String> workspaceId;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const ProjectsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.workspaceId = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  ProjectsCompanion.insert({
+    required String id,
+    required String name,
+    required String workspaceId,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       workspaceId = Value(workspaceId),
+       createdAt = Value(createdAt);
+  static Insertable<ProjectRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<String>? workspaceId,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (workspaceId != null) 'workspace_id': workspaceId,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  ProjectsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<String>? workspaceId,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return ProjectsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      workspaceId: workspaceId ?? this.workspaceId,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (workspaceId.present) {
+      map['workspace_id'] = Variable<String>(workspaceId.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('ProjectsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('workspaceId: $workspaceId, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -2168,6 +2541,20 @@ class $ConversationsTable extends Conversations
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
   $ConversationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE RESTRICT',
+    ),
+  );
   static const VerificationMeta _workspaceIdMeta = const VerificationMeta(
     'workspaceId',
   );
@@ -2297,6 +2684,7 @@ class $ConversationsTable extends Conversations
   );
   @override
   List<GeneratedColumn> get $columns => [
+    projectId,
     workspaceId,
     id,
     assistantId,
@@ -2321,6 +2709,12 @@ class $ConversationsTable extends Conversations
   }) {
     final context = VerificationContext();
     final data = instance.toColumns(true);
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
     if (data.containsKey('workspace_id')) {
       context.handle(
         _workspaceIdMeta,
@@ -2401,6 +2795,10 @@ class $ConversationsTable extends Conversations
   ConversationRow map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return ConversationRow(
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
       workspaceId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}workspace_id'],
@@ -2469,6 +2867,7 @@ class $ConversationsTable extends Conversations
 }
 
 class ConversationRow extends DataClass implements Insertable<ConversationRow> {
+  final String? projectId;
   final String? workspaceId;
   final String id;
 
@@ -2485,6 +2884,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   final DateTime createdAt;
   final DateTime updatedAt;
   const ConversationRow({
+    this.projectId,
     this.workspaceId,
     required this.id,
     this.assistantId,
@@ -2500,6 +2900,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
     if (!nullToAbsent || workspaceId != null) {
       map['workspace_id'] = Variable<String>(workspaceId);
     }
@@ -2534,6 +2937,9 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   ConversationsCompanion toCompanion(bool nullToAbsent) {
     return ConversationsCompanion(
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
       workspaceId: workspaceId == null && nullToAbsent
           ? const Value.absent()
           : Value(workspaceId),
@@ -2562,6 +2968,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return ConversationRow(
+      projectId: serializer.fromJson<String?>(json['projectId']),
       workspaceId: serializer.fromJson<String?>(json['workspaceId']),
       id: serializer.fromJson<String>(json['id']),
       assistantId: serializer.fromJson<String?>(json['assistantId']),
@@ -2582,6 +2989,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   Map<String, dynamic> toJson({ValueSerializer? serializer}) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
+      'projectId': serializer.toJson<String?>(projectId),
       'workspaceId': serializer.toJson<String?>(workspaceId),
       'id': serializer.toJson<String>(id),
       'assistantId': serializer.toJson<String?>(assistantId),
@@ -2603,6 +3011,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   }
 
   ConversationRow copyWith({
+    Value<String?> projectId = const Value.absent(),
     Value<String?> workspaceId = const Value.absent(),
     String? id,
     Value<String?> assistantId = const Value.absent(),
@@ -2615,6 +3024,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => ConversationRow(
+    projectId: projectId.present ? projectId.value : this.projectId,
     workspaceId: workspaceId.present ? workspaceId.value : this.workspaceId,
     id: id ?? this.id,
     assistantId: assistantId.present ? assistantId.value : this.assistantId,
@@ -2633,6 +3043,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   );
   ConversationRow copyWithCompanion(ConversationsCompanion data) {
     return ConversationRow(
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
       workspaceId: data.workspaceId.present
           ? data.workspaceId.value
           : this.workspaceId,
@@ -2662,6 +3073,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   @override
   String toString() {
     return (StringBuffer('ConversationRow(')
+          ..write('projectId: $projectId, ')
           ..write('workspaceId: $workspaceId, ')
           ..write('id: $id, ')
           ..write('assistantId: $assistantId, ')
@@ -2679,6 +3091,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 
   @override
   int get hashCode => Object.hash(
+    projectId,
     workspaceId,
     id,
     assistantId,
@@ -2695,6 +3108,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is ConversationRow &&
+          other.projectId == this.projectId &&
           other.workspaceId == this.workspaceId &&
           other.id == this.id &&
           other.assistantId == this.assistantId &&
@@ -2709,6 +3123,7 @@ class ConversationRow extends DataClass implements Insertable<ConversationRow> {
 }
 
 class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
+  final Value<String?> projectId;
   final Value<String?> workspaceId;
   final Value<String> id;
   final Value<String?> assistantId;
@@ -2722,6 +3137,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
   const ConversationsCompanion({
+    this.projectId = const Value.absent(),
     this.workspaceId = const Value.absent(),
     this.id = const Value.absent(),
     this.assistantId = const Value.absent(),
@@ -2736,6 +3152,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     this.rowid = const Value.absent(),
   });
   ConversationsCompanion.insert({
+    this.projectId = const Value.absent(),
     this.workspaceId = const Value.absent(),
     required String id,
     this.assistantId = const Value.absent(),
@@ -2753,6 +3170,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
        createdAt = Value(createdAt),
        updatedAt = Value(updatedAt);
   static Insertable<ConversationRow> custom({
+    Expression<String>? projectId,
     Expression<String>? workspaceId,
     Expression<String>? id,
     Expression<String>? assistantId,
@@ -2767,6 +3185,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
+      if (projectId != null) 'project_id': projectId,
       if (workspaceId != null) 'workspace_id': workspaceId,
       if (id != null) 'id': id,
       if (assistantId != null) 'assistant_id': assistantId,
@@ -2783,6 +3202,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   }
 
   ConversationsCompanion copyWith({
+    Value<String?>? projectId,
     Value<String?>? workspaceId,
     Value<String>? id,
     Value<String?>? assistantId,
@@ -2797,6 +3217,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
     Value<int>? rowid,
   }) {
     return ConversationsCompanion(
+      projectId: projectId ?? this.projectId,
       workspaceId: workspaceId ?? this.workspaceId,
       id: id ?? this.id,
       assistantId: assistantId ?? this.assistantId,
@@ -2815,6 +3236,9 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
     if (workspaceId.present) {
       map['workspace_id'] = Variable<String>(workspaceId.value);
     }
@@ -2865,6 +3289,7 @@ class ConversationsCompanion extends UpdateCompanion<ConversationRow> {
   @override
   String toString() {
     return (StringBuffer('ConversationsCompanion(')
+          ..write('projectId: $projectId, ')
           ..write('workspaceId: $workspaceId, ')
           ..write('id: $id, ')
           ..write('assistantId: $assistantId, ')
@@ -3538,11 +3963,25 @@ class $AttachmentsTable extends Attachments
   late final GeneratedColumn<String> conversationId = GeneratedColumn<String>(
     'conversation_id',
     aliasedName,
-    false,
+    true,
     type: DriftSqlType.string,
-    requiredDuringInsert: true,
+    requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'REFERENCES conversations (id) ON DELETE CASCADE',
+      'REFERENCES conversations (id) ON DELETE SET NULL',
+    ),
+  );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES projects (id) ON DELETE RESTRICT',
     ),
   );
   static const VerificationMeta _kindMeta = const VerificationMeta('kind');
@@ -3659,6 +4098,7 @@ class $AttachmentsTable extends Attachments
   List<GeneratedColumn> get $columns => [
     id,
     conversationId,
+    projectId,
     kind,
     name,
     mimeType,
@@ -3696,8 +4136,12 @@ class $AttachmentsTable extends Attachments
           _conversationIdMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_conversationIdMeta);
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
     }
     if (data.containsKey('kind')) {
       context.handle(
@@ -3799,7 +4243,11 @@ class $AttachmentsTable extends Attachments
       conversationId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}conversation_id'],
-      )!,
+      ),
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
       kind: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}kind'],
@@ -3855,7 +4303,8 @@ class $AttachmentsTable extends Attachments
 
 class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
   final String id;
-  final String conversationId;
+  final String? conversationId;
+  final String? projectId;
   final String kind;
   final String name;
   final String mimeType;
@@ -3871,7 +4320,8 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
   final DateTime createdAt;
   const AttachmentRow({
     required this.id,
-    required this.conversationId,
+    this.conversationId,
+    this.projectId,
     required this.kind,
     required this.name,
     required this.mimeType,
@@ -3888,7 +4338,12 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
-    map['conversation_id'] = Variable<String>(conversationId);
+    if (!nullToAbsent || conversationId != null) {
+      map['conversation_id'] = Variable<String>(conversationId);
+    }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
     map['kind'] = Variable<String>(kind);
     map['name'] = Variable<String>(name);
     map['mime_type'] = Variable<String>(mimeType);
@@ -3913,10 +4368,15 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     return map;
   }
 
-  AttachmentsCompanion toCompanion(bool nullToAbsent) {
-    return AttachmentsCompanion(
+  AttachmentChanges toCompanion(bool nullToAbsent) {
+    return AttachmentChanges(
       id: Value(id),
-      conversationId: Value(conversationId),
+      conversationId: conversationId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(conversationId),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
       kind: Value(kind),
       name: Value(name),
       mimeType: Value(mimeType),
@@ -3948,7 +4408,8 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return AttachmentRow(
       id: serializer.fromJson<String>(json['id']),
-      conversationId: serializer.fromJson<String>(json['conversationId']),
+      conversationId: serializer.fromJson<String?>(json['conversationId']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
       kind: serializer.fromJson<String>(json['kind']),
       name: serializer.fromJson<String>(json['name']),
       mimeType: serializer.fromJson<String>(json['mimeType']),
@@ -3969,7 +4430,8 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     serializer ??= driftRuntimeOptions.defaultSerializer;
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
-      'conversationId': serializer.toJson<String>(conversationId),
+      'conversationId': serializer.toJson<String?>(conversationId),
+      'projectId': serializer.toJson<String?>(projectId),
       'kind': serializer.toJson<String>(kind),
       'name': serializer.toJson<String>(name),
       'mimeType': serializer.toJson<String>(mimeType),
@@ -3986,7 +4448,8 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
 
   AttachmentRow copyWith({
     String? id,
-    String? conversationId,
+    Value<String?> conversationId = const Value.absent(),
+    Value<String?> projectId = const Value.absent(),
     String? kind,
     String? name,
     String? mimeType,
@@ -4000,7 +4463,10 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     DateTime? createdAt,
   }) => AttachmentRow(
     id: id ?? this.id,
-    conversationId: conversationId ?? this.conversationId,
+    conversationId: conversationId.present
+        ? conversationId.value
+        : this.conversationId,
+    projectId: projectId.present ? projectId.value : this.projectId,
     kind: kind ?? this.kind,
     name: name ?? this.name,
     mimeType: mimeType ?? this.mimeType,
@@ -4017,12 +4483,13 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     height: height.present ? height.value : this.height,
     createdAt: createdAt ?? this.createdAt,
   );
-  AttachmentRow copyWithCompanion(AttachmentsCompanion data) {
+  AttachmentRow copyWithCompanion(AttachmentChanges data) {
     return AttachmentRow(
       id: data.id.present ? data.id.value : this.id,
       conversationId: data.conversationId.present
           ? data.conversationId.value
           : this.conversationId,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
       kind: data.kind.present ? data.kind.value : this.kind,
       name: data.name.present ? data.name.value : this.name,
       mimeType: data.mimeType.present ? data.mimeType.value : this.mimeType,
@@ -4046,6 +4513,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
     return (StringBuffer('AttachmentRow(')
           ..write('id: $id, ')
           ..write('conversationId: $conversationId, ')
+          ..write('projectId: $projectId, ')
           ..write('kind: $kind, ')
           ..write('name: $name, ')
           ..write('mimeType: $mimeType, ')
@@ -4065,6 +4533,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
   int get hashCode => Object.hash(
     id,
     conversationId,
+    projectId,
     kind,
     name,
     mimeType,
@@ -4083,6 +4552,7 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
       (other is AttachmentRow &&
           other.id == this.id &&
           other.conversationId == this.conversationId &&
+          other.projectId == this.projectId &&
           other.kind == this.kind &&
           other.name == this.name &&
           other.mimeType == this.mimeType &&
@@ -4096,9 +4566,10 @@ class AttachmentRow extends DataClass implements Insertable<AttachmentRow> {
           other.createdAt == this.createdAt);
 }
 
-class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
+class AttachmentChanges extends UpdateCompanion<AttachmentRow> {
   final Value<String> id;
-  final Value<String> conversationId;
+  final Value<String?> conversationId;
+  final Value<String?> projectId;
   final Value<String> kind;
   final Value<String> name;
   final Value<String> mimeType;
@@ -4111,9 +4582,10 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
   final Value<int?> height;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
-  const AttachmentsCompanion({
+  const AttachmentChanges({
     this.id = const Value.absent(),
     this.conversationId = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.kind = const Value.absent(),
     this.name = const Value.absent(),
     this.mimeType = const Value.absent(),
@@ -4127,9 +4599,10 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  AttachmentsCompanion.insert({
+  AttachmentChanges.insert({
     required String id,
-    required String conversationId,
+    this.conversationId = const Value.absent(),
+    this.projectId = const Value.absent(),
     required String kind,
     required String name,
     required String mimeType,
@@ -4143,7 +4616,6 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
-       conversationId = Value(conversationId),
        kind = Value(kind),
        name = Value(name),
        mimeType = Value(mimeType),
@@ -4153,6 +4625,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
   static Insertable<AttachmentRow> custom({
     Expression<String>? id,
     Expression<String>? conversationId,
+    Expression<String>? projectId,
     Expression<String>? kind,
     Expression<String>? name,
     Expression<String>? mimeType,
@@ -4169,6 +4642,7 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (conversationId != null) 'conversation_id': conversationId,
+      if (projectId != null) 'project_id': projectId,
       if (kind != null) 'kind': kind,
       if (name != null) 'name': name,
       if (mimeType != null) 'mime_type': mimeType,
@@ -4184,9 +4658,10 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     });
   }
 
-  AttachmentsCompanion copyWith({
+  AttachmentChanges copyWith({
     Value<String>? id,
-    Value<String>? conversationId,
+    Value<String?>? conversationId,
+    Value<String?>? projectId,
     Value<String>? kind,
     Value<String>? name,
     Value<String>? mimeType,
@@ -4200,9 +4675,10 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
-    return AttachmentsCompanion(
+    return AttachmentChanges(
       id: id ?? this.id,
       conversationId: conversationId ?? this.conversationId,
+      projectId: projectId ?? this.projectId,
       kind: kind ?? this.kind,
       name: name ?? this.name,
       mimeType: mimeType ?? this.mimeType,
@@ -4226,6 +4702,9 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
     }
     if (conversationId.present) {
       map['conversation_id'] = Variable<String>(conversationId.value);
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
     }
     if (kind.present) {
       map['kind'] = Variable<String>(kind.value);
@@ -4268,9 +4747,10 @@ class AttachmentsCompanion extends UpdateCompanion<AttachmentRow> {
 
   @override
   String toString() {
-    return (StringBuffer('AttachmentsCompanion(')
+    return (StringBuffer('AttachmentChanges(')
           ..write('id: $id, ')
           ..write('conversationId: $conversationId, ')
+          ..write('projectId: $projectId, ')
           ..write('kind: $kind, ')
           ..write('name: $name, ')
           ..write('mimeType: $mimeType, ')
@@ -11909,6 +12389,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $ModelsTable models = $ModelsTable(this);
   late final $AssistantsTable assistants = $AssistantsTable(this);
   late final $WorkspacesTable workspaces = $WorkspacesTable(this);
+  late final $ProjectsTable projects = $ProjectsTable(this);
   late final $ConversationsTable conversations = $ConversationsTable(this);
   late final $MessagesTable messages = $MessagesTable(this);
   late final $AttachmentsTable attachments = $AttachmentsTable(this);
@@ -11939,6 +12420,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     models,
     assistants,
     workspaces,
+    projects,
     conversations,
     messages,
     attachments,
@@ -11983,7 +12465,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
         'conversations',
         limitUpdateKind: UpdateKind.delete,
       ),
-      result: [TableUpdate('attachments', kind: UpdateKind.delete)],
+      result: [TableUpdate('attachments', kind: UpdateKind.update)],
     ),
     WritePropagation(
       on: TableUpdateQuery.onTableName(
@@ -13149,6 +13631,7 @@ typedef $$WorkspacesTableCreateCompanionBuilder = WorkspacesCompanion Function({
   required String id,
   required String name,
   required String environmentId,
+  Value<WorkspaceKind> kind,
   Value<bool> deleting,
   required DateTime createdAt,
   Value<int> rowid,
@@ -13157,6 +13640,7 @@ typedef $$WorkspacesTableUpdateCompanionBuilder = WorkspacesCompanion Function({
   Value<String> id,
   Value<String> name,
   Value<String> environmentId,
+  Value<WorkspaceKind> kind,
   Value<bool> deleting,
   Value<DateTime> createdAt,
   Value<int> rowid,
@@ -13165,6 +13649,24 @@ typedef $$WorkspacesTableUpdateCompanionBuilder = WorkspacesCompanion Function({
 final class $$WorkspacesTableReferences
     extends BaseReferences<_$AppDatabase, $WorkspacesTable, WorkspaceRow> {
   $$WorkspacesTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static MultiTypedResultKey<$ProjectsTable, List<ProjectRow>>
+  _projectsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.projects,
+    aliasName: 'workspaces__id__projects__workspace_id',
+  );
+
+  $$ProjectsTableProcessedTableManager get projectsRefs {
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.workspaceId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_projectsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
 
   static MultiTypedResultKey<$ConversationsTable, List<ConversationRow>>
   _conversationsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
@@ -13247,6 +13749,12 @@ class $$WorkspacesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnWithTypeConverterFilters<WorkspaceKind, WorkspaceKind, String>
+  get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
+  );
+
   ColumnFilters<bool> get deleting => $composableBuilder(
     column: $table.deleting,
     builder: (column) => ColumnFilters(column),
@@ -13256,6 +13764,31 @@ class $$WorkspacesTableFilterComposer
     column: $table.createdAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  Expression<bool> projectsRefs(
+    Expression<bool> Function($$ProjectsTableFilterComposer f) f,
+  ) {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 
   Expression<bool> conversationsRefs(
     Expression<bool> Function($$ConversationsTableFilterComposer f) f,
@@ -13357,6 +13890,11 @@ class $$WorkspacesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get deleting => $composableBuilder(
     column: $table.deleting,
     builder: (column) => ColumnOrderings(column),
@@ -13388,11 +13926,39 @@ class $$WorkspacesTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumnWithTypeConverter<WorkspaceKind, String> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
   GeneratedColumn<bool> get deleting =>
       $composableBuilder(column: $table.deleting, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  Expression<T> projectsRefs<T extends Object>(
+    Expression<T> Function($$ProjectsTableAnnotationComposer a) f,
+  ) {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.workspaceId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
 
   Expression<T> conversationsRefs<T extends Object>(
     Expression<T> Function($$ConversationsTableAnnotationComposer a) f,
@@ -13484,6 +14050,7 @@ class $$WorkspacesTableTableManager
           (WorkspaceRow, $$WorkspacesTableReferences),
           WorkspaceRow,
           PrefetchHooks Function({
+            bool projectsRefs,
             bool conversationsRefs,
             bool workspaceCopiesRefs,
             bool commandTasksRefs,
@@ -13505,6 +14072,7 @@ class $$WorkspacesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> environmentId = const Value.absent(),
+                Value<WorkspaceKind> kind = const Value.absent(),
                 Value<bool> deleting = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -13512,6 +14080,7 @@ class $$WorkspacesTableTableManager
                 id: id,
                 name: name,
                 environmentId: environmentId,
+                kind: kind,
                 deleting: deleting,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -13521,6 +14090,7 @@ class $$WorkspacesTableTableManager
                 required String id,
                 required String name,
                 required String environmentId,
+                Value<WorkspaceKind> kind = const Value.absent(),
                 Value<bool> deleting = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
@@ -13528,6 +14098,7 @@ class $$WorkspacesTableTableManager
                 id: id,
                 name: name,
                 environmentId: environmentId,
+                kind: kind,
                 deleting: deleting,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -13542,6 +14113,7 @@ class $$WorkspacesTableTableManager
               .toList(),
           prefetchHooksCallback:
               ({
+                projectsRefs = false,
                 conversationsRefs = false,
                 workspaceCopiesRefs = false,
                 commandTasksRefs = false,
@@ -13549,6 +14121,7 @@ class $$WorkspacesTableTableManager
                 return PrefetchHooks(
                   db: db,
                   explicitlyWatchedTables: [
+                    if (projectsRefs) db.projects,
                     if (conversationsRefs) db.conversations,
                     if (workspaceCopiesRefs) db.workspaceCopies,
                     if (commandTasksRefs) db.commandTasks,
@@ -13556,6 +14129,27 @@ class $$WorkspacesTableTableManager
                   addJoins: null,
                   getPrefetchedDataCallback: (items) async {
                     return [
+                      if (projectsRefs)
+                        await $_getPrefetchedData<
+                          WorkspaceRow,
+                          $WorkspacesTable,
+                          ProjectRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$WorkspacesTableReferences
+                              ._projectsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$WorkspacesTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).projectsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.workspaceId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
                       if (conversationsRefs)
                         await $_getPrefetchedData<
                           WorkspaceRow,
@@ -13640,13 +14234,504 @@ typedef $$WorkspacesTableProcessedTableManager =
       (WorkspaceRow, $$WorkspacesTableReferences),
       WorkspaceRow,
       PrefetchHooks Function({
+        bool projectsRefs,
         bool conversationsRefs,
         bool workspaceCopiesRefs,
         bool commandTasksRefs,
       })
     >;
+typedef $$ProjectsTableCreateCompanionBuilder = ProjectsCompanion Function({
+  required String id,
+  required String name,
+  required String workspaceId,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$ProjectsTableUpdateCompanionBuilder = ProjectsCompanion Function({
+  Value<String> id,
+  Value<String> name,
+  Value<String> workspaceId,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
+
+final class $$ProjectsTableReferences
+    extends BaseReferences<_$AppDatabase, $ProjectsTable, ProjectRow> {
+  $$ProjectsTableReferences(super.$_db, super.$_table, super.$_typedResult);
+
+  static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
+      db.workspaces.createAlias('projects__workspace_id__workspaces__id');
+
+  $$WorkspacesTableProcessedTableManager get workspaceId {
+    final $_column = $_itemColumn<String>('workspace_id')!;
+
+    final manager = $$WorkspacesTableTableManager(
+      $_db,
+      $_db.workspaces,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_workspaceIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static MultiTypedResultKey<$ConversationsTable, List<ConversationRow>>
+  _conversationsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.conversations,
+    aliasName: 'projects__id__conversations__project_id',
+  );
+
+  $$ConversationsTableProcessedTableManager get conversationsRefs {
+    final manager = $$ConversationsTableTableManager(
+      $_db,
+      $_db.conversations,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_conversationsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+
+  static MultiTypedResultKey<$AttachmentsTable, List<AttachmentRow>>
+  _attachmentsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
+    db.attachments,
+    aliasName: 'projects__id__attachments__project_id',
+  );
+
+  $$AttachmentsTableProcessedTableManager get attachmentsRefs {
+    final manager = $$AttachmentsTableTableManager(
+      $_db,
+      $_db.attachments,
+    ).filter((f) => f.projectId.id.sqlEquals($_itemColumn<String>('id')!));
+
+    final cache = $_typedResult.readTableOrNull(_attachmentsRefsTable($_db));
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: cache),
+    );
+  }
+}
+
+class $$ProjectsTableFilterComposer
+    extends Composer<_$AppDatabase, $ProjectsTable> {
+  $$ProjectsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  $$WorkspacesTableFilterComposer get workspaceId {
+    final $$WorkspacesTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableFilterComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<bool> conversationsRefs(
+    Expression<bool> Function($$ConversationsTableFilterComposer f) f,
+  ) {
+    final $$ConversationsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableFilterComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<bool> attachmentsRefs(
+    Expression<bool> Function($$AttachmentsTableFilterComposer f) f,
+  ) {
+    final $$AttachmentsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.attachments,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AttachmentsTableFilterComposer(
+            $db: $db,
+            $table: $db.attachments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$ProjectsTableOrderingComposer
+    extends Composer<_$AppDatabase, $ProjectsTable> {
+  $$ProjectsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  $$WorkspacesTableOrderingComposer get workspaceId {
+    final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableOrderingComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+}
+
+class $$ProjectsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $ProjectsTable> {
+  $$ProjectsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  $$WorkspacesTableAnnotationComposer get workspaceId {
+    final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.workspaceId,
+      referencedTable: $db.workspaces,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$WorkspacesTableAnnotationComposer(
+            $db: $db,
+            $table: $db.workspaces,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  Expression<T> conversationsRefs<T extends Object>(
+    Expression<T> Function($$ConversationsTableAnnotationComposer a) f,
+  ) {
+    final $$ConversationsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.conversations,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ConversationsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+
+  Expression<T> attachmentsRefs<T extends Object>(
+    Expression<T> Function($$AttachmentsTableAnnotationComposer a) f,
+  ) {
+    final $$AttachmentsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.id,
+      referencedTable: $db.attachments,
+      getReferencedColumn: (t) => t.projectId,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AttachmentsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.attachments,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return f(composer);
+  }
+}
+
+class $$ProjectsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $ProjectsTable,
+          ProjectRow,
+          $$ProjectsTableFilterComposer,
+          $$ProjectsTableOrderingComposer,
+          $$ProjectsTableAnnotationComposer,
+          $$ProjectsTableCreateCompanionBuilder,
+          $$ProjectsTableUpdateCompanionBuilder,
+          (ProjectRow, $$ProjectsTableReferences),
+          ProjectRow,
+          PrefetchHooks Function({
+            bool workspaceId,
+            bool conversationsRefs,
+            bool attachmentsRefs,
+          })
+        > {
+  $$ProjectsTableTableManager(_$AppDatabase db, $ProjectsTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$ProjectsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$ProjectsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$ProjectsTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<String> workspaceId = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => ProjectsCompanion(
+                id: id,
+                name: name,
+                workspaceId: workspaceId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required String workspaceId,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => ProjectsCompanion.insert(
+                id: id,
+                name: name,
+                workspaceId: workspaceId,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$ProjectsTable, ProjectRow>(table),
+                  $$ProjectsTableReferences(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback:
+              ({
+                workspaceId = false,
+                conversationsRefs = false,
+                attachmentsRefs = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [
+                    if (conversationsRefs) db.conversations,
+                    if (attachmentsRefs) db.attachments,
+                  ],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (workspaceId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.workspaceId,
+                            referencedTable: $$ProjectsTableReferences
+                                ._workspaceIdTable(db),
+                            referencedColumn: $$ProjectsTableReferences
+                                ._workspaceIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [
+                      if (conversationsRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          ConversationRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._conversationsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).conversationsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                      if (attachmentsRefs)
+                        await $_getPrefetchedData<
+                          ProjectRow,
+                          $ProjectsTable,
+                          AttachmentRow
+                        >(
+                          currentTable: table,
+                          referencedTable: $$ProjectsTableReferences
+                              ._attachmentsRefsTable(db),
+                          managerFromTypedResult: (p0) =>
+                              $$ProjectsTableReferences(
+                                db,
+                                table,
+                                p0,
+                              ).attachmentsRefs,
+                          referencedItemsForCurrentItem:
+                              (item, referencedItems) => referencedItems.where(
+                                (e) => e.projectId == item.id,
+                              ),
+                          typedResults: items,
+                        ),
+                    ];
+                  },
+                );
+              },
+        ),
+      );
+}
+
+typedef $$ProjectsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $ProjectsTable,
+      ProjectRow,
+      $$ProjectsTableFilterComposer,
+      $$ProjectsTableOrderingComposer,
+      $$ProjectsTableAnnotationComposer,
+      $$ProjectsTableCreateCompanionBuilder,
+      $$ProjectsTableUpdateCompanionBuilder,
+      (ProjectRow, $$ProjectsTableReferences),
+      ProjectRow,
+      PrefetchHooks Function({
+        bool workspaceId,
+        bool conversationsRefs,
+        bool attachmentsRefs,
+      })
+    >;
 typedef $$ConversationsTableCreateCompanionBuilder =
     ConversationsCompanion Function({
+      Value<String?> projectId,
       Value<String?> workspaceId,
       required String id,
       Value<String?> assistantId,
@@ -13662,6 +14747,7 @@ typedef $$ConversationsTableCreateCompanionBuilder =
     });
 typedef $$ConversationsTableUpdateCompanionBuilder =
     ConversationsCompanion Function({
+      Value<String?> projectId,
       Value<String?> workspaceId,
       Value<String> id,
       Value<String?> assistantId,
@@ -13684,6 +14770,23 @@ final class $$ConversationsTableReferences
     super.$_table,
     super.$_typedResult,
   );
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias('conversations__project_id__projects__id');
+
+  $$ProjectsTableProcessedTableManager? get projectId {
+    final $_column = $_itemColumn<String>('project_id');
+    if ($_column == null) return null;
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 
   static $WorkspacesTable _workspaceIdTable(_$AppDatabase db) =>
       db.workspaces.createAlias('conversations__workspace_id__workspaces__id');
@@ -13909,6 +15012,29 @@ class $$ConversationsTableFilterComposer
     column: $table.updatedAt,
     builder: (column) => ColumnFilters(column),
   );
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   $$WorkspacesTableFilterComposer get workspaceId {
     final $$WorkspacesTableFilterComposer composer = $composerBuilder(
@@ -14193,6 +15319,29 @@ class $$ConversationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
   $$WorkspacesTableOrderingComposer get workspaceId {
     final $$WorkspacesTableOrderingComposer composer = $composerBuilder(
       composer: this,
@@ -14267,6 +15416,29 @@ class $$ConversationsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get updatedAt =>
       $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 
   $$WorkspacesTableAnnotationComposer get workspaceId {
     final $$WorkspacesTableAnnotationComposer composer = $composerBuilder(
@@ -14506,6 +15678,7 @@ class $$ConversationsTableTableManager
           (ConversationRow, $$ConversationsTableReferences),
           ConversationRow,
           PrefetchHooks Function({
+            bool projectId,
             bool workspaceId,
             bool messagesRefs,
             bool attachmentsRefs,
@@ -14530,6 +15703,7 @@ class $$ConversationsTableTableManager
               $$ConversationsTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
+                Value<String?> projectId = const Value.absent(),
                 Value<String?> workspaceId = const Value.absent(),
                 Value<String> id = const Value.absent(),
                 Value<String?> assistantId = const Value.absent(),
@@ -14543,6 +15717,7 @@ class $$ConversationsTableTableManager
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion(
+                projectId: projectId,
                 workspaceId: workspaceId,
                 id: id,
                 assistantId: assistantId,
@@ -14558,6 +15733,7 @@ class $$ConversationsTableTableManager
               ),
           createCompanionCallback:
               ({
+                Value<String?> projectId = const Value.absent(),
                 Value<String?> workspaceId = const Value.absent(),
                 required String id,
                 Value<String?> assistantId = const Value.absent(),
@@ -14571,6 +15747,7 @@ class $$ConversationsTableTableManager
                 required DateTime updatedAt,
                 Value<int> rowid = const Value.absent(),
               }) => ConversationsCompanion.insert(
+                projectId: projectId,
                 workspaceId: workspaceId,
                 id: id,
                 assistantId: assistantId,
@@ -14594,6 +15771,7 @@ class $$ConversationsTableTableManager
               .toList(),
           prefetchHooksCallback:
               ({
+                projectId = false,
                 workspaceId = false,
                 messagesRefs = false,
                 attachmentsRefs = false,
@@ -14632,6 +15810,17 @@ class $$ConversationsTableTableManager
                           dynamic
                         >
                       >(state) {
+                        if (projectId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.projectId,
+                            referencedTable: $$ConversationsTableReferences
+                                ._projectIdTable(db),
+                            referencedColumn: $$ConversationsTableReferences
+                                ._projectIdTable(db)
+                                .id,
+                          ) as T;
+                        }
                         if (workspaceId) {
                           state = state.withJoin(
                             currentTable: table,
@@ -14837,6 +16026,7 @@ typedef $$ConversationsTableProcessedTableManager =
       (ConversationRow, $$ConversationsTableReferences),
       ConversationRow,
       PrefetchHooks Function({
+        bool projectId,
         bool workspaceId,
         bool messagesRefs,
         bool attachmentsRefs,
@@ -15263,40 +16453,40 @@ typedef $$MessagesTableProcessedTableManager =
       MessageRow,
       PrefetchHooks Function({bool conversationId})
     >;
-typedef $$AttachmentsTableCreateCompanionBuilder =
-    AttachmentsCompanion Function({
-      required String id,
-      required String conversationId,
-      required String kind,
-      required String name,
-      required String mimeType,
-      required int size,
-      required String localPath,
-      Value<String?> sha256,
-      Value<String?> extractedTextPath,
-      Value<String?> extractionError,
-      Value<int?> width,
-      Value<int?> height,
-      required DateTime createdAt,
-      Value<int> rowid,
-    });
-typedef $$AttachmentsTableUpdateCompanionBuilder =
-    AttachmentsCompanion Function({
-      Value<String> id,
-      Value<String> conversationId,
-      Value<String> kind,
-      Value<String> name,
-      Value<String> mimeType,
-      Value<int> size,
-      Value<String> localPath,
-      Value<String?> sha256,
-      Value<String?> extractedTextPath,
-      Value<String?> extractionError,
-      Value<int?> width,
-      Value<int?> height,
-      Value<DateTime> createdAt,
-      Value<int> rowid,
-    });
+typedef $$AttachmentsTableCreateCompanionBuilder = AttachmentChanges Function({
+  required String id,
+  Value<String?> conversationId,
+  Value<String?> projectId,
+  required String kind,
+  required String name,
+  required String mimeType,
+  required int size,
+  required String localPath,
+  Value<String?> sha256,
+  Value<String?> extractedTextPath,
+  Value<String?> extractionError,
+  Value<int?> width,
+  Value<int?> height,
+  required DateTime createdAt,
+  Value<int> rowid,
+});
+typedef $$AttachmentsTableUpdateCompanionBuilder = AttachmentChanges Function({
+  Value<String> id,
+  Value<String?> conversationId,
+  Value<String?> projectId,
+  Value<String> kind,
+  Value<String> name,
+  Value<String> mimeType,
+  Value<int> size,
+  Value<String> localPath,
+  Value<String?> sha256,
+  Value<String?> extractedTextPath,
+  Value<String?> extractionError,
+  Value<int?> width,
+  Value<int?> height,
+  Value<DateTime> createdAt,
+  Value<int> rowid,
+});
 
 final class $$AttachmentsTableReferences
     extends BaseReferences<_$AppDatabase, $AttachmentsTable, AttachmentRow> {
@@ -15306,14 +16496,31 @@ final class $$AttachmentsTableReferences
       .conversations
       .createAlias('attachments__conversation_id__conversations__id');
 
-  $$ConversationsTableProcessedTableManager get conversationId {
-    final $_column = $_itemColumn<String>('conversation_id')!;
-
+  $$ConversationsTableProcessedTableManager? get conversationId {
+    final $_column = $_itemColumn<String>('conversation_id');
+    if ($_column == null) return null;
     final manager = $$ConversationsTableTableManager(
       $_db,
       $_db.conversations,
     ).filter((f) => f.id.sqlEquals($_column));
     final item = $_typedResult.readTableOrNull(_conversationIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
+
+  static $ProjectsTable _projectIdTable(_$AppDatabase db) =>
+      db.projects.createAlias('attachments__project_id__projects__id');
+
+  $$ProjectsTableProcessedTableManager? get projectId {
+    final $_column = $_itemColumn<String>('project_id');
+    if ($_column == null) return null;
+    final manager = $$ProjectsTableTableManager(
+      $_db,
+      $_db.projects,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_projectIdTable($_db));
     if (item == null) return manager;
     return ProcessedTableManager(
       manager.$state.copyWith(prefetchedData: [item]),
@@ -15404,6 +16611,29 @@ class $$AttachmentsTableFilterComposer
           }) => $$ConversationsTableFilterComposer(
             $db: $db,
             $table: $db.conversations,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
+
+  $$ProjectsTableFilterComposer get projectId {
+    final $$ProjectsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableFilterComposer(
+            $db: $db,
+            $table: $db.projects,
             $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
             joinBuilder: joinBuilder,
             $removeJoinBuilderFromRootComposer:
@@ -15505,6 +16735,29 @@ class $$AttachmentsTableOrderingComposer
     );
     return composer;
   }
+
+  $$ProjectsTableOrderingComposer get projectId {
+    final $$ProjectsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableOrderingComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AttachmentsTableAnnotationComposer
@@ -15578,6 +16831,29 @@ class $$AttachmentsTableAnnotationComposer
     );
     return composer;
   }
+
+  $$ProjectsTableAnnotationComposer get projectId {
+    final $$ProjectsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.projectId,
+      referencedTable: $db.projects,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$ProjectsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.projects,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$AttachmentsTableTableManager
@@ -15593,7 +16869,7 @@ class $$AttachmentsTableTableManager
           $$AttachmentsTableUpdateCompanionBuilder,
           (AttachmentRow, $$AttachmentsTableReferences),
           AttachmentRow,
-          PrefetchHooks Function({bool conversationId})
+          PrefetchHooks Function({bool conversationId, bool projectId})
         > {
   $$AttachmentsTableTableManager(_$AppDatabase db, $AttachmentsTable table)
     : super(
@@ -15609,7 +16885,8 @@ class $$AttachmentsTableTableManager
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
-                Value<String> conversationId = const Value.absent(),
+                Value<String?> conversationId = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<String> kind = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<String> mimeType = const Value.absent(),
@@ -15622,9 +16899,10 @@ class $$AttachmentsTableTableManager
                 Value<int?> height = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => AttachmentsCompanion(
+              }) => AttachmentChanges(
                 id: id,
                 conversationId: conversationId,
+                projectId: projectId,
                 kind: kind,
                 name: name,
                 mimeType: mimeType,
@@ -15641,7 +16919,8 @@ class $$AttachmentsTableTableManager
           createCompanionCallback:
               ({
                 required String id,
-                required String conversationId,
+                Value<String?> conversationId = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 required String kind,
                 required String name,
                 required String mimeType,
@@ -15654,9 +16933,10 @@ class $$AttachmentsTableTableManager
                 Value<int?> height = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
-              }) => AttachmentsCompanion.insert(
+              }) => AttachmentChanges.insert(
                 id: id,
                 conversationId: conversationId,
+                projectId: projectId,
                 kind: kind,
                 name: name,
                 mimeType: mimeType,
@@ -15678,7 +16958,7 @@ class $$AttachmentsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({conversationId = false}) {
+          prefetchHooksCallback: ({conversationId = false, projectId = false}) {
             return PrefetchHooks(
               db: db,
               explicitlyWatchedTables: [],
@@ -15709,6 +16989,17 @@ class $$AttachmentsTableTableManager
                             .id,
                       ) as T;
                     }
+                    if (projectId) {
+                      state = state.withJoin(
+                        currentTable: table,
+                        currentColumn: table.projectId,
+                        referencedTable: $$AttachmentsTableReferences
+                            ._projectIdTable(db),
+                        referencedColumn: $$AttachmentsTableReferences
+                            ._projectIdTable(db)
+                            .id,
+                      ) as T;
+                    }
 
                     return state;
                   },
@@ -15733,7 +17024,7 @@ typedef $$AttachmentsTableProcessedTableManager =
       $$AttachmentsTableUpdateCompanionBuilder,
       (AttachmentRow, $$AttachmentsTableReferences),
       AttachmentRow,
-      PrefetchHooks Function({bool conversationId})
+      PrefetchHooks Function({bool conversationId, bool projectId})
     >;
 typedef $$AgentRunsTableCreateCompanionBuilder = AgentRunsCompanion Function({
   required String id,
@@ -20559,6 +21850,8 @@ class $AppDatabaseManager {
       $$AssistantsTableTableManager(_db, _db.assistants);
   $$WorkspacesTableTableManager get workspaces =>
       $$WorkspacesTableTableManager(_db, _db.workspaces);
+  $$ProjectsTableTableManager get projects =>
+      $$ProjectsTableTableManager(_db, _db.projects);
   $$ConversationsTableTableManager get conversations =>
       $$ConversationsTableTableManager(_db, _db.conversations);
   $$MessagesTableTableManager get messages =>
