@@ -554,7 +554,7 @@ class ChatRunDriver implements AgentLoopHost {
         conversationId: run.conversationId,
         parentId: _turnTailId ?? run.currentMessageId ?? run.inputMessageId,
         runId: run.id,
-        role: ChatRole.assistant,
+        role: ChatRole.system,
         status: MessageStatus.failed,
         parts: [
           TextPart(
@@ -563,7 +563,6 @@ class ChatRunDriver implements AgentLoopHost {
                 '已执行的工具结果已保留，可发送“继续”接着处理。',
           ),
         ],
-        modelLabel: _selection.model,
         createdAt: DateTime.now(),
       );
       await _repository.appendMessage(message);
@@ -600,7 +599,7 @@ class ChatRunDriver implements AgentLoopHost {
       finishReason: finishReason,
       currentMessageId: _turnTailId,
     );
-    _operation.markRunFinished();
+    _operation.markRunFinished(status);
   }
 
   /// 请求用户确认：等待期间运行记 awaitingConfirmation 与待确认调用。

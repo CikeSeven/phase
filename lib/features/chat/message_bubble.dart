@@ -14,6 +14,7 @@ import 'activity_card_group.dart';
 import 'attachment_chips.dart';
 import 'chat_markdown.dart';
 import 'chat_selection_area.dart';
+import 'system_message_bubble.dart';
 import 'thinking_panel.dart';
 import 'tool_call_card.dart';
 
@@ -24,6 +25,7 @@ class MessageBubble extends StatelessWidget {
     this.attachments = const {},
     this.onRegenerate,
     this.isRunning = false,
+    this.showFailure = true,
     super.key,
   });
 
@@ -37,6 +39,9 @@ class MessageBubble extends StatelessWidget {
 
   /// 整轮运行尚未收尾，包括工具执行与等待，不等同于单次模型流式响应。
   final bool isRunning;
+
+  /// 独立系统消息已说明失败时，助手正文保留普通阅读样式。
+  final bool showFailure;
 
   bool get canRegenerate =>
       onRegenerate != null &&
@@ -219,9 +224,12 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.role == ChatRole.system) {
+      return SystemMessageBubble(message: message);
+    }
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final isError = message.status == MessageStatus.failed;
+    final isError = showFailure && message.status == MessageStatus.failed;
     final streaming = message.status == MessageStatus.streaming;
     final textColor = isError
         ? colors.onErrorContainer

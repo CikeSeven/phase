@@ -7,6 +7,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../tools/run_recovery_controller.dart';
 import '../execution/execution_controller.dart';
 import 'chat_controller.dart';
+import 'model_retry_status.dart';
 import 'tool_confirmation_host.dart';
 
 /// 切换查看位置后仍能回到根任务；启动失败与中断任务都有可达入口。
@@ -87,15 +88,9 @@ class ChatRunBanner extends ConsumerWidget {
                   ),
                 ),
               if (retry != null)
-                Semantics(
-                  liveRegion: true,
-                  child: Text(
-                    '自动重试 ${retry.attempt}/${retry.maxRetries} · 等待 ${retry.delay.inSeconds} 秒',
-                    key: const ValueKey('model-retry-status'),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
+                ModelRetryStatus(
+                  key: const ValueKey('model-retry-status'),
+                  retry: retry,
                 ),
               if (canConfirm)
                 TextButton(

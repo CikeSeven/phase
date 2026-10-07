@@ -13,15 +13,31 @@ import 'dio_failure_mapper.dart';
 Stream<String> decodeSseDataLines(Stream<List<int>> byteStream) async* {
   final lines = utf8.decoder.bind(byteStream).transform(const LineSplitter());
   var pending = <String>[];
+  final nonSseBody = StringBuffer();
+  var sawData = false;
   await for (final line in lines) {
     if (line.isEmpty) {
+      if (!sawData && nonSseBody.isNotEmpty) nonSseBody.writeln();
       if (pending.isNotEmpty) {
         yield pending.join('\n');
         pending = [];
       }
       continue;
     }
-    if (!line.startsWith('data:')) continue;
+    if (!line.startsWith('data:')) {
+      if (!sawData &&
+          !line.startsWith(':') &&
+          !line.startsWith('event:') &&
+          !line.startsWith('id:') &&
+          !line.startsWith('retry:')) {
+        nonSseBody.writeln(line);
+      }
+      continue;
+    }
+    if (!sawData) {
+      sawData = true;
+      nonSseBody.clear();
+    }
     var data = line.substring(5);
     if (data.startsWith(' ')) data = data.substring(1);
     if (pending.isNotEmpty &&
@@ -41,6 +57,10 @@ Stream<String> decodeSseDataLines(Stream<List<int>> byteStream) async* {
     }
   }
   if (pending.isNotEmpty) yield pending.join('\n');
+  if (!sawData && nonSseBody.toString().trim().isNotEmpty) {
+    // HTTP 200 也可能承载非 SSE 错误正文，保留上游说明与明确的错误分类。
+    throw mapProtocolError(nonSseBody.toString());
+  }
 }
 
 enum _SsePayloadState { complete, incomplete, invalid }
@@ -122,7 +142,7 @@ Stream<ChatChunk> postSseStream({
       if (body == null) {
         if (!controller.isClosed) {
           controller.addError(
-            const ProviderError(ProviderErrorCategory.providerError, '响应体为空'),
+            const ProviderError(ProviderErrorCategory.emptyResponse, '响应体为空'),
           );
           await controller.close();
         }

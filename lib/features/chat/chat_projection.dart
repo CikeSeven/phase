@@ -23,11 +23,55 @@ List<ChatMessage> visibleMessages(ConversationThread thread, ChatState state) {
   // 助手消息会把它的工具卡片抹掉。
   final streaming = state.isGenerating && state.streamingParts.isNotEmpty;
   final tail = thread.branch.length - 1;
+  final hiddenRetryMessages = <String>{};
+  for (var index = 0; index < tail; index++) {
+    final notice = thread.branch[index];
+    final next = thread.branch[index + 1];
+    if (notice.role != ChatRole.system ||
+        notice.status != MessageStatus.failed ||
+        notice.runId == null ||
+        next.role != ChatRole.assistant ||
+        next.parentId != notice.id ||
+        next.runId != notice.runId) {
+      continue;
+    }
+    hiddenRetryMessages.add(notice.id);
+    if (index > 0) {
+      final failed = thread.branch[index - 1];
+      if (failed.id == notice.parentId &&
+          failed.role == ChatRole.assistant &&
+          failed.status == MessageStatus.failed) {
+        hiddenRetryMessages.add(failed.id);
+      }
+    }
+  }
   final visible = <ChatMessage>[];
   for (var index = 0; index <= tail; index++) {
     final message = thread.branch[index];
-    if (message.role == ChatRole.tool ||
+    if (hiddenRetryMessages.contains(message.id) ||
+        message.role == ChatRole.tool ||
         (message.role == ChatRole.system && !message.hasVisibleContent)) {
+      continue;
+    }
+    if (index == tail &&
+        message.role == ChatRole.system &&
+        message.status == MessageStatus.failed &&
+        state.isGenerating &&
+        state.runningConversationId == message.conversationId) {
+      // 重试过程由运行提示展示，运行真正结束后才显示最终失败正文。
+      continue;
+    }
+    final following = index < tail ? thread.branch[index + 1] : null;
+    if (message.role == ChatRole.assistant &&
+        message.status == MessageStatus.failed &&
+        following?.role == ChatRole.system &&
+        following?.status == MessageStatus.failed &&
+        following?.parentId == message.id &&
+        (!message.hasVisibleContent ||
+            (state.isGenerating &&
+                state.runningConversationId == message.conversationId &&
+                following?.id == thread.currentMessageId))) {
+      // 无输出的失败请求只显示系统提示；助手记录仍保留请求关联与用量。
       continue;
     }
     final live =

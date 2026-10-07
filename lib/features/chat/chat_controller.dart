@@ -269,7 +269,7 @@ class ChatController extends _$ChatController {
   /// 发送一条消息并流式接收回复。
   ///
   /// 前置失败（未选择模型、落库失败）抛出 [Failure] 由 UI 提示；
-  /// 流式期间的错误写入助手消息（failed 状态）并保留已收内容。
+  /// 请求失败保留已收内容，系统消息展示最终错误；重试等待仍属于本次运行。
   /// [onAccepted] 在用户消息成功入库后触发，不等待模型回复结束。
   Future<void> send(
     String text, {
@@ -355,6 +355,7 @@ class ChatController extends _$ChatController {
             state = state.removeConversation(conversationId);
           }
           if (!wasCancelled &&
+              operation.runCompleted &&
               ref.read(activeConversationProvider).conversationId !=
                   conversationId) {
             state = state.markConversationCompleted(conversationId);
@@ -816,6 +817,7 @@ class ChatController extends _$ChatController {
             status: RunStatus.completed,
             finishReason: RunFinishReason.completed,
           );
+          operation.markRunFinished(RunStatus.completed);
           return;
         }
         await _driveRun(
@@ -959,14 +961,22 @@ class ChatController extends _$ChatController {
           attachments: attachments,
         ),
         ChatStreamingStarted(:final messageId) => session.copyWith(
+          isGenerating: true,
+          runningConversationId: update.conversationId,
           streamingParts: const [],
           streamingMessageId: messageId,
         ),
         ChatStreamingChanged(:final parts) => session.copyWith(
           streamingParts: parts,
         ),
-        ChatStreamingFinished() => session.copyWith(clearStreaming: true),
+        ChatStreamingFinished() => session.copyWith(
+          isGenerating: true,
+          runningConversationId: update.conversationId,
+          clearStreaming: true,
+        ),
         ChatRetryChanged(:final retry) => session.copyWith(
+          isGenerating: true,
+          runningConversationId: update.conversationId,
           retry: retry,
           clearRetry: retry == null,
         ),

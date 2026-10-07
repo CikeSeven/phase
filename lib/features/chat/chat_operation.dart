@@ -1,7 +1,8 @@
 import 'dart:async';
 
-import '../../../core/error/failure.dart';
-import '../../../core/utils/logger.dart';
+import '../../core/error/failure.dart';
+import '../../core/utils/logger.dart';
+import '../../data/models/agent_run.dart';
 import '../tools/tool.dart';
 
 /// 一次发送、恢复或手动整理的生命周期；完整收尾后才解除操作互斥。
@@ -10,7 +11,7 @@ final class ChatOperation {
   RunCancellation? _cancellation;
   String? _runId;
   String? _conversationId;
-  bool _runFinished = false;
+  RunStatus? _finishedRunStatus;
   bool _cancelRequested = false;
   bool? _wasCancelledBeforeClose;
   Failure? _cleanupFailure;
@@ -18,7 +19,8 @@ final class ChatOperation {
   String? get runId => _runId;
   String? get conversationId => _conversationId;
   RunCancellation? get cancellation => _cancellation;
-  bool get runFinished => _runFinished;
+  bool get runFinished => _finishedRunStatus != null;
+  bool get runCompleted => _finishedRunStatus == RunStatus.completed;
   bool get isCancelled =>
       _cancelRequested || _cancellation?.isCancelled == true;
   bool get wasCancelled => _wasCancelledBeforeClose ?? isCancelled;
@@ -44,7 +46,7 @@ final class ChatOperation {
     return cancellation;
   }
 
-  void markRunFinished() => _runFinished = true;
+  void markRunFinished(RunStatus status) => _finishedRunStatus = status;
 
   void cancel() {
     _cancelRequested = true;

@@ -17,6 +17,7 @@ class _BubbleEntry {
     required this.message,
     required this.attachments,
     required this.isRunning,
+    required this.showFailure,
     required this.canRegenerate,
     required this.onRegenerate,
     required this.widget,
@@ -25,6 +26,7 @@ class _BubbleEntry {
   final ChatMessage message;
   final Map<String, Attachment> attachments;
   final bool isRunning;
+  final bool showFailure;
   final bool canRegenerate;
   final Future<void> Function()? onRegenerate;
   final Widget widget;
@@ -134,18 +136,26 @@ class _ChatTranscriptState extends State<ChatTranscript> {
 
   Widget _bubble(int index) {
     final message = widget.messages[index];
+    final following = index + 1 < widget.messages.length
+        ? widget.messages[index + 1]
+        : null;
+    final showFailure =
+        following?.role != ChatRole.system ||
+        following?.status != MessageStatus.failed;
     final isRunning =
         widget.isGenerating && index == widget.messages.length - 1;
     // 只有分支最后一条回答可以重新生成。
     final canRegenerate =
         widget.onRegenerate != null &&
         !widget.isGenerating &&
+        message.role == ChatRole.assistant &&
         index == widget.messages.length - 1;
     final cached = _bubbles[message.id];
     if (cached != null &&
         identical(cached.message, message) &&
         identical(cached.attachments, widget.attachments) &&
         cached.isRunning == isRunning &&
+        cached.showFailure == showFailure &&
         cached.canRegenerate == canRegenerate &&
         cached.onRegenerate == widget.onRegenerate) {
       return cached.widget;
@@ -159,12 +169,14 @@ class _ChatTranscriptState extends State<ChatTranscript> {
       message: message,
       attachments: widget.attachments,
       isRunning: isRunning,
+      showFailure: showFailure,
       onRegenerate: canRegenerate ? widget.onRegenerate : null,
     );
     _bubbles[message.id] = _BubbleEntry(
       message: message,
       attachments: widget.attachments,
       isRunning: isRunning,
+      showFailure: showFailure,
       canRegenerate: canRegenerate,
       onRegenerate: widget.onRegenerate,
       widget: widget_,

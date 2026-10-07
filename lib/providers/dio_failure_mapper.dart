@@ -113,7 +113,10 @@ ProviderError mapHttpResponseError({
       categoryForProtocolError(error) ??
       _categoryForStatus(statusCode) ??
       ProviderErrorCategory.providerError;
-  final message = protocolErrorMessage(error) ?? 'HTTP $statusCode';
+  final message =
+      protocolErrorMessage(error) ??
+      _plainErrorMessage(body) ??
+      'HTTP $statusCode';
   return ProviderError(
     category,
     message,
@@ -129,13 +132,10 @@ ProviderError mapHttpResponseError({
 ///
 /// 错误值是纯字符串时只作为文案（协议没有给出可分类的字段）。
 ProviderError mapProtocolError(Object? error) {
-  if (error is String && error.trim().isNotEmpty) {
-    return ProviderError(ProviderErrorCategory.providerError, error.trim());
-  }
   final object = protocolErrorObject(error);
   return ProviderError(
     categoryForProtocolError(object) ?? ProviderErrorCategory.providerError,
-    protocolErrorMessage(object) ?? '协议返回错误事件',
+    protocolErrorMessage(object) ?? _plainErrorMessage(error) ?? '协议返回错误事件',
     retryable: _isKnownServerError(object) ? true : null,
   );
 }
@@ -156,13 +156,30 @@ Object? protocolErrorObject(Object? body) {
   return decoded;
 }
 
-/// 协议错误对象里的安全文案（只取协议写明的 message 字段）。
+/// 提取协议写明的错误说明；凭据由展示与持久化调用方移除。
 String? protocolErrorMessage(Object? error) {
   if (error is Map && error['message'] is String) {
     final message = (error['message'] as String).trim();
     if (message.isNotEmpty) return message;
   }
+  if (error is Map && error['error'] is String) {
+    final message = (error['error'] as String).trim();
+    if (message.isNotEmpty) return message;
+  }
   return null;
+}
+
+String? _plainErrorMessage(Object? body) {
+  if (body is! String || body.trim().isEmpty) return null;
+  final text = body.trim();
+  try {
+    final decoded = jsonDecode(text);
+    return decoded is String && decoded.trim().isNotEmpty
+        ? decoded.trim()
+        : null;
+  } on FormatException {
+    return text;
+  }
 }
 
 /// 协议错误字段到分类的映射表。

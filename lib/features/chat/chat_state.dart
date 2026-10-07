@@ -49,8 +49,12 @@ class ChatState {
 
   /// 某会话是否正在运行（包含当前正在生成或后台会话正在生成）。
   bool isConversationRunning(String conversationId) {
-    if (activeConversationId == conversationId && isGenerating) return true;
-    return sessions[conversationId]?.isGenerating ?? false;
+    if (activeConversationId == conversationId &&
+        (isGenerating || retry != null)) {
+      return true;
+    }
+    final session = sessions[conversationId];
+    return session?.isGenerating == true || session?.retry != null;
   }
 
   /// 某会话是否刚刚完成任务且尚未被用户点开查看。

@@ -155,12 +155,16 @@ class ModelTurnRunner {
     _attachments = attachments;
     _turnFailure = null;
     _turnTailId = null;
-    final turn = await _requestWithRetry(
-      _selection,
-      messages,
-      parentId: parentId,
-    );
-    return ModelTurnResult(turn, _turnFailure, _turnTailId);
+    try {
+      final turn = await _requestWithRetry(
+        _selection,
+        messages,
+        parentId: parentId,
+      );
+      return ModelTurnResult(turn, _turnFailure, _turnTailId);
+    } finally {
+      _observe(ChatRetryChanged(_run.id, _run.conversationId, null));
+    }
   }
 
   void stop() {
@@ -214,12 +218,13 @@ class ModelTurnRunner {
     _liveParts.clear();
   }
 
-  /// 一次模型尝试保存为独立消息；失败尝试保留在同一父节点的历史分支。
+  /// 每次模型尝试沿当前分支保存，失败说明与后续重试按发生顺序保留。
   Future<StreamedTurn> _streamAttempt(
     AiProvider provider,
     ChatRequest request, {
     required String? parentId,
     required ContextMeasurement? inputMeasurement,
+    required String apiKey,
   }) async {
     final run = _run;
     final repository = _repository;
@@ -331,42 +336,30 @@ class ModelTurnRunner {
 
     if (failure != null) {
       // 流内错误与连接错误都保留已收内容，按失败收口。
-      _turnFailure = failure.category == ProviderErrorCategory.contextLimit
-          ? RunFinishReason.contextLimit
-          : RunFinishReason.modelError;
-      _turnParts = [...parts, TextPart(text: failure.userMessage)];
-      await _settleAttempt(ModelRequestStatus.failed, () async {
-        await repository.updateMessage(
-          messageId: assistantMessage.id,
-          parts: _turnParts,
-          status: MessageStatus.failed,
-          thinkingDurationMs: _turnThinkingDurationMs,
-        );
-      });
-      return StreamedTurn(
-        messageId: assistantMessage.id,
-        parts: _turnParts,
-        toolCalls: const [],
-        failed: true,
+      _turnFailure = switch (failure.category) {
+        ProviderErrorCategory.contextLimit => RunFinishReason.contextLimit,
+        ProviderErrorCategory.emptyResponse => RunFinishReason.emptyResponse,
+        _ => RunFinishReason.modelError,
+      };
+      return _failAttempt(
+        assistantMessage: assistantMessage,
+        parts: parts,
+        errorText: failure.displayMessage(apiKey: apiKey),
       );
     }
 
     if (parts.isEmpty && toolCalls.isEmpty) {
-      // 网关用非 SSE 错误体（HTTP 200 + JSON）时会空跑结束，明确报错。
+      // 没有正文或工具调用的响应按可重试的空响应收口。
+      const error = ProviderError(
+        ProviderErrorCategory.emptyResponse,
+        '服务商返回了空响应，请检查模型名称与推理等级设置',
+      );
+      _streamError = error;
       _turnFailure = RunFinishReason.emptyResponse;
-      _turnParts = const [TextPart(text: '服务商返回了空响应，请检查模型名称与推理等级设置')];
-      await _settleAttempt(ModelRequestStatus.failed, () async {
-        await repository.updateMessage(
-          messageId: assistantMessage.id,
-          parts: _turnParts,
-          status: MessageStatus.failed,
-        );
-      });
-      return StreamedTurn(
-        messageId: assistantMessage.id,
-        parts: _turnParts,
-        toolCalls: const [],
-        failed: true,
+      return _failAttempt(
+        assistantMessage: assistantMessage,
+        parts: const [],
+        errorText: error.message,
       );
     }
 
@@ -425,11 +418,46 @@ class ModelTurnRunner {
     );
   }
 
+  /// 回答与失败提示在请求终态事务中一起保存；系统提示继续进入后续上下文。
+  Future<StreamedTurn> _failAttempt({
+    required ChatMessage assistantMessage,
+    required List<MessagePart> parts,
+    required String errorText,
+  }) async {
+    final notice = ChatMessage(
+      id: generateId(),
+      conversationId: _run.conversationId,
+      parentId: assistantMessage.id,
+      runId: _run.id,
+      role: ChatRole.system,
+      status: MessageStatus.failed,
+      parts: [TextPart(text: errorText)],
+      createdAt: DateTime.now(),
+    );
+    _turnParts = parts;
+    await _settleAttempt(ModelRequestStatus.failed, () async {
+      await _repository.updateMessage(
+        messageId: assistantMessage.id,
+        parts: parts,
+        status: MessageStatus.failed,
+        thinkingDurationMs: _turnThinkingDurationMs,
+      );
+      await _repository.appendMessage(notice);
+    }, tailId: notice.id);
+    return StreamedTurn(
+      messageId: assistantMessage.id,
+      parts: parts,
+      toolCalls: const [],
+      failed: true,
+    );
+  }
+
   int _attemptIndex = 1;
   Future<void> _settleAttempt(
     ModelRequestStatus status,
-    Future<void> Function() persist,
-  ) async {
+    Future<void> Function() persist, {
+    String? tailId,
+  }) async {
     await _requests.settle(
       _requestId!,
       status: status,
@@ -442,6 +470,7 @@ class ModelTurnRunner {
           (status == ModelRequestStatus.failed ? _turnFailure?.name : null),
       persistResult: persist,
     );
+    _turnTailId = tailId ?? _turnTailId;
     await _contexts.refreshForRun(
       run: _run,
       selection: _selection,
@@ -486,9 +515,9 @@ class ModelTurnRunner {
         conversationId: _run.conversationId,
         parentId: parentId,
         runId: _run.id,
-        role: ChatRole.assistant,
+        role: ChatRole.system,
         status: MessageStatus.failed,
-        parts: [TextPart(text: failure.userMessage)],
+        parts: [TextPart(text: '模型请求失败：${failure.userMessage}')],
         createdAt: DateTime.now(),
       );
       await _repository.appendMessage(message);
@@ -526,6 +555,8 @@ class ModelTurnRunner {
 
     final policy = _retryPolicy;
     var recoveredContext = false;
+    var retries = 0;
+    var attemptParentId = parentId;
     for (var attempt = 0; ; attempt++) {
       _attemptIndex = attempt + 1;
       {
@@ -535,12 +566,14 @@ class ModelTurnRunner {
       final turn = await _streamAttempt(
         provider,
         request,
-        parentId: parentId,
+        parentId: attemptParentId,
         inputMeasurement: context.measurement,
+        apiKey: apiKey,
       );
       if (isCancelled || turn.cancelled) return turn;
       final error = _streamError;
       if (error == null) return turn;
+      attemptParentId = _turnTailId ?? turn.messageId;
       if (error.category == ProviderErrorCategory.contextLimit &&
           !recoveredContext) {
         recoveredContext = true;
@@ -555,19 +588,34 @@ class ModelTurnRunner {
           return turn;
         }
         request = context.preparedRequest!;
+        _observe(
+          ChatRetryChanged(
+            _run.id,
+            _run.conversationId,
+            ModelRetryState(
+              attempt: retries + 1,
+              maxRetries: policy.maxRetries,
+              delay: Duration.zero,
+              phase: ModelRetryPhase.requesting,
+            ),
+          ),
+        );
         continue;
       }
-      final delay = policy.delayFor(error, attempt + 1);
+      final retry = retries + 1;
+      final delay = policy.delayFor(error, retry);
       if (delay == null) return turn;
+      retries = retry;
       {
         _observe(
           ChatRetryChanged(
             _run.id,
             _run.conversationId,
             ModelRetryState(
-              attempt: attempt + 1,
+              attempt: retry,
               maxRetries: policy.maxRetries,
               delay: delay,
+              retryAt: DateTime.now().add(delay),
             ),
           ),
         );
@@ -577,13 +625,33 @@ class ModelTurnRunner {
               .activityFor(_run.id)
               .copyWith(
                 phase: TaskPanelPhase.waitingModel,
-                status: '等待自动重试 ${attempt + 1}/${policy.maxRetries}',
+                status: '等待自动重试 $retry/${policy.maxRetries}',
               ),
         );
       }
       await waitForModelRetry(delay, _cancellation);
-      _observe(ChatRetryChanged(_run.id, _run.conversationId, null));
       if (isCancelled) return turn;
+      _observe(
+        ChatRetryChanged(
+          _run.id,
+          _run.conversationId,
+          ModelRetryState(
+            attempt: retry,
+            maxRetries: policy.maxRetries,
+            delay: delay,
+            phase: ModelRetryPhase.requesting,
+          ),
+        ),
+      );
+      _execution.updateActivity(
+        _run.id,
+        _execution
+            .activityFor(_run.id)
+            .copyWith(
+              phase: TaskPanelPhase.waitingModel,
+              status: '正在重试 $retry/${policy.maxRetries}',
+            ),
+      );
     }
   }
 

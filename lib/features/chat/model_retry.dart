@@ -6,7 +6,7 @@ import '../tools/tool.dart';
 /// 当前模型轮的有限重试，不重放此前的工具动作。
 class ModelRetryPolicy {
   const ModelRetryPolicy({
-    this.maxRetries = 2,
+    this.maxRetries = 5,
     this.baseDelay = const Duration(seconds: 2),
     this.maxDelay = const Duration(seconds: 60),
   });
@@ -30,16 +30,22 @@ class ModelRetryPolicy {
   }
 }
 
+enum ModelRetryPhase { waiting, requesting }
+
 class ModelRetryState {
   const ModelRetryState({
     required this.attempt,
     required this.maxRetries,
     required this.delay,
+    this.phase = ModelRetryPhase.waiting,
+    this.retryAt,
   });
 
   final int attempt;
   final int maxRetries;
   final Duration delay;
+  final ModelRetryPhase phase;
+  final DateTime? retryAt;
 }
 
 /// 停止时销毁退避定时器，不等到下一次请求才检查取消。
