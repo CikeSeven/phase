@@ -39,6 +39,7 @@ class ModelRetryState {
     required this.delay,
     this.phase = ModelRetryPhase.waiting,
     this.retryAt,
+    this.message = '',
   });
 
   final int attempt;
@@ -46,6 +47,7 @@ class ModelRetryState {
   final Duration delay;
   final ModelRetryPhase phase;
   final DateTime? retryAt;
+  final String message;
 }
 
 /// 停止时销毁退避定时器，不等到下一次请求才检查取消。

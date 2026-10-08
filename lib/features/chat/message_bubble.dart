@@ -13,6 +13,8 @@ import '../../../data/models/message_part.dart';
 import 'activity_card_group.dart';
 import 'attachment_chips.dart';
 import 'chat_markdown.dart';
+import 'chat_retry_message.dart';
+import 'chat_retry_message_bubble.dart';
 import 'chat_selection_area.dart';
 import 'system_message_bubble.dart';
 import 'thinking_panel.dart';
@@ -224,6 +226,9 @@ class MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message case final ChatRetryMessage retryMessage) {
+      return ChatRetryMessageBubble(message: retryMessage);
+    }
     if (message.role == ChatRole.system) {
       return SystemMessageBubble(message: message);
     }

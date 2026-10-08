@@ -3,6 +3,7 @@ import 'dart:convert';
 import '../../data/models/chat_message.dart';
 import '../../data/models/message_part.dart';
 import '../../data/repositories/conversation_repository.dart';
+import 'chat_retry_message.dart';
 import 'chat_state.dart';
 
 /// 当前分支的展示投影；同一次运行及没有新用户输入的后台续答共用回答区。
@@ -58,7 +59,7 @@ List<ChatMessage> visibleMessages(ConversationThread thread, ChatState state) {
         message.status == MessageStatus.failed &&
         state.isGenerating &&
         state.runningConversationId == message.conversationId) {
-      // 重试过程由运行提示展示，运行真正结束后才显示最终失败正文。
+      // 重试项承载运行中的失败说明，结束后才展示持久化的最终失败消息。
       continue;
     }
     final following = index < tail ? thread.branch[index + 1] : null;
@@ -88,7 +89,23 @@ List<ChatMessage> visibleMessages(ConversationThread thread, ChatState state) {
           : message,
     );
   }
-  return _mergeAnswerRuns(visible, _answerGroups(thread.branch));
+  final messages = _mergeAnswerRuns(visible, _answerGroups(thread.branch));
+  final retry = state.retry;
+  if (retry != null &&
+      state.isGenerating &&
+      state.runningConversationId == thread.conversation.id) {
+    final anchor = thread.lastMessage;
+    messages.add(
+      ChatRetryMessage(
+        conversationId: thread.conversation.id,
+        createdAt: anchor?.createdAt ?? thread.conversation.createdAt,
+        parentId: anchor?.id,
+        runId: anchor?.runId,
+        retry: retry,
+      ),
+    );
+  }
+  return messages;
 }
 
 /// 完成通知只延续其任务来源的回答区，新用户输入或其他回答区会截断归组。

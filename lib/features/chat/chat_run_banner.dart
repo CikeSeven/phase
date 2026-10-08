@@ -7,7 +7,6 @@ import '../../../core/theme/app_spacing.dart';
 import '../tools/run_recovery_controller.dart';
 import '../execution/execution_controller.dart';
 import 'chat_controller.dart';
-import 'model_retry_status.dart';
 import 'tool_confirmation_host.dart';
 
 /// 切换查看位置后仍能回到根任务；启动失败与中断任务都有可达入口。
@@ -16,10 +15,8 @@ class ChatRunBanner extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final chat = ref.watch(
-      chatControllerProvider.select(
-        (state) => (retry: state.retry, summarizing: state.summarizing),
-      ),
+    final summarizing = ref.watch(
+      chatControllerProvider.select((state) => state.summarizing),
     );
     final recovery = ref.watch(runRecoveryControllerProvider);
     final count = recovery.value?.length ?? 0;
@@ -33,13 +30,11 @@ class ChatRunBanner extends ConsumerWidget {
     final userAction = execution.userAction;
     final reopen = ToolConfirmationHost.reopenOf(context);
     final canConfirm = pending != null && reopen != null;
-    final retry = chat.retry;
     if (count == 0 &&
         !recovery.hasError &&
         !canConfirm &&
         userAction == null &&
-        retry == null &&
-        !chat.summarizing) {
+        !summarizing) {
       return const SizedBox.shrink();
     }
     return Center(
@@ -51,7 +46,7 @@ class ChatRunBanner extends ConsumerWidget {
             spacing: AppSpacing.s,
             runSpacing: AppSpacing.xs,
             children: [
-              if (chat.summarizing) const Text('正在整理上下文摘要 · 可停止'),
+              if (summarizing) const Text('正在整理上下文摘要 · 可停止'),
               if (userAction != null)
                 Semantics(
                   liveRegion: true,
@@ -86,11 +81,6 @@ class ChatRunBanner extends ConsumerWidget {
                       ],
                     ),
                   ),
-                ),
-              if (retry != null)
-                ModelRetryStatus(
-                  key: const ValueKey('model-retry-status'),
-                  retry: retry,
                 ),
               if (canConfirm)
                 TextButton(

@@ -597,6 +597,7 @@ class ModelTurnRunner {
               maxRetries: policy.maxRetries,
               delay: Duration.zero,
               phase: ModelRetryPhase.requesting,
+              message: error.displayMessage(apiKey: apiKey),
             ),
           ),
         );
@@ -616,6 +617,7 @@ class ModelTurnRunner {
               maxRetries: policy.maxRetries,
               delay: delay,
               retryAt: DateTime.now().add(delay),
+              message: error.displayMessage(apiKey: apiKey),
             ),
           ),
         );
@@ -640,6 +642,7 @@ class ModelTurnRunner {
             maxRetries: policy.maxRetries,
             delay: delay,
             phase: ModelRetryPhase.requesting,
+            message: error.displayMessage(apiKey: apiKey),
           ),
         ),
       );
