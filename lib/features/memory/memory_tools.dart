@@ -53,9 +53,8 @@ class MemoryTool extends Tool {
   @override
   String get name => write ? 'write_memory' : 'read_memory';
   @override
-  String get description => write
-      ? '显式保存长期记忆，遵循当前会话权限模式。不得把普通工具结果或摘要自动当作长期事实。'
-      : '在已启用的助手/全局记忆中按关键字检索，空查询列出近期条目。返回来源和有界内容。';
+  String get description =>
+      write ? '保存长期记忆条目。' : '按关键词检索已保存的长期记忆，query 为空时列出近期条目。';
   @override
   Map<String, dynamic> get inputSchema => write
       ? const {

@@ -35,9 +35,8 @@ class TaskTool extends Tool {
   @override
   List<String> get promptGuidelines => switch (action) {
     TaskToolAction.list => const [
-      '后台任务跨轮次运行，默认完成后通知；等待期间继续独立工作，仅在必须等待结果时设置 waitMs，避免重复轮询。',
-      '使用 shell 或 task_list 返回的 taskId 查询或停止任务；回复用户时说明实际成果或失败原因，除非用户索要，否则不展示任务 ID。',
-      '不要重复启动运行中的服务或为取日志重跑已完成的命令；停止不再需要的任务用 task_stop。停止或失败不撤销文件变化。',
+      '后台任务跨轮次运行，默认完成后通知；仅在必须等待结果时设置 waitMs。',
+      '使用 shell 或 task_list 返回的 taskId 查询或停止任务；停止不再需要的任务用 task_stop。',
     ],
     TaskToolAction.output || TaskToolAction.stop => const [],
   };

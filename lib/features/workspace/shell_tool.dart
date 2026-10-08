@@ -36,20 +36,16 @@ class ShellTool extends Tool {
   String get policyKey => commandExecutionPolicyKey;
   @override
   String get description =>
-      '在 Ubuntu 中执行 shell 命令；前台命令返回 stdout、stderr、退出码和产物。'
-      '支持当前环境中的绝对文件路径和绝对 cwd；默认目录：${workspace?.executionRoot ?? '当前会话目录'}。'
-      '前台输出预览保留最后 2000 行或 50 KiB，以先达到的上限为准；截断时已收完整输出保存为附件。'
-      'background=true 或指定 yieldMs 时交由任务管理；后台日志仅保留有界尾部，用 task_output 读取。'
-      '后台产物留在工作区，用 read_file 读取。';
+      '在当前环境中执行 shell 命令；前台命令返回 stdout、stderr、退出码和产物。'
+      '默认在当前会话工作区执行。前台输出超限时完整日志保存为附件。'
+      '持续运行的服务设置 background=true。';
   @override
   String get promptSnippet => '在当前环境执行 shell 命令';
   @override
   List<String> get promptGuidelines => const [
     '文件查看、搜索、定位和局部修改优先使用 read_file、grep、find、list_files、edit_file；shell 用于执行程序或组合操作。',
-    'shell 支持当前环境绝对路径，cwd 仅影响本次命令；默认无超时，需要时设置 timeout（秒）。',
-    '前台命令预览保留尾部，完整输出附件使用 read_file 的 attachment:<ID> 按页读取。',
-    '模型结果带 sourceId 的进一步裁剪可用 read_history 续读原始记录，不重跑有副作用命令来取日志。',
-    '需要持续运行的服务用 background=true，并让服务保持前台运行；不要用 &、nohup 或服务自守护模式，主进程退出会清理子进程。',
+    '默认在当前工作区执行命令；cwd 仅影响本次命令；默认无超时，需要时设置 timeout（秒）。',
+    '需要持续运行的服务用 background=true，并让服务保持前台运行。',
   ];
   @override
   Map<String, dynamic> get inputSchema => const {

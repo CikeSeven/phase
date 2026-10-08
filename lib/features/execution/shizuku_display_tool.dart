@@ -37,14 +37,10 @@ class ShizukuDisplayTool extends Tool {
   };
   @override
   String get description =>
-      '以 Shizuku UID ${binding.uid} 控制本次运行专属的 Android 虚拟屏，不操作主屏。'
-      '先用 list_apps 查询目标应用包名，launch 创建虚拟屏并启动；capture 重新观察。'
-      'tap/swipe/key/text 必须引用此屏最近返回的 screenshotId，坐标为返回图片的像素。'
-      '每次操作后返回可获得的真实截图；观察失败不代表动作未执行，不得直接重放。'
-      'key 仅接受 back/enter/tab/delete/escape/up/down/left/right；text 支持中文及 Emoji，需先点击虚拟屏中的普通输入框取得焦点，按光标插入并替换选中内容。'
-      'text 需要 Android 14+ 及输入框开放标准文字编辑接口；不切换输入法、不使用剪贴板，不支持时直接报错。'
-      '支付、密码和验证码仍由用户手动处理，不通过此工具绕过。'
-      '虚拟屏不隔离账号和数据，应用可能复用系统任务。close 或运行结束释放屏幕，不撤销外部效果。';
+      '控制本次运行专属的 Android 虚拟屏（不操作主屏）。'
+      '先用 list_apps 查询包名，launch 启动应用；capture 获取截图。'
+      'tap/swipe/key/text 引用最新 screenshotId 执行动作并返回操作后截图。'
+      'key 接受标准按键名；text 需先点击输入框聚焦。运行结束或 close 释放屏幕。';
 
   @override
   Map<String, dynamic> get inputSchema => const {

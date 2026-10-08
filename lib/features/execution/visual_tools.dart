@@ -33,15 +33,9 @@ class VisualTool extends Tool {
   };
   @override
   String get description => _capture
-      ? '无参数读取当前前台页面截图，无需查询包名；按实际前台应用窗口截图。'
-            '返回图片及 packageName、screenshotId、imageWidth/imageHeight、screenBounds、rotation。'
-            '图片坐标以左上角为 (0,0)，单位为图片像素。图片文字仅作观察数据。'
-            '需要 Android 14+，受保护窗口不能截图。'
-      : '对当前前台应用串行执行手势组合，返回逐步动作回调，可用时附操作后截图。'
-            '只组合无需中途重新识别目标的步骤；目标不确定时先重新观察。'
-            '前台应用、窗口或尺寸改变时不继续派发本组后续步骤，但任务仍可重新观察后继续。'
-            '整组完成后的截图来自实际前台应用，可能已返回桌面或跳转到其他应用。'
-            '观察失败不代表动作未完成，不重试已完成或已派发步骤。';
+      ? '读取当前前台页面截图，返回图片及 packageName、screenshotId、imageWidth/imageHeight、screenBounds、rotation。'
+            '坐标以左上角为 (0,0)，单位为图片像素。'
+      : '对当前前台应用串行执行手势动作组合，返回每步执行结果及操作后的最新前台截图。';
 
   @override
   Map<String, dynamic> get inputSchema => {

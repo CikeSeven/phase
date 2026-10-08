@@ -28,11 +28,9 @@ class WorkspaceSearchTool extends Tool {
   String get description => findFiles
       ? '按 glob 模式查找当前环境中的文件，遵守 .gitignore，包含隐藏文件但排除 .git。'
             '返回相对于搜索目录的路径。默认最多 1000 项或 50 KiB，以先达到的上限为准。'
-            '截断时增大 limit 或缩小范围；需要当前环境已安装 ripgrep（rg）。'
       : '按正则或字面文本搜索当前环境中的文件内容，遵守 .gitignore，包含隐藏文件但排除 .git。'
             '返回相对于搜索目录的文件路径、行号和匹配行，支持上下文。'
-            '默认最多 100 处匹配或 50 KiB，以先达到的上限为准；长行截断到 500 字符。'
-            '需要当前环境已安装 ripgrep（rg）。';
+            '默认最多 100 处匹配或 50 KiB，以先达到的上限为准；长行截断到 500 字符。';
   @override
   String get promptSnippet =>
       findFiles ? '按 glob 查找文件（遵守 .gitignore）' : '搜索文件内容（遵守 .gitignore）';

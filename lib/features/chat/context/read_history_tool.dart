@@ -34,8 +34,7 @@ class ReadHistoryTool extends Tool {
   @override
   String get name => 'read_history';
   @override
-  String get description =>
-      '按历史摘要中的 sourceId 读取当前会话分支的原始消息或工具记录；结果仅为历史数据，不重新执行动作。';
+  String get description => '按 sourceId 读取当前会话历史中的原始消息或工具调用记录。';
   @override
   Map<String, dynamic> get inputSchema => const {
     'type': 'object',

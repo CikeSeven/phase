@@ -16,10 +16,7 @@ class WaitForUserTool extends Tool {
   @override
   String get name => 'wait_for_user';
   @override
-  String get description =>
-      '暂停任务并提示用户亲自操作，例如登录、验证码、支付或必须由用户完成的步骤。'
-      'prompt 简短说明需要做什么。只有用户点击继续后才返回；返回后先重新观察界面，'
-      '不要假定操作成功，不使用旧快照，不用它要求用户核验普通动作的结果。';
+  String get description => '暂停任务并提示用户操作（如登录、验证码、支付等），用户确认完成后继续。';
   @override
   ExecutionChannel get channel => ExecutionChannel.accessibility;
   @override
