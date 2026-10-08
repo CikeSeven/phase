@@ -91,11 +91,11 @@ final class WorkspaceEntriesProvider
         $FunctionalProvider<
           AsyncValue<List<(String, int)>>,
           List<(String, int)>,
-          FutureOr<List<(String, int)>>
+          Stream<List<(String, int)>>
         >
     with
         $FutureModifier<List<(String, int)>>,
-        $FutureProvider<List<(String, int)>> {
+        $StreamProvider<List<(String, int)>> {
   WorkspaceEntriesProvider._({
     required WorkspaceEntriesFamily super.from,
     required (String, String) super.argument,
@@ -119,12 +119,12 @@ final class WorkspaceEntriesProvider
 
   @$internal
   @override
-  $FutureProviderElement<List<(String, int)>> $createElement(
+  $StreamProviderElement<List<(String, int)>> $createElement(
     $ProviderPointer pointer,
-  ) => $FutureProviderElement(pointer);
+  ) => $StreamProviderElement(pointer);
 
   @override
-  FutureOr<List<(String, int)>> create(Ref ref) {
+  Stream<List<(String, int)>> create(Ref ref) {
     final argument = this.argument as (String, String);
     return workspaceEntries(ref, argument.$1, argument.$2);
   }
@@ -140,12 +140,12 @@ final class WorkspaceEntriesProvider
   }
 }
 
-String _$workspaceEntriesHash() => r'ad2a1f1ab9917794123d4478c77bd12fbabbf6bd';
+String _$workspaceEntriesHash() => r'39c778794077964542665b08ac986cc0b76a768f';
 
 final class WorkspaceEntriesFamily extends $Family
     with
         $FunctionalFamilyOverride<
-          FutureOr<List<(String, int)>>,
+          Stream<List<(String, int)>>,
           (String, String)
         > {
   WorkspaceEntriesFamily._()

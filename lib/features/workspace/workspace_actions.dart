@@ -24,15 +24,15 @@ part 'workspace_actions.g.dart';
 Future<Workspace?> workspace(Ref ref, String id) async =>
     (await ref.watch(workspaceRepositoryProvider.future)).get(id);
 @riverpod
-Future<List<(String, int)>> workspaceEntries(
+Stream<List<(String, int)>> workspaceEntries(
   Ref ref,
   String id,
   String path,
-) async {
+) async* {
   final repository = await ref.watch(workspaceRepositoryProvider.future);
   final value = await repository.get(id);
   if (value == null || value.deleting) throw const OperationFailure('工作区已删除');
-  return WorkspaceFiles(repository).list(value, path);
+  yield* WorkspaceFiles(repository).watch(value, path);
 }
 
 @riverpod

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -135,9 +136,17 @@ class WorkspaceFiles {
   Future<List<(String, int)>> list(
     Workspace workspace, [
     String relative = '.',
-  ]) async {
+  ]) => _list(workspace, relative, RunCancellation());
+
+  Future<List<(String, int)>> _list(
+    Workspace workspace,
+    String relative,
+    RunCancellation cancellation,
+  ) async {
+    cancellation.throwIfCancelled();
     final access = repository.files(await repository.snapshot(workspace.id));
-    final entries = await access.list(relative, RunCancellation());
+    final entries = await access.list(relative, cancellation);
+    cancellation.throwIfCancelled();
     if (entries.length > 1000) {
       throw const WorkspaceFailure('directoryLimit', '目录条目超过 1000，请进入子目录查看');
     }
@@ -146,6 +155,136 @@ class WorkspaceFiles {
         if (entry.type == 'file' || entry.type == 'directory')
           (entry.path, entry.type == 'directory' ? -1 : entry.size),
     ];
+  }
+
+  Stream<List<(String, int)>> watch(
+    Workspace workspace, [
+    String relative = '.',
+  ]) {
+    late final StreamController<List<(String, int)>> controller;
+    StreamSubscription<FileSystemEvent>? changes;
+    Timer? scheduled;
+    Timer? polling;
+    RunCancellation? readingCancellation;
+    List<(String, int)>? previous;
+    var active = false;
+    var cancelled = false;
+    var reading = false;
+    var pending = false;
+    var generation = 0;
+
+    void report(Object error, StackTrace stack, int current) {
+      if (!active || current != generation) return;
+      previous = null;
+      controller.addError(
+        error is Failure
+            ? error
+            : const WorkspaceFailure('directoryRead', '无法读取工作区目录，请刷新后重试'),
+        stack,
+      );
+    }
+
+    Future<void> refresh() async {
+      pending = true;
+      if (!active || reading) return;
+      reading = true;
+      try {
+        while (active && pending) {
+          pending = false;
+          final current = generation;
+          try {
+            final cancellation = RunCancellation();
+            readingCancellation = cancellation;
+            final entries = await _list(workspace, relative, cancellation);
+            if (!active || current != generation) continue;
+            final last = previous;
+            if (last == null ||
+                last.length != entries.length ||
+                entries.indexed.any((entry) => entry.$2 != last[entry.$1])) {
+              previous = entries;
+              controller.add(entries);
+            }
+          } catch (error, stack) {
+            report(error, stack, current);
+          }
+        }
+      } finally {
+        readingCancellation = null;
+        reading = false;
+      }
+    }
+
+    void scheduleRefresh() {
+      if (!active) return;
+      // 连续写入也按固定间隔刷新，避免一直等待最后一次事件。
+      scheduled ??= Timer(const Duration(milliseconds: 200), () {
+        scheduled = null;
+        unawaited(refresh());
+      });
+    }
+
+    void startPolling(int current) {
+      if (!active || current != generation) return;
+      polling ??= Timer.periodic(const Duration(seconds: 1), (_) {
+        unawaited(refresh());
+      });
+      unawaited(refresh());
+    }
+
+    Future<void> start() async {
+      if (cancelled) return;
+      active = true;
+      previous = null;
+      final current = ++generation;
+      try {
+        final location = await workspacePath(workspace.rootPath, relative);
+        if (!active || current != generation) return;
+        if (FileSystemEntity.isWatchSupported) {
+          changes = Directory(location).watch().listen(
+            (_) {
+              if (current == generation) scheduleRefresh();
+            },
+            onError: (Object error, StackTrace stack) => startPolling(current),
+            onDone: () => startPolling(current),
+            cancelOnError: true,
+          );
+        } else {
+          startPolling(current);
+          return;
+        }
+        await refresh();
+      } on UnsupportedError {
+        startPolling(current);
+      } on FileSystemException {
+        startPolling(current);
+      } catch (error, stack) {
+        report(error, stack, current);
+      }
+    }
+
+    Future<void> stop() async {
+      active = false;
+      generation++;
+      readingCancellation?.cancel();
+      scheduled?.cancel();
+      scheduled = null;
+      polling?.cancel();
+      polling = null;
+      final subscription = changes;
+      changes = null;
+      await subscription?.cancel();
+    }
+
+    controller = StreamController<List<(String, int)>>(
+      onListen: () => unawaited(start()),
+      onPause: () => unawaited(stop()),
+      onResume: () => unawaited(start()),
+      onCancel: () {
+        cancelled = true;
+        return stop();
+      },
+    );
+    return controller.stream;
   }
 
   Future<Attachment> artifact(
