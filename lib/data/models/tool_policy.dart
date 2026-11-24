@@ -6,6 +6,7 @@ enum ToolPolicy { allow, ask, deny }
 const commandExecutionPolicyKey = 'command_execution';
 
 const applicationOperationsPolicyKey = 'app_operations';
+const virtualDisplayTools = {'shizuku_display', 'root_display'};
 const applicationOperationTools = {
   'open_app',
   'inspect_ui',
@@ -14,13 +15,13 @@ const applicationOperationTools = {
   'input_text',
   'capture_screen',
   'perform_gestures',
-  'shizuku_display',
+  ...virtualDisplayTools,
 };
 
 const visualOperationTools = {
   'capture_screen',
   'perform_gestures',
-  'shizuku_display',
+  ...virtualDisplayTools,
 };
 
 ToolPolicy toolPolicyFromName(String? name) {

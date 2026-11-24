@@ -11,6 +11,7 @@ import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_menu_anchor.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_snack_bar.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/models/workspace.dart';
 import '../chat/tool_artifact_viewer.dart';
 import '../projects/project_path_display.dart';
@@ -460,7 +461,7 @@ class _WorkspaceFilesPageState extends ConsumerState<WorkspaceFilesPage> {
                         child: const Text('清除搜索'),
                       ),
                     )
-                  : ListView(
+                  : SettingsListView(
                       padding: EdgeInsets.fromLTRB(
                         AppSpacing.l,
                         AppSpacing.xs,

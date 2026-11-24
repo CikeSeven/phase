@@ -1,11 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import '../content/attachment_image_frame.dart';
+
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../data/models/attachment.dart';
+import 'tool_artifact_viewer.dart';
+import '../content/attachment_image_preview.dart';
 
 /// 输入栏上方的附件草稿条：横向滚动，图片缩略图/文件名 + 移除按钮。
 class AttachmentChips extends StatelessWidget {
@@ -61,6 +66,7 @@ class _Chip extends StatelessWidget {
           if (attachment.isImage)
             Image.file(
               File(attachment.localPath),
+              frameBuilder: attachmentImageFrame,
               width: 48,
               height: 48,
               fit: BoxFit.cover,
@@ -125,9 +131,11 @@ class MessageAttachments extends StatelessWidget {
       children: [
         for (final attachment in attachments)
           if (attachment.isImage)
-            GestureDetector(
+            AttachmentImagePreview(
               key: ValueKey('message-attachment-${attachment.id}'),
-              onTap: () => _previewImage(context, attachment),
+              attachment: attachment,
+              onOpen: (tag) =>
+                  showToolArtifact(context, attachment, heroTag: tag),
               child: ClipRRect(
                 borderRadius: AppRadius.smallAll,
                 child: ConstrainedBox(
@@ -137,6 +145,18 @@ class MessageAttachments extends StatelessWidget {
                   ),
                   child: Image.file(
                     File(attachment.localPath),
+                    frameBuilder: attachmentImageFrame,
+                    width: 160,
+                    height:
+                        (attachment.width ?? 0) > 0 &&
+                            (attachment.height ?? 0) > 0
+                        ? (160 * attachment.height! / attachment.width!).clamp(
+                            1,
+                            160,
+                          )
+                        : 120,
+                    cacheWidth: (160 * MediaQuery.devicePixelRatioOf(context))
+                        .ceil(),
                     fit: BoxFit.cover,
                     errorBuilder: (_, _, _) =>
                         _fileFallback(context, attachment),
@@ -175,24 +195,6 @@ class MessageAttachments extends StatelessWidget {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  void _previewImage(BuildContext context, Attachment attachment) {
-    showDialog<void>(
-      context: context,
-      builder: (context) => Dialog(
-        clipBehavior: Clip.antiAlias,
-        child: InteractiveViewer(
-          child: Image.file(
-            File(attachment.localPath),
-            errorBuilder: (_, _, _) => const Padding(
-              padding: EdgeInsets.all(AppSpacing.xl),
-              child: Text('图片文件已丢失'),
-            ),
-          ),
         ),
       ),
     );

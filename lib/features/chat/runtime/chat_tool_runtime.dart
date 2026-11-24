@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import '../../../core/error/failure.dart';
 import '../../../data/datasources/local/settings_storage.dart';
 import '../../../data/models/agent_run.dart';
 import '../../../data/models/command_channel.dart';
@@ -19,6 +20,9 @@ import '../../../data/repositories/conversation_repository.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
 import '../../../data/repositories/memory_repository.dart';
 import '../../../data/repositories/plan_repository.dart';
+import '../../../data/repositories/image_generation_repository.dart';
+import '../../../data/repositories/media_generation_repository.dart';
+import '../../../data/repositories/video_generation_repository.dart';
 import '../../../data/repositories/skill_repository.dart';
 import '../../../data/repositories/tool_call_repository.dart';
 import '../../../data/repositories/workspace_repository.dart';
@@ -29,13 +33,17 @@ import '../context/context_configuration.dart';
 import '../context/read_history_tool.dart';
 import '../chat_operation.dart';
 import '../planning/planning_tools.dart';
+import '../../commands/android_shell_tool.dart';
 import '../../commands/command_channel_driver.dart';
+import '../../commands/root_device_tool.dart';
 import '../../execution/channel_driver.dart';
 import '../../execution/execution_controller.dart';
 import '../../execution/execution_api.g.dart';
 import '../../execution/shizuku_display_tool.dart';
 import '../../execution/task_activity.dart';
 import '../../execution/wait_for_user_tool.dart';
+import '../../image_generation/image_generation_tool.dart';
+import '../../video_generation/video_generation_tool.dart';
 import '../../mcp/mcp_connections.dart';
 import '../../mcp/mcp_runtime.dart';
 import '../../memory/memory_tools.dart';
@@ -112,10 +120,14 @@ class ChatToolRuntimeFactory {
     required this.connections,
     required this.commandSnapshots,
     this.web,
+    this.imageGeneration,
+    this.videoGeneration,
     this.tasks,
   });
   final ToolRegistry builtIns;
   final WebSearchRepository? web;
+  final ImageGenerationRepository? imageGeneration;
+  final VideoGenerationRepository? videoGeneration;
   final ConversationRepository conversations;
   final AgentRunRepository runs;
   final ToolCallRepository calls;
@@ -169,8 +181,42 @@ class ChatToolRuntimeFactory {
 
   List<Tool> _channelTools(List<CommandChannelSnapshot> channels) => [
     for (final channel in channels)
-      if (channel.channel == ExecutionChannel.shizuku)
+      if (channel.channel == ExecutionChannel.shizuku) ...[
+        AndroidShellTool(
+          channel,
+          () => settings.readCommandChannels().enabled(channel.channel),
+        ),
         ShizukuDisplayTool(channel, platform),
+      ] else if (channel.channel == ExecutionChannel.root &&
+          channel.uid == CommandChannelSnapshot.rootDevice.uid &&
+          channel.revision == CommandChannelSnapshot.rootDevice.revision) ...[
+        AndroidShellTool(
+          channel,
+          () => settings.readCommandChannels().enabled(channel.channel),
+        ),
+        RootDeviceTool(() => settings.readCommandChannels().root),
+        ShizukuDisplayTool(channel, platform),
+      ],
+  ];
+
+  Future<Tool?> _generationTool<R extends MediaGenerationRepository>(
+    R? repository,
+    Tool Function(R, MediaGenerationBinding) create,
+  ) async {
+    if (repository == null) return null;
+    try {
+      final binding = await repository.binding();
+      return binding == null ? null : create(repository, binding);
+    } on Failure {
+      return null;
+    }
+  }
+
+  Future<List<Tool>> _generationTools(Set<String> names) async => [
+    if (names.contains(ImageGenerationTool.toolName))
+      ?await _generationTool(imageGeneration, ImageGenerationTool.new),
+    if (names.contains(VideoGenerationTool.toolName))
+      ?await _generationTool(videoGeneration, VideoGenerationTool.new),
   ];
 
   Future<ChatToolCatalog> catalog({
@@ -186,6 +232,12 @@ class ChatToolRuntimeFactory {
     required List<CommandChannelSnapshot> channels,
   }) async {
     final webSettings = supportsTools ? web?.read() : null;
+    final generationTools = supportsTools
+        ? await _generationTools(const {
+            ImageGenerationTool.toolName,
+            VideoGenerationTool.toolName,
+          })
+        : const <Tool>[];
     final workspaces = workspace == null ? null : await loadWorkspaces();
     final skill = supportsTools
         ? await _skillTool(skillSnapshots, assistantId, workspace)
@@ -198,6 +250,7 @@ class ChatToolRuntimeFactory {
           inputMessageId: inputMessageId,
         ),
       if (supportsTools) ..._channelTools(channels),
+      ...generationTools,
       if (webSettings != null) ...buildWebTools(web!, webSettings),
       for (final tool in builtIns.tools)
         if (tool is ShellTool)
@@ -218,7 +271,7 @@ class ChatToolRuntimeFactory {
           (_environmentTools.contains(name) &&
               !workspaceToolAvailable(name, workspace)) ||
           (!supportsImages &&
-              const {'capture_screen', 'shizuku_display'}.contains(name)),
+              (name == 'capture_screen' || virtualDisplayTools.contains(name))),
     );
     final entries = supportsTools && mcpServerIds.isNotEmpty
         ? await (await loadMcpServers()).list()
@@ -272,6 +325,17 @@ class ChatToolRuntimeFactory {
     waitForUser,
   }) async {
     final config = run.configuration;
+    final generationRevisions = {
+      for (final snapshot in config.toolSnapshots)
+        if (const {
+          ImageGenerationTool.toolName,
+          VideoGenerationTool.toolName,
+        }.contains(snapshot.name))
+          snapshot.name: snapshot.source.definitionRevision,
+    };
+    final generationTools = await _generationTools(
+      generationRevisions.keys.toSet(),
+    );
     final mcp = config.mcpServers.isEmpty
         ? null
         : McpRunRuntime(
@@ -284,11 +348,14 @@ class ChatToolRuntimeFactory {
     final workspaces = binding == null ? null : await loadWorkspaces();
     final files = workspaces == null ? null : WorkspaceFiles(workspaces);
     final skill = await _skillTool(config.skills, run.assistantId, binding);
+    final hasShizuku = config.commandChannels.any(
+      (channel) => channel.channel == ExecutionChannel.shizuku,
+    );
     final commandDriver = config.commandChannels.isEmpty ? null : commands();
     if (commandDriver != null) {
       await commandDriver.setEnabled(settings.readCommandChannels().channels);
     }
-    final processDriver = binding?.executable != true && commandDriver == null
+    final processDriver = binding?.executable != true && !hasShizuku
         ? null
         : processes();
     final registry = ToolRegistry([
@@ -299,6 +366,9 @@ class ChatToolRuntimeFactory {
           inputMessageId: run.inputMessageId,
         ),
       ..._channelTools(config.commandChannels),
+      for (final tool in generationTools)
+        if (tool.source.definitionRevision == generationRevisions[tool.name])
+          tool,
       if (web != null && config.webSearch != null)
         ...buildWebTools(web!, config.webSearch!),
       for (final tool in builtIns.tools)
@@ -371,7 +441,9 @@ class ChatToolRuntimeFactory {
                 !tool.repository.allowed(tool.settings, fetch: true)) {
           return ToolPolicy.deny;
         }
-        if (tool is ShizukuDisplayTool &&
+        if ((tool is ShizukuDisplayTool ||
+                tool is RootDeviceTool ||
+                tool is AndroidShellTool) &&
             !settings.readCommandChannels().enabled(tool.channel)) {
           return ToolPolicy.deny;
         }
@@ -406,20 +478,23 @@ class ChatToolRuntimeFactory {
                 status: '准备${ToolPresentation.toolLabel(tool.name)}',
               ),
         );
+        final shizuku =
+            tool is ShizukuDisplayTool &&
+            tool.channel == ExecutionChannel.shizuku;
         if ((tool is ShellTool &&
                 arguments['background'] != true &&
                 arguments['yieldMs'] == null) ||
             tool is WorkspaceSearchTool ||
-            tool is ShizukuDisplayTool) {
+            shizuku) {
           await processDriver!.beginTask(
             run.id,
-            tool is ShizukuDisplayTool
+            shizuku
                 ? '虚拟屏控制'
                 : tool is ShellTool
                 ? '工作区命令'
                 : '文件搜索',
           );
-          if (tool is! ShizukuDisplayTool) {
+          if (!shizuku) {
             await execution.showAvailablePanel(run.id);
           }
         }

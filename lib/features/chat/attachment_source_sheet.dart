@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/app_option_sheet.dart';
+
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
@@ -7,10 +10,8 @@ import '../../../core/widgets/app_interactive_surface.dart';
 enum AttachmentSource { camera, gallery, file }
 
 Future<AttachmentSource?> showAttachmentSourceSheet(BuildContext context) =>
-    showModalBottomSheet<AttachmentSource>(
+    showAppOptionSheet<AttachmentSource>(
       context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
       showDragHandle: true,
       builder: (context) => const AttachmentSourceSheet(),
     );

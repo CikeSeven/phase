@@ -2,10 +2,96 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../theme/app_motion.dart';
+import 'app_card_dialog.dart';
+import 'app_popup_transition.dart';
+
 import '../theme/app_radius.dart';
 import '../theme/app_spacing.dart';
 import '../theme/frosted_surface.dart';
 import 'app_icon_badge.dart';
+
+Future<T?> showAppDialog<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool barrierDismissible = true,
+}) {
+  final navigator = Navigator.of(context, rootNavigator: true);
+  return navigator.push(
+    _AppDialogRoute<T>(
+      context: context,
+      builder: builder,
+      barrierDismissible: barrierDismissible,
+      themes: InheritedTheme.capture(from: context, to: navigator.context),
+      barrierColor:
+          DialogTheme.of(context).barrierColor ??
+          Theme.of(context).dialogTheme.barrierColor ??
+          Colors.black54,
+      traversalEdgeBehavior: TraversalEdgeBehavior.closedLoop,
+      reduced: AppMotion.reduce(context),
+    ),
+  );
+}
+
+class _AppDialogRoute<T> extends DialogRoute<T> {
+  _AppDialogRoute({
+    required super.context,
+    required super.builder,
+    required super.barrierDismissible,
+    required super.themes,
+    required super.traversalEdgeBehavior,
+    required super.barrierColor,
+    required this.reduced,
+  });
+  final bool reduced;
+  @override
+  Duration get transitionDuration =>
+      reduced ? Duration.zero : AppMotion.sheetOpen;
+  @override
+  Duration get reverseTransitionDuration =>
+      reduced ? Duration.zero : AppMotion.sheetClose;
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) => child;
+}
+
+class _DialogSurfaceTransition extends StatelessWidget {
+  const _DialogSurfaceTransition({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final route = ModalRoute.of(context);
+    final color = Theme.of(context).colorScheme.surfaceContainerLow;
+    if (route is AppCardDialogRoute) {
+      return AppCardDialogHero(
+        tag: route.tag,
+        color: color,
+        radius: AppRadius.extraLarge,
+        surfaceBuilder: (content) => Material(
+          color: color,
+          borderRadius: AppRadius.extraLargeAll,
+          clipBehavior: Clip.antiAlias,
+          child: content,
+        ),
+        child: child,
+      );
+    }
+    final surface = FrostedSurface(
+      borderRadius: AppRadius.extraLargeAll,
+      color: color,
+      blur: 0,
+      child: child,
+    );
+    return route is _AppDialogRoute
+        ? AppPopupTransition(progress: route.animation!, child: surface)
+        : surface;
+  }
+}
 
 /// 可直接由 showDialog 返回的限宽弹窗。
 ///
@@ -102,9 +188,18 @@ class AppDialog extends StatelessWidget {
       child: content,
     );
 
+    final fromCard = ModalRoute.of(context) is AppCardDialogRoute;
     return Dialog(
+      shape: fromCard
+          ? const RoundedRectangleBorder(borderRadius: AppRadius.extraLargeAll)
+          : null,
       constraints: const BoxConstraints(maxWidth: 440),
-      insetPadding: const EdgeInsets.all(AppSpacing.xl),
+      insetPadding: fromCard
+          ? const EdgeInsets.symmetric(
+              horizontal: AppSpacing.m,
+              vertical: AppSpacing.xl,
+            )
+          : const EdgeInsets.all(AppSpacing.xl),
       insetAnimationDuration: media?.disableAnimations == true
           ? Duration.zero
           : const Duration(milliseconds: 200),
@@ -113,11 +208,7 @@ class AppDialog extends StatelessWidget {
       elevation: 0,
       // Flutter 的 Dialog 默认不避开键盘；底部固定的 actions 会被键盘
       // 盖住，这里把 viewInsets 转成外边距让整个弹窗为键盘让位。
-      child: FrostedSurface(
-        borderRadius: AppRadius.extraLargeAll,
-        color: colors.surfaceContainerLow.withValues(
-          alpha: theme.brightness == Brightness.dark ? 0.98 : 0.96,
-        ),
+      child: _DialogSurfaceTransition(
         child: LayoutBuilder(
           builder: (context, constraints) {
             if (constraints.maxHeight < 360 * scale) {

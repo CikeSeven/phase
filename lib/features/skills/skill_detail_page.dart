@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_elastic_switch.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -12,6 +15,7 @@ import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_snack_bar.dart';
+import '../../core/widgets/settings_list_item.dart';
 import 'skill_controller.dart';
 
 class SkillDetailPage extends ConsumerStatefulWidget {
@@ -42,7 +46,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
   }
 
   Future<void> _delete() async {
-    final yes = await showDialog<bool>(
+    final yes = await showAppDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: '删除 Skill',
@@ -99,7 +103,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
               );
             }
             final skill = entry.snapshot;
-            return ListView(
+            return SettingsListView(
               key: PageStorageKey('skill-${widget.id}'),
               padding: const EdgeInsets.all(AppSpacing.l),
               children: [
@@ -114,7 +118,7 @@ class _SkillDetailPageState extends ConsumerState<SkillDetailPage> {
                 if (skill.ignoredFields.isNotEmpty)
                   Text('未使用的元数据字段：${skill.ignoredFields.join('、')}'),
                 const SizedBox(height: AppSpacing.l),
-                SwitchListTile.adaptive(
+                AppElasticSwitchTile(
                   key: const ValueKey('skill-global-enabled'),
                   contentPadding: EdgeInsets.zero,
                   title: const Text('启用 Skill'),

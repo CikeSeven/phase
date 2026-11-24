@@ -220,7 +220,7 @@ class _ChatMarkdownState extends State<ChatMarkdown> {
         renderText,
         style: _bodyStyle,
         components: _components,
-        animation: widget.streaming
+        animation: widget.streaming && !MediaQuery.disableAnimationsOf(context)
             ? GptMarkdownAnimation.fade
             : GptMarkdownAnimation.none,
         charactersPerSecond: 1200,

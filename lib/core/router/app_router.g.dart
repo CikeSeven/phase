@@ -8,7 +8,7 @@ part of 'app_router.dart';
 
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // ignore_for_file: type=lint, type=warning
-/// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
+/// 应用路由表。设置页使用轻滑转场，其余页面由主题提供。
 ///
 /// 每条路由必须显式给出 pageBuilder：go_router 18 靠检测 material_ui 包的
 /// MaterialApp 决定页面类型，而本应用用的是 Flutter SDK 内置的 MaterialApp，
@@ -17,7 +17,7 @@ part of 'app_router.dart';
 @ProviderFor(appRouter)
 final appRouterProvider = AppRouterProvider._();
 
-/// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
+/// 应用路由表。设置页使用轻滑转场，其余页面由主题提供。
 ///
 /// 每条路由必须显式给出 pageBuilder：go_router 18 靠检测 material_ui 包的
 /// MaterialApp 决定页面类型，而本应用用的是 Flutter SDK 内置的 MaterialApp，
@@ -26,7 +26,7 @@ final appRouterProvider = AppRouterProvider._();
 final class AppRouterProvider
     extends $FunctionalProvider<GoRouter, GoRouter, GoRouter>
     with $Provider<GoRouter> {
-  /// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
+  /// 应用路由表。设置页使用轻滑转场，其余页面由主题提供。
   ///
   /// 每条路由必须显式给出 pageBuilder：go_router 18 靠检测 material_ui 包的
   /// MaterialApp 决定页面类型，而本应用用的是 Flutter SDK 内置的 MaterialApp，
@@ -64,4 +64,4 @@ final class AppRouterProvider
   }
 }
 
-String _$appRouterHash() => r'40365491bddb1cf6cae323d3276463d8624d3c91';
+String _$appRouterHash() => r'435af4c603a00519ee39f0f857032edf1ca0a696';

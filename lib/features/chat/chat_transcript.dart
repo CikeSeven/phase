@@ -8,6 +8,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/content_expansion_notification.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
+import '../../../core/widgets/app_breathing_dots.dart';
 import 'chat_return_to_bottom_button.dart';
 import 'message_bubble.dart';
 
@@ -363,6 +364,9 @@ class _ChatTranscriptState extends State<ChatTranscript> {
 
   @override
   Widget build(BuildContext context) {
+    final waitingForReply =
+        widget.isGenerating &&
+        widget.messages.lastOrNull?.role == ChatRole.user;
     final indices = {
       for (var index = 0; index < widget.messages.length; index++)
         ValueKey(widget.messages[index].id): index,
@@ -397,9 +401,19 @@ class _ChatTranscriptState extends State<ChatTranscript> {
                           top: AppSpacing.m + widget.topPadding,
                           bottom: AppSpacing.m + widget.bottomPadding,
                         ),
-                        itemCount: widget.messages.length,
+                        itemCount:
+                            widget.messages.length + (waitingForReply ? 1 : 0),
                         findChildIndexCallback: (key) => indices[key],
-                        itemBuilder: (context, index) => _bubble(index),
+                        itemBuilder: (context, index) =>
+                            index == widget.messages.length
+                            ? const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Padding(
+                                  padding: EdgeInsets.all(AppSpacing.s),
+                                  child: AppBreathingDots(label: '正在思考'),
+                                ),
+                              )
+                            : _bubble(index),
                       ),
                     ),
                   ),

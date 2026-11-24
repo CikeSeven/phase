@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/app_option_sheet.dart';
+
 import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -45,10 +48,8 @@ Future<ToolConfirmationOutcome> showToolConfirmationSheet(
   ToolConfirmationRequest request,
 ) async {
   FocusManager.instance.primaryFocus?.unfocus();
-  final outcome = await showModalBottomSheet<ToolConfirmationOutcome>(
+  final outcome = await showAppOptionSheet<ToolConfirmationOutcome>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
     builder: (context) => ToolConfirmationSheet(request: request),
   );
   return outcome ?? ToolConfirmationOutcome.expired;

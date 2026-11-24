@@ -11,13 +11,18 @@ import kotlinx.coroutines.*
 import rikka.shizuku.Shizuku
 
 /** App-process checks and lifecycle; the privileged service never owns conversation state. */
-class ShizukuDeviceHost(private val context: Context, private val stopped: (String, String) -> Unit) {
+class ShizukuDeviceHost(
+    private val context: Context,
+    private val stopped: (String, String) -> Unit,
+    private val rootBacked: Boolean = false,
+) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     var onStatusChanged: () -> Unit = {}
-    private val connection = ShizukuConnection(context, { onStatusChanged() }) {
-        scope.launch { owners.keys.toList().forEach { stop(it, "channelDisconnected") } }
-    }
+    private val shizuku = if (rootBacked) null
+        else ShizukuConnection(context, { onStatusChanged() }, ::onDisconnected)
+    private val connection: DisplayConnection = shizuku ?: RootDisplayConnection(context, ::onDisconnected)
     @Volatile private var enabled = false
+    private var shellStop: CompletableDeferred<Unit>? = null
     private class Owner(val uid: Long, val applicationExists: suspend (String) -> Boolean) {
         val client = Binder()
         var target: String? = null
@@ -25,41 +30,108 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
     }
     private val owners = mutableMapOf<String, Owner>()
     private val ended = mutableSetOf<String>()
+    private val backend = if (rootBacked) "root" else "shizuku"
+    private val revision = if (rootBacked) "root_device_v1" else ShizukuDeviceService.REVISION
+
+    private fun onDisconnected() {
+        scope.launch { owners.keys.toList().forEach { stop(it, "channelDisconnected") } }
+    }
+
     fun status(): CommandChannelStatus {
-        val uid = connection.uid()
+        if (Build.VERSION.SDK_INT < 30) return CommandChannelStatus(
+            backend, "unsupported", "虚拟屏需要 Android 11 或更高版本",
+        )
+        if (rootBacked) return if (enabled) {
+            CommandChannelStatus(backend, "ready", "已启用 Root 虚拟屏", 0L, revision)
+        } else {
+            CommandChannelStatus(backend, "permissionRequired", "Root 模式未启用")
+        }
+        val service = checkNotNull(shizuku)
+        val uid = service.uid()
         return when {
-            Build.VERSION.SDK_INT < 30 -> CommandChannelStatus("shizuku", "unsupported", "虚拟屏需要 Android 11 或更高版本")
             !runCatching { context.packageManager.getApplicationInfo("moe.shizuku.privileged.api", 0) }.isSuccess -> CommandChannelStatus("shizuku", "notInstalled", "未安装 Shizuku")
-            !connection.running() -> CommandChannelStatus("shizuku", "notRunning", "Shizuku 未运行")
-            !connection.permission() -> CommandChannelStatus("shizuku", "permissionRequired", "未授权 Shizuku")
+            !service.running() -> CommandChannelStatus("shizuku", "notRunning", "Shizuku 未运行")
+            !service.permission() -> CommandChannelStatus("shizuku", "permissionRequired", "未授权 Shizuku")
             uid < 0 -> CommandChannelStatus("shizuku", "unavailable", "无法读取 Shizuku 执行身份")
             else -> CommandChannelStatus("shizuku", "ready", "已授权", uid.toLong(), ShizukuDeviceService.REVISION)
         }
     }
+    fun isEnabled() = enabled
     fun available() = enabled && status().state == "ready"
     fun authorize() {
-        check(connection.running())
+        check(shizuku?.running() == true)
         Shizuku.requestPermission(4601)
     }
     suspend fun initialize() {
         val reply = withContext(Dispatchers.IO) { connection.get().probe() }
-        check(reply.getInt("uid") == connection.uid() && reply.getString("revision") == ShizukuDeviceService.REVISION)
+        check(reply.getInt("uid") == shizuku?.uid() && reply.getString("revision") == ShizukuDeviceService.REVISION)
     }
     suspend fun setEnabled(value: Boolean) = withContext(Dispatchers.Main.immediate) {
         enabled = value
-        if (!value) owners.keys.toList().forEach { stop(it, "channelDisabled") }
+        if (!value) {
+            shellStop?.complete(Unit)
+            owners.keys.toList().forEach { stop(it, "channelDisabled") }
+        }
     }
     private fun locked() = context.getSystemService(KeyguardManager::class.java).isKeyguardLocked
-    private fun permitted(uid: Long) = available() && connection.uid().toLong() == uid
+    private fun permitted(uid: Long) = available() && (if (rootBacked) 0L else shizuku?.uid()?.toLong()) == uid
     private suspend fun applicationExistsNow(owner: Owner, target: String): Boolean = try {
         owner.applicationExists(target)
     } catch (error: CancellationException) { throw error } catch (_: Exception) { false }
-    private fun cacheDirectory(owner: String) = File(context.cacheDir, "virtual-display/$owner")
+    private fun cacheDirectory(owner: String) = File(context.cacheDir, "virtual-display/$backend/$owner")
+
+    internal suspend fun executeShell(request: Bundle, stop: CompletableDeferred<Unit>): Bundle = coroutineScope {
+        val uid = request.getLong("uid", -1)
+        fun identityMatches() = shizuku != null && request.getString("revision") == revision && permitted(uid)
+        fun failure(code: String) = Bundle().apply { putString("error", code) }
+        fun cancelled() = Bundle().apply {
+            putString("status", "cancelled")
+            putString("output", "")
+        }
+        if (!identityMatches()) return@coroutineScope failure("identityChanged")
+        val id = checkNotNull(request.getString("id"))
+        shellStop = stop
+        try {
+            val remote = connection.get()
+            if (stop.isCompleted) return@coroutineScope cancelled()
+            if (!identityMatches()) return@coroutineScope failure("identityChanged")
+            val result = CompletableDeferred<Bundle>()
+            val callback = object : IDeviceCallback.Stub() {
+                override fun finished(value: Bundle) { result.complete(value) }
+            }
+            withContext(Dispatchers.IO) { remote.executeShell(request, callback) }
+            val cancellation = launch(Dispatchers.IO) {
+                stop.await()
+                runCatching { remote.cancelShell(id) }
+            }
+            try {
+                withTimeoutOrNull(12000) { result.await() } ?: failure("unconfirmed")
+            } finally {
+                cancellation.cancel()
+                if (!result.isCompleted) withContext(NonCancellable + Dispatchers.IO) {
+                    runCatching { remote.cancelShell(id) }
+                }
+            }
+        } catch (_: TimeoutCancellationException) {
+            failure("shizukuUnavailable")
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            failure("shizukuUnavailable")
+        } finally {
+            shellStop = null
+            if (!enabled) disconnectIfUnused(connection.remote)
+        }
+    }
+
+    private fun disconnectIfUnused(remote: IDeviceUserService?) {
+        if (owners.isEmpty() && shellStop == null && remote != null) connection.disconnect(remote)
+    }
 
     suspend fun execute(request: ExecutionRequest, applicationExists: suspend (String) -> Boolean, checkpoint: (Map<String, Any?>) -> Unit): ExecutionResult {
         if (!Regex("[a-zA-Z0-9_-]{1,100}").matches(request.runId)) return failure(request, "invalidArguments")
         val uid = (request.arguments["uid"] as? Number)?.toLong() ?: return failure(request, "identityChanged")
-        if (request.arguments["revision"] != ShizukuDeviceService.REVISION || !permitted(uid)) return failure(request, "identityChanged")
+        if (request.arguments["revision"] != revision || !permitted(uid)) return failure(request, "identityChanged")
         if (request.runId in ended) return failure(request, "cancelled")
         if (locked()) return failure(request, "locked")
         val action = request.arguments["action"] as? String ?: return failure(request, "invalidArguments")
@@ -102,6 +174,7 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
                         is Long -> if (key != "uid") { require(value in Int.MIN_VALUE..Int.MAX_VALUE); putInt(key, value.toInt()) }
                         is Int -> if (key != "uid") putInt(key, value)
                     }
+                    putString("revision", ShizukuDeviceService.REVISION)
                 }
                 checkpoint(mapOf("packageName" to target, "dispatchRequested" to true))
                 dispatched = true
@@ -149,6 +222,7 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
                 runCatching { remote?.cancel(request.runId, request.toolCallId) }
             }
             if (!retained) image.delete()
+            if (rootBacked && owners.isEmpty()) remote?.let(connection::disconnect)
         }
     }
     fun endOwner(ownerId: String) {
@@ -161,16 +235,21 @@ class ShizukuDeviceHost(private val context: Context, private val stopped: (Stri
                 runCatching { remote?.release(ownerId) }
                 cacheDirectory(ownerId).deleteRecursively()
             }
-            if (owners.isEmpty() && remote != null) connection.disconnect(remote)
+            disconnectIfUnused(remote)
         }
     }
     private fun stop(owner: String, reason: String) {
         endOwner(owner)
-        stopped(owner, if (reason == "permissionRequired") "shizukuPermissionRequired" else reason)
+        stopped(owner, when {
+            rootBacked && reason in setOf("permissionRequired", "channelDisabled", "channelDisconnected") -> "rootDisplayStopped"
+            reason == "permissionRequired" -> "shizukuPermissionRequired"
+            else -> reason
+        })
     }
     private fun failure(request: ExecutionRequest, code: String, dispatched: Boolean = false) = ExecutionResult(
         request.toolCallId, ExecutionStatus.FAILED,
-        mapOf("reason" to reason(code), "dispatchRequested" to dispatched), emptyList(), ChannelError.EXECUTION_FAILED)
+        mapOf("reason" to (if (rootBacked) reason(code).replace("Shizuku", "Root") else reason(code)),
+            "dispatchRequested" to dispatched), emptyList(), ChannelError.EXECUTION_FAILED)
     companion object {
         fun reason(code: String): String = when (code) {
             "identityChanged" -> "Shizuku 执行身份或设备组件已改变，请开始新运行"

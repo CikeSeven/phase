@@ -79,13 +79,27 @@ class ExecutionSetup(private val context: Context, private val files: AppFileDri
         } catch (_: IllegalArgumentException) {
             throw FlutterError("invalidArguments", "会话文件路径无效", null)
         }
-        if (!source.isFile || source.length() > 64L * 1024 * 1024)
-            throw FlutterError("invalidArguments", "文件路径无效或超过 64 MiB 导出上限", null)
+        return exportFile(path, source, name, mimeType, 64L * 1024 * 1024)
+    }
+
+    override suspend fun exportAttachment(path: String, name: String, mimeType: String): Boolean {
+        val source = try {
+            val root = File(context.getDir("flutter", Context.MODE_PRIVATE), "attachments").canonicalFile
+            File(path).canonicalFile.also { require(it.path.startsWith(root.path + File.separator)) }
+        } catch (_: Exception) {
+            throw FlutterError("invalidArguments", "附件路径无效", null)
+        }
+        return exportFile(path, source, name, mimeType, 256L * 1024 * 1024)
+    }
+
+    private suspend fun exportFile(path: String, source: File, name: String, mimeType: String, limit: Long): Boolean {
+        if (!source.isFile || source.length() > limit)
+            throw FlutterError("invalidArguments", "文件路径无效或超过 ${limit / (1024 * 1024)} MiB 导出上限", null)
         val uri = pick(directory = false, persist = false, exportName = File(name).name, exportMime = mimeType) ?: return false
         try {
             withContext(Dispatchers.IO) {
                 // Recheck after the external picker; no large bytes cross Pigeon.
-                check(File(path).canonicalPath == source.path && source.length() <= 64L * 1024 * 1024)
+                check(File(path).canonicalPath == source.path && source.length() <= limit)
                 source.inputStream().use { input ->
                     (context.contentResolver.openOutputStream(uri, "wt") ?: error("outputUnavailable")).use { output ->
                         val buffer = ByteArray(65536)
@@ -95,7 +109,7 @@ class ExecutionSetup(private val context: Context, private val files: AppFileDri
                             val count = input.read(buffer)
                             if (count < 0) break
                             total += count
-                            check(total <= 64L * 1024 * 1024)
+                            check(total <= limit)
                             output.write(buffer, 0, count)
                         }
                     }

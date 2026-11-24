@@ -23,6 +23,7 @@ void main() {
           arguments: '{"prompt":"请在目标应用完成登录，操作完成后再点击继续。"}',
         ),
         textTurn('操作权已交还'),
+        textTurn('用户交接'),
       ]);
       await tester.pumpWidget(
         UncontrolledProviderScope(
@@ -48,12 +49,16 @@ void main() {
       expect(tester.takeException(), isNull);
       final button = find.byKey(const ValueKey('continue-user-action'));
       await tester.ensureVisible(button);
+      await _until(tester, () => button.hitTestable().evaluate().isNotEmpty);
       await tester.tap(button);
       await _until(tester, () => !h.state().isGenerating);
       await sending;
-      await tester.pump();
-      expect(find.byKey(const ValueKey('waiting-for-user')), findsNothing);
-      expect(h.provider.requests, hasLength(2));
+      final banner = find.byKey(const ValueKey('waiting-for-user'));
+      await _until(tester, () => banner.evaluate().isEmpty);
+      final taskRequests = h.provider.requests.where(
+        (request) => request.tools.any((tool) => tool.name == 'wait_for_user'),
+      );
+      expect(taskRequests, hasLength(2));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
     });

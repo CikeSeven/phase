@@ -21,6 +21,7 @@ class CommandChannelHost(
     private val context: Context,
     private val flutter: CommandChannelFlutterApi,
     private val device: ShizukuDeviceHost,
+    private val rootDisplay: ShizukuDeviceHost,
 ) : CommandChannelHostApi {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val setupMutex = Mutex()
@@ -65,7 +66,8 @@ class CommandChannelHost(
     }
 
     override suspend fun setEnabled(channels: List<String>) {
-        require(channels.all { it == "shizuku" })
+        require(channels.all { it == "shizuku" || it == "root" })
         device.setEnabled("shizuku" in channels)
+        rootDisplay.setEnabled("root" in channels)
     }
 }

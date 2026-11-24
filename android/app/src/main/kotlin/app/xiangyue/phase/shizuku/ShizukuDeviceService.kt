@@ -15,6 +15,7 @@ import android.media.ImageReader
 import android.os.*
 import android.os.Process
 import android.view.*
+import app.xiangyue.phase.commands.AndroidShellCommand
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -24,7 +25,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Privileged, run-owned display primitives only. No commands, paths or physical display IDs. */
+/** Privileged display operations and Android diagnostics for the app process. */
 @androidx.annotation.Keep
 class ShizukuDeviceService(private val context: Context) : IDeviceUserService.Stub() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -38,6 +39,7 @@ class ShizukuDeviceService(private val context: Context) : IDeviceUserService.St
     private val owners = ConcurrentHashMap<String, Owner>()
     private val ended = ConcurrentHashMap.newKeySet<String>()
     private val jobs = ConcurrentHashMap<String, Job>()
+    private val shellJobs = ConcurrentHashMap<String, Job>()
     private val cancelled = ConcurrentHashMap.newKeySet<String>()
     private val lock = Any()
     private val taskDisplayId by lazy { TaskInfo::class.java.getField("displayId") }
@@ -54,6 +56,77 @@ class ShizukuDeviceService(private val context: Context) : IDeviceUserService.St
     override fun probe(): Bundle {
         caller()
         return Bundle().apply { putInt("uid", Process.myUid()); putString("revision", REVISION) }
+    }
+
+    override fun executeShell(request: Bundle, callback: IDeviceCallback) {
+        caller()
+        check(request.getLong("uid", -1) == Process.myUid().toLong())
+        check(request.getString("revision") == REVISION)
+        val id = request.getString("id").orEmpty()
+        check(ID.matches(id))
+        val argv = AndroidShellCommand.resolve(request.getString("command"))
+        requireNotNull(argv)
+        val result = Bundle().apply {
+            putString("status", "cancelled")
+            putString("output", "")
+        }
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                withTimeout(10000) { runShell(argv, result) }
+            } catch (_: TimeoutCancellationException) {
+                result.putString("status", "timedOut")
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                result.putString("error", "executionFailed")
+            }
+        }
+        if (shellJobs.putIfAbsent(id, job) != null) {
+            job.cancel()
+            throw IllegalStateException("duplicate shell call")
+        }
+        job.invokeOnCompletion {
+            shellJobs.remove(id, job)
+            runCatching { callback.finished(result) }
+        }
+        job.start()
+    }
+
+    override fun cancelShell(call: String) {
+        caller()
+        shellJobs[call]?.cancel()
+    }
+
+    private suspend fun runShell(argv: List<String>, result: Bundle) {
+        val child = ProcessBuilder(argv).redirectErrorStream(true).start()
+        try {
+            child.outputStream.close()
+            val output = ByteArrayOutputStream()
+            val buffer = ByteArray(8192)
+            val stream = child.inputStream
+            var truncated = false
+            while (true) {
+                val available = stream.available()
+                if (available == 0) {
+                    if (!child.isAlive) break
+                    delay(25)
+                    continue
+                }
+                val count = stream.read(buffer, 0, minOf(available, buffer.size))
+                if (count < 0) break
+                val kept = minOf(count, SHELL_OUTPUT_BYTES - output.size())
+                output.write(buffer, 0, kept)
+                truncated = truncated || kept < count
+                currentCoroutineContext().ensureActive()
+            }
+            result.putInt("exitCode", child.exitValue())
+            result.putString("output", output.toString(Charsets.UTF_8.name()))
+            result.putBoolean("truncated", truncated)
+            result.putString("status", "exited")
+        } finally {
+            if (child.isAlive) child.destroyForcibly()
+            child.inputStream.close()
+        }
     }
 
     override fun execute(request: Bundle, screenshot: ParcelFileDescriptor, callback: IDeviceCallback, client: IBinder) {
@@ -398,14 +471,18 @@ class ShizukuDeviceService(private val context: Context) : IDeviceUserService.St
         }
     }
     override fun release(owner: String) { caller(); releaseOwned(owner) }
-    override fun destroy() {
-        check(Binder.getCallingUid() in setOf(context.applicationInfo.uid, Process.myUid(), 0))
+    internal fun releaseAll() {
         owners.keys.toList().forEach { runCatching { releaseOwned(it) } }
         scope.cancel()
+    }
+    override fun destroy() {
+        check(Binder.getCallingUid() in setOf(context.applicationInfo.uid, Process.myUid(), 0))
+        releaseAll()
         kotlin.system.exitProcess(0)
     }
     companion object {
         const val REVISION = "virtual-display-1"
+        private const val SHELL_OUTPUT_BYTES = 50 * 1024
         const val WIDTH = 720
         const val HEIGHT = 1280
         private val ID = Regex("[a-zA-Z0-9_-]{1,100}")

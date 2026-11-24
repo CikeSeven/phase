@@ -4,6 +4,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:phase/core/widgets/app_menu_anchor.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -116,11 +117,11 @@ void main() {
         );
         await tester.tap(_button);
         await tester.pumpAndSettle();
-        final menu = tester.widget<MenuAnchor>(
-          find.ancestor(of: _button, matching: find.byType(MenuAnchor)),
+        final menu = tester.widget<AppMenuAnchor>(
+          find.ancestor(of: _button, matching: find.byType(AppMenuAnchor)),
         );
         expect(
-          menu.style!.maximumSize!.resolve({})!.width,
+          menu.style.maximumSize!.resolve({})!.width,
           closeTo(304 * 2 / 3, .01),
         );
         for (final mode in PermissionMode.values) {

@@ -1,11 +1,23 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/error/failure.dart';
-import '../../../core/theme/app_spacing.dart';
-import '../../../core/widgets/app_loading_indicator.dart';
+import '../../core/widgets/app_elastic_switch.dart';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
+
+import '../../core/error/failure.dart';
+import '../../core/theme/app_radius.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/widgets/app_icon_badge.dart';
+import '../../core/widgets/app_loading_indicator.dart';
+import '../../core/widgets/app_section.dart';
+import '../../data/models/tool_call_record.dart';
 import 'command_channel_card.dart';
 import 'command_channels_controller.dart';
+import 'root_command_dialog.dart';
+import '../../core/widgets/app_dialog.dart';
+import 'root_command_driver.dart';
 
 class CommandChannelsSection extends ConsumerStatefulWidget {
   const CommandChannelsSection({super.key});
@@ -58,7 +70,7 @@ class _CommandChannelsSectionState
   @override
   Widget build(BuildContext context) {
     final value = ref.watch(commandChannelsControllerProvider);
-    return value.when(
+    final shizuku = value.when(
       loading: () => const Center(child: AppLoadingIndicator()),
       error: (error, _) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -78,8 +90,8 @@ class _CommandChannelsSectionState
           spacing: AppSpacing.m,
           children: [
             CommandChannelCard(
-              enabled: state.settings.shizuku,
-              locked: locked,
+              enabled: state.settings.enabled(ExecutionChannel.shizuku),
+              locked: locked || state.settings.root,
               loading: _busy || state.busy,
               status: state.statuses
                   .where((status) => status.channel == 'shizuku')
@@ -100,6 +112,66 @@ class _CommandChannelsSectionState
           ],
         );
       },
+    );
+    final state = value.value;
+    return AppSection(
+      title: 'Android 执行方式',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: AppSpacing.m,
+        children: [
+          shizuku,
+          if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android)
+            Material(
+              color: Theme.of(context).colorScheme.surfaceContainer,
+              borderRadius: AppRadius.mediumAll,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  AppElasticSwitchTile(
+                    secondary: const AppIconBadge(
+                      icon: LucideIcons.terminal,
+                      size: 40,
+                      iconSize: 22,
+                    ),
+                    title: const Text('Root 模式'),
+                    subtitle: const Text('通过 Root 运行 Android 命令和虚拟屏'),
+                    value: state?.settings.root ?? false,
+                    onChanged: state == null || state.busy || _busy
+                        ? null
+                        : (enabled) => _operate(
+                            () => ref
+                                .read(
+                                  commandChannelsControllerProvider.notifier,
+                                )
+                                .setRootEnabled(enabled),
+                          ),
+                  ),
+                  Align(
+                    alignment: AlignmentDirectional.centerEnd,
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.only(
+                        end: AppSpacing.m,
+                      ),
+                      child: TextButton(
+                        onPressed: _busy || state?.busy == true
+                            ? null
+                            : () => showAppDialog<void>(
+                                context: context,
+                                barrierDismissible: false,
+                                builder: (context) => const RootCommandDialog(
+                                  driver: RootCommandDriver(),
+                                ),
+                              ),
+                        child: const Text('手动命令'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

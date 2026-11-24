@@ -7,6 +7,7 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_section.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/models/api_protocol.dart';
 import '../../../providers/presets/provider_preset.dart';
 import 'provider_logo.dart';
@@ -250,7 +251,7 @@ class ProviderFormSections extends StatelessWidget {
             ],
           ),
         ),
-      ],
+      ].map(SettingsListItem.wrap).toList(),
     );
   }
 }

@@ -16,7 +16,7 @@ class ToolPresentation {
   const ToolPresentation._();
 
   static String actionLabel(String toolName, String action) =>
-      toolName == 'shizuku_display'
+      virtualDisplayTools.contains(toolName)
       ? switch (action) {
           'launch' => '启动应用',
           'capture' => '截图观察',
@@ -42,7 +42,9 @@ class ToolPresentation {
     'grep' || 'find' => LucideIcons.search,
     'web_search' => LucideIcons.search,
     'web_fetch' => LucideIcons.globe,
-    'shell' => LucideIcons.terminal,
+    'generate_image' => LucideIcons.image,
+    'generate_video' => LucideIcons.video,
+    'shell' || 'android_shell' => LucideIcons.terminal,
     'task_list' => LucideIcons.listChecks,
     'task_output' => LucideIcons.logs,
     'task_stop' => LucideIcons.square,
@@ -54,7 +56,8 @@ class ToolPresentation {
     'list_files' => LucideIcons.folderOpen,
     'http_request' => LucideIcons.globe,
     'capture_screen' => LucideIcons.scan,
-    'shizuku_display' => LucideIcons.smartphone,
+    'shizuku_display' || 'root_display' => LucideIcons.smartphone,
+    'root_device' => LucideIcons.terminal,
     'perform_gestures' => LucideIcons.pointer,
     _ => LucideIcons.wrench,
   };
@@ -92,6 +95,7 @@ class ToolPresentation {
     'read_file' => '读取文件',
     'read_skill' => '读取 Skill',
     'shell' => '执行命令',
+    'android_shell' => 'Android Shell',
     'task_list' => '查看后台任务',
     'task_output' => '后台任务完成',
     'task_stop' => '停止后台任务',
@@ -105,6 +109,8 @@ class ToolPresentation {
     'http_request' => 'HTTP 请求',
     'web_search' => '搜索网页',
     'web_fetch' => '读取网页',
+    'generate_image' => '生成图片',
+    'generate_video' => '生成视频',
     'inspect_ui' => '读取界面控件',
     'list_apps' => '获取应用列表',
     'open_app' => '打开应用',
@@ -113,6 +119,8 @@ class ToolPresentation {
     'input_text' => '输入文本',
     'capture_screen' => '截图观察',
     'shizuku_display' => '控制虚拟屏',
+    'root_display' => '控制 Root 虚拟屏',
+    'root_device' => 'Root 设备操作',
     'perform_gestures' => '执行手势组合',
     _ => toolName,
   };
@@ -170,6 +178,7 @@ class ToolPresentation {
     ExecutionChannel.app => '应用内',
     ExecutionChannel.accessibility => '无障碍服务',
     ExecutionChannel.shizuku => 'Shizuku',
+    ExecutionChannel.root => 'Root',
     ExecutionChannel.unknown => '未知通道',
   };
 
@@ -197,7 +206,10 @@ class ToolPresentation {
   static List<ToolParameterDetail> parameterDetails(ToolCallRecord record) {
     final arguments = record.arguments;
     if (arguments.isEmpty) return const [];
-    final labels = _parameterLabels[record.toolName];
+    final labels =
+        _parameterLabels[virtualDisplayTools.contains(record.toolName)
+            ? 'shizuku_display'
+            : record.toolName];
     final details = <ToolParameterDetail>[];
     final seen = <String>{};
     if (labels != null) {

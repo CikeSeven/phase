@@ -1,12 +1,13 @@
 import '../../../data/models/command_channel.dart';
 import '../../../data/models/tool_call_record.dart';
 import '../../../data/models/tool_policy.dart';
+import '../commands/root_command_driver.dart';
 import '../tools/tool.dart';
 import 'channel_driver.dart';
 import 'execution_api.g.dart';
 import 'visual_tools.dart';
 
-/// Explicit virtual-display backend; never falls back to the physical display.
+/// 两条执行通道共用同一套虚拟屏动作。
 class ShizukuDisplayTool extends Tool {
   static const actions = [
     'launch',
@@ -21,24 +22,27 @@ class ShizukuDisplayTool extends Tool {
   final CommandChannelSnapshot binding;
   final ChannelDriver Function() driver;
 
+  bool get _root => binding.channel == ExecutionChannel.root;
+  String get _label => _root ? 'Root 虚拟屏' : 'Shizuku 虚拟屏';
+
   @override
-  String get name => 'shizuku_display';
+  String get name => _root ? 'root_display' : 'shizuku_display';
   @override
-  ExecutionChannel get channel => ExecutionChannel.shizuku;
+  ExecutionChannel get channel => binding.channel;
   @override
   String get policyKey => applicationOperationsPolicyKey;
   @override
   ToolPolicy get defaultPolicy => ToolPolicy.ask;
   @override
-  Set<String> get requiredCapabilities => const {
+  Set<String> get requiredCapabilities => {
     'applications',
-    'shizuku_device',
+    _root ? 'root_device' : 'shizuku_device',
     'vision',
   };
   @override
   String get description =>
-      '控制本次运行专属的 Android 虚拟屏（不操作主屏）。'
-      '先用 list_apps 查询包名，launch 启动应用；capture 获取截图。'
+      '${_root ? '通过 Root 控制本次运行专属的 Android 虚拟屏。' : '控制本次运行专属的 Android 虚拟屏（不操作主屏）。'}'
+      '先用 ${_root ? 'root_device 的 list_apps 动作' : 'list_apps'} 查询包名，launch 启动应用；capture 获取截图。'
       'tap/swipe/key/text 引用最新 screenshotId 执行动作并返回操作后截图。'
       'key 接受标准按键名；text 需先点击输入框聚焦。运行结束或 close 释放屏幕。';
 
@@ -158,7 +162,7 @@ class ShizukuDisplayTool extends Tool {
 
   @override
   String describeAction(Map<String, dynamic> arguments) =>
-      'Shizuku 虚拟屏 · UID ${binding.uid}\n'
+      '$_label · UID ${binding.uid}\n'
       '${arguments['action']} ${arguments['packageName'] ?? ''}'
       '${arguments['text'] == null ? '' : '\n${arguments['text']}'}'
       '\n操作后截图会发送给所选模型；停止不撤销已发生的效果';
@@ -174,6 +178,13 @@ class ShizukuDisplayTool extends Tool {
     if (validation != null) {
       return ToolOutcome.failure(validation, errorCode: 'invalidArguments');
     }
+    if (_root) {
+      if (arguments['action'] != 'close') {
+        await const RootCommandDriver().authorize();
+      }
+      cancellation.throwIfCancelled();
+      await context.checkPermission?.call();
+    }
     final result = await driver().execute(
       ExecutionRequest(
         runId: context.runId,
@@ -181,6 +192,7 @@ class ShizukuDisplayTool extends Tool {
         action: ExecutionAction.controlDisplay,
         arguments: {
           ...arguments,
+          if (_root) 'backend': 'root',
           'uid': binding.uid,
           'revision': binding.revision,
         },

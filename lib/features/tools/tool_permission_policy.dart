@@ -4,10 +4,15 @@ import '../../../data/models/tool_permission.dart';
 import '../../../data/models/tool_source.dart';
 import '../chat/context/read_history_tool.dart';
 import '../chat/planning/planning_tools.dart';
+import '../commands/android_shell_tool.dart';
+import '../commands/root_command_driver.dart';
+import '../commands/root_device_tool.dart';
 import '../execution/platform_tools.dart';
 import '../execution/shizuku_display_tool.dart';
 import '../execution/visual_tools.dart';
 import '../execution/wait_for_user_tool.dart';
+import '../image_generation/image_generation_tool.dart';
+import '../video_generation/video_generation_tool.dart';
 import '../memory/memory_tools.dart';
 import '../skills/read_skill_tool.dart';
 import '../web_search/web_tools.dart';
@@ -55,7 +60,7 @@ ToolPermissionRequest permissionRequestFor(
           null => 'GET',
           _ => 'unknown',
         }
-      : tool is ShizukuDisplayTool
+      : tool is ShizukuDisplayTool || tool is RootDeviceTool
       ? switch (arguments['action']) {
           String action => action,
           _ => 'unknown',
@@ -69,12 +74,16 @@ ToolPermissionRequest permissionRequestFor(
     WriteFileTool() ||
     EditFileTool() ||
     PrepareSkillTool() => ToolEffect.fileWrite,
-    ShellTool() || InstallTool() => ToolEffect.codeExecution,
+    ShellTool() ||
+    AndroidShellTool() ||
+    InstallTool() => ToolEffect.codeExecution,
     TaskTool(:final action) =>
       action == TaskToolAction.stop
           ? ToolEffect.stateWrite
           : ToolEffect.informationRead,
     HttpRequestTool() ||
+    ImageGenerationTool() ||
+    VideoGenerationTool() ||
     WebSearchTool() ||
     WebFetchTool() => ToolEffect.networkRequest,
     SystemInfoTool() || ReadHistoryTool() => ToolEffect.informationRead,
@@ -96,6 +105,10 @@ ToolPermissionRequest permissionRequestFor(
       action == 'capture'
           ? ToolEffect.deviceObservation
           : ToolEffect.deviceInteraction,
+    RootDeviceTool() =>
+      RootDeviceAction.parse(action)?.writesState == true
+          ? ToolEffect.deviceInteraction
+          : ToolEffect.informationRead,
     _ => ToolEffect.unknown,
   };
   return ToolPermissionRequest(

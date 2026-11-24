@@ -1,21 +1,35 @@
 import 'tool_call_record.dart';
 
-/// Shizuku 虚拟屏的应用内许可。
+/// Android 执行通道的应用内许可。
 class CommandChannelSettings {
-  const CommandChannelSettings({this.shizuku = false});
+  const CommandChannelSettings({this.shizuku = false, this.root = false});
   final bool shizuku;
+  final bool root;
   bool enabled(ExecutionChannel channel) => switch (channel) {
-    ExecutionChannel.shizuku => shizuku,
+    ExecutionChannel.shizuku => shizuku && !root,
+    ExecutionChannel.root => root,
     _ => false,
   };
-  List<String> get channels => [if (shizuku) 'shizuku'];
-  Map<String, dynamic> toJson() => {'shizuku': shizuku};
+  List<String> get channels => [
+    if (enabled(ExecutionChannel.shizuku)) 'shizuku',
+    if (root) 'root',
+  ];
+  Map<String, dynamic> toJson() => {'shizuku': shizuku, if (root) 'root': true};
   factory CommandChannelSettings.fromJson(Map<String, dynamic> json) =>
-      CommandChannelSettings(shizuku: json['shizuku'] == true);
+      CommandChannelSettings(
+        shizuku: json['shizuku'] == true,
+        root: json['root'] == true,
+      );
 }
 
-/// Shizuku 绑定设备契约修订与 UID。
+/// 普通会话保存实际执行通道、设备契约修订和 UID。
 class CommandChannelSnapshot {
+  static const rootDevice = CommandChannelSnapshot(
+    channel: ExecutionChannel.root,
+    uid: 0,
+    revision: 'root_device_v1',
+  );
+
   const CommandChannelSnapshot({
     required this.channel,
     required this.uid,

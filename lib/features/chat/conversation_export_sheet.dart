@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/app_option_sheet.dart';
+
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'chat_action_sheet.dart';
@@ -9,11 +12,9 @@ Future<ConversationExportFormat?> showConversationExportSheet(
   BuildContext context,
 ) {
   FocusManager.instance.primaryFocus?.unfocus();
-  return showModalBottomSheet<ConversationExportFormat>(
+  return showAppOptionSheet<ConversationExportFormat>(
     context: context,
-    isScrollControlled: true,
     showDragHandle: true,
-    useSafeArea: true,
     builder: (context) => const ChatActionSheet<ConversationExportFormat>(
       title: '导出会话',
       actions: [

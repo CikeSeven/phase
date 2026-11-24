@@ -63,6 +63,8 @@ class ToolCallCard extends ConsumerWidget {
           if (attachments[id] != null) attachments[id]!,
       ],
       onOpenArtifact: (attachment) => showToolArtifact(context, attachment),
+      onOpenImage: (attachment, tag) =>
+          showToolArtifact(context, attachment, heroTag: tag),
     );
   }
 }

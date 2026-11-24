@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../../../data/models/tool_call_record.dart';
+import '../../../data/models/tool_policy.dart';
 import '../../../data/models/tool_source.dart';
 
 /// 应用工具的阅读投影；记录中的快照、权限信息和协议字段不在卡片展开。
@@ -21,7 +22,7 @@ class ApplicationToolDisplay {
         'input_text',
         'capture_screen',
         'perform_gestures',
-        'shizuku_display',
+        ...virtualDisplayTools,
       }.contains(record.toolName);
 
   String? get packageName {
@@ -39,7 +40,7 @@ class ApplicationToolDisplay {
         : null;
   }
 
-  String? get title => record.toolName == 'shizuku_display'
+  String? get title => virtualDisplayTools.contains(record.toolName)
       ? switch (record.arguments['action']) {
           'launch' => '在虚拟屏打开应用',
           'capture' => '观察虚拟屏',
@@ -58,7 +59,7 @@ class ApplicationToolDisplay {
   bool get showScreenshots =>
       record.toolName == 'capture_screen' ||
       record.toolName == 'perform_gestures' ||
-      record.toolName == 'shizuku_display';
+      virtualDisplayTools.contains(record.toolName);
 
   String? get call {
     final args = record.arguments;
@@ -74,7 +75,7 @@ class ApplicationToolDisplay {
       'input_text' =>
         '$node\n${args['text'] is String ? args['text'] : '未提供输入文字'}',
       'perform_gestures' => _gestures(args),
-      'shizuku_display' => switch (args['action']) {
+      'shizuku_display' || 'root_display' => switch (args['action']) {
         'tap' => '图片坐标 (${args['x']}, ${args['y']})',
         'swipe' =>
           '图片坐标 (${args['x']}, ${args['y']}) → (${args['endX']}, ${args['endY']}) · ${args['durationMs'] ?? 400} 毫秒',
@@ -108,11 +109,11 @@ class ApplicationToolDisplay {
       if (data['actionAccepted'] == true && data['observationChanged'] == false)
         '系统已接受动作，界面未变化',
       if (data['actionAccepted'] == false) '系统未接受动作',
-      if (record.toolName == 'shizuku_display' &&
+      if (virtualDisplayTools.contains(record.toolName) &&
           data['actionDispatched'] == true &&
           data['actionAccepted'] == null)
         '动作已派发，未收到完整执行回执',
-      if (record.toolName == 'shizuku_display' &&
+      if (virtualDisplayTools.contains(record.toolName) &&
           data['dispatchRequested'] == true &&
           data['actionDispatched'] != true)
         '已请求执行，未收到完整回执',

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_elastic_switch.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -33,7 +36,7 @@ class AssistantSkillsSection extends ConsumerWidget {
                 if (entries.where((e) => !e.deleting).isEmpty)
                   const Text('导入 Skill 后，可在这里为助手选择任务指导。'),
                 for (final entry in entries.where((e) => !e.deleting))
-                  SwitchListTile.adaptive(
+                  AppElasticSwitchTile(
                     key: ValueKey('skill-enable-${entry.id}'),
                     contentPadding: EdgeInsets.zero,
                     title: Text(entry.snapshot.name),

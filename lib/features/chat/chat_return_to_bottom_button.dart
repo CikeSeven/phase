@@ -7,7 +7,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/frosted_surface.dart';
 
-/// 只在用户朝最新消息滚动时浮现，玻璃与内容分别渐变，避免模糊层闪白。
+/// 只在用户朝最新消息滚动时浮现。
 class ChatReturnToBottomButton extends StatefulWidget {
   const ChatReturnToBottomButton({
     required this.visible,
@@ -27,8 +27,8 @@ class _ChatReturnToBottomButtonState extends State<ChatReturnToBottomButton>
     with SingleTickerProviderStateMixin {
   late final _reveal = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 260),
-    reverseDuration: const Duration(milliseconds: 180),
+    duration: AppMotion.menuOpen,
+    reverseDuration: AppMotion.menuClose,
     value: widget.visible ? 1 : 0,
   );
   late final _opacity = CurvedAnimation(
@@ -105,10 +105,10 @@ class _ChatReturnToBottomButtonState extends State<ChatReturnToBottomButton>
       },
       child: FrostedSurface(
         borderRadius: AppRadius.controlAll,
-        blur: 20,
-        color:
-            (dark ? colors.surfaceContainerLow : colors.surfaceContainerLowest)
-                .withValues(alpha: dark ? 0.54 : 0.38),
+        blur: 0,
+        color: dark
+            ? colors.surfaceContainerLow
+            : colors.surfaceContainerLowest,
         borderColor: highlight.withValues(alpha: dark ? 0.20 : 0.72),
         revealAnimation: _opacity,
         child: DecoratedBox(

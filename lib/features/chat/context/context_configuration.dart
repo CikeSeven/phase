@@ -35,7 +35,11 @@ List<RuntimeContextPart> contextRuntimeParts(RunConfiguration config) {
     section(
       'environment',
       '${config.workspace == null ? '当前没有会话工作区。' : workspacePrompt(config.workspace)}'
-          '${config.enabledTools.contains('shizuku_display') ? '\n已启用 Shizuku 虚拟屏控制。' : '\n未开放 Shizuku 虚拟屏控制。'}'
+          '${config.enabledTools.contains('root_display')
+              ? '\n已启用 Root 虚拟屏控制。'
+              : config.enabledTools.contains('shizuku_display')
+              ? '\n已启用 Shizuku 虚拟屏控制。'
+              : '\n未开放 Shizuku 虚拟屏控制。'}'
           '${executionScopePrompt(config.executionScope, toolExecution: config.enabledTools.isNotEmpty, applicationOperations: config.enabledTools.any(applicationOperationTools.contains))}',
     ),
     section(

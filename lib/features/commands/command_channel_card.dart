@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_elastic_switch.dart';
+
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_control_style.dart';
@@ -260,7 +263,7 @@ class _CommandChannelCardState extends State<CommandChannelCard> {
         child: Semantics(
           container: true,
           label: '启用 Shizuku 虚拟屏控制',
-          child: Switch(
+          child: AppElasticSwitch(
             value: widget.enabled,
             // 临时操作锁保持外观稳定；真正未授权时弱化并禁止开启。
             thumbColor: WidgetStateProperty.resolveWith(

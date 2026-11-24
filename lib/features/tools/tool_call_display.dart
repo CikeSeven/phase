@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import '../../../data/models/attachment.dart';
 import '../../../data/models/tool_call_record.dart';
+import '../../../data/models/tool_policy.dart';
 import '../../../data/models/tool_source.dart';
 import '../../../data/models/web_search_result.dart';
 import 'application_tool_display.dart';
@@ -45,7 +46,7 @@ class ToolCallDisplay {
     if (!isBuiltIn(record)) return null;
     if (ApplicationToolDisplay.supports(record)) {
       return record.toolName == 'list_apps' ||
-              (record.toolName == 'shizuku_display' &&
+              (virtualDisplayTools.contains(record.toolName) &&
                   record.arguments['action'] == 'close')
           ? null
           : appName ??
@@ -102,6 +103,14 @@ class ToolCallDisplay {
             output: output,
             webFetch: WebFetchResult.tryParse(record.result),
           );
+        case 'generate_image' || 'generate_video':
+          return ToolCallDisplay(
+            call: args['prompt'] is String ? args['prompt'] as String : null,
+            output: output,
+            showScreenshots:
+                record.toolName == 'generate_image' &&
+                record.artifacts.isNotEmpty,
+          );
         case 'wait_for_user':
           if (args['prompt'] case final String prompt) {
             return ToolCallDisplay(
@@ -111,7 +120,7 @@ class ToolCallDisplay {
                   : output,
             );
           }
-        case 'shell':
+        case 'shell' || 'android_shell':
           if (args['command'] case final String command) {
             return ToolCallDisplay(
               call: '\$ $command',

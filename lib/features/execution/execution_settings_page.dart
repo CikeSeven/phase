@@ -13,6 +13,7 @@ import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_snack_bar.dart';
+import '../../core/widgets/settings_list_item.dart';
 import 'execution_api.g.dart';
 import 'execution_setup_controller.dart';
 
@@ -87,7 +88,7 @@ class _ExecutionSettingsPageState extends ConsumerState<ExecutionSettingsPage>
               onRetry: controller.load,
             ),
           ),
-          data: (value) => ListView(
+          data: (value) => SettingsListView(
             padding: const EdgeInsets.all(AppSpacing.l),
             children: [
               AppListTile(

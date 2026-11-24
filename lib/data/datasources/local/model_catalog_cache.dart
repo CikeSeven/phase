@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -44,17 +45,21 @@ class ModelCatalogCache {
     try {
       if (!await _file.exists()) return null;
       final text = await _file.readAsString();
-      final catalog = ModelCatalog.tryParse(text);
-      if (catalog == null) return null;
-      final decoded = jsonDecode(text);
-      final etag = decoded is Map ? decoded['etag'] : null;
-      return CachedModelCatalog(
-        catalog: catalog,
-        etag: etag is String ? etag : null,
-      );
+      return await compute(_parseCached, text);
     } on Object {
       return null;
     }
+  }
+
+  static CachedModelCatalog? _parseCached(String text) {
+    final catalog = ModelCatalog.tryParse(text);
+    if (catalog == null) return null;
+    final decoded = jsonDecode(text);
+    final etag = decoded is Map ? decoded['etag'] : null;
+    return CachedModelCatalog(
+      catalog: catalog,
+      etag: etag is String ? etag : null,
+    );
   }
 
   /// 先写临时文件再 rename，避免半截文件被当成有效缓存。
@@ -112,13 +117,9 @@ Future<ModelCatalog> modelCatalog(Ref ref) async {
     // 缓存目录不可用或读取失败仍可使用内置快照。
   }
   try {
-    final data = await rootBundle.load('assets/models_catalog.json');
-    return ModelCatalog.tryParse(
-          utf8.decode(
-            data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
-          ),
-        ) ??
-        ModelCatalog.empty;
+    final text = await rootBundle.loadString('assets/models_catalog.json');
+    final catalog = await compute(ModelCatalog.tryParse, text);
+    return catalog ?? ModelCatalog.empty;
   } on Object {
     // 资产缺失/损坏 → 空目录，全部走本地默认。
     return ModelCatalog.empty;

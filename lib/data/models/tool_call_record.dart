@@ -22,7 +22,7 @@ extension ToolDecisionApproval on ToolDecision {
 }
 
 /// 工具执行通道；无法识别的历史通道保留为 unknown。
-enum ExecutionChannel { app, accessibility, shizuku, unknown }
+enum ExecutionChannel { app, accessibility, shizuku, unknown, root }
 
 /// 工具调用记录：参数、用户决定与结果的唯一业务事实来源。
 ///

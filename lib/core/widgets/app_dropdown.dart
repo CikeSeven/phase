@@ -101,7 +101,6 @@ class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
         onClose: _closed,
         alignmentOffset: const Offset(0, AppSpacing.xs),
         style: MenuStyle(
-          backgroundColor: WidgetStatePropertyAll(colors.surfaceContainer),
           minimumSize: WidgetStatePropertyAll(
             Size(math.max(constraints.maxWidth, menuMinWidth), 0),
           ),
@@ -149,7 +148,7 @@ class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
                   backgroundColor: WidgetStatePropertyAll(
                     entry.key == widget.value
                         ? colors.primaryContainer
-                        : colors.surfaceContainer,
+                        : Colors.transparent,
                   ),
                   foregroundColor: WidgetStatePropertyAll(
                     entry.key == widget.value
@@ -199,6 +198,9 @@ class _AppDropdownState<T extends Object> extends State<AppDropdown<T>> {
                   isFocused: controller.isOpen || _focus.hasFocus,
                   decoration: InputDecoration(
                     enabled: _enabled,
+                    fillColor: theme.brightness == Brightness.dark
+                        ? colors.surface
+                        : colors.surfaceContainer,
                     labelText: widget.label,
                     suffixIcon: Icon(
                       controller.isOpen

@@ -1,4 +1,9 @@
 import 'package:flutter/material.dart';
+
+import '../../core/theme/app_motion.dart';
+
+import '../../core/widgets/app_menu_glyph.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -23,6 +28,7 @@ import 'sidebar_mode.dart';
 class ConversationDrawer extends ConsumerStatefulWidget {
   const ConversationDrawer({
     required this.width,
+    this.open = true,
     this.onNewConversation,
     this.onOpenConversation,
     this.onOpenProject,
@@ -31,6 +37,7 @@ class ConversationDrawer extends ConsumerStatefulWidget {
   });
 
   final double width;
+  final bool open;
   final VoidCallback? onNewConversation;
   final ValueChanged<Conversation>? onOpenConversation;
   final ValueChanged<String>? onOpenProject;
@@ -160,9 +167,8 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer>
       shape: const RoundedRectangleBorder(borderRadius: radius),
       child: FrostedSurface(
         borderRadius: radius,
-        color: colors.surfaceContainerLow.withValues(
-          alpha: theme.brightness == Brightness.dark ? 0.94 : 0.88,
-        ),
+        blur: 0,
+        color: colors.surfaceContainerLow,
         child: SafeArea(
           child: Column(
             children: [
@@ -201,7 +207,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer>
                                 IconButton(
                                   tooltip: '关闭侧栏',
                                   onPressed: _close,
-                                  icon: const Icon(LucideIcons.x),
+                                  icon: AppMenuGlyph(open: widget.open),
                                 ),
                               ],
                             ),
@@ -288,7 +294,15 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer>
                         ),
                       ),
                     ),
-                    list,
+                    if (AppMotion.reduce(context))
+                      list
+                    else
+                      SliverFadeTransition(
+                        opacity: isChat
+                            ? ReverseAnimation(_tabs.animation!)
+                            : _tabs.animation!,
+                        sliver: list,
+                      ),
                   ],
                 ),
               ),
@@ -300,7 +314,7 @@ class _ConversationDrawerState extends ConsumerState<ConversationDrawer>
                 ),
                 child: AppInteractiveSurface(
                   onTap: () {
-                    FocusScope.of(context).unfocus();
+                    _close();
                     context.push('/settings');
                   },
                   child: Padding(

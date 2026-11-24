@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_elastic_switch.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -35,7 +38,7 @@ class AssistantMcpSection extends ConsumerWidget {
               children: [
                 if (servers.isEmpty) const Text('尚未添加 MCP 服务'),
                 for (final entry in servers)
-                  SwitchListTile.adaptive(
+                  AppElasticSwitchTile(
                     key: ValueKey('mcp-enable-${entry.profile.id}'),
                     contentPadding: EdgeInsets.zero,
                     title: Text(entry.profile.name),

@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../theme/app_spacing.dart';
-import '../theme/frosted_surface.dart';
 
-/// 与页面边缘连续的玻璃顶栏，可用于业务自行持有的 Scaffold。
+/// 与页面边缘连续的顶栏，可用于业务自行持有的 Scaffold。
 class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   const AppTopBar({
     required this.title,
@@ -37,9 +36,7 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
     final clear = colors.surface.withValues(alpha: 0);
-    final highlight = dark ? colors.onSurface : colors.surfaceContainerLowest;
     return AppBar(
       title: title,
       leading: leading ?? _impliedLeading(context),
@@ -56,39 +53,20 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
       scrolledUnderElevation: 0,
       shape: const RoundedRectangleBorder(),
       flexibleSpace: Padding(
-        // 玻璃底色只覆盖工具栏，底部进度区域沿用下方页面画布。
+        // 底色只覆盖工具栏，底部进度区域沿用下方页面画布。
         padding: EdgeInsets.only(bottom: bottom?.preferredSize.height ?? 0),
-        child: FrostedSurface(
-          borderRadius: BorderRadius.zero,
-          borderColor: clear,
-          color:
-              (dark
-                      ? colors.surfaceContainerLow
-                      : colors.surfaceContainerLowest)
-                  .withValues(alpha: dark ? 0.42 : 0.28),
-          blur: 24,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                stops: const [0, 0.5, 1],
-                colors: [
-                  highlight.withValues(alpha: dark ? 0.025 : 0.08),
-                  highlight.withValues(alpha: dark ? 0.005 : 0.015),
-                  colors.primary.withValues(alpha: dark ? 0.025 : 0.015),
-                ],
-              ),
-              border: showDivider
-                  ? Border(
-                      bottom: BorderSide(
-                        color: colors.outlineVariant.withValues(alpha: 0.16),
-                      ),
-                    )
-                  : null,
-            ),
-            child: const SizedBox.expand(),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: colors.surface,
+            border: showDivider
+                ? Border(
+                    bottom: BorderSide(
+                      color: colors.outlineVariant.withValues(alpha: 0.16),
+                    ),
+                  )
+                : null,
           ),
+          child: const SizedBox.expand(),
         ),
       ),
     );

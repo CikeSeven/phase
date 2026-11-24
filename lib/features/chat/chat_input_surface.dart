@@ -4,7 +4,7 @@ import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/frosted_surface.dart';
 
-/// 输入栏的月色玻璃：模糊限于圆角内部，轻阴影与高光区分悬浮层次。
+/// 输入栏的轻阴影与高光区分悬浮层次。
 class ChatInputSurface extends StatelessWidget {
   const ChatInputSurface({
     required this.focused,
@@ -34,10 +34,10 @@ class ChatInputSurface extends StatelessWidget {
         ],
       ),
       child: FrostedSurface(
-        blur: 20,
-        color:
-            (dark ? colors.surfaceContainerLow : colors.surfaceContainerLowest)
-                .withValues(alpha: dark ? 0.68 : 0.58),
+        blur: 0,
+        color: dark
+            ? colors.surfaceContainerLow
+            : colors.surfaceContainerLowest,
         borderColor: focused
             ? colors.primary
             : highlight.withValues(alpha: dark ? 0.16 : 0.64),

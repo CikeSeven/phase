@@ -1,19 +1,23 @@
 #define _GNU_SOURCE
 #include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/prctl.h>
 #include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
-/* The supervisor stays outside the child's session, reaps descendants and also
- * closes the process group when the Java host dies. stdout starts with a private
- * 8-byte handshake, consumed by the host before any process output is delivered. */
+/* The supervisor stays outside the child's session and reaps descendants.
+ * Ubuntu consumes an 8-byte handshake before normal stdout. The Root host
+ * uses stdout for the handshake and exit report, with command output on stderr. */
 static volatile sig_atomic_t stopped;
 static void stop_handler(int value) { (void)value; stopped = 1; }
+static const long root_timeout_ms = 60000;
 static long millis(void) {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -30,14 +34,28 @@ static void kill_children(int sig) {
 }
 int main(int argc, char **argv) {
     if (argc < 3) return 125;
+    int root = strcmp(argv[1], "--controlled-root") == 0;
+    if (root && (getuid() != 0 || geteuid() != 0)) return 126;
     signal(SIGTERM, stop_handler);
     signal(SIGINT, stop_handler);
     signal(SIGPIPE, SIG_IGN);
-    prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0);
+    if (prctl(PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0) && root) return 125;
     pid_t parent = getppid();
     if (prctl(PR_SET_PDEATHSIG, SIGTERM) || getppid() != parent) return 125;
-    uint32_t words[] = {0x50484153u, (uint32_t)getpid()};
-    if (write(STDOUT_FILENO, words, sizeof(words)) != sizeof(words)) return 125;
+    struct pollfd control = { .fd = STDIN_FILENO, .events = POLLIN };
+    long root_deadline = 0;
+    if (root) {
+        // Only start after the app receives the verified root handshake.
+        const char ready[] = "PHASROOT\n";
+        if (write(STDOUT_FILENO, ready, sizeof(ready) - 1) != sizeof(ready) - 1) return 125;
+        char start;
+        if (poll(&control, 1, root_timeout_ms) <= 0 || stopped ||
+            read(STDIN_FILENO, &start, 1) != 1 || start != '1') return 125;
+        root_deadline = millis() + root_timeout_ms;
+    } else {
+        uint32_t words[] = {0x50484153u, (uint32_t)getpid()};
+        if (write(STDOUT_FILENO, words, sizeof(words)) != sizeof(words)) return 125;
+    }
     int ready[2];
     if (pipe(ready)) return 125;
     pid_t supervisor = getpid();
@@ -50,6 +68,13 @@ int main(int argc, char **argv) {
         if (setsid() < 0) _exit(125);
         prctl(PR_SET_PDEATHSIG, SIGKILL);
         if (getppid() != supervisor) _exit(125);
+        if (root) {
+            signal(SIGPIPE, SIG_DFL);
+            int input = open("/dev/null", O_RDONLY);
+            if (input < 0 || dup2(input, STDIN_FILENO) < 0 ||
+                dup2(STDERR_FILENO, STDOUT_FILENO) < 0) _exit(125);
+            if (input != STDIN_FILENO) close(input);
+        }
         char ok = 1;
         if (write(ready[1], &ok, 1) != 1) _exit(125);
         close(ready[1]);
@@ -62,6 +87,7 @@ int main(int argc, char **argv) {
     close(ready[0]);
     int main_status = 0;
     int main_done = 0;
+    int root_timed_out = 0;
     long deadline = 0;
     for (;;) {
         int status;
@@ -71,6 +97,10 @@ int main(int argc, char **argv) {
             continue;
         }
         if (pid < 0 && errno == ECHILD) break;
+        if (root && !deadline) {
+            root_timed_out = millis() >= root_deadline;
+            if (root_timed_out || poll(&control, 1, 0) > 0) stopped = 1;
+        }
         if ((stopped || main_done) && !deadline) {
             kill(-child, SIGTERM);
             kill_children(SIGTERM);
@@ -83,11 +113,20 @@ int main(int argc, char **argv) {
         struct timespec pause = {0, 10000000};
         nanosleep(&pause, NULL);
     }
+    int exit_code = WIFEXITED(main_status) ? WEXITSTATUS(main_status) : 128 + WTERMSIG(main_status);
+    if (root) {
+        if (root_timed_out) {
+            dprintf(STDOUT_FILENO, "TIMEOUT\n");
+            return 124;
+        }
+        dprintf(STDOUT_FILENO, "EXIT:%d\n", exit_code);
+        return exit_code;
+    }
     FILE *result = fopen(argv[1], "w");
     if (result) {
         fprintf(result, "%d %d\n", WIFEXITED(main_status) ? WEXITSTATUS(main_status) : -1,
                 WIFSIGNALED(main_status) ? WTERMSIG(main_status) : 0);
         fclose(result);
     }
-    return WIFEXITED(main_status) ? WEXITSTATUS(main_status) : 128 + WTERMSIG(main_status);
+    return exit_code;
 }

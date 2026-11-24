@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/theme/app_motion.dart';
+import '../../../core/widgets/app_popup_transition.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/frosted_surface.dart';
@@ -35,7 +36,13 @@ class ContextUsageIndicator extends ConsumerStatefulWidget {
       _ContextUsageIndicatorState();
 }
 
-class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
+class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator>
+    with SingleTickerProviderStateMixin {
+  late final _motion = AnimationController(
+    vsync: this,
+    duration: AppMotion.menuOpen,
+    reverseDuration: AppMotion.menuClose,
+  );
   final _overlay = OverlayPortalController();
   LocalHistoryEntry? _history;
   ContextMeasurement? _displayed;
@@ -47,14 +54,25 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
     entry?.remove();
   }
 
-  void _close() {
-    _overlay.hide();
+  Future<void> _close() async {
+    if (!_overlay.isShowing) return;
     _removeHistory();
-    if (mounted) setState(() {});
+    if (!AppMotion.reduce(context)) {
+      try {
+        await _motion.reverse().orCancel;
+      } on TickerCanceled {
+        return;
+      }
+    } else {
+      _motion.value = 0;
+    }
+    if (mounted && _motion.value == 0 && _history == null) {
+      setState(_overlay.hide);
+    }
   }
 
   void _toggle() {
-    if (_overlay.isShowing) {
+    if (_overlay.isShowing && _motion.status != AnimationStatus.reverse) {
       _close();
       return;
     }
@@ -74,6 +92,11 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
       route.addLocalHistoryEntry(entry);
     }
     setState(_overlay.show);
+    if (AppMotion.reduce(context)) {
+      _motion.value = 1;
+    } else {
+      _motion.forward();
+    }
   }
 
   @override
@@ -101,6 +124,7 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
   @override
   void dispose() {
     _removeHistory();
+    _motion.dispose();
     super.dispose();
   }
 
@@ -173,30 +197,34 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
                 left: left,
                 width: width,
                 bottom: info.overlaySize.height - bottom,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(maxHeight: height),
-                  child: Material(
-                    key: const ValueKey('context-usage-popover'),
-                    color: Colors.transparent,
-                    surfaceTintColor: Colors.transparent,
-                    elevation: 4,
-                    shadowColor: colors.shadow.withValues(alpha: 0.2),
-                    borderRadius: AppRadius.controlAll,
-                    clipBehavior: Clip.antiAlias,
-                    child: FrostedSurface(
+                child: AppPopupTransition(
+                  alignment: Alignment.bottomCenter,
+                  progress: _motion,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: height),
+                    child: Material(
+                      key: const ValueKey('context-usage-popover'),
+                      color: Colors.transparent,
+                      surfaceTintColor: Colors.transparent,
+                      elevation: 4,
+                      shadowColor: colors.shadow.withValues(alpha: 0.2),
                       borderRadius: AppRadius.controlAll,
-                      color: colors.surfaceContainerLow.withValues(
-                        alpha: dark ? 0.70 : 0.62,
-                      ),
-                      blur: 20,
-                      child: SingleChildScrollView(
-                        primary: false,
-                        padding: const EdgeInsets.all(AppSpacing.m),
-                        child: _ContextUsageDetails(
-                          conversationId: widget.conversationId,
-                          measurement: measurement,
-                          empty: _empty,
-                          failed: preview.hasError,
+                      clipBehavior: Clip.antiAlias,
+                      child: FrostedSurface(
+                        borderRadius: AppRadius.controlAll,
+                        color: colors.surfaceContainerLow.withValues(
+                          alpha: dark ? 0.97 : 0.96,
+                        ),
+                        blur: 0,
+                        child: SingleChildScrollView(
+                          primary: false,
+                          padding: const EdgeInsets.all(AppSpacing.m),
+                          child: _ContextUsageDetails(
+                            conversationId: widget.conversationId,
+                            measurement: measurement,
+                            empty: _empty,
+                            failed: preview.hasError,
+                          ),
                         ),
                       ),
                     ),
@@ -234,7 +262,7 @@ class _ContextUsageIndicatorState extends ConsumerState<ContextUsageIndicator> {
                   duration: AppMotion.reduce(context)
                       ? Duration.zero
                       : const Duration(milliseconds: 360),
-                  curve: Curves.easeInOutCubic,
+                  curve: Curves.easeOutCubic,
                   builder: (context, value, _) => Stack(
                     alignment: Alignment.center,
                     children: [

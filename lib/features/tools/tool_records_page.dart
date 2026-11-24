@@ -133,6 +133,8 @@ class _ToolRecordsPageState extends ConsumerState<ToolRecordsPage> {
                     ],
                     onOpenArtifact: (attachment) =>
                         showToolArtifact(context, attachment),
+                    onOpenImage: (attachment, tag) =>
+                        showToolArtifact(context, attachment, heroTag: tag),
                   ),
                 ],
               );

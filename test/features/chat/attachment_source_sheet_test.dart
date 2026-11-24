@@ -1,10 +1,46 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/features/chat/attachment_source_sheet.dart';
 
 void main() {
+  testWidgets('附件面板从底部展开，返回时先收拢再移除', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showAttachmentSourceSheet(context),
+              child: const Text('附件'),
+            ),
+          ),
+        ),
+      ),
+    );
+    final sheet = find.byType(BottomSheet);
+    Rect bounds() =>
+        Rect.fromPoints(tester.getTopLeft(sheet), tester.getBottomRight(sheet));
+
+    await tester.tap(find.text('附件'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
+    final opening = bounds();
+    await tester.pumpAndSettle();
+    final open = bounds();
+    expect(opening.width, lessThan(open.width));
+    expect(opening.top, greaterThan(open.top));
+
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 70));
+    final closing = bounds();
+    expect(closing.width, lessThan(open.width));
+    expect(closing.top, greaterThan(open.top));
+    await tester.pumpAndSettle();
+    expect(sheet, findsNothing);
+  });
+
   for (final dark in [false, true]) {
     for (final (size, scale) in [
       (const Size(320, 720), 1.0),
@@ -53,11 +89,11 @@ void main() {
             isTrue,
           );
           for (final icon in [
-            Symbols.photo_camera_rounded,
-            Symbols.photo_library_rounded,
-            Symbols.folder_open_rounded,
+            LucideIcons.camera,
+            LucideIcons.images,
+            LucideIcons.folderOpen,
           ]) {
-            expect(tester.widget<Icon>(find.byIcon(icon)).fill, 1);
+            expect(find.byIcon(icon), findsOneWidget);
           }
           if (scale == 1) {
             expect(

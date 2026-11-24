@@ -24,16 +24,77 @@ class ProviderProfileRepository {
   final SecureKeyStorage _keyStorage;
 
   Stream<List<ProviderProfile>> watchProfiles() {
-    final profileQuery = _db.select(_db.providerProfiles)
-      ..orderBy([(t) => OrderingTerm.asc(t.createdAt)]);
-    return profileQuery.watch().asyncMap((rows) async {
-      final modelsByProfile = await _modelsByProfile();
+    final profiles = _db.providerProfiles;
+    final models = _db.models;
+    final query =
+        _db.select(profiles).join([
+          leftOuterJoin(models, models.profileId.equalsExp(profiles.id)),
+        ])..orderBy([
+          OrderingTerm.asc(profiles.createdAt),
+          OrderingTerm.asc(profiles.rowId),
+          OrderingTerm.asc(models.rowId),
+        ]);
+    return query.watch().map((rows) {
+      final profilesById = <String, ProviderProfileRow>{};
+      final modelsByProfile = <String, List<ProfileModel>>{};
+      for (final row in rows) {
+        final profile = row.readTable(profiles);
+        profilesById[profile.id] = profile;
+        if (row.readTableOrNull(models) case final model?) {
+          modelsByProfile
+              .putIfAbsent(profile.id, () => [])
+              .add(profileModelFromRow(model));
+        }
+      }
       return [
-        for (final row in rows)
+        for (final row in profilesById.values)
           providerProfileFromRow(row, modelsByProfile[row.id] ?? const []),
       ];
     });
   }
+
+  Future<void> saveModelLimits({
+    required String profileId,
+    required ProfileModel model,
+    required int? contextWindow,
+    required int? maxOutputTokens,
+  }) => _guard(
+    '保存模型限制失败',
+    () => _db.transaction(() async {
+      final updated =
+          await (_db.update(_db.models)..where(
+                (table) =>
+                    table.profileId.equals(profileId) &
+                    table.modelId.equals(model.id),
+              ))
+              .write(
+                ModelsCompanion(
+                  contextWindow: Value(contextWindow),
+                  maxOutputTokens: Value(maxOutputTokens),
+                ),
+              );
+      if (updated != 0) return;
+      // 当前手输模型可独立保存限制，保持候选模型列表的启用状态。
+      final profile = await (_db.select(
+        _db.providerProfiles,
+      )..where((table) => table.id.equals(profileId))).getSingleOrNull();
+      if (profile == null) throw const OperationFailure('服务商配置已删除');
+      await _db
+          .into(_db.models)
+          .insert(
+            modelCompanion(
+              profileId,
+              model.withSettings(
+                enabled: false,
+                contextWindow: contextWindow,
+                clearContextWindow: contextWindow == null,
+                maxOutputTokens: maxOutputTokens,
+                clearMaxOutputTokens: maxOutputTokens == null,
+              ),
+            ),
+          );
+    }),
+  );
 
   Future<List<ProviderProfile>> listProfiles() async {
     return _guard('读取服务商配置失败', () async {

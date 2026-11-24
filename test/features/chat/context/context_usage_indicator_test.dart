@@ -195,7 +195,7 @@ void main() {
         );
         expect(tester.getSize(_button).shortestSide, greaterThanOrEqualTo(48));
         final ring = find.byType(CircularProgressIndicator);
-        expect(tester.widget<CircularProgressIndicator>(ring).strokeWidth, 6);
+        expect(tester.widget<CircularProgressIndicator>(ring).strokeWidth, 4.5);
         expect(
           tester.getSize(ring).width,
           closeTo(ContextUsageIndicator.diameter * scale, .01),
@@ -306,7 +306,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('发送准备和整轮运行冻结，结束后圆环与数字平滑更新', (tester) async {
+  testWidgets('发送准备保留原值，运行期间新计量的圆环与数字同步减速更新', (tester) async {
     ContextBuild? next = _preview();
     late _UsageChatController controller;
     final container = ProviderContainer(
@@ -327,10 +327,7 @@ void main() {
     expect(find.text('25%'), findsOneWidget);
     next = _preview(used: 64000);
     container.invalidate(contextPreviewProvider('c'));
-    await tester.pumpAndSettle();
-    await _pump(tester, container, submitting: false);
-    expect(find.text('25%'), findsOneWidget);
-    controller.generating(false);
+    await tester.pump();
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 180));
     final value = tester
@@ -342,6 +339,9 @@ void main() {
     expect(value, lessThan(.5));
     expect(find.text('${(value * 100).round()}%'), findsOneWidget);
     await tester.pumpAndSettle();
+    expect(find.text('50%'), findsOneWidget);
+    controller.generating(false);
+    await _pump(tester, container, submitting: false);
     expect(find.text('50%'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });

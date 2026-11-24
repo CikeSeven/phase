@@ -8,6 +8,7 @@ import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_snack_bar.dart';
+import '../../core/widgets/settings_list_item.dart';
 import 'skill_controller.dart';
 
 class SkillImportPage extends ConsumerWidget {
@@ -52,7 +53,7 @@ class SkillImportPage extends ConsumerWidget {
                 label: Text(replaceId == null ? '安装' : '更新版本'),
               ),
             ),
-      body: ListView(
+      body: SettingsListView(
         padding: const EdgeInsets.all(AppSpacing.l),
         children: [
           Text(

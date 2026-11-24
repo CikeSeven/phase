@@ -13,6 +13,7 @@ class ResolvedToolCard extends ConsumerWidget {
     required this.record,
     this.artifacts = const [],
     this.onOpenArtifact,
+    this.onOpenImage,
     this.grouped = false,
     super.key,
   });
@@ -21,6 +22,7 @@ class ResolvedToolCard extends ConsumerWidget {
   final bool grouped;
   final List<Attachment> artifacts;
   final void Function(Attachment)? onOpenArtifact;
+  final void Function(Attachment, Object)? onOpenImage;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -39,6 +41,7 @@ class ResolvedToolCard extends ConsumerWidget {
       appName: appName,
       artifacts: artifacts,
       onOpenArtifact: onOpenArtifact,
+      onOpenImage: onOpenImage,
     );
   }
 }

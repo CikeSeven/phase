@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_elastic_switch.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -8,6 +11,7 @@ import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/models/memory_entry.dart';
 import '../../../data/repositories/memory_repository.dart';
 import '../chat/chat_controller.dart';
@@ -30,7 +34,7 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
 
   Future<void> _delete(MemoryEntry entry) async {
     if (_deleting.contains(entry.id)) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: '删除记忆？',
@@ -80,7 +84,7 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
         IconButton(
           tooltip: '添加记忆',
           icon: const Icon(LucideIcons.plus),
-          onPressed: () => showDialog<void>(
+          onPressed: () => showAppDialog<void>(
             context: context,
             builder: (_) => const MemoryEditor(),
           ),
@@ -136,49 +140,52 @@ class _MemoriesPageState extends ConsumerState<MemoriesPage> {
                   itemCount: filtered.length,
                   itemBuilder: (context, i) {
                     final e = filtered[i];
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            '${e.assistantId == null ? '全局' : names[e.assistantId] ?? '已删除的助手'} · ${e.enabled ? '已启用' : '已停用'}',
-                            style: Theme.of(context).textTheme.labelLarge,
-                          ),
-                          const SizedBox(height: 8),
-                          SelectableText(e.content),
-                          const SizedBox(height: 8),
-                          Text(
-                            '来源消息：${e.sourceMessageId ?? '用户编辑'}\n来源运行：${e.sourceRunId ?? '无'}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          Wrap(
-                            children: [
-                              TextButton.icon(
-                                onPressed: _deleting.contains(e.id)
-                                    ? null
-                                    : () => showDialog<void>(
-                                        context: context,
-                                        builder: (_) => MemoryEditor(entry: e),
-                                      ),
-                                icon: const Icon(LucideIcons.pencil),
-                                label: const Text('编辑'),
-                              ),
-                              TextButton.icon(
-                                onPressed: _deleting.contains(e.id)
-                                    ? null
-                                    : () => _delete(e),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .error,
+                    return SettingsListItem.wrap(
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Text(
+                              '${e.assistantId == null ? '全局' : names[e.assistantId] ?? '已删除的助手'} · ${e.enabled ? '已启用' : '已停用'}',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            SelectableText(e.content),
+                            const SizedBox(height: 8),
+                            Text(
+                              '来源消息：${e.sourceMessageId ?? '用户编辑'}\n来源运行：${e.sourceRunId ?? '无'}',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            Wrap(
+                              children: [
+                                TextButton.icon(
+                                  onPressed: _deleting.contains(e.id)
+                                      ? null
+                                      : () => showAppDialog<void>(
+                                          context: context,
+                                          builder: (_) =>
+                                              MemoryEditor(entry: e),
+                                        ),
+                                  icon: const Icon(LucideIcons.pencil),
+                                  label: const Text('编辑'),
                                 ),
-                                icon: const Icon(LucideIcons.trash2),
-                                label: const Text('删除'),
-                              ),
-                            ],
-                          ),
-                        ],
+                                TextButton.icon(
+                                  onPressed: _deleting.contains(e.id)
+                                      ? null
+                                      : () => _delete(e),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .error,
+                                  ),
+                                  icon: const Icon(LucideIcons.trash2),
+                                  label: const Text('删除'),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -276,7 +283,7 @@ class _MemoryEditorState extends ConsumerState<MemoryEditor> {
               decoration: const InputDecoration(labelText: '记忆内容'),
             ),
             if (widget.entry != null)
-              SwitchListTile(
+              AppElasticSwitchTile(
                 title: const Text('启用'),
                 value: _enabled,
                 onChanged: _saving ? null : (v) => setState(() => _enabled = v),
