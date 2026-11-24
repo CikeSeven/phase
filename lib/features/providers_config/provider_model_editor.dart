@@ -1,16 +1,23 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_completion_mark.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
+import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/app_section.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/datasources/local/model_catalog_cache.dart';
 import '../../../data/models/model_catalog.dart';
 import '../../../data/models/profile_model.dart';
+import '../../core/widgets/app_dialog.dart';
+import 'model_budget_dialog.dart';
 
 /// 用于 CustomScrollView 的模型管理分区，筛选后的条目惰性构建。
 ///
@@ -144,13 +151,15 @@ class _ProviderModelEditorState extends State<ProviderModelEditor> {
           sliver: SliverList.separated(
             itemCount: models.length,
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s),
-            itemBuilder: (context, index) => _ModelCard(
-              key: ValueKey('provider-model-${models[index].id}'),
-              presetId: widget.presetId,
-              model: models[index],
-              enabled: widget.enabled,
-              onModelChanged: widget.onModelChanged,
-              onRemove: widget.onRemove,
+            itemBuilder: (context, index) => SettingsListItem.wrap(
+              _ModelCard(
+                key: ValueKey('provider-model-${models[index].id}'),
+                presetId: widget.presetId,
+                model: models[index],
+                enabled: widget.enabled,
+                onModelChanged: widget.onModelChanged,
+                onRemove: widget.onRemove,
+              ),
             ),
           ),
         ),
@@ -189,15 +198,30 @@ class _ModelCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Checkbox(
-                key: ValueKey('enabled-${model.id}'),
-                value: model.enabled,
-                semanticLabel: '启用该模型',
-                onChanged: enabled
-                    ? (value) => onModelChanged(
-                        model.withSettings(enabled: value ?? false),
-                      )
-                    : null,
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  Checkbox(
+                    key: ValueKey('enabled-${model.id}'),
+                    value: model.enabled,
+                    checkColor: Colors.transparent,
+                    semanticLabel: '启用该模型',
+                    onChanged: enabled
+                        ? (value) => onModelChanged(
+                            model.withSettings(enabled: value ?? false),
+                          )
+                        : null,
+                  ),
+                  IgnorePointer(
+                    child: AppCompletionMark(
+                      animate: false,
+                      checked: model.enabled,
+                      color: enabled
+                          ? theme.colorScheme.onPrimary
+                          : theme.colorScheme.surface,
+                    ),
+                  ),
+                ],
               ),
               Expanded(
                 child: Tooltip(
@@ -338,10 +362,7 @@ class _ModelCapabilities extends StatelessWidget {
   }
 }
 
-/// 单个模型的预算参数；目录值不改变协议请求。
-///
-/// 上下文窗口与输出上限的提示来自 models.dev 目录（命中时）或本地默认；
-/// 目录值只做提示与校验基线，绝不回写用户输入。
+/// 每个模型展示当前限制，具体覆盖值在弹窗中一次保存。
 class _ModelParameters extends ConsumerStatefulWidget {
   const _ModelParameters({
     required this.presetId,
@@ -360,151 +381,89 @@ class _ModelParameters extends ConsumerStatefulWidget {
 }
 
 class _ModelParametersState extends ConsumerState<_ModelParameters> {
-  late final _maxOutputController = TextEditingController(
-    text: widget.model.maxOutputTokens?.toString() ?? '',
-  );
+  bool _editing = false;
 
-  late final _contextController = TextEditingController(
-    text: widget.model.contextWindow?.toString() ?? '',
-  );
-  String? _budgetError;
-  int _applyRevision = 0;
-
-  @override
-  void dispose() {
-    _maxOutputController.dispose();
-    _contextController.dispose();
-    super.dispose();
-  }
-
-  ModelCatalogEntry? _lookup(ModelCatalog catalog) =>
-      catalog.lookup(widget.presetId, widget.model.id);
-
-  Future<void> _apply() async {
-    final revision = ++_applyRevision;
-    ModelCatalog catalog;
+  Future<void> _edit() async {
+    if (_editing) return;
+    _editing = true;
     try {
-      catalog = await ref.read(modelCatalogProvider.future);
-    } on Object {
-      if (mounted && revision == _applyRevision) {
-        setState(() => _budgetError = '模型目录读取失败，请重试。');
+      final draft = await showAppDialog<ModelBudgetOverride>(
+        context: context,
+        builder: (context) =>
+            ModelBudgetDialog(presetId: widget.presetId, model: widget.model),
+      );
+      if (!mounted || !widget.enabled || draft == null) return;
+      final model = widget.model;
+      if (model.contextWindow == draft.contextWindow &&
+          model.maxOutputTokens == draft.maxOutputTokens) {
+        return;
       }
-      return;
+      widget.onModelChanged(
+        model.withSettings(
+          contextWindow: draft.contextWindow,
+          clearContextWindow: draft.contextWindow == null,
+          maxOutputTokens: draft.maxOutputTokens,
+          clearMaxOutputTokens: draft.maxOutputTokens == null,
+        ),
+      );
+    } finally {
+      _editing = false;
     }
-    if (!mounted || !widget.enabled || revision != _applyRevision) return;
-    // 首次加载期间提交也按最终目录校验，不能用临时默认放行无效预算。
-    final entry = _lookup(catalog);
-    final maxOutput = int.tryParse(_maxOutputController.text.trim());
-    final rawWindow = _contextController.text.trim();
-    final window = int.tryParse(rawWindow);
-    final rawOutput = _maxOutputController.text.trim();
-    final fallbackWindow =
-        entry?.contextWindow ?? ModelCatalog.localDefaultWindow;
-    final fallbackOutput =
-        entry?.maxOutputTokens ?? ModelCatalog.localDefaultOutputReserve;
-    if ((rawWindow.isNotEmpty && (window == null || window < 2048)) ||
-        (rawOutput.isNotEmpty && (maxOutput == null || maxOutput <= 0)) ||
-        ((window ?? fallbackWindow) <= (maxOutput ?? fallbackOutput) + 1024)) {
-      setState(() => _budgetError = '窗口至少 2048，且需大于输出预留加 1024；输出上限须为正整数');
-      return;
-    }
-    setState(() => _budgetError = null);
-    widget.onModelChanged(
-      widget.model.withSettings(
-        contextWindow: window,
-        clearContextWindow: rawWindow.isEmpty,
-        clearMaxOutputTokens: rawOutput.isEmpty,
-        maxOutputTokens: maxOutput,
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final entry = _lookup(
-      ref.watch(modelCatalogProvider).value ?? ModelCatalog.empty,
-    );
-    final catalogWindow = entry?.contextWindow;
-    final catalogOutput = entry?.maxOutputTokens;
+    final catalog = ref.watch(modelCatalogProvider).value;
+    final model = widget.model;
+    final format = MaterialLocalizations.of(context).formatDecimal;
+    final window = model.contextWindow;
+    final output = model.maxOutputTokens;
+    final automaticWindow = catalog == null
+        ? '自动'
+        : '自动 · ${format(catalog.lookup(widget.presetId, model.id)?.contextWindow ?? ModelCatalog.localDefaultWindow)}';
+    final summaryStyle = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.m,
-        AppSpacing.s,
-        AppSpacing.s,
-        0,
+      padding: const EdgeInsets.only(
+        left: AppSpacing.m,
+        right: AppSpacing.s,
+        top: AppSpacing.s,
       ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final minimumWidth =
-              MediaQuery.textScalerOf(context).scale(80) + AppSpacing.m * 2;
-          final halfWidth = (constraints.maxWidth - AppSpacing.s) / 2;
-          final fieldWidth = halfWidth >= minimumWidth
-              ? halfWidth
-              : constraints.maxWidth;
-          return Wrap(
-            spacing: AppSpacing.s,
-            runSpacing: AppSpacing.m,
+      child: InkWell(
+        key: ValueKey('model-limits-${model.id}'),
+        borderRadius: AppRadius.smallAll,
+        onTap: widget.enabled ? _edit : null,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(
+            minHeight: AppControlStyle.touchTarget,
+          ),
+          child: Row(
             children: [
-              SizedBox(
-                width: fieldWidth,
-                child: TextField(
-                  key: ValueKey('context-window-${widget.model.id}'),
-                  controller: _contextController,
-                  enabled: widget.enabled,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  onSubmitted: (_) => _apply(),
-                  onTapOutside: (_) {
-                    FocusScope.of(context).unfocus();
-                    _apply();
-                  },
-                  decoration: InputDecoration(
-                    labelText: '上下文窗口',
-                    hintText:
-                        '${catalogWindow ?? ModelCatalog.localDefaultWindow}',
-                    errorText: _budgetError,
-                    errorMaxLines: 3,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.all(AppSpacing.m),
-                    labelStyle: theme.textTheme.bodyMedium,
-                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+              Expanded(
+                child: Wrap(
+                  spacing: AppSpacing.m,
+                  runSpacing: AppSpacing.xs,
+                  children: [
+                    Text(
+                      '上下文窗口 ${window == null ? automaticWindow : format(window)}',
+                      style: summaryStyle,
                     ),
-                  ),
-                  style: theme.textTheme.bodyMedium,
+                    Text(
+                      '输出上限 ${output == null ? '自动' : format(output)}',
+                      style: summaryStyle,
+                    ),
+                  ],
                 ),
               ),
-              SizedBox(
-                width: fieldWidth,
-                child: TextField(
-                  key: ValueKey('max-output-${widget.model.id}'),
-                  controller: _maxOutputController,
-                  enabled: widget.enabled,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.done,
-                  onSubmitted: (_) => _apply(),
-                  onTapOutside: (_) {
-                    FocusScope.of(context).unfocus();
-                    _apply();
-                  },
-                  decoration: InputDecoration(
-                    labelText: '输出上限',
-                    hintText:
-                        '${catalogOutput ?? ModelCatalog.localDefaultOutputReserve}',
-                    isDense: true,
-                    contentPadding: const EdgeInsets.all(AppSpacing.m),
-                    labelStyle: theme.textTheme.bodyMedium,
-                    hintStyle: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  style: theme.textTheme.bodyMedium,
+              if (widget.enabled) ...[
+                const SizedBox(width: AppSpacing.s),
+                const ExcludeSemantics(
+                  child: Icon(LucideIcons.slidersHorizontal, size: 20),
                 ),
-              ),
+              ],
             ],
-          );
-        },
+          ),
+        ),
       ),
     );
   }

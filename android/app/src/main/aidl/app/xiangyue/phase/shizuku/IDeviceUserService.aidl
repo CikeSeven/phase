@@ -8,5 +8,7 @@ interface IDeviceUserService {
     void execute(in Bundle request, in ParcelFileDescriptor screenshot, IDeviceCallback callback, IBinder client) = 1;
     void cancel(String owner, String call) = 2;
     void release(String owner) = 3;
+    void executeShell(in Bundle request, IDeviceCallback callback) = 4;
+    void cancelShell(String call) = 5;
     void destroy() = 16777114;
 }

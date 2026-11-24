@@ -1,21 +1,32 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+
+import '../content/attachment_image_frame.dart';
+
+import '../../../core/theme/app_motion.dart';
+import '../../../core/widgets/app_option_sheet.dart';
+
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_dialog.dart';
 import '../../../core/widgets/app_icon_badge.dart';
+import '../content/content_toolbox.dart';
 import 'artifact_text_sheet.dart';
 import '../../../data/models/attachment.dart';
 
 /// 查看一份工具产物：文本直接显示内容，图片显示缩略图。
 ///
 /// 文件不在磁盘上时给出明确文案，不假装内容为空。
-Future<void> showToolArtifact(BuildContext context, Attachment attachment) {
+Future<void> showToolArtifact(
+  BuildContext context,
+  Attachment attachment, {
+  Object? heroTag,
+}) {
   final file = File(attachment.localPath);
   if (!file.existsSync()) {
-    return showDialog<void>(
+    return showAppDialog<void>(
       context: context,
       builder: (context) => AppDialog(
         title: attachment.name,
@@ -34,40 +45,71 @@ Future<void> showToolArtifact(BuildContext context, Attachment attachment) {
     );
   }
   if (attachment.isImage) {
-    return showDialog<void>(
-      context: context,
-      builder: (context) => AppDialog(
-        title: attachment.name,
-        titleStyle: Theme.of(context).textTheme.bodyMedium,
-        description: _sizeLabel(attachment.size),
-        content: InteractiveViewer(
-          child: Image.file(
+    final reduced = AppMotion.reduce(context);
+    return Navigator.of(context).push<void>(
+      PageRouteBuilder<void>(
+        transitionDuration: reduced ? Duration.zero : AppMotion.pageOpen,
+        reverseTransitionDuration: reduced
+            ? Duration.zero
+            : AppMotion.pageClose,
+        pageBuilder: (context, _, _) {
+          final image = Image.file(
             file,
-            errorBuilder: (_, _, _) => const Padding(
-              padding: EdgeInsets.all(AppSpacing.l),
-              child: Text('图片文件已丢失'),
+            frameBuilder: attachmentImageFrame,
+            width: double.infinity,
+            height: double.infinity,
+            fit: BoxFit.contain,
+            errorBuilder: (_, _, _) => const Text('图片文件已丢失'),
+          );
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(attachment.name),
+              actions: [ContentToolbox(attachment: attachment)],
             ),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('关闭'),
-          ),
-        ],
+            body: SafeArea(
+              child: Column(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: InteractiveViewer(
+                        child: heroTag == null || reduced
+                            ? image
+                            : Hero(
+                                tag: heroTag,
+                                createRectTween: (begin, end) =>
+                                    _ImageFlightRect(begin: begin, end: end),
+                                child: image,
+                              ),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(AppSpacing.s),
+                    child: Text(_sizeLabel(attachment.size)),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+        transitionsBuilder: (_, animation, _, child) =>
+            FadeTransition(opacity: animation, child: child),
       ),
     );
   }
   if (!attachment.mimeType.startsWith('text/')) {
-    return showDialog<void>(
+    return showAppDialog<void>(
       context: context,
       builder: (context) => AppDialog(
         title: attachment.name,
         titleStyle: Theme.of(context).textTheme.bodyMedium,
-        icon: LucideIcons.fileText,
-        description: '这是二进制文件，不能按文本预览。',
+        icon: attachment.mimeType.startsWith('video/')
+            ? LucideIcons.video
+            : LucideIcons.fileText,
         content: _FileFacts(attachment: attachment),
         actions: [
+          if (attachment.mimeType.startsWith('video/'))
+            ContentToolbox(attachment: attachment),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
             child: const Text('关闭'),
@@ -77,6 +119,12 @@ Future<void> showToolArtifact(BuildContext context, Attachment attachment) {
     );
   }
   return _showTextPreview(context, attachment, file);
+}
+
+class _ImageFlightRect extends RectTween {
+  _ImageFlightRect({super.begin, super.end});
+  @override
+  Rect? lerp(double t) => super.lerp(Curves.easeOutCubic.transform(t));
 }
 
 Future<void> _showTextPreview(
@@ -89,7 +137,7 @@ Future<void> _showTextPreview(
     page = await readArtifactPage(file, 0);
   } on FileSystemException {
     if (!context.mounted) return;
-    await showDialog<void>(
+    await showAppDialog<void>(
       context: context,
       builder: (context) => AppDialog(
         title: attachment.name,
@@ -109,10 +157,8 @@ Future<void> _showTextPreview(
     return;
   }
   if (!context.mounted) return;
-  await showModalBottomSheet<void>(
+  await showAppOptionSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
     // 拖动杆由 AppSheet 自己画，这里不能再让框架画一个（会变成两根）。
     builder: (context) => ArtifactTextSheet(
       attachment: attachment,

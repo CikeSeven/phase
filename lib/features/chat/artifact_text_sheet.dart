@@ -3,9 +3,12 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollDirection;
 
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_sheet.dart';
+import '../../../core/widgets/app_breathing_dots.dart';
+import '../../../core/theme/app_motion.dart';
 import '../../../data/models/attachment.dart';
 
 const artifactPageBytes = 256 * 1024;
@@ -50,12 +53,37 @@ class ArtifactTextSheet extends StatefulWidget {
 
 class _ArtifactTextSheetState extends State<ArtifactTextSheet> {
   final offsets = [0];
-  late String text = widget.initialText;
+  late final pages = [widget.initialText];
+  final scroll = ScrollController();
+  int first = 0;
   late int? next = widget.nextOffset;
   var index = 0;
   bool busy = false;
   String? error;
-  Future<void> _load(int target) async {
+  @override
+  void initState() {
+    super.initState();
+    scroll.addListener(_nearEnd);
+  }
+
+  @override
+  void dispose() {
+    scroll.dispose();
+    super.dispose();
+  }
+
+  void _nearEnd() {
+    if (!busy &&
+        error == null &&
+        next != null &&
+        scroll.position.isScrollingNotifier.value &&
+        scroll.position.userScrollDirection == ScrollDirection.reverse &&
+        scroll.position.extentAfter < 220) {
+      _load(index + 1, append: true);
+    }
+  }
+
+  Future<void> _load(int target, {bool append = false}) async {
     if (busy) return;
     setState(() {
       busy = true;
@@ -71,9 +99,14 @@ class _ArtifactTextSheetState extends State<ArtifactTextSheet> {
       setState(() {
         if (target == offsets.length) offsets.add(offset);
         index = target;
-        text = page.text;
+        if (!append) {
+          first = target;
+          pages.clear();
+        }
+        pages.add(page.text);
         next = page.next;
       });
+      if (!append && scroll.hasClients) scroll.jumpTo(0);
     } on FileSystemException {
       if (mounted) setState(() => error = '读取产物文件失败，请重试');
     } finally {
@@ -111,16 +144,32 @@ class _ArtifactTextSheetState extends State<ArtifactTextSheet> {
             ],
           )
         : null,
-    child: ListView(
+    child: ListView.builder(
+      controller: scroll,
       key: const ValueKey('tool-artifact-content'),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.l),
-      children: [
-        SelectableText(
-          text,
-          key: ValueKey(index),
-          style: Theme.of(context).textTheme.bodyMedium,
-        ),
-      ],
+      itemCount: pages.length + (next != null ? 1 : 0),
+      itemBuilder: (context, i) {
+        if (i == pages.length) {
+          return const Center(child: AppBreathingDots(label: '还有更多内容'));
+        }
+        return TweenAnimationBuilder<double>(
+          key: ValueKey(first + i),
+          tween: Tween(begin: i == 0 ? 1 : 0, end: 1),
+          duration: AppMotion.reduce(context)
+              ? Duration.zero
+              : AppMotion.effects,
+          curve: Curves.easeOutCubic,
+          builder: (_, t, child) => Transform.translate(
+            offset: Offset(0, 10 * (1 - t)),
+            child: Opacity(opacity: t, child: child),
+          ),
+          child: SelectableText(
+            pages[i],
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+        );
+      },
     ),
   );
 }

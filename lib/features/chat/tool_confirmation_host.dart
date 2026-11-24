@@ -1,6 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../core/theme/app_motion.dart';
+import '../../core/widgets/app_option_sheet.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/widgets/app_snack_bar.dart';
@@ -83,7 +87,11 @@ class _ToolConfirmationHostState extends ConsumerState<ToolConfirmationHost>
       final old = _route!;
       _route = null;
       _shown = null;
-      if (old.isActive) old.navigator?.removeRoute(old);
+      if (old.isCurrent) {
+        old.navigator?.pop();
+      } else if (old.isActive) {
+        old.navigator?.removeRoute(old);
+      }
     }
     if (request == null ||
         _route != null ||
@@ -93,10 +101,9 @@ class _ToolConfirmationHostState extends ConsumerState<ToolConfirmationHost>
     final navigator = widget.navigatorKey.currentState;
     if (navigator == null) return;
     FocusManager.instance.primaryFocus?.unfocus();
-    final route = ModalBottomSheetRoute<ToolConfirmationOutcome>(
+    final route = AppOptionSheetRoute<ToolConfirmationOutcome>(
       builder: (_) => ToolConfirmationSheet(request: request),
-      isScrollControlled: true,
-      useSafeArea: true,
+      sheetAnimationStyle: AppMotion.sheetStyle(navigator.context),
       barrierLabel: MaterialLocalizations.of(navigator.context)
           .modalBarrierDismissLabel,
     );

@@ -10,6 +10,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_snack_bar.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/models/tool_permission.dart';
 import '../../../data/models/tool_policy.dart';
 import '../../../data/models/tool_source.dart';
@@ -30,6 +31,8 @@ const _builtInTools = [
   'write_file',
   'edit_file',
   'shell',
+  'android_shell',
+  'root_device',
   'task_list',
   'task_output',
   'task_stop',
@@ -41,6 +44,8 @@ const _builtInTools = [
   'write_memory',
   'web_search',
   'web_fetch',
+  'generate_image',
+  'generate_video',
   'list_apps',
   'open_app',
   'inspect_ui',
@@ -79,7 +84,7 @@ class _ToolPermissionRulesPageState
               _ => null,
             };
       if (choice == _RuleChoice.allow && warning != null) {
-        final confirmed = await showDialog<bool>(
+        final confirmed = await showAppDialog<bool>(
           context: context,
           builder: (context) => AppDialog(
             title: '直接允许此工具',
@@ -159,12 +164,13 @@ class _ToolPermissionRulesPageState
                   label: 'HTTP · $method',
                   rule: target('http_request', action: method),
                 ),
-              for (final action in ShizukuDisplayTool.actions)
-                (
-                  label:
-                      '虚拟屏 · ${ToolPresentation.actionLabel('shizuku_display', action)}',
-                  rule: target('shizuku_display', action: action),
-                ),
+              for (final tool in virtualDisplayTools)
+                for (final action in ShizukuDisplayTool.actions)
+                  (
+                    label:
+                        '${ToolPresentation.toolLabel(tool)} · ${ToolPresentation.actionLabel(tool, action)}',
+                    rule: target(tool, action: action),
+                  ),
               for (final entry in servers.value ?? const [])
                 for (final tool in entry.tools)
                   (
@@ -180,7 +186,7 @@ class _ToolPermissionRulesPageState
                   ),
             ];
             final keys = targets.map((target) => target.rule.key).toSet();
-            return ListView(
+            return SettingsListView(
               padding: const EdgeInsets.all(AppSpacing.l),
               children: [
                 for (final target in targets)

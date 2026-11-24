@@ -361,18 +361,24 @@ final class ChatToolRuntimeFactoryProvider
         dependencies: <ProviderOrFamily>[
           settingsStorageProvider,
           webSearchRepositoryProvider,
+          imageGenerationRepositoryProvider,
+          videoGenerationRepositoryProvider,
         ],
-        $allTransitiveDependencies: <ProviderOrFamily>[
+        $allTransitiveDependencies: <ProviderOrFamily>{
           ChatToolRuntimeFactoryProvider.$allTransitiveDependencies0,
           ChatToolRuntimeFactoryProvider.$allTransitiveDependencies1,
           ChatToolRuntimeFactoryProvider.$allTransitiveDependencies2,
-        ],
+          ChatToolRuntimeFactoryProvider.$allTransitiveDependencies3,
+          ChatToolRuntimeFactoryProvider.$allTransitiveDependencies4,
+        },
       );
 
   static final $allTransitiveDependencies0 = settingsStorageProvider;
   static final $allTransitiveDependencies1 =
       SettingsStorageProvider.$allTransitiveDependencies0;
   static final $allTransitiveDependencies2 = webSearchRepositoryProvider;
+  static final $allTransitiveDependencies3 = imageGenerationRepositoryProvider;
+  static final $allTransitiveDependencies4 = videoGenerationRepositoryProvider;
 
   @override
   String debugGetCreateSourceHash() => _$chatToolRuntimeFactoryHash();
@@ -390,7 +396,7 @@ final class ChatToolRuntimeFactoryProvider
 }
 
 String _$chatToolRuntimeFactoryHash() =>
-    r'16cc3aa11f272b364ae60e68aa3267a86e4d4548';
+    r'26c96cb805cadc268ec6f12e2973e27f0977fcb3';
 
 @ProviderFor(chatRunFactory)
 final chatRunFactoryProvider = ChatRunFactoryProvider._();
@@ -421,6 +427,8 @@ final class ChatRunFactoryProvider
           ChatRunFactoryProvider.$allTransitiveDependencies3,
           ChatRunFactoryProvider.$allTransitiveDependencies4,
           ChatRunFactoryProvider.$allTransitiveDependencies5,
+          ChatRunFactoryProvider.$allTransitiveDependencies6,
+          ChatRunFactoryProvider.$allTransitiveDependencies7,
         },
       );
 
@@ -431,8 +439,12 @@ final class ChatRunFactoryProvider
       ChatToolRuntimeFactoryProvider.$allTransitiveDependencies1;
   static final $allTransitiveDependencies3 =
       ChatToolRuntimeFactoryProvider.$allTransitiveDependencies2;
-  static final $allTransitiveDependencies4 = modelCatalogProvider;
+  static final $allTransitiveDependencies4 =
+      ChatToolRuntimeFactoryProvider.$allTransitiveDependencies3;
   static final $allTransitiveDependencies5 =
+      ChatToolRuntimeFactoryProvider.$allTransitiveDependencies4;
+  static final $allTransitiveDependencies6 = modelCatalogProvider;
+  static final $allTransitiveDependencies7 =
       ModelCatalogProvider.$allTransitiveDependencies0;
 
   @override

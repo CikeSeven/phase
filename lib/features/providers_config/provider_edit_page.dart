@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/app_option_sheet.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -327,10 +330,8 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
 
   Future<void> _choosePreset() async {
     final preset = await _showEditorModal(
-      () => showModalBottomSheet<ProviderPreset>(
+      () => showAppOptionSheet<ProviderPreset>(
         context: context,
-        isScrollControlled: true,
-        useSafeArea: true,
         backgroundColor: Theme.of(context).colorScheme.surface
             .withValues(alpha: 0),
         builder: (_) => ProviderPresetSheet(selectedId: _presetId),
@@ -360,7 +361,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
 
   Future<void> _addModel() async {
     final model = await _showEditorModal(
-      () => showDialog<ProfileModel>(
+      () => showAppDialog<ProfileModel>(
         context: context,
         builder: (_) => ProviderModelDialog(
           containsId: (id) => _models.any((model) => model.id == id),
@@ -380,7 +381,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
   Future<void> _removeModel(ProfileModel model) async {
     var confirmed = false;
     final remove = await _showEditorModal(
-      () => showDialog<bool>(
+      () => showAppDialog<bool>(
         context: context,
         builder: (context) => AppDialog(
           title: '移除模型？',
@@ -580,7 +581,7 @@ class _ProviderEditPageState extends ConsumerState<ProviderEditPage> {
     if (_deleting || _modalOpen || _profileId == null) return;
     if (!_deletePending) {
       final confirmed = await _showEditorModal(
-        () => showDialog<bool>(
+        () => showAppDialog<bool>(
           context: context,
           builder: (context) => AppDialog(
             title: '删除服务商？',

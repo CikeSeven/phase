@@ -12,6 +12,7 @@ import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_linear_progress_indicator.dart';
 import '../../../core/widgets/app_list_tile.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/models/workspace.dart';
 import '../commands/command_channels_section.dart';
 import 'dependency_controller.dart';
@@ -172,7 +173,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
               ),
             )
           : null,
-      body: ListView(
+      body: SettingsListView(
         padding: const EdgeInsets.all(AppSpacing.l),
         children: [
           Material(
@@ -378,7 +379,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
     required bool replacesEnvironment,
   }) async {
     final colors = Theme.of(context).colorScheme;
-    final allowed = await showDialog<bool>(
+    final allowed = await showAppDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: replacesEnvironment ? '重试安装 Ubuntu？' : '安装 Ubuntu？',
@@ -414,7 +415,7 @@ class _WorkspacesPageState extends ConsumerState<WorkspacesPage> {
 
   Future<void> _confirmEnvironmentUninstall() async {
     final colors = Theme.of(context).colorScheme;
-    final allowed = await showDialog<bool>(
+    final allowed = await showAppDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: '卸载 Ubuntu 环境？',

@@ -4,6 +4,41 @@ import 'package:phase/core/theme/app_theme.dart';
 import 'package:phase/core/widgets/app_dialog.dart';
 
 void main() {
+  testWidgets('弹窗打开和返回都有中间帧，淡入只覆盖卡片', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => TextButton(
+            onPressed: () => showAppDialog<void>(
+              context: context,
+              builder: (_) =>
+                  const AppDialog(title: '选择外观', content: Text('浅色')),
+            ),
+            child: const Text('打开'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('打开'));
+    await tester.pump();
+    final fade = find
+        .descendant(
+          of: find.byType(Dialog),
+          matching: find.byType(FadeTransition),
+        )
+        .first;
+    double opacity() => tester.widget<FadeTransition>(fade).opacity.value;
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(opacity(), inExclusiveRange(0, 1));
+    await tester.pumpAndSettle();
+    expect(opacity(), 1);
+    await tester.binding.handlePopRoute();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 80));
+    expect(opacity(), inExclusiveRange(0, 1));
+    await tester.pumpAndSettle();
+    expect(find.byType(AppDialog), findsNothing);
+  });
   Future<void> pumpDialog(
     WidgetTester tester, {
     required TextScaler textScaler,

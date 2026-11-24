@@ -15,7 +15,8 @@ class FrostedSurface extends StatelessWidget {
     this.blur = 12,
     this.revealAnimation,
     this.padding = EdgeInsets.zero,
-  }) : assert(blur >= 0);
+  }) : assert(blur >= 0),
+       assert(revealAnimation == null || blur == 0);
 
   final Widget child;
   final BorderRadius borderRadius;
@@ -23,33 +24,17 @@ class FrostedSurface extends StatelessWidget {
   final Color? borderColor;
   final double blur;
 
-  /// 渐变底色、边缘、模糊强度与内容，不把背景采样放入整体透明度层。
+  /// 无背景采样的表面可直接整体淡入。
   final Animation<double>? revealAnimation;
   final EdgeInsetsGeometry padding;
 
   @override
   Widget build(BuildContext context) {
-    final animation = revealAnimation;
-    if (animation == null) return _buildSurface(context, 1, child);
-    return AnimatedBuilder(
-      animation: animation,
-      child: FadeTransition(
-        opacity: animation,
-        alwaysIncludeSemantics: true,
-        child: child,
-      ),
-      builder: (context, child) =>
-          _buildSurface(context, animation.value, child!),
-    );
-  }
-
-  Widget _buildSurface(BuildContext context, double progress, Widget child) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
     final dark = theme.brightness == Brightness.dark;
     // 辅助服务读取控件也会开启无障碍导航，不等于用户要求减少动态效果。
-    final reducedEffects =
-        MediaQuery.maybeOf(context)?.disableAnimations == true;
+    final reducedEffects = MediaQuery.disableAnimationsOf(context);
     final tint =
         color ??
         (dark ? colors.surfaceContainerLow : colors.surfaceContainerLowest)
@@ -59,30 +44,32 @@ class FrostedSurface extends StatelessWidget {
         borderColor ??
         colors.outlineVariant.withValues(alpha: dark ? 0.58 : 0.48);
     final surface = Material(
-      color: fill.withValues(alpha: fill.a * progress),
+      color: fill,
       surfaceTintColor: colors.surfaceTint.withValues(alpha: 0),
-      // 显式进度已经驱动边缘，避免 Material 再叠一层隐式动画产生拖尾。
-      animationDuration: revealAnimation == null
-          ? kThemeChangeDuration
-          : Duration.zero,
+      animationDuration: reducedEffects ? Duration.zero : kThemeChangeDuration,
       shape: RoundedRectangleBorder(
         borderRadius: borderRadius,
-        side: BorderSide(color: border.withValues(alpha: border.a * progress)),
+        side: BorderSide(color: border),
       ),
       child: Padding(padding: padding, child: child),
     );
 
-    return ClipRRect(
+    final clipped = ClipRRect(
       borderRadius: borderRadius,
       child: blur == 0 || reducedEffects
           ? surface
           : BackdropFilter(
-              filter: ImageFilter.blur(
-                sigmaX: blur * progress,
-                sigmaY: blur * progress,
-              ),
+              filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
               child: surface,
             ),
     );
+    final animation = revealAnimation;
+    return animation == null || reducedEffects
+        ? clipped
+        : FadeTransition(
+            opacity: animation,
+            alwaysIncludeSemantics: true,
+            child: RepaintBoundary(child: clipped),
+          );
   }
 }

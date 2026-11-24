@@ -129,12 +129,11 @@ abstract final class AppTheme {
       canvasColor: colors.surface,
       dividerColor: outline,
       dividerTheme: DividerThemeData(color: outline, thickness: 1, space: 1),
+      splashFactory: InkRipple.splashFactory,
       pageTransitionsTheme: PageTransitionsTheme(
         builders: {
-          // 非手势导航使用 SDK 默认过渡，手势返回保留 Android 预测预览。
-          TargetPlatform.android: PredictiveBackPageTransitionsBuilder(
-            fallbackColor: colors.surface,
-          ),
+          for (final platform in TargetPlatform.values)
+            platform: const AppPageTransitionsBuilder(),
         },
       ),
       appBarTheme: AppBarTheme(
@@ -325,7 +324,9 @@ abstract final class AppTheme {
       ),
       menuTheme: MenuThemeData(
         style: MenuStyle(
-          backgroundColor: WidgetStatePropertyAll(colors.surfaceContainer),
+          backgroundColor: WidgetStatePropertyAll(
+            dark ? colors.surfaceContainerLowest : colors.surfaceContainerHigh,
+          ),
           surfaceTintColor: WidgetStatePropertyAll(transparent),
           shape: WidgetStatePropertyAll(menuShape),
           elevation: const WidgetStatePropertyAll(2),

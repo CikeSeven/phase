@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:syncfusion_flutter_pdf/pdf.dart';
 
@@ -34,151 +35,101 @@ class WebFetchClient {
     WebRequestScope scope, {
     required int maxCharacters,
   }) async {
-    var uri = validateUrl(url);
     try {
-      for (var hop = 0; hop <= maxRedirects; hop++) {
-        scope.check();
-        final addresses = await scope.guard(InternetAddress.lookup(uri.host));
-        if (addresses.isEmpty ||
-            addresses.any((address) => !_publicAddress(address))) {
-          throw const WebFailure(
-            'blockedDestination',
-            '网页读取仅支持公网地址，不访问本机、私网或保留地址',
-          );
-        }
-        final client = HttpClient()
-          ..autoUncompress = true
-          // 连接固定到已审查的目标 IP，不让环境代理改变连接协议。
-          ..findProxy = null;
-        // 自定义 factory 必须提供已完成 TLS 握手的 HTTPS socket；
-        // HttpClient 不会为 factory 返回的普通 Socket 自动启用 TLS。
-        client.connectionFactory = (target, proxyHost, proxyPort) async {
-          scope.check();
-          return _connect(addresses, target, scope);
-        };
-        var active = true;
-        scope.whenAborted.then((_) {
-          if (active) client.close(force: true);
-        }).ignore();
-        try {
-          final request = await scope.guard(client.getUrl(uri));
-          request.followRedirects = false;
-          request.headers.set(
-            HttpHeaders.userAgentHeader,
-            'Phase/1.0 (Web Fetch)',
-          );
-          request.headers.set(
-            HttpHeaders.acceptHeader,
+      final response = await _get(
+        url,
+        scope,
+        accept:
             'text/html, text/plain, application/json, application/pdf;q=0.8',
-          );
-          final response = await scope.guard(request.close());
-          final status = response.statusCode;
-          if (const {301, 302, 303, 307, 308}.contains(status)) {
-            final location = response.headers.value(HttpHeaders.locationHeader);
-            if (location == null || hop == maxRedirects) {
-              throw const WebFailure('redirectLimit', '网页重定向无效或次数超过上限');
-            }
-            uri = validateUrl(uri.resolve(location).toString());
-            continue;
+        consume: (response) => readWebResponse(
+          response,
+          scope,
+          maxBytes: maxResponseBytes,
+          allowTruncation: true,
+        ),
+      );
+      final uri = response.uri;
+      final status = response.status;
+      final body = response.body;
+      scope.check();
+      final raw = body.bytes;
+      var truncated = body.truncated;
+      final type = response.contentType;
+      final mime = type?.mimeType.toLowerCase() ?? '';
+      String content;
+      String? title;
+      if (mime == 'application/pdf') {
+        if (truncated) {
+          throw const WebFailure('responseTooLarge', 'PDF 超过读取上限，请使用较小的文档');
+        }
+        final document = PdfDocument(inputBytes: raw);
+        try {
+          if (document.pages.count > 100) {
+            throw const WebFailure('responseTooLarge', 'PDF 超过 100 页，请读取较小的文档');
           }
-          final body = await readWebResponse(
-            response,
-            scope,
-            maxBytes: maxResponseBytes,
-            allowTruncation: true,
-          );
-          scope.check();
-          final raw = body.bytes;
-          var truncated = body.truncated;
-          final type = response.headers.contentType;
-          final mime = type?.mimeType.toLowerCase() ?? '';
-          String content;
-          String? title;
-          if (mime == 'application/pdf') {
-            if (truncated) {
-              throw const WebFailure('responseTooLarge', 'PDF 超过读取上限，请使用较小的文档');
+          final text = StringBuffer();
+          final extractor = PdfTextExtractor(document);
+          for (var page = 0; page < document.pages.count; page++) {
+            scope.check();
+            final pageText = extractor.extractText(
+              startPageIndex: page,
+              endPageIndex: page,
+            );
+            final remaining = maxCharacters - text.length;
+            text.write(clipWebText(pageText, remaining));
+            if (pageText.length > remaining || text.length == maxCharacters) {
+              truncated |=
+                  pageText.length > remaining ||
+                  page < document.pages.count - 1;
+              break;
             }
-            final document = PdfDocument(inputBytes: raw);
-            try {
-              if (document.pages.count > 100) {
-                throw const WebFailure(
-                  'responseTooLarge',
-                  'PDF 超过 100 页，请读取较小的文档',
-                );
-              }
-              final text = StringBuffer();
-              final extractor = PdfTextExtractor(document);
-              for (var page = 0; page < document.pages.count; page++) {
-                scope.check();
-                final pageText = extractor.extractText(
-                  startPageIndex: page,
-                  endPageIndex: page,
-                );
-                final remaining = maxCharacters - text.length;
-                text.write(clipWebText(pageText, remaining));
-                if (pageText.length > remaining ||
-                    text.length == maxCharacters) {
-                  truncated |=
-                      pageText.length > remaining ||
-                      page < document.pages.count - 1;
-                  break;
-                }
-                if (page < document.pages.count - 1 &&
-                    text.length < maxCharacters) {
-                  text.write('\n');
-                }
-              }
-              content = text.toString();
-              title = document.documentInformation.title;
-            } finally {
-              document.dispose();
-            }
-          } else {
-            if (!(mime.startsWith('text/') ||
-                const {
-                  'application/json',
-                  'application/xml',
-                  'application/xhtml+xml',
-                }.contains(mime))) {
-              throw const WebFailure(
-                'unsupportedContent',
-                '此网页未返回可读文本、HTML 或 PDF',
-              );
-            }
-            final encoding = Encoding.getByName(type?.charset ?? 'utf-8');
-            if (encoding == null) {
-              throw const WebFailure('unsupportedEncoding', '此网页使用了不支持的字符编码');
-            }
-            final text = encoding == latin1
-                ? latin1.decode(raw)
-                : encoding == utf8
-                ? utf8.decode(raw, allowMalformed: truncated)
-                : encoding.decode(raw);
-            if (mime == 'text/html' || mime == 'application/xhtml+xml') {
-              final rendered = webPageText(text, uri, maxCharacters);
-              content = rendered.content;
-              title = rendered.title;
-              truncated |= rendered.truncated;
-            } else {
-              content = text;
+            if (page < document.pages.count - 1 &&
+                text.length < maxCharacters) {
+              text.write('\n');
             }
           }
-          scope.check();
-          truncated |= content.length > maxCharacters;
-          return WebFetchResult(
-            url: uri.toString(),
-            statusCode: status,
-            content: clipWebText(content, maxCharacters),
-            title: title,
-            retrievedAt: DateTime.now().toUtc(),
-            truncated: truncated,
-          );
+          content = text.toString();
+          title = document.documentInformation.title;
         } finally {
-          active = false;
-          client.close(force: true);
+          document.dispose();
+        }
+      } else {
+        if (!(mime.startsWith('text/') ||
+            const {
+              'application/json',
+              'application/xml',
+              'application/xhtml+xml',
+            }.contains(mime))) {
+          throw const WebFailure('unsupportedContent', '此网页未返回可读文本、HTML 或 PDF');
+        }
+        final encoding = Encoding.getByName(type?.charset ?? 'utf-8');
+        if (encoding == null) {
+          throw const WebFailure('unsupportedEncoding', '此网页使用了不支持的字符编码');
+        }
+        final text = encoding == latin1
+            ? latin1.decode(raw)
+            : encoding == utf8
+            ? utf8.decode(raw, allowMalformed: truncated)
+            : encoding.decode(raw);
+        if (mime == 'text/html' || mime == 'application/xhtml+xml') {
+          final rendered = webPageText(text, uri, maxCharacters);
+          content = rendered.content;
+          title = rendered.title;
+          truncated |= rendered.truncated;
+        } else {
+          content = text;
         }
       }
-      throw const WebFailure('redirectLimit', '网页重定向次数超过上限');
+      scope.check();
+      truncated |= content.length > maxCharacters;
+      return WebFetchResult(
+        url: uri.toString(),
+        statusCode: status,
+        content: clipWebText(content, maxCharacters),
+        title: title,
+        retrievedAt: DateTime.now().toUtc(),
+        truncated: truncated,
+      );
     } on WebFailure {
       rethrow;
     } on HandshakeException {
@@ -191,6 +142,115 @@ class WebFetchClient {
       scope.check();
       throw const WebFailure('invalidResponse', '未收到可解析的完整网页内容');
     }
+  }
+
+  Future<Uint8List> fetchImageBytes(
+    String url,
+    WebRequestScope scope, {
+    required int maxBytes,
+  }) async {
+    final response = await _get(
+      url,
+      scope,
+      accept: 'image/png, image/jpeg, image/webp',
+      consume: (response) =>
+          readWebResponse(response, scope, maxBytes: maxBytes),
+    );
+    if (response.status < 200 || response.status >= 300) {
+      throw const WebFailure('imageDownloadFailed', '图片下载失败');
+    }
+    return response.body.bytes;
+  }
+
+  Future<void> downloadVideo(
+    String url,
+    WebRequestScope scope,
+    File destination, {
+    required int maxBytes,
+  }) async {
+    await _get<void>(
+      url,
+      scope,
+      accept: 'video/mp4',
+      consume: (response) async {
+        if (response.statusCode != HttpStatus.ok) {
+          throw const WebFailure('videoDownloadFailed', '视频下载失败');
+        }
+        if (response.contentLength > maxBytes) {
+          throw const WebFailure('responseTooLarge', '下载结果超过大小上限');
+        }
+        await writeWebResponse(
+          response,
+          scope,
+          destination,
+          maxBytes: maxBytes,
+        );
+      },
+    );
+  }
+
+  Future<({Uri uri, int status, ContentType? contentType, T body})> _get<T>(
+    String url,
+    WebRequestScope scope, {
+    required String accept,
+    required Future<T> Function(HttpClientResponse) consume,
+  }) async {
+    var uri = validateUrl(url);
+    for (var hop = 0; hop <= maxRedirects; hop++) {
+      scope.check();
+      final addresses = await scope.guard(InternetAddress.lookup(uri.host));
+      if (addresses.isEmpty ||
+          addresses.any((address) => !_publicAddress(address))) {
+        throw const WebFailure(
+          'blockedDestination',
+          '网页读取仅支持公网地址，不访问本机、私网或保留地址',
+        );
+      }
+      final client = HttpClient()
+        ..autoUncompress = true
+        // 连接固定到已审查的目标 IP，不让环境代理改变连接协议。
+        ..findProxy = null;
+      // 自定义 factory 必须提供已完成 TLS 握手的 HTTPS socket；
+      // HttpClient 不会为 factory 返回的普通 Socket 自动启用 TLS。
+      client.connectionFactory = (target, proxyHost, proxyPort) async {
+        scope.check();
+        return _connect(addresses, target, scope);
+      };
+      var active = true;
+      scope.whenAborted.then((_) {
+        if (active) client.close(force: true);
+      }).ignore();
+      try {
+        final request = await scope.guard(client.getUrl(uri));
+        request.followRedirects = false;
+        request.headers.set(
+          HttpHeaders.userAgentHeader,
+          'Phase/1.0 (Web Fetch)',
+        );
+        request.headers.set(HttpHeaders.acceptHeader, accept);
+        final response = await scope.guard(request.close());
+        final status = response.statusCode;
+        if (const {301, 302, 303, 307, 308}.contains(status)) {
+          final location = response.headers.value(HttpHeaders.locationHeader);
+          if (location == null || hop == maxRedirects) {
+            throw const WebFailure('redirectLimit', '网页重定向无效或次数超过上限');
+          }
+          uri = validateUrl(uri.resolve(location).toString());
+          continue;
+        }
+        final body = await consume(response);
+        return (
+          uri: uri,
+          status: status,
+          contentType: response.headers.contentType,
+          body: body,
+        );
+      } finally {
+        active = false;
+        client.close(force: true);
+      }
+    }
+    throw const WebFailure('redirectLimit', '网页重定向次数超过上限');
   }
 
   static ConnectionTask<Socket> _connect(

@@ -97,8 +97,14 @@ class ConversationRepository {
   }
 
   /// 会话内容；会话不存在时为 null，供界面区分"空会话"与"已删除"。
-  Stream<ConversationThread?> watchThread(String conversationId) {
-    return _threadQuery(conversationId).watch().map(_threadFromRows);
+  Stream<ConversationThread?> watchThread(String conversationId) async* {
+    try {
+      yield* _threadQuery(conversationId).watch().map(_threadFromRows);
+    } on Failure {
+      rethrow;
+    } on Exception catch (error) {
+      throw StorageFailure('读取会话失败', cause: error);
+    }
   }
 
   /// 发送前读取最新分支，不依赖界面订阅是否已收到更新。
@@ -929,14 +935,14 @@ class ConversationRepository {
     while (cursor != null && seen.add(cursor)) {
       final message = byId[cursor];
       if (message == null) break;
-      branch.insert(0, message);
+      branch.add(message);
       cursor = message.parentId;
     }
 
     return ConversationThread(
       conversation: conversationFromRow(row),
       messages: messages,
-      branch: branch,
+      branch: branch.reversed.toList(),
       currentMessageId: row.currentMessageId,
     );
   }

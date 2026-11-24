@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_elastic_switch.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -14,6 +17,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/models/mcp_server_profile.dart';
 import '../../../data/models/tool_source.dart';
 import '../../../data/models/ubuntu_filesystem_layout.dart';
@@ -232,7 +236,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
 
   Future<void> _delete() async {
     if (_busy) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: '删除 MCP 服务',
@@ -332,7 +336,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
               )
             : Form(
                 key: _form,
-                child: ListView(
+                child: SettingsListView(
                   padding: const EdgeInsets.all(AppSpacing.l),
                   children: [
                     SegmentedButton<McpTransport>(
@@ -473,7 +477,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                       ),
                     ],
                     const SizedBox(height: AppSpacing.m),
-                    SwitchListTile.adaptive(
+                    AppElasticSwitchTile(
                       title: const Text('启用服务'),
                       contentPadding: EdgeInsets.zero,
                       value: _enabled,
@@ -485,7 +489,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                             }),
                     ),
                     if (_transport == McpTransport.streamableHttp) ...[
-                      SwitchListTile.adaptive(
+                      AppElasticSwitchTile(
                         title: const Text('Bearer 鉴权'),
                         contentPadding: EdgeInsets.zero,
                         value: _requiresBearer,

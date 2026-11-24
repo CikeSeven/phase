@@ -397,6 +397,7 @@ class ExecutionController extends _$ExecutionController {
           'locked' => '设备已锁定，自动操作已停止',
           'permissionRequired' => '无障碍授权已关闭，自动操作已停止',
           'shizukuPermissionRequired' => 'Shizuku 授权或执行身份已改变，虚拟屏操作已停止',
+          'rootDisplayStopped' => 'Root 虚拟屏已关闭或连接已断开',
           'channelDisabled' => 'Shizuku 已关闭，虚拟屏操作已停止',
           'channelDisconnected' => 'Shizuku 服务已断开，虚拟屏操作已停止',
           'serviceStopped' => '任务服务已停止',

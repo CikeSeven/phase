@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_loading_indicator/loading_indicator.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:phase/core/theme/app_motion.dart';
 import 'package:phase/core/theme/app_radius.dart';
 import 'package:phase/core/theme/app_theme.dart';
@@ -24,7 +24,7 @@ void main() {
       expect(rect.size, const Size.square(56));
       expect(tester.getSize(_surface()), const Size.square(40));
       expect(
-        tester.getSize(find.byIcon(Symbols.arrow_upward)),
+        tester.getSize(find.byIcon(LucideIcons.arrowUp)),
         const Size.square(24),
       );
 
@@ -88,9 +88,9 @@ void main() {
         isNull,
       );
       await tester.pump(const Duration(milliseconds: 60));
-      expect(find.byIcon(Symbols.arrow_upward), findsOneWidget);
+      expect(find.byIcon(LucideIcons.arrowUp), findsOneWidget);
       expect(find.byType(LoadingIndicator), findsOneWidget);
-      expect(find.byIcon(Symbols.stop), findsNothing);
+      expect(find.byIcon(LucideIcons.square), findsNothing);
       expect(
         tester.getSize(find.byType(LoadingIndicator)),
         const Size.square(40),
@@ -119,7 +119,7 @@ void main() {
       expect(stops, 1);
       expect(tester.getSemantics(find.byType(IconButton)).tooltip, '发送');
       await tester.pumpAndSettle();
-      expect(find.byIcon(Symbols.arrow_upward), findsOneWidget);
+      expect(find.byIcon(LucideIcons.arrowUp), findsOneWidget);
       expect(find.byType(LoadingIndicator), findsNothing);
       expect(tester.getRect(button), rect);
       expect(tester.binding.transientCallbackCount, 0);
@@ -147,7 +147,7 @@ void main() {
       );
       final sendBackground = tester.widget<Material>(_surface()).color;
       final sendForeground = IconTheme.of(
-        tester.element(find.byIcon(Symbols.arrow_upward)),
+        tester.element(find.byIcon(LucideIcons.arrowUp)),
       ).color;
       await tester.tap(find.byTooltip('发送'));
       await tester.pump();
@@ -171,7 +171,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.widget<Material>(_surface()).color, sendBackground);
       expect(
-        IconTheme.of(tester.element(find.byIcon(Symbols.arrow_upward))).color,
+        IconTheme.of(tester.element(find.byIcon(LucideIcons.arrowUp))).color,
         sendForeground,
       );
       expect(tester.takeException(), isNull);
@@ -190,8 +190,8 @@ void main() {
             update = setState;
             return MediaQuery(
               data: MediaQuery.of(context).copyWith(
-                disableAnimations: reduced && !accessible,
-                accessibleNavigation: reduced && accessible,
+                disableAnimations: reduced,
+                accessibleNavigation: accessible,
               ),
               child: ChatSendButton(
                 isGenerating: generating,
@@ -205,11 +205,11 @@ void main() {
       await tester.tap(find.byTooltip('发送'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 40));
-      expect(find.byIcon(Symbols.arrow_upward), findsOneWidget);
+      expect(find.byIcon(LucideIcons.arrowUp), findsOneWidget);
       update(() => reduced = true);
       await tester.pump();
       expect(find.byType(AnimatedSwitcher), findsNothing);
-      expect(find.byIcon(Symbols.arrow_upward), findsNothing);
+      expect(find.byIcon(LucideIcons.arrowUp), findsNothing);
       expect(find.byType(LoadingIndicator), findsOneWidget);
       expect(tester.element(find.byType(IconButton)), same(buttonElement));
       expect(
@@ -228,7 +228,7 @@ void main() {
       await tester.pump();
       expect(generating, isFalse);
       expect(find.byType(LoadingIndicator), findsNothing);
-      expect(find.byIcon(Symbols.arrow_upward), findsOneWidget);
+      expect(find.byIcon(LucideIcons.arrowUp), findsOneWidget);
       update(() => reduced = false);
       await tester.pumpAndSettle();
       expect(tester.element(find.byType(IconButton)), same(buttonElement));

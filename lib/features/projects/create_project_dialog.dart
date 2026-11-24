@@ -9,7 +9,7 @@ import '../../data/models/project.dart';
 import '../../data/repositories/project_repository.dart';
 
 Future<Project?> showCreateProjectDialog(BuildContext context) =>
-    showDialog<Project>(
+    showAppDialog<Project>(
       context: context,
       barrierDismissible: false,
       builder: (context) => const _CreateProjectDialog(),

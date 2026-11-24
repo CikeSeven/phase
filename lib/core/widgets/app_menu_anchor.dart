@@ -57,7 +57,6 @@ class _AppMenuAnchorState extends State<AppMenuAnchor>
     curve: AppMotion.menuCurve,
     reverseCurve: AppMotion.menuReverseCurve,
   );
-  late final _scale = Tween(begin: 0.96, end: 1.0).animate(_progress);
   final _menuFocus = FocusScopeNode();
   final _scroll = ScrollController();
   VoidCallback? _hideOverlay;
@@ -114,6 +113,16 @@ class _AppMenuAnchorState extends State<AppMenuAnchor>
     hide?.call();
   }
 
+  void _overlayChanged(VoidCallback? callback) {
+    callback?.call();
+    // 菜单可能增删 LocalHistoryEntry，首页也需要同步 Android 的返回处理状态。
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || ModalRoute.isCurrentOf(context) != true) return;
+      NavigationNotification(canHandlePop: Navigator.of(context).canPop())
+          .dispatch(context);
+    });
+  }
+
   void _moveFocus({required bool forward}) {
     if (!_interactive || _menuFocus.context == null) return;
     if (_menuFocus.hasFocus) {
@@ -158,8 +167,8 @@ class _AppMenuAnchorState extends State<AppMenuAnchor>
     consumeOutsideTaps: true,
     onOpenRequested: _open,
     onCloseRequested: _close,
-    onOpen: widget.onOpen,
-    onClose: widget.onClose,
+    onOpen: () => _overlayChanged(widget.onOpen),
+    onClose: () => _overlayChanged(widget.onClose),
     builder: (context, controller, child) =>
         _shortcuts(widget.builder(context, controller, child)),
     overlayBuilder: _buildOverlay,
@@ -185,40 +194,48 @@ class _AppMenuAnchorState extends State<AppMenuAnchor>
           : b,
     );
     final bounds = screen.deflate(AppSpacing.s);
-    return CustomSingleChildLayout(
-      delegate: _MenuLayout(
-        anchor: info.anchorRect,
-        bounds: bounds,
-        alignment: style.alignment ?? AlignmentDirectional.bottomStart,
-        offset: widget.alignmentOffset,
-        position: info.position,
-        direction: direction,
-      ),
-      child: TapRegion(
-        groupId: info.tapRegionGroupId,
-        consumeOutsideTaps: true,
-        onTapOutside: (_) => widget.controller.close(),
-        child: ExcludeSemantics(
-          excluding: !_interactive,
-          child: ExcludeFocus(
+    final layout = _MenuLayout(
+      progress: _progress,
+      anchor: info.anchorRect,
+      bounds: bounds,
+      alignment: style.alignment ?? AlignmentDirectional.bottomStart,
+      offset: widget.alignmentOffset,
+      position: info.position,
+      direction: direction,
+    );
+    return Flow.unwrapped(
+      clipBehavior: Clip.none,
+      delegate: layout,
+      children: [
+        TapRegion(
+          groupId: info.tapRegionGroupId,
+          consumeOutsideTaps: true,
+          onTapOutside: (_) => widget.controller.close(),
+          child: ExcludeSemantics(
             excluding: !_interactive,
-            child: IgnorePointer(
-              ignoring: !_interactive,
-              child: Semantics(
-                scopesRoute: true,
-                explicitChildNodes: true,
-                child: FocusTraversalGroup(
-                  child: FocusScope(
-                    node: _menuFocus,
-                    skipTraversal: true,
-                    child: _shortcuts(_buildPanel(theme, style)),
+            child: ExcludeFocus(
+              excluding: !_interactive,
+              child: IgnorePointer(
+                ignoring: !_interactive,
+                child: Semantics(
+                  scopesRoute: true,
+                  explicitChildNodes: true,
+                  child: FocusTraversalGroup(
+                    child: FocusScope(
+                      node: _menuFocus,
+                      skipTraversal: true,
+                      child: ClipRect(
+                        clipper: _MenuRevealClipper(layout),
+                        child: _shortcuts(_buildPanel(theme, style)),
+                      ),
+                    ),
                   ),
                 ),
               ),
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -262,11 +279,7 @@ class _AppMenuAnchorState extends State<AppMenuAnchor>
           clipBehavior: Clip.antiAlias,
           child: content,
         );
-    Widget panel = ScaleTransition(
-      scale: _scale,
-      // 按最终尺寸布局，文字不逐帧重排；玻璃表面自行渐变底色和内容。
-      child: RepaintBoundary(child: IntrinsicWidth(child: surface)),
-    );
+    Widget panel = RepaintBoundary(child: IntrinsicWidth(child: surface));
     if (widget.surfaceBuilder == null) {
       panel = FadeTransition(
         opacity: _progress,
@@ -325,16 +338,18 @@ class AppMenuItemButton extends StatelessWidget {
   );
 }
 
-class _MenuLayout extends SingleChildLayoutDelegate {
+class _MenuLayout extends FlowDelegate {
   const _MenuLayout({
+    required this.progress,
     required this.anchor,
     required this.bounds,
     required this.alignment,
     required this.offset,
     required this.position,
     required this.direction,
-  });
+  }) : super(repaint: progress);
 
+  final Animation<double> progress;
   final Rect anchor;
   final Rect bounds;
   final AlignmentGeometry alignment;
@@ -343,13 +358,14 @@ class _MenuLayout extends SingleChildLayoutDelegate {
   final TextDirection direction;
 
   @override
-  BoxConstraints getConstraintsForChild(BoxConstraints constraints) =>
-      BoxConstraints.loose(
-        Size(math.max(0, bounds.width), math.max(0, bounds.height)),
-      );
+  BoxConstraints getConstraintsForChild(
+    int index,
+    BoxConstraints constraints,
+  ) => BoxConstraints.loose(
+    Size(math.max(0, bounds.width), math.max(0, bounds.height)),
+  );
 
-  @override
-  Offset getPositionForChild(Size size, Size childSize) {
+  Offset _positionFor(Size childSize) {
     final rtl = direction == TextDirection.rtl;
     final directionalOffset = alignment is AlignmentDirectional && rtl
         ? Offset(-offset.dx, offset.dy)
@@ -376,11 +392,66 @@ class _MenuLayout extends SingleChildLayoutDelegate {
   }
 
   @override
+  void paintChildren(FlowPaintingContext context) {
+    final origin = _positionFor(context.getChildSize(0)!);
+    final pivot = position == null ? anchor.center : anchor.topLeft + position!;
+    final scale = 0.90 + 0.10 * progress.value;
+    final translated = origin + (pivot - origin) * (1 - scale);
+    context.paintChild(
+      0,
+      transform: Matrix4.translationValues(translated.dx, translated.dy, 0)
+        ..scaleByDouble(scale, scale, 1, 1),
+    );
+  }
+
+  @override
   bool shouldRelayout(_MenuLayout oldDelegate) =>
+      bounds.size != oldDelegate.bounds.size;
+
+  @override
+  bool shouldRepaint(_MenuLayout oldDelegate) =>
+      progress != oldDelegate.progress ||
       anchor != oldDelegate.anchor ||
       bounds != oldDelegate.bounds ||
       alignment != oldDelegate.alignment ||
       offset != oldDelegate.offset ||
       position != oldDelegate.position ||
       direction != oldDelegate.direction;
+}
+
+class _MenuRevealClipper extends CustomClipper<Rect> {
+  _MenuRevealClipper(this.layout) : super(reclip: layout.progress);
+
+  final _MenuLayout layout;
+
+  @override
+  Rect getClip(Size size) {
+    final trigger = layout.position == null
+        ? layout.anchor.center
+        : layout.anchor.topLeft + layout.position!;
+    final local = trigger - layout._positionFor(size);
+    final startSize = Size(size.width * .52, math.min(36.0, size.height));
+    final start =
+        Offset(
+          (local.dx - startSize.width / 2).clamp(
+            0,
+            size.width - startSize.width,
+          ),
+          (local.dy - startSize.height / 2).clamp(
+            0,
+            size.height - startSize.height,
+          ),
+        ) &
+        startSize;
+    // 展开后给 Material 阴影留出边缘。
+    return Rect.lerp(
+      start,
+      (Offset.zero & size).inflate(16),
+      layout.progress.value,
+    )!;
+  }
+
+  @override
+  bool shouldReclip(_MenuRevealClipper oldClipper) =>
+      layout.shouldRepaint(oldClipper.layout);
 }

@@ -8,6 +8,7 @@ import '../../../core/theme/app_spacing.dart';
 import '../../../core/utils/logger.dart';
 import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/repositories/skill_repository.dart';
 import '../tools/tool.dart';
 import 'read_skill_tool.dart';
@@ -96,7 +97,7 @@ class _SkillResourcePageState extends ConsumerState<SkillResourcePage> {
   @override
   Widget build(BuildContext context) => AppScaffold(
     title: '资源查看',
-    body: ListView(
+    body: SettingsListView(
       controller: _scroll,
       padding: const EdgeInsets.all(AppSpacing.l),
       children: [

@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/app_option_sheet.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -13,10 +16,8 @@ import '../chat/chat_controller.dart';
 
 /// 会话内切换助手；选中后立即作用于当前会话（新会话则作用于下一条消息）。
 Future<void> showAssistantPickerSheet(BuildContext context) {
-  return showModalBottomSheet<void>(
+  return showAppOptionSheet<void>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
     backgroundColor: Colors.transparent,
     builder: (context) => const _AssistantPickerSheet(),
   );

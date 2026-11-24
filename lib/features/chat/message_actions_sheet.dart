@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/app_option_sheet.dart';
+
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import 'chat_action_sheet.dart';
@@ -14,10 +17,8 @@ Future<MessageAction?> showMessageActionsSheet(
   bool canViewUsage = false,
 }) {
   FocusManager.instance.primaryFocus?.unfocus();
-  return showModalBottomSheet<MessageAction>(
+  return showAppOptionSheet<MessageAction>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
     showDragHandle: true,
     builder: (context) => MessageActionsSheet(
       canCopy: canCopy,

@@ -177,42 +177,50 @@ class ChatController extends _$ChatController {
   }) async {
     state = state.clearCompleted(conversationId);
     final revision = ++_viewRevision;
-    final repository = await ref.read(conversationRepositoryProvider.future);
-    final thread = await repository.getThread(conversationId);
-    if (!ref.mounted ||
-        revision != _viewRevision ||
-        isCurrent?.call() == false) {
-      return;
-    }
-    if (thread == null) {
-      if (restored != null) {
-        startNewConversation(projectId: restored.projectId);
+    // 保持同一个历史订阅到切换完成，阅读区首帧可直接复用已解析的分支。
+    final history = ref.listen(
+      conversationThreadProvider(conversationId).future,
+      (_, _) {},
+    );
+    try {
+      final thread = await history.read();
+      if (!ref.mounted ||
+          revision != _viewRevision ||
+          isCurrent?.call() == false) {
         return;
       }
-      throw const OperationFailure('会话已不存在');
+      if (thread == null) {
+        if (restored != null) {
+          startNewConversation(projectId: restored.projectId);
+          return;
+        }
+        throw const OperationFailure('会话已不存在');
+      }
+      if (expectedProjectId != null &&
+          thread.conversation.projectId != expectedProjectId) {
+        throw const OperationFailure('此会话不属于当前项目');
+      }
+      final attachments = await _attachmentIndex(conversationId, const []);
+      if (!ref.mounted ||
+          revision != _viewRevision ||
+          isCurrent?.call() == false) {
+        return;
+      }
+      final active = ref.read(activeConversationProvider.notifier);
+      if (restored != null) {
+        active.restore(restored);
+      } else {
+        active.open(conversationId, projectId: thread.conversation.projectId);
+      }
+      state = state
+          .clearCompleted(conversationId)
+          .selectConversation(conversationId)
+          .copyWith(attachments: attachments);
+      // 会话绑定的助手可能不同：刷新派生选择。
+      ref.invalidate(modelSelectionProvider);
+    } finally {
+      history.close();
     }
-    if (expectedProjectId != null &&
-        thread.conversation.projectId != expectedProjectId) {
-      throw const OperationFailure('此会话不属于当前项目');
-    }
-    final attachments = await _attachmentIndex(conversationId, const []);
-    if (!ref.mounted ||
-        revision != _viewRevision ||
-        isCurrent?.call() == false) {
-      return;
-    }
-    final active = ref.read(activeConversationProvider.notifier);
-    if (restored != null) {
-      active.restore(restored);
-    } else {
-      active.open(conversationId, projectId: thread.conversation.projectId);
-    }
-    state = state
-        .clearCompleted(conversationId)
-        .selectConversation(conversationId)
-        .copyWith(attachments: attachments);
-    // 会话绑定的助手可能不同：刷新派生选择。
-    ref.invalidate(modelSelectionProvider);
   }
 
   /// 为当前会话切换助手；还没有会话时记为草稿，建会话时使用该助手。

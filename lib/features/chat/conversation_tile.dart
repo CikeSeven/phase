@@ -304,7 +304,7 @@ class _ConversationTileState extends ConsumerState<ConversationTile> {
   }
 
   Future<void> _rename(BuildContext context, WidgetRef ref) async {
-    final newTitle = await showDialog<String>(
+    final newTitle = await showAppDialog<String>(
       context: context,
       builder: (context) =>
           _RenameConversationDialog(title: conversation.title),
@@ -374,7 +374,7 @@ class _ConversationTileState extends ConsumerState<ConversationTile> {
   }
 
   Future<void> _confirmDelete(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (context) {
         final colors = Theme.of(context).colorScheme;

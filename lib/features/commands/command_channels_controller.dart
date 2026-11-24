@@ -8,6 +8,7 @@ import '../../../data/models/command_channel.dart';
 import '../../../data/models/tool_call_record.dart';
 import 'command_api.g.dart';
 import 'command_channel_driver.dart';
+import 'root_command_driver.dart';
 
 part 'command_channels_controller.g.dart';
 
@@ -115,10 +116,12 @@ class CommandChannelsController extends _$CommandChannelsController {
 
   Future<void> setShizukuEnabled(bool value) async {
     final current = state.value;
-    if (current == null) return;
-    final next = CommandChannelSettings(shizuku: value);
+    if (current == null || current.settings.root) return;
+    final next = CommandChannelSettings(
+      shizuku: value,
+      root: current.settings.root,
+    );
     await _operate(() async {
-      final storage = ref.read(settingsStorageProvider);
       final driver = ref.read(commandChannelDriverProvider);
       if (value) {
         final statuses = await driver.status();
@@ -140,15 +143,46 @@ class CommandChannelsController extends _$CommandChannelsController {
           );
         }
       }
-      await storage.writeCommandChannels(next);
-      try {
-        await driver.setEnabled(next.channels);
-      } on Failure {
-        await storage.writeCommandChannels(current.settings);
-        await driver.setEnabled(current.settings.channels);
-        rethrow;
+      await _saveSettings(current.settings, next);
+    }, settings: next);
+  }
+
+  Future<void> setRootEnabled(bool value) async {
+    final current = state.value;
+    if (current == null || current.settings.root == value) return;
+    final next = CommandChannelSettings(
+      shizuku: current.settings.shizuku,
+      root: value,
+    );
+    await _operate(() async {
+      const root = RootCommandDriver();
+      if (value) {
+        await root.authorize();
+        if (!ref.mounted) return;
+        await _saveSettings(current.settings, next);
+      } else {
+        await Future.wait([
+          _saveSettings(current.settings, next),
+          root.cancelDeviceAction(),
+        ]);
       }
     }, settings: next);
+  }
+
+  Future<void> _saveSettings(
+    CommandChannelSettings previous,
+    CommandChannelSettings next,
+  ) async {
+    final storage = ref.read(settingsStorageProvider);
+    final driver = ref.read(commandChannelDriverProvider);
+    await storage.writeCommandChannels(next);
+    try {
+      await driver.setEnabled(next.channels);
+    } on Failure {
+      await storage.writeCommandChannels(previous);
+      await driver.setEnabled(previous.channels);
+      rethrow;
+    }
   }
 
   Future<void> authorize(String channel) =>
@@ -161,20 +195,23 @@ class CommandChannelsController extends _$CommandChannelsController {
   );
 }
 
-/// 系统授权与运行时就绪的通道才进入快照；Shizuku 另受应用内开关约束。
+/// Shizuku 按服务状态绑定。Root 在每次实际调用时确认执行身份。
 Future<List<CommandChannelSnapshot>> commandSnapshots(Ref ref) async {
   final settings = ref.read(settingsStorageProvider).readCommandChannels();
-  if (settings.channels.isEmpty) return const [];
+  final root = [if (settings.root) CommandChannelSnapshot.rootDevice];
+  if (settings.channels.isEmpty) return root;
   final driver = ref.read(commandChannelDriverProvider);
   List<CommandChannelStatus> statuses;
   try {
     await driver.setEnabled(settings.channels);
+    if (settings.root) return root;
     statuses = await driver.status();
   } on CommandChannelFailure {
     // An unavailable optional channel must not prevent an ordinary chat run.
-    return const [];
+    return root;
   }
   return [
+    ...root,
     for (final status in statuses)
       if (settings.channels.contains(status.channel) &&
           status.state == 'ready' &&

@@ -182,7 +182,7 @@ class _WebDraftBackGuardState extends State<WebDraftBackGuard> {
     }
     _asking = true;
     try {
-      final discard = await showDialog<bool>(
+      final discard = await showAppDialog<bool>(
         context: context,
         builder: (context) => AppDialog(
           title: '放弃未保存的更改？',

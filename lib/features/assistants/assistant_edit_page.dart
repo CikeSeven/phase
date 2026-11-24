@@ -162,7 +162,7 @@ class _AssistantEditPageState extends ConsumerState<AssistantEditPage> {
     if (!_canDelete || _saving || _loading || _loadError != null) return;
     final assistant = widget.assistantId;
     if (assistant == null) return;
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAppDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: '删除助手',

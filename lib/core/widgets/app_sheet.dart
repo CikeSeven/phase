@@ -45,9 +45,11 @@ class AppSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final media = MediaQuery.maybeOf(context);
-    final keyboard = media?.viewInsets.bottom ?? 0;
-    final scale = math.max(1.0, (media?.textScaler.scale(14) ?? 14) / 14);
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final scale = math.max(
+      1.0,
+      MediaQuery.textScalerOf(context).scale(14) / 14,
+    );
     final titleText = Semantics(
       header: true,
       child:
@@ -151,7 +153,7 @@ class AppSheet extends StatelessWidget {
         builder: (context, constraints) {
           final availableHeight = constraints.hasBoundedHeight
               ? constraints.maxHeight
-              : math.max(0.0, (media?.size.height ?? 600) - keyboard);
+              : math.max(0.0, MediaQuery.sizeOf(context).height - keyboard);
           return Align(
             alignment: Alignment.bottomCenter,
             heightFactor: 1,
@@ -162,9 +164,8 @@ class AppSheet extends StatelessWidget {
                 borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(AppRadius.extraLarge),
                 ),
-                color: colors.surfaceContainerLow.withValues(
-                  alpha: theme.brightness == Brightness.dark ? 0.98 : 0.96,
-                ),
+                color: colors.surfaceContainerLow,
+                blur: 0,
                 child: SafeArea(
                   top: false,
                   child: LayoutBuilder(

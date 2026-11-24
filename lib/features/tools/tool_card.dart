@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_completion_mark.dart';
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:gpt_markdown/gpt_markdown.dart';
@@ -22,6 +25,7 @@ import 'tool_diff.dart';
 import 'tool_diff_view.dart';
 import 'tool_presentation.dart';
 import 'tool_screenshot_preview.dart';
+import '../content/content_toolbox.dart';
 import '../web_search/web_tool_result_view.dart';
 
 /// 包装带高亮 TextSpan 的 Text 组件，同时保留 Text.data 满足测试与无障碍访问。
@@ -55,6 +59,7 @@ class ToolCard extends StatefulWidget {
     this.appName,
     this.artifacts = const [],
     this.onOpenArtifact,
+    this.onOpenImage,
     this.grouped = false,
     super.key,
   });
@@ -69,6 +74,7 @@ class ToolCard extends StatefulWidget {
   final List<Attachment> artifacts;
 
   final void Function(Attachment attachment)? onOpenArtifact;
+  final void Function(Attachment attachment, Object heroTag)? onOpenImage;
 
   @override
   State<ToolCard> createState() => _ToolCardState();
@@ -81,6 +87,7 @@ class _ToolCardState extends State<ToolCard>
   final _outputController = ScrollController();
   bool _expanded = false;
   bool _userToggled = false;
+  bool _justCompleted = false;
   bool _followInput = true;
   bool _followOutput = true;
   bool _scrollToEndScheduled = false;
@@ -93,6 +100,10 @@ class _ToolCardState extends State<ToolCard>
   @override
   void didUpdateWidget(covariant ToolCard oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _justCompleted =
+        widget.record.id == oldWidget.record.id &&
+        widget.record.status == ToolCallStatus.succeeded &&
+        oldWidget.record.status != ToolCallStatus.succeeded;
     if (oldWidget.record.id != widget.record.id) {
       _expanded = false;
       _userToggled = false;
@@ -363,6 +374,34 @@ class _ToolCardState extends State<ToolCard>
             case final String label)
           (artifact: artifact, label: label),
     ];
+    final generatedImage = record.toolName == 'generate_image';
+    final generatedVideo = record.toolName == 'generate_video';
+    final imagePreviews = display?.showScreenshots != true
+        ? const <Widget>[]
+        : <Widget>[
+            for (final (:artifact, label: _) in artifacts)
+              if (artifact.isImage)
+                ToolScreenshotPreview(
+                  key: ValueKey('tool-artifact-${artifact.id}'),
+                  attachment: artifact,
+                  semanticsLabel:
+                      generatedImage || record.toolName == 'read_file'
+                      ? '查看图片'
+                      : '查看截图',
+                  onOpen: widget.onOpenArtifact == null
+                      ? null
+                      : () => widget.onOpenArtifact!(artifact),
+                  onOpenImage: widget.onOpenImage == null
+                      ? null
+                      : (tag) => widget.onOpenImage!(artifact, tag),
+                ),
+            if (record.artifacts.isNotEmpty &&
+                !artifacts.any((entry) => entry.artifact.isImage))
+              Padding(
+                padding: const EdgeInsets.only(top: AppSpacing.s),
+                child: Text(generatedImage ? '图片附件暂不可用' : '截图附件暂不可用'),
+              ),
+          ];
 
     // 精致的状态药丸徽标
     final statusPill = Container(
@@ -385,6 +424,12 @@ class _ToolCardState extends State<ToolCard>
             AppLoadingIndicator.small(
               color: statusColor,
               semanticsLabel: ToolPresentation.statusLabel(record.status),
+            )
+          else if (record.status == ToolCallStatus.succeeded)
+            AppCompletionMark(
+              key: ValueKey(record.id),
+              color: statusColor,
+              animate: _justCompleted,
             )
           else
             Icon(
@@ -965,45 +1010,15 @@ class _ToolCardState extends State<ToolCard>
                             ),
                           ],
 
-                          // 截图附件预览
-                          if (display.showScreenshots) ...[
-                            for (final (:artifact, label: _) in artifacts)
-                              if (artifact.isImage)
-                                Padding(
-                                  padding: const EdgeInsets.only(
-                                    top: AppSpacing.s,
-                                  ),
-                                  child: ToolScreenshotPreview(
-                                    key: ValueKey(
-                                      'tool-artifact-${artifact.id}',
-                                    ),
-                                    attachment: artifact,
-                                    semanticsLabel:
-                                        record.toolName == 'read_file'
-                                        ? '查看图片'
-                                        : '查看截图',
-                                    onOpen: widget.onOpenArtifact == null
-                                        ? null
-                                        : () =>
-                                              widget.onOpenArtifact!(artifact),
-                                  ),
-                                ),
-                            if (record.artifacts.isNotEmpty &&
-                                !artifacts.any(
-                                  (entry) => entry.artifact.isImage,
-                                ))
-                              const Padding(
-                                padding: EdgeInsets.only(top: AppSpacing.s),
-                                child: Text('截图附件暂不可用'),
-                              ),
-                          ],
+                          if (!generatedImage) ...imagePreviews,
 
                           // 文件/非图片附件按钮组
-                          if (artifacts.any(
-                            (entry) =>
-                                !display.showScreenshots ||
-                                !entry.artifact.isImage,
-                          )) ...[
+                          if (!generatedVideo &&
+                              artifacts.any(
+                                (entry) =>
+                                    !display.showScreenshots ||
+                                    !entry.artifact.isImage,
+                              )) ...[
                             const SizedBox(height: AppSpacing.m),
                             Wrap(
                               spacing: AppSpacing.s,
@@ -1047,6 +1062,13 @@ class _ToolCardState extends State<ToolCard>
                               ],
                             ),
                           ],
+                          if (display.output case final String output
+                              when !inFlight &&
+                                  output.trim().isNotEmpty &&
+                                  display.copyText == null &&
+                                  !generatedImage &&
+                                  !generatedVideo)
+                            ContentToolbox(text: output),
                         ],
                       ),
                     ),
@@ -1054,6 +1076,39 @@ class _ToolCardState extends State<ToolCard>
                 );
               },
             ),
+            if (generatedImage && imagePreviews.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.m,
+                  0,
+                  AppSpacing.m,
+                  AppSpacing.m,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ...imagePreviews,
+                    for (final (:artifact, label: _) in artifacts)
+                      if (artifact.isImage)
+                        ContentToolbox(attachment: artifact),
+                  ],
+                ),
+              ),
+            if (generatedVideo)
+              for (final (:artifact, :label) in artifacts)
+                ListTile(
+                  key: ValueKey('tool-artifact-${artifact.id}'),
+                  leading: const Icon(LucideIcons.video),
+                  title: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: ContentToolbox(attachment: artifact),
+                  onTap: widget.onOpenArtifact == null
+                      ? null
+                      : () => widget.onOpenArtifact!(artifact),
+                ),
           ],
         ),
       ),

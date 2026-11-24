@@ -1,6 +1,9 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+
+import '../../../../core/widgets/app_option_sheet.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/error/failure.dart';
@@ -44,10 +47,8 @@ Future<void> showUsageSheet(
   BuildContext context, {
   required String conversationId,
   required String runId,
-}) => showModalBottomSheet<void>(
+}) => showAppOptionSheet<void>(
   context: context,
-  isScrollControlled: true,
-  useSafeArea: true,
   backgroundColor: Colors.transparent,
   builder: (context) => AppSheet(
     title: '用量',

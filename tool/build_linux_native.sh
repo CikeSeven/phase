@@ -5,8 +5,16 @@ ndk_dir="${1:-${ANDROID_NDK_ROOT:-$HOME/android-sdk/ndk/28.2.13676358}}"
 output="$PWD/build/linux-native"
 source_dir="$output/source"
 jni_dir="$output/jniLibs/arm64-v8a"
-llvm="$ndk_dir/toolchains/llvm/prebuilt/linux-x86_64/bin"
-cc="$llvm/aarch64-linux-android24-clang"
+ndk_host=linux-x86_64
+case "$(uname -s)" in
+  MINGW*|MSYS*)
+    ndk_host=windows-x86_64
+    ndk_dir="$(cygpath -m "$ndk_dir")"
+    ;;
+esac
+llvm="$ndk_dir/toolchains/llvm/prebuilt/$ndk_host/bin"
+cc=("$llvm/clang" --target=aarch64-linux-android24)
+printf -v make_cc '%q ' "${cc[@]}"
 # Versioned source archives and local build inputs determine the cache key.
 fingerprint=$(cat tool/build_linux_native.sh tool/native/talloc_replace.h tool/native/process_runner.c "$ndk_dir/source.properties" | sha256sum | cut -d ' ' -f1)
 if [[ -f "$output/stamp" && "$(cat "$output/stamp")" == "$fingerprint" && -f "$jni_dir/libphase_proot.so" && -f "$jni_dir/libphase_loader.so" && -f "$jni_dir/libphase_talloc.so" && -f "$jni_dir/libphase_exec.so" ]]; then exit 0; fi
@@ -28,17 +36,17 @@ tar -xzf "$source_dir/proot.tar.gz" -C "$source_dir"
 tar -xzf "$source_dir/talloc.tar.gz" -C "$source_dir"
 sed -i '1i #include <string.h>' "$source_dir/proot-5.1.107.92/src/extension/ashmem_memfd/ashmem_memfd.c"
 cp tool/native/talloc_replace.h "$source_dir/talloc-2.4.3/replace.h"
-"$cc" -O2 -fPIC -shared -D_GNU_SOURCE -I"$source_dir/talloc-2.4.3" "$source_dir/talloc-2.4.3/talloc.c" -Wl,-soname,libphase_talloc.so,-z,max-page-size=16384 -o "$jni_dir/libphase_talloc.so"
+"${cc[@]}" -O2 -fPIC -shared -D_GNU_SOURCE -I"$source_dir/talloc-2.4.3" "$source_dir/talloc-2.4.3/talloc.c" -Wl,-soname,libphase_talloc.so,-z,max-page-size=16384 -o "$jni_dir/libphase_talloc.so"
 # loader is a static executable; PRoot obtains its packaged path from PROOT_LOADER.
 make -C "$source_dir/proot-5.1.107.92/src" clean > "$output/proot-clean.log" 2>&1
 make -C "$source_dir/proot-5.1.107.92/src" -j4 \
-  GIT=false CC="$cc" STRIP="$llvm/llvm-strip" OBJCOPY="$llvm/llvm-objcopy" OBJDUMP="$llvm/llvm-objdump" \
+  GIT=false CC="$make_cc" STRIP="$llvm/llvm-strip" OBJCOPY="$llvm/llvm-objcopy" OBJDUMP="$llvm/llvm-objdump" \
   PROOT_UNBUNDLE_LOADER=/unused \
   CPPFLAGS="-D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -DARG_MAX=131072 -DVERSION=\\\"5.1.107.92\\\" -I. -I$source_dir/talloc-2.4.3" \
   LDFLAGS="-L$jni_dir -lphase_talloc -Wl,-z,noexecstack,-z,max-page-size=16384" \
   > "$output/proot-build.log" 2>&1 || { tail -60 "$output/proot-build.log"; exit 1; }
 cp "$source_dir/proot-5.1.107.92/src/proot" "$jni_dir/libphase_proot.so"
 cp "$source_dir/proot-5.1.107.92/src/loader/loader" "$jni_dir/libphase_loader.so"
-"$cc" -O2 -Wall -Wextra -Werror tool/native/process_runner.c -Wl,-z,max-page-size=16384 -o "$jni_dir/libphase_exec.so"
+"${cc[@]}" -O2 -Wall -Wextra -Werror tool/native/process_runner.c -Wl,-z,max-page-size=16384 -o "$jni_dir/libphase_exec.so"
 "$llvm/llvm-strip" "$jni_dir/"*.so
 printf '%s' "$fingerprint" > "$output/stamp"

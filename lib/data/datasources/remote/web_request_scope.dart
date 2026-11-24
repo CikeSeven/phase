@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:dio/dio.dart';
@@ -87,5 +88,34 @@ Future<({Uint8List bytes, bool truncated})> readWebResponse(
   } finally {
     // 取消/超限后显式结束正文订阅，不仅丢弃等待它的 Future。
     await iterator.cancel();
+  }
+}
+
+Future<void> writeWebResponse(
+  Stream<List<int>> stream,
+  WebRequestScope scope,
+  File destination, {
+  required int maxBytes,
+}) async {
+  final iterator = StreamIterator(stream);
+  RandomAccessFile? output;
+  var received = 0;
+  try {
+    output = await destination.open(mode: FileMode.write);
+    while (await scope.guard(iterator.moveNext())) {
+      final chunk = iterator.current;
+      received += chunk.length;
+      if (received > maxBytes) {
+        throw const WebFailure('responseTooLarge', '下载结果超过大小上限');
+      }
+      await output.writeFrom(chunk);
+    }
+    scope.check();
+  } finally {
+    try {
+      await iterator.cancel();
+    } finally {
+      await output?.close();
+    }
   }
 }

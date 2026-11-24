@@ -22,6 +22,7 @@ import app.xiangyue.phase.shizuku.ShizukuDeviceHost
 class ExecutionCoordinator(private val context: Context, private val flutter: ExecutionFlutterApi) : ExecutionHostApi {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val shizuku = ShizukuDeviceHost(context, ::stopFromSystem)
+    val rootDisplay = ShizukuDeviceHost(context, ::stopFromSystem, rootBacked = true)
     val files = AppFileDriver(context)
     private val applications = ApplicationCatalog(context)
     val setup = ExecutionSetup(context, files, applications)
@@ -43,15 +44,20 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
             if (action in fileActions) files.execute(request, sessions[request.runId]?.fileUris ?: emptyList())
             else if (action == ExecutionAction.LIST_APPS) listApplications(request)
             else if (action == ExecutionAction.CONTROL_DISPLAY) deviceQueue.withLock {
-                if (request.runId != deviceRunId) {
+                val display = when (request.arguments["backend"]) {
+                    null -> shizuku
+                    "root" -> rootDisplay
+                    else -> null
+                }
+                if (sessions[request.runId] == null || display == null) {
                     return@withLock NativeExecutionTasks.result(
                         request.toolCallId,
                         ExecutionStatus.FAILED,
                         ChannelError.PERMISSION_REQUIRED,
                     )
                 }
-                virtualDeviceActive = true
-                shizuku.execute(request, applicationExists = { target ->
+                if (request.runId == deviceRunId) virtualDeviceActive = true
+                display.execute(request, applicationExists = { target ->
                     applications.get(target) != null
                 }, checkpoint = { tasks.checkpoint(request.runId, request.toolCallId, it) })
             }
@@ -81,7 +87,8 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
             ((accessibility?.serviceInfo?.capabilities ?: 0) and
                 android.accessibilityservice.AccessibilityServiceInfo.CAPABILITY_CAN_TAKE_SCREENSHOT) != 0
         return ExecutionCapabilities(tasks.capabilities.filter {
-            (if (it == ExecutionAction.CONTROL_DISPLAY) shizuku.available() else it in fileActions || it == ExecutionAction.LIST_APPS || connected) &&
+            (if (it == ExecutionAction.CONTROL_DISPLAY) shizuku.available() || rootDisplay.available()
+                else it in fileActions || it == ExecutionAction.LIST_APPS || connected) &&
                 (it != ExecutionAction.CAPTURE_SCREEN || screenshots)
         }, manager.areNotificationsEnabled() && channelEnabled, resumed, connected)
     }
@@ -184,6 +191,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
         }
         if (confirmation?.runId == runId) clearConfirmation()
         shizuku.endOwner(runId)
+        rootDisplay.endOwner(runId)
         tasks.end(runId)
         sessions.remove(runId)
         refreshOverlay()
@@ -200,6 +208,7 @@ class ExecutionCoordinator(private val context: Context, private val flutter: Ex
             runId in setOf(submission.sourceRunId, submission.nextRunId)) cancelPanelSubmission()
         if (!tasks.contains(runId)) return
         shizuku.endOwner(runId)
+        rootDisplay.endOwner(runId)
         tasks.stop(runId)
         if (deviceRunId == runId) {
             deviceActive = false

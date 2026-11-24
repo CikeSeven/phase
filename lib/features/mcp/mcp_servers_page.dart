@@ -6,15 +6,14 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_empty_state.dart';
-import '../../../core/widgets/app_loading_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/repositories/mcp_server_repository.dart';
 
-class McpServersPage extends ConsumerWidget {
+class McpServersPage extends StatelessWidget {
   const McpServersPage({super.key});
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final servers = ref.watch(mcpServersProvider);
+  Widget build(BuildContext context) {
     return AppScaffold(
       title: 'MCP 服务',
       actions: [
@@ -24,8 +23,22 @@ class McpServersPage extends ConsumerWidget {
           onPressed: () => context.push('/settings/extensions/mcp/new'),
         ),
       ],
-      body: servers.when(
-        loading: () => const Center(child: AppLoadingIndicator()),
+      body: const _McpServerList(),
+    );
+  }
+}
+
+// 卡片展开期间也由当前显示的列表接收数据。
+class _McpServerList extends ConsumerWidget {
+  const _McpServerList();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) => ref
+      .watch(mcpServersProvider)
+      .when(
+        skipLoadingOnReload: true,
+        loading: () =>
+            Semantics(label: '正在读取 MCP 服务', child: const SizedBox.expand()),
         error: (error, _) => AppEmptyState(
           icon: LucideIcons.circleAlert,
           title: '无法读取 MCP 服务',
@@ -46,7 +59,7 @@ class McpServersPage extends ConsumerWidget {
                   onPressed: () => context.push('/settings/extensions/mcp/new'),
                 ),
               )
-            : ListView(
+            : SettingsListView(
                 padding: const EdgeInsets.all(AppSpacing.l),
                 children: [
                   for (final entry in entries)
@@ -74,7 +87,5 @@ class McpServersPage extends ConsumerWidget {
                     ),
                 ],
               ),
-      ),
-    );
-  }
+      );
 }

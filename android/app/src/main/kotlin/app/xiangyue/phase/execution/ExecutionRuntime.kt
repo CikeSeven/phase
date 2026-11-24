@@ -2,6 +2,7 @@ package app.xiangyue.phase.execution
 
 import android.content.Context
 import app.xiangyue.phase.commands.CommandChannelHost
+import app.xiangyue.phase.commands.RootCommandHost
 import app.xiangyue.phase.bridge.commands.CommandChannelHostApi
 import app.xiangyue.phase.bridge.commands.CommandChannelFlutterApi
 import app.xiangyue.phase.bridge.process.LinuxProcessHostApi
@@ -22,10 +23,14 @@ class ExecutionRuntime(context: Context) {
     )
 
     val processes: LinuxProcessHost = LinuxProcessHost(context.applicationContext, LinuxProcessFlutterApi(engine.dartExecutor.binaryMessenger)) { owner -> coordinator.externalOwnerStopped(owner) }
-    val commands: CommandChannelHost = CommandChannelHost(context.applicationContext, CommandChannelFlutterApi(engine.dartExecutor.binaryMessenger), coordinator.shizuku)
+    val commands: CommandChannelHost = CommandChannelHost(context.applicationContext, CommandChannelFlutterApi(engine.dartExecutor.binaryMessenger), coordinator.shizuku, coordinator.rootDisplay)
 
     init {
         CommandChannelHostApi.setUp(engine.dartExecutor.binaryMessenger, commands)
+        RootCommandHost(
+            context.applicationContext, engine.dartExecutor.binaryMessenger,
+            coordinator.rootDisplay::isEnabled, coordinator.shizuku,
+        )
         LinuxProcessHostApi.setUp(engine.dartExecutor.binaryMessenger, processes)
         ExecutionHostApi.setUp(engine.dartExecutor.binaryMessenger, coordinator)
         ExecutionSetupApi.setUp(engine.dartExecutor.binaryMessenger, coordinator.setup)

@@ -8,6 +8,7 @@ import 'package:lucide_icons_flutter/lucide_icons.dart';
 import '../../../core/error/failure.dart';
 import '../../../core/theme/app_control_style.dart';
 import '../../../core/theme/app_motion.dart';
+import '../../../core/widgets/app_option_sheet.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_empty_state.dart';
@@ -23,18 +24,18 @@ import '../../../data/models/provider_profile.dart';
 import '../../../data/models/reasoning_effort.dart';
 import '../../../data/repositories/provider_profile_repository.dart';
 import '../assistants/assistant_picker_sheet.dart';
+import '../providers_config/model_budget_dialog.dart';
 import '../providers_config/provider_logo.dart';
 import 'active_conversation.dart';
 import 'chat_providers.dart';
+import '../../core/widgets/app_dialog.dart';
 import 'model_selection.dart';
 
 /// 打开模型与推理等级面板；切换后自动保存，面板保持打开。
 Future<void> showModelPickerSheet(BuildContext context) async {
   final dismissed = Completer<void>();
-  final openAssistantPicker = await showModalBottomSheet<bool>(
+  final openAssistantPicker = await showAppOptionSheet<bool>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
     backgroundColor: Theme.of(context).colorScheme.surface.withValues(alpha: 0),
     builder: (context) {
       final route = ModalRoute.of(context);
@@ -77,9 +78,11 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   String? _selectedProfileId;
   String? _selectedModel;
   ReasoningEffort _selectedEffort = ReasoningEffort.off;
+  double? _dragEffort;
   String _query = '';
   String? _saveError;
   bool _initialized = false;
+  bool _editingLimits = false;
   int _saveRevision = 0;
 
   @override
@@ -114,7 +117,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   @override
   Widget build(BuildContext context) {
     final profiles = ref.watch(providerProfilesProvider);
-    final selection = ref.watch(modelSelectionProvider);
+    final selection = _initialized ? null : ref.watch(modelSelectionProvider);
     final assistantName =
         ref
             .watch(
@@ -131,9 +134,10 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       footer:
           _initialized &&
               !profiles.hasError &&
-              (selected?.model?.supportsReasoning == true || _saveError != null)
+              (selected != null || _saveError != null)
           ? _buildFooter(selected)
           : null,
+      footerMaxHeightFactor: 0.4,
       child: profiles.when(
         data: (profiles) {
           if (profiles.isEmpty) {
@@ -148,8 +152,8 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
             );
           }
           if (!_initialized) {
-            if (selection.hasError) {
-              return _buildLoadError(selection.error!);
+            if (selection?.error case final error?) {
+              return _buildLoadError(error);
             }
             return _loading();
           }
@@ -213,11 +217,16 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         // 当前选择不在启用列表里（手输模型或已被取消勾选）：保留为可选项，
         // 沿用它在本次选择中的能力标记。
         manualModel = initial.model;
-        models[initial.model] = ProfileModel(
-          id: initial.model,
-          supportsReasoning: initial.supportsReasoning,
-          supportsImages: initial.supportsImages,
-        );
+        models[initial.model] =
+            profile.models
+                .where((model) => model.id == initial.model)
+                .firstOrNull ??
+            ProfileModel(
+              id: initial.model,
+              supportsReasoning: initial.supportsReasoning,
+              supportsImages: initial.supportsImages,
+              supportsTools: initial.supportsTools,
+            );
       }
       if (models.isEmpty) {
         entries.add((profile: profile, model: null, manual: false));
@@ -248,21 +257,16 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
   Widget _buildModels(List<_PickerEntry> entries) {
     final query = _query.trim().toLowerCase();
     final searching = query.isNotEmpty;
-    final profiles = <ProviderProfile>[
-      ...{for (final entry in entries) entry.profile.id: entry.profile}.values,
-    ];
-    // 搜索时列表与标签都只保留命中的服务商与模型。
-    final visible = searching
-        ? [
-            for (final entry in entries)
-              if (entry.model != null &&
-                  _entryMatches(entry.profile, entry.model, query))
-                entry,
-          ]
-        : entries;
+    final groups = <String, List<_PickerEntry>>{};
+    for (final entry in entries) {
+      if (!searching ||
+          (entry.model != null &&
+              _entryMatches(entry.profile, entry.model, query))) {
+        groups.putIfAbsent(entry.profile.id, () => []).add(entry);
+      }
+    }
     final visibleProfiles = [
-      for (final profile in profiles)
-        if (visible.any((entry) => entry.profile.id == profile.id)) profile,
+      for (final group in groups.values) group.first.profile,
     ];
 
     // 单一平铺列表：服务商名称作分组标题，标题位置记入估算偏移供标签跳转。
@@ -274,8 +278,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       _estimatedOffsets[profile.id] = offset;
       items.add(profile);
       offset += _estimatedHeaderExtent;
-      for (final entry in visible) {
-        if (entry.profile.id != profile.id) continue;
+      for (final entry in groups[profile.id]!) {
         items.add(entry);
         if (entry.model != null) {
           counts[profile.id] = (counts[profile.id] ?? 0) + 1;
@@ -318,7 +321,7 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         if (visibleProfiles.isNotEmpty)
           _buildProviderTabs(visibleProfiles, counts, _selectedProfileId),
         Expanded(
-          child: visible.isEmpty
+          child: items.isEmpty
               ? _buildStatus(
                   icon: LucideIcons.searchX,
                   title: '没有找到模型',
@@ -605,6 +608,17 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
+        if (selected != null && model != null)
+          ListTile(
+            key: const ValueKey('model-picker-limits'),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.s,
+            ),
+            leading: const Icon(LucideIcons.slidersHorizontal),
+            title: const Text('上下文与输出上限'),
+            subtitle: Text(_modelLimitsSummary(model)),
+            onTap: () => _editLimits(selected.profile, model),
+          ),
         if (model?.supportsReasoning == true) ...[
           Row(
             children: [
@@ -624,19 +638,44 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
             children: [
               Text('关', style: theme.textTheme.bodySmall),
               Expanded(
-                child: Slider(
-                  key: const ValueKey('reasoning-effort-slider'),
-                  value: _selectedEffort.index.toDouble(),
-                  max: (ReasoningEffort.values.length - 1).toDouble(),
-                  divisions: ReasoningEffort.values.length - 1,
-                  label: _selectedEffort.label,
-                  activeColor: brand.lavender,
-                  onChanged: (value) => setState(() {
-                    _selectedEffort = ReasoningEffort.values[value.round()];
-                    _saveError = null;
-                  }),
-                  // 松手后保存最终档位，后续选择无需等待这次写入。
-                  onChangeEnd: (_) => _autoSaveSelection(),
+                child: SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 10,
+                    ),
+                    trackShape: const RoundedRectSliderTrackShape(),
+                    trackHeight: 6,
+                    thumbSize: const WidgetStatePropertyAll(Size.square(20)),
+                    trackGap: 0,
+                    showValueIndicator: ShowValueIndicator.onDrag,
+                  ),
+                  child: Slider(
+                    key: const ValueKey('reasoning-effort-slider'),
+                    value: _dragEffort ?? _selectedEffort.index.toDouble(),
+                    max: (ReasoningEffort.values.length - 1).toDouble(),
+                    divisions: _dragEffort == null
+                        ? ReasoningEffort.values.length - 1
+                        : null,
+                    onChangeStart: (value) =>
+                        setState(() => _dragEffort = value),
+                    semanticFormatterCallback: (value) =>
+                        ReasoningEffort.values[value.round()].label,
+                    label: _selectedEffort.label,
+                    activeColor: brand.lavender,
+                    onChanged: (value) => setState(() {
+                      if (_dragEffort != null) _dragEffort = value;
+                      _selectedEffort = ReasoningEffort.values[value.round()];
+                      _saveError = null;
+                    }),
+                    // 松手后保存最终档位，后续选择无需等待这次写入。
+                    onChangeEnd: (value) {
+                      setState(() {
+                        _selectedEffort = ReasoningEffort.values[value.round()];
+                        _dragEffort = null;
+                      });
+                      _autoSaveSelection();
+                    },
+                  ),
                 ),
               ),
               Text('最高', style: theme.textTheme.bodySmall),
@@ -664,6 +703,38 @@ class _ModelPickerSheetState extends ConsumerState<ModelPickerSheet> {
         ],
       ],
     );
+  }
+
+  String _modelLimitsSummary(ProfileModel model) {
+    final format = MaterialLocalizations.of(context).formatDecimal;
+    final window = model.contextWindow;
+    final output = model.maxOutputTokens;
+    return '上下文 ${window == null ? '自动' : format(window)} · '
+        '输出 ${output == null ? '自动' : format(output)}';
+  }
+
+  Future<void> _editLimits(ProviderProfile profile, ProfileModel model) async {
+    if (_editingLimits) return;
+    _editingLimits = true;
+    final repository = ref.read(providerProfileRepositoryProvider.future);
+    try {
+      await showAppDialog<ModelBudgetOverride>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => ModelBudgetDialog(
+          presetId: profile.presetId,
+          model: model,
+          onSave: (draft) async => (await repository).saveModelLimits(
+            profileId: profile.id,
+            model: model,
+            contextWindow: draft.contextWindow,
+            maxOutputTokens: draft.maxOutputTokens,
+          ),
+        ),
+      );
+    } finally {
+      _editingLimits = false;
+    }
   }
 
   Widget _buildStatus({

@@ -63,7 +63,10 @@ class HistoryResolver {
               : null,
           images:
               (record.source?.kind != ToolSourceKind.mcp &&
-                      record.toolName == 'read_file') ||
+                      const {
+                        'read_file',
+                        'generate_image',
+                      }.contains(record.toolName)) ||
                   visualOperationTools.contains(record.toolName) ||
                   record.source?.kind == ToolSourceKind.mcp
               ? [

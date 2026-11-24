@@ -5,6 +5,10 @@ import 'dart:math' as math;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+
+import '../../core/theme/app_motion.dart';
+import '../../core/widgets/app_menu_glyph.dart';
+
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -36,6 +40,17 @@ import 'model_selection.dart';
 import 'sidebar_mode.dart';
 
 /// 聊天页的玻璃顶栏、阅读区、输入栏与会话侧栏。
+Widget _conversationTransition(Widget child, Animation<double> progress) =>
+    FadeTransition(
+      opacity: progress,
+      child: SlideTransition(
+        position: progress.drive(
+          Tween(begin: const Offset(.08, 0), end: Offset.zero),
+        ),
+        child: RepaintBoundary(child: child),
+      ),
+    );
+
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({this.projectId, super.key});
 
@@ -133,11 +148,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         : ref.watch(projectProvider(projectId));
     final workspaceId = conversationId == null
         ? project?.value?.workspaceId
-        : ref
-              .watch(conversationThreadProvider(conversationId))
-              .value
-              ?.conversation
-              .workspaceId;
+        : ref.watch(
+            conversationThreadProvider(conversationId)
+                .select((thread) => thread.value?.conversation.workspaceId),
+          );
     final selection = ref.watch(modelSelectionProvider);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
@@ -164,12 +178,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         : selection.value?.model ?? (selection.isLoading ? '正在读取模型…' : '未配置模型');
     final current = selection.value;
     final assistantName =
-        ref
-            .watch(
-              currentAssistantProvider(ref.watch(activeConversationProvider)),
-            )
-            ?.name ??
-        '相月';
+        ref.watch(currentAssistantProvider(active))?.name ?? '相月';
 
     final page = PopScope<void>(
       canPop: !_drawerOpen && !_selectionController.hasSelection,
@@ -208,11 +217,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   onPressed: widget.projectId == null
                       ? _openDrawer
                       : () => context.pop(),
-                  icon: Icon(
-                    widget.projectId == null
-                        ? LucideIcons.textAlignStart
-                        : LucideIcons.arrowLeft,
-                  ),
+                  icon: widget.projectId == null
+                      ? AppMenuGlyph(open: _drawerOpen)
+                      : const Icon(LucideIcons.arrowLeft),
                 ),
                 title: Tooltip(
                   message: '选择助手和模型',
@@ -296,7 +303,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     IconButton(
                       tooltip: '打开侧栏',
                       onPressed: _openDrawer,
-                      icon: const Icon(LucideIcons.textAlignStart, size: 20),
+                      icon: AppMenuGlyph(open: _drawerOpen, size: 20),
                     ),
                   if (workspaceId != null)
                     IconButton(
@@ -319,6 +326,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
           drawer: _ChatContentGestureSettings(
             settings: contentGestureSettings,
             child: ConversationDrawer(
+              open: _drawerOpen,
               width: math.min(MediaQuery.sizeOf(context).width * 0.88, 400),
               onNewConversation: widget.projectId == null
                   ? null
@@ -374,48 +382,58 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                       child: Stack(
                         children: [
                           Positioned.fill(
-                            child:
-                                project != null &&
-                                    (project.isLoading ||
-                                        project.hasError ||
-                                        project.value == null)
-                                ? Padding(
-                                    padding: EdgeInsets.only(
-                                      top: topPadding,
-                                      bottom: _composerExtent,
-                                    ),
-                                    child: project.isLoading
-                                        ? const Center(
-                                            child: AppLoadingIndicator(),
-                                          )
-                                        : AppEmptyState(
-                                            icon: LucideIcons.folder,
-                                            title: '无法读取项目',
-                                            message: project.error is Failure
-                                                ? (project.error as Failure)
-                                                      .userMessage
-                                                : '项目已不存在或暂时无法读取',
-                                            action: TextButton(
-                                              onPressed: () => ref.invalidate(
-                                                projectProvider(projectId!),
+                            child: AnimatedSwitcher(
+                              duration: AppMotion.reduce(context)
+                                  ? Duration.zero
+                                  : AppMotion.pageOpen,
+                              reverseDuration: Duration.zero,
+                              switchInCurve: Curves.easeOutCubic,
+                              transitionBuilder: _conversationTransition,
+                              layoutBuilder: (current, _) =>
+                                  current ?? const SizedBox.shrink(),
+                              child:
+                                  project != null &&
+                                      (project.isLoading ||
+                                          project.hasError ||
+                                          project.value == null)
+                                  ? Padding(
+                                      padding: EdgeInsets.only(
+                                        top: topPadding,
+                                        bottom: _composerExtent,
+                                      ),
+                                      child: project.isLoading
+                                          ? const Center(
+                                              child: AppLoadingIndicator(),
+                                            )
+                                          : AppEmptyState(
+                                              icon: LucideIcons.folder,
+                                              title: '无法读取项目',
+                                              message: project.error is Failure
+                                                  ? (project.error as Failure)
+                                                        .userMessage
+                                                  : '项目已不存在或暂时无法读取',
+                                              action: TextButton(
+                                                onPressed: () => ref.invalidate(
+                                                  projectProvider(projectId!),
+                                                ),
+                                                child: const Text('重试'),
                                               ),
-                                              child: const Text('重试'),
                                             ),
-                                          ),
-                                  )
-                                : conversationId == null
-                                ? ChatEmptyState(
-                                    projectName: project?.value?.name,
-                                    topPadding: topPadding,
-                                    bottomPadding: _composerExtent,
-                                  )
-                                : _ConversationMessages(
-                                    key: ValueKey(conversationId),
-                                    conversationId: conversationId,
-                                    projectName: project?.value?.name,
-                                    topPadding: topPadding,
-                                    bottomPadding: _composerExtent,
-                                  ),
+                                    )
+                                  : conversationId == null
+                                  ? ChatEmptyState(
+                                      projectName: project?.value?.name,
+                                      topPadding: topPadding,
+                                      bottomPadding: _composerExtent,
+                                    )
+                                  : _ConversationMessages(
+                                      key: ValueKey(conversationId),
+                                      conversationId: conversationId,
+                                      projectName: project?.value?.name,
+                                      topPadding: topPadding,
+                                      bottomPadding: _composerExtent,
+                                    ),
+                            ),
                           ),
                           Positioned(
                             left: 0,

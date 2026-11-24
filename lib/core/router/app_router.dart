@@ -30,10 +30,12 @@ import '../../features/skills/skill_detail_page.dart';
 import '../../features/skills/skill_resource_page.dart';
 import '../../features/web_search/web_search_page.dart';
 import '../../features/web_search/web_search_profile_page.dart';
+import '../widgets/app_card_dialog.dart';
+import 'settings_material_page.dart';
 
 part 'app_router.g.dart';
 
-/// 应用路由表。页面转场统一由主题（DESIGN.md §6）提供。
+/// 应用路由表。设置页使用轻滑转场，其余页面由主题提供。
 ///
 /// 每条路由必须显式给出 pageBuilder：go_router 18 靠检测 material_ui 包的
 /// MaterialApp 决定页面类型，而本应用用的是 Flutter SDK 内置的 MaterialApp，
@@ -41,7 +43,10 @@ part 'app_router.g.dart';
 @Riverpod(keepAlive: true)
 GoRouter appRouter(Ref ref) {
   MaterialPage<void> materialPage(GoRouterState state, Widget child) {
-    return MaterialPage(key: state.pageKey, child: child);
+    final path = state.matchedLocation;
+    return path == '/settings' || path.startsWith('/settings/')
+        ? SettingsMaterialPage(key: state.pageKey, child: child)
+        : MaterialPage(key: state.pageKey, child: child);
   }
 
   return GoRouter(
@@ -132,8 +137,11 @@ GoRouter appRouter(Ref ref) {
             routes: [
               GoRoute(
                 path: 'skills',
-                pageBuilder: (context, state) =>
-                    materialPage(state, const SkillsPage()),
+                pageBuilder: (context, state) => AppCardDialogPage(
+                  key: state.pageKey,
+                  tag: state.matchedLocation,
+                  child: const SkillsPage(),
+                ),
                 routes: [
                   GoRoute(
                     path: 'import',
@@ -173,8 +181,11 @@ GoRouter appRouter(Ref ref) {
               ),
               GoRoute(
                 path: 'mcp',
-                pageBuilder: (context, state) =>
-                    materialPage(state, const McpServersPage()),
+                pageBuilder: (context, state) => AppCardDialogPage(
+                  key: state.pageKey,
+                  tag: state.matchedLocation,
+                  child: const McpServersPage(),
+                ),
                 routes: [
                   GoRoute(
                     path: 'new',

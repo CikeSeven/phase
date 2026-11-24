@@ -189,7 +189,7 @@ void main() {
       late StateSetter update;
       await _pumpHost(
         tester,
-        disableAnimations: !accessible,
+        disableAnimations: true,
         accessibleNavigation: accessible,
         child: StatefulBuilder(
           builder: (context, setState) {

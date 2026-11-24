@@ -1469,6 +1469,7 @@ interface ExecutionHostApi {
 /** Generated interface from Pigeon that represents a handler of messages from Flutter. */
 interface ExecutionSetupApi {
   suspend fun exportWorkspaceFile(path: String, name: String, mimeType: String): Boolean
+  suspend fun exportAttachment(path: String, name: String, mimeType: String): Boolean
   suspend fun importSkillDirectory(request: SkillDirectoryImport): SkillDirectoryCopy?
   fun cancelSkillImport(id: String)
   suspend fun selectFile(directory: Boolean): FileGrant?
@@ -1497,6 +1498,27 @@ interface ExecutionSetupApi {
             CoroutineScope(Dispatchers.Main).launch {
               val wrapped: List<Any?> = try {
                 listOf(api.exportWorkspaceFile(pathArg, nameArg, mimeTypeArg))
+              } catch (exception: Throwable) {
+                ExecutionApiPigeonUtils.wrapError(exception)
+              }
+              reply.reply(wrapped)
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.phase.ExecutionSetupApi.exportAttachment$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val pathArg = args[0] as String
+            val nameArg = args[1] as String
+            val mimeTypeArg = args[2] as String
+            CoroutineScope(Dispatchers.Main).launch {
+              val wrapped: List<Any?> = try {
+                listOf(api.exportAttachment(pathArg, nameArg, mimeTypeArg))
               } catch (exception: Throwable) {
                 ExecutionApiPigeonUtils.wrapError(exception)
               }

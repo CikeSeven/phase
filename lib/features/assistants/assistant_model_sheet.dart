@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../../core/widgets/app_option_sheet.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
@@ -19,10 +22,8 @@ Future<ModelSelection?> showAssistantModelSheet(
   BuildContext context, {
   required ModelSelection? current,
 }) {
-  return showModalBottomSheet<ModelSelection>(
+  return showAppOptionSheet<ModelSelection>(
     context: context,
-    isScrollControlled: true,
-    useSafeArea: true,
     backgroundColor: Colors.transparent,
     builder: (context) => _AssistantModelSheet(current: current),
   );

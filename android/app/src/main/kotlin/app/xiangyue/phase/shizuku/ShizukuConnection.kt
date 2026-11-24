@@ -10,9 +10,15 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import rikka.shizuku.Shizuku
 
-internal class ShizukuConnection(private val context: Context, private val changed: () -> Unit, private val disconnected: () -> Unit) {
+internal interface DisplayConnection {
+    val remote: IDeviceUserService?
+    suspend fun get(): IDeviceUserService
+    fun disconnect(expected: IDeviceUserService)
+}
+
+internal class ShizukuConnection(private val context: Context, private val changed: () -> Unit, private val disconnected: () -> Unit) : DisplayConnection {
     private val mutex = Mutex()
-    @Volatile var remote: IDeviceUserService? = null
+    @Volatile override var remote: IDeviceUserService? = null
         private set
     private var connection: ServiceConnection? = null
     private var args: Shizuku.UserServiceArgs? = null
@@ -25,12 +31,12 @@ internal class ShizukuConnection(private val context: Context, private val chang
     fun permission(): Boolean = runCatching { running() && Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED }.getOrDefault(false)
     fun uid(): Int = runCatching { Shizuku.getUid() }.getOrDefault(-1)
     fun running(): Boolean = runCatching { Shizuku.pingBinder() }.getOrDefault(false)
-    suspend fun get(): IDeviceUserService = mutex.withLock {
+    override suspend fun get(): IDeviceUserService = mutex.withLock {
         check(permission())
         remote?.takeIf { it.asBinder().pingBinder() }?.let { return@withLock it }
         val ready = CompletableDeferred<IDeviceUserService>()
         val serviceArgs = Shizuku.UserServiceArgs(ComponentName(context, ShizukuDeviceService::class.java))
-            .tag("phase.device").processNameSuffix("device").version(3).daemon(false)
+            .tag("phase.device").processNameSuffix("device").version(4).daemon(false)
         val listener = object : ServiceConnection {
             override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
                 if (connection !== this || ready.isCompleted) return
@@ -56,7 +62,7 @@ internal class ShizukuConnection(private val context: Context, private val chang
         } finally { if (pending === ready) pending = null }
     }
     /** Main-thread only, after the last owner has been released; never detach a newer binding. */
-    fun disconnect(expected: IDeviceUserService) {
+    override fun disconnect(expected: IDeviceUserService) {
         if (remote !== expected || pending != null) return
         val listener = connection ?: return
         val serviceArgs = args ?: return

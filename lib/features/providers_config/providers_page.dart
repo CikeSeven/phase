@@ -11,9 +11,10 @@ import '../../../core/widgets/app_bottom_bar.dart';
 import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
-import '../../../core/widgets/app_loading_indicator.dart';
+import '../../../core/widgets/app_list_skeleton.dart';
 import '../../../core/widgets/app_scaffold.dart';
 import '../../../core/widgets/app_snack_bar.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/datasources/local/model_catalog_cache.dart';
 import '../../../data/datasources/remote/models_dev_client.dart';
 import '../../../data/models/model_catalog.dart';
@@ -147,27 +148,27 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
           ),
         ),
       ),
-      body: profilesAsync.when(
-        skipLoadingOnReload: true,
-        data: (profiles) => profiles.isEmpty
-            ? _buildStatus(
-                icon: LucideIcons.network,
-                title: '暂无服务商',
-                action: _buildCatalogStatus(catalog),
-              )
-            : _buildProfiles(profiles, catalog),
-        loading: () => _buildStatus(
-          title: '正在读取配置',
-          action: const AppLoadingIndicator(semanticsLabel: '正在读取服务商'),
-        ),
-        error: (error, _) => AppEmptyState(
-          icon: LucideIcons.cloudOff,
-          title: '暂时无法读取服务商',
-          message: error is Failure ? error.userMessage : '加载本机配置失败，请重试。',
-          action: FilledButton.tonalIcon(
-            onPressed: () => ref.invalidate(providerProfilesProvider),
-            icon: const Icon(LucideIcons.rotateCw),
-            label: const Text('重新加载'),
+      body: AppListLoadTransition(
+        slideIn: true,
+        child: profilesAsync.when(
+          skipLoadingOnReload: true,
+          data: (profiles) => profiles.isEmpty
+              ? _buildStatus(
+                  icon: LucideIcons.network,
+                  title: '暂无服务商',
+                  action: _buildCatalogStatus(catalog),
+                )
+              : _buildProfiles(profiles, catalog),
+          loading: () => const AppListSkeleton(label: '正在读取服务商'),
+          error: (error, _) => AppEmptyState(
+            icon: LucideIcons.cloudOff,
+            title: '暂时无法读取服务商',
+            message: error is Failure ? error.userMessage : '加载本机配置失败，请重试。',
+            action: FilledButton.tonalIcon(
+              onPressed: () => ref.invalidate(providerProfilesProvider),
+              icon: const Icon(LucideIcons.rotateCw),
+              label: const Text('重新加载'),
+            ),
           ),
         ),
       ),
@@ -300,10 +301,12 @@ class _ProvidersPageState extends ConsumerState<ProvidersPage> {
           sliver: SliverList.separated(
             itemCount: filtered.length,
             separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s),
-            itemBuilder: (context, index) => _ProfileRow(
-              profile: filtered[index],
-              onTap: () =>
-                  context.push('/settings/providers/${filtered[index].id}'),
+            itemBuilder: (context, index) => SettingsListItem.wrap(
+              _ProfileRow(
+                profile: filtered[index],
+                onTap: () =>
+                    context.push('/settings/providers/${filtered[index].id}'),
+              ),
             ),
           ),
         ),

@@ -108,7 +108,6 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
     final mode = permissions.value?.mode;
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
-    final dark = theme.brightness == Brightness.dark;
     final brand = context.brandColors;
     final tones = {
       PermissionMode.plan: (
@@ -140,8 +139,8 @@ class _PermissionModeMenuState extends ConsumerState<PermissionModeMenu> {
       alignmentOffset: Offset(-width / 2, AppSpacing.xs),
       surfaceBuilder: (context, animation, child) => FrostedSurface(
         borderRadius: AppRadius.mediumAll,
-        color: colors.surfaceContainerLow.withValues(alpha: dark ? 0.70 : 0.62),
-        blur: 20,
+        color: colors.surfaceContainerLow,
+        blur: 0,
         revealAnimation: animation,
         child: child,
       ),

@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_breathing_dots.dart';
+
 import 'package:flutter/semantics.dart';
-import 'package:flutter/services.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 
 import '../../../core/theme/app_radius.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/widgets/app_icon_badge.dart';
-import '../../../core/widgets/app_snack_bar.dart';
 import '../../../data/models/attachment.dart';
 import '../../../data/models/chat_message.dart';
 import '../../../data/models/message_part.dart';
+import '../content/content_toolbox.dart';
 import 'activity_card_group.dart';
 import 'attachment_chips.dart';
 import 'chat_markdown.dart';
@@ -245,15 +247,6 @@ class MessageBubble extends StatelessWidget {
       color: textColor,
       height: 1.5,
     );
-    final actionStyle = IconButton.styleFrom(
-      minimumSize: const Size(32, 48),
-      fixedSize: const Size(32, 48),
-      maximumSize: const Size(32, 48),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      padding: EdgeInsets.zero,
-      alignment: Alignment.center,
-    );
-
     return SizeChangedLayoutNotifier(
       child: Semantics(
         customSemanticsActions: message.text.isEmpty
@@ -408,43 +401,25 @@ class MessageBubble extends StatelessWidget {
                     Align(
                       key: const ValueKey('generation-cursor'),
                       alignment: Alignment.centerLeft,
-                      child: _GenerationCursor(
-                        style: textStyle?.copyWith(
-                          color: colors.onSurfaceVariant,
-                        ),
-                      ),
-                    ),
-                  if (!isRunning && !streaming)
-                    Transform.translate(
-                      offset: const Offset(-4, 0),
-                      child: Padding(
-                        padding: const EdgeInsets.only(top: AppSpacing.xs),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              key: const ValueKey('copy-message'),
-                              tooltip: '复制全文',
-                              style: actionStyle,
-                              onPressed: message.text.isEmpty
-                                  ? null
-                                  : () => _copy(context),
-                              icon: const Icon(LucideIcons.copy, size: 20),
-                            ),
-                            if (canRegenerate) ...[
-                              const SizedBox(width: AppSpacing.s),
-                              IconButton(
-                                key: const ValueKey('regenerate-message'),
-                                tooltip: '重新生成',
-                                style: actionStyle,
-                                onPressed: onRegenerate,
-                                icon: const Icon(
-                                  LucideIcons.rotateCw,
-                                  size: 20,
-                                ),
+                      child:
+                          message.parts.every(
+                            (p) => p is TextPart && p.text.isEmpty,
+                          )
+                          ? const AppBreathingDots(label: '正在思考')
+                          : _GenerationCursor(
+                              style: textStyle?.copyWith(
+                                color: colors.onSurfaceVariant,
                               ),
-                            ],
-                          ],
-                        ),
+                            ),
+                    ),
+                  if (!isRunning &&
+                      !streaming &&
+                      (message.text.trim().isNotEmpty || canRegenerate))
+                    Padding(
+                      padding: const EdgeInsets.only(top: AppSpacing.xs),
+                      child: ContentToolbox(
+                        text: message.text,
+                        onRegenerate: canRegenerate ? onRegenerate : null,
                       ),
                     ),
                 ],
@@ -456,19 +431,8 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Future<void> _copy(BuildContext context) async {
-    String feedback;
-    try {
-      await Clipboard.setData(ClipboardData(text: message.text));
-      feedback = '已复制';
-    } on PlatformException {
-      feedback = '复制失败，请重试';
-    }
-    if (!context.mounted) return;
-    ScaffoldMessenger.maybeOf(context)
-      ?..hideCurrentSnackBar()
-      ..showSnackBar(buildAppSnackBar(content: Text(feedback)));
-  }
+  Future<void> _copy(BuildContext context) =>
+      copyContentText(context, message.text);
 }
 
 class _GenerationCursor extends StatefulWidget {
@@ -498,9 +462,7 @@ class _GenerationCursorState extends State<_GenerationCursor>
   void didChangeDependencies() {
     super.didChangeDependencies();
     final media = MediaQuery.of(context);
-    if (media.disableAnimations ||
-        media.accessibleNavigation ||
-        !TickerMode.valuesOf(context).enabled) {
+    if (media.disableAnimations || !TickerMode.valuesOf(context).enabled) {
       _controller.stop();
       _controller.value = 1;
     } else if (!_controller.isAnimating) {

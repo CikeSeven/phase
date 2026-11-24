@@ -99,7 +99,7 @@ class _PlanCardState extends ConsumerState<PlanCard> {
                 TextButton.icon(
                   onPressed: disabled
                       ? null
-                      : () => showDialog<void>(
+                      : () => showAppDialog<void>(
                           context: context,
                           builder: (_) => _PlanEditor(plan: p),
                         ),

@@ -15,6 +15,7 @@ import '../../core/widgets/app_loading_indicator.dart';
 import '../../core/widgets/app_scaffold.dart';
 import '../../core/widgets/app_section.dart';
 import '../../core/widgets/app_snack_bar.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../data/models/web_search_settings.dart';
 import 'web_search_controller.dart';
 import 'web_search_form_widgets.dart';
@@ -191,7 +192,7 @@ class _WebSearchSettingsViewState
             constraints: const BoxConstraints(maxWidth: 688),
             child: Form(
               key: _form,
-              child: ListView(
+              child: SettingsListView(
                 padding: const EdgeInsets.fromLTRB(
                   AppSpacing.l,
                   AppSpacing.l,

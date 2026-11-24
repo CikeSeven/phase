@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+
+import '../../core/widgets/app_pointer_motion.dart';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
@@ -9,9 +12,11 @@ import '../../../core/theme/brand_colors.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_interactive_surface.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/settings_list_item.dart';
 import 'settings_entry.dart';
 import 'theme_mode_controller.dart';
 import 'theme_mode_dialog.dart';
+import '../../core/widgets/app_card_dialog.dart';
 import 'theme_preview.dart';
 
 /// 相月的外观偏好、服务商入口与版本信息。
@@ -24,7 +29,7 @@ class SettingsPage extends ConsumerWidget {
     return AppScaffold(
       title: '设置',
       showAppBarDivider: false,
-      body: ListView(
+      body: SettingsListView(
         padding: const EdgeInsets.fromLTRB(
           AppSpacing.xl,
           AppSpacing.xl,
@@ -93,6 +98,7 @@ class SettingsPage extends ConsumerWidget {
 class _AppearanceSurface extends StatelessWidget {
   const _AppearanceSurface({required this.mode});
 
+  static const _tag = ValueKey('settings-theme-card');
   final ThemeMode mode;
 
   @override
@@ -100,12 +106,25 @@ class _AppearanceSurface extends StatelessWidget {
     final theme = Theme.of(context);
     final brand = context.brandColors;
     final colors = theme.colorScheme;
-    return AppInteractiveSurface(
-      color: brand.lavenderContainer.withValues(alpha: 0.48),
+    final fill = brand.lavenderContainer.withValues(alpha: 0.48);
+    return AppCardDialogHero(
+      tag: _tag,
+      color: fill,
       radius: AppRadius.large,
-      onTap: () => showDialog<void>(
-        context: context,
-        builder: (context) => ThemeModeDialog(initialMode: mode),
+      surfaceBuilder: (content) => AppPointerMotion(
+        showcase: true,
+        child: AppInteractiveSurface(
+          color: fill,
+          radius: AppRadius.large,
+          onTap: () => Navigator.of(context).push(
+            AppCardDialogRoute<void>(
+              tag: _tag,
+              context: context,
+              builder: (context) => ThemeModeDialog(initialMode: mode),
+            ),
+          ),
+          child: content,
+        ),
       ),
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.l),

@@ -6,6 +6,8 @@ import 'dart:convert';
 
 import '../../models/execution_scope.dart';
 import '../../models/command_channel.dart';
+import '../../models/media_generation.dart';
+import '../../models/video_generation.dart';
 import '../../models/web_search_settings.dart';
 import '../../models/tool_permission.dart';
 import '../../../core/error/failure.dart';
@@ -19,6 +21,8 @@ class SettingsStorage {
   final SharedPreferences _prefs;
   List<ToolPermissionRule>? _permissionRules;
   bool _writingPermissionRules = false;
+  final _mediaGeneration = <MediaGenerationKind, MediaGenerationSettings?>{};
+  final _writingMediaGeneration = <MediaGenerationKind>{};
 
   List<ToolPermissionRule> readToolPermissionRules() {
     if (_permissionRules case final cached?) return cached;
@@ -90,6 +94,61 @@ class SettingsStorage {
       rethrow;
     } on Object {
       throw const StorageFailure('网页搜索配置保存失败');
+    }
+  }
+
+  MediaGenerationSettings? readMediaGeneration(MediaGenerationKind kind) =>
+      _mediaGeneration.putIfAbsent(kind, () => _readMediaGeneration(kind));
+
+  MediaGenerationSettings? _readMediaGeneration(MediaGenerationKind kind) {
+    final value = _prefs.getString('${kind.name}_generation_v1');
+    if (value == null) return null;
+    try {
+      final json = jsonDecode(value);
+      if (json
+          case {
+            'profileId': final String profileId,
+            'modelId': final String modelId,
+          }
+          when profileId.isNotEmpty && modelId.isNotEmpty) {
+        final video =
+            kind == MediaGenerationKind.video && json is Map<String, dynamic>
+            ? VideoGenerationOptions.fromJson(
+                json['video'] as Map<String, dynamic>,
+              )
+            : null;
+        return MediaGenerationSettings((
+          profileId: profileId,
+          modelId: modelId,
+        ), video: video);
+      }
+    } on Object {
+      // The settings dialog can replace an invalid saved selection.
+    }
+    return null;
+  }
+
+  Future<void> writeMediaGeneration(
+    MediaGenerationKind kind,
+    MediaGenerationSettings? target,
+  ) async {
+    if (!_writingMediaGeneration.add(kind)) {
+      throw OperationFailure('${kind.label}设置正在保存');
+    }
+    final key = '${kind.name}_generation_v1';
+    try {
+      readMediaGeneration(kind);
+      final saved = target == null
+          ? await _prefs.remove(key)
+          : await _prefs.setString(key, jsonEncode(target.toJson()));
+      if (!saved) throw OperationFailure('${kind.label}设置保存失败');
+      _mediaGeneration[kind] = target;
+    } on Failure {
+      rethrow;
+    } on Exception {
+      throw OperationFailure('${kind.label}设置保存失败');
+    } finally {
+      _writingMediaGeneration.remove(kind);
     }
   }
 

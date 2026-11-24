@@ -3,12 +3,14 @@ import '../../data/datasources/local/secure_key_storage.dart';
 import '../../data/datasources/local/settings_storage.dart';
 import '../../data/repositories/agent_context_repository.dart';
 import '../../data/repositories/agent_run_repository.dart';
+import '../../data/repositories/image_generation_repository.dart';
 import '../../data/repositories/mcp_server_repository.dart';
 import '../../data/repositories/memory_repository.dart';
 import '../../data/repositories/model_request_repository.dart';
 import '../../data/repositories/plan_repository.dart';
 import '../../data/repositories/skill_repository.dart';
 import '../../data/repositories/tool_call_repository.dart';
+import '../../data/repositories/video_generation_repository.dart';
 import '../../data/repositories/workspace_repository.dart';
 import '../../data/repositories/web_search_repository.dart';
 import '../commands/command_channel_driver.dart';
@@ -152,11 +154,21 @@ Future<Assistant?> awaitAssistantContext(Ref ref) async {
 }
 
 /// 装配点只提供依赖；目录发现、运行创建和资源启动由对应组件显式调用。
-@Riverpod(keepAlive: true, dependencies: [settingsStorage, webSearchRepository])
+@Riverpod(
+  keepAlive: true,
+  dependencies: [
+    settingsStorage,
+    webSearchRepository,
+    imageGenerationRepository,
+    videoGenerationRepository,
+  ],
+)
 Future<ChatToolRuntimeFactory> chatToolRuntimeFactory(Ref ref) async {
   return ChatToolRuntimeFactory(
     builtIns: ref.watch(toolRegistryProvider),
     web: ref.watch(webSearchRepositoryProvider),
+    imageGeneration: ref.watch(imageGenerationRepositoryProvider),
+    videoGeneration: ref.watch(videoGenerationRepositoryProvider),
     conversations: await ref.watch(conversationRepositoryProvider.future),
     runs: await ref.watch(agentRunRepositoryProvider.future),
     calls: await ref.watch(toolCallRepositoryProvider.future),

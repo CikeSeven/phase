@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../theme/app_spacing.dart';
 import 'app_background.dart';
+import 'app_card_dialog.dart';
+import 'app_dialog.dart';
 import 'app_bottom_bar.dart';
 import 'app_top_bar.dart';
 
@@ -42,6 +44,23 @@ class AppScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (ModalRoute.settingsOf(context) is AppCardDialogPage) {
+      return AppDialog(
+        title: title,
+        scrollableContent: true,
+        content: SizedBox(
+          height: math.min(520, MediaQuery.sizeOf(context).height * .52),
+          child: body,
+        ),
+        actions: [
+          ...actions,
+          TextButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            child: const Text('关闭'),
+          ),
+        ],
+      );
+    }
     final theme = Theme.of(context);
     final media = MediaQuery.maybeOf(context);
     final scaler = media?.textScaler ?? TextScaler.noScaling;

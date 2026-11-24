@@ -10,6 +10,7 @@ import '../../../core/widgets/app_empty_state.dart';
 import '../../../core/widgets/app_icon_badge.dart';
 import '../../../core/widgets/app_linear_progress_indicator.dart';
 import '../../../core/widgets/app_scaffold.dart';
+import '../../core/widgets/settings_list_item.dart';
 import '../../../data/models/workspace.dart';
 import 'dependency_controller.dart';
 import 'dependency_profiles.dart';
@@ -65,7 +66,7 @@ class _WorkspacePackagesPageState extends ConsumerState<WorkspacePackagesPage> {
             (p) => records.containsKey(p.id),
           );
 
-          return ListView(
+          return SettingsListView(
             padding: const EdgeInsets.all(AppSpacing.l),
             children: [
               const _SectionHeader(title: '核心环境'),
@@ -121,7 +122,7 @@ class _WorkspacePackagesPageState extends ConsumerState<WorkspacePackagesPage> {
         ? '继续安装'
         : '安装';
 
-    final allowed = await showDialog<bool>(
+    final allowed = await showAppDialog<bool>(
       context: context,
       builder: (context) => AppDialog(
         title: '$actionLabel${bundle.label}？',

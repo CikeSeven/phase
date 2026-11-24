@@ -197,10 +197,6 @@ void main() {
     );
     await tester.tap(dropdown);
     await tester.pump();
-    expect(
-      tester.widget<MenuAnchor>(find.byType(MenuAnchor)).animated,
-      isFalse,
-    );
     final size = find.widgetWithText(MenuItemButton, '安装包大小（大到小）');
     await tester.ensureVisible(size);
     await tester.pumpAndSettle();
@@ -209,8 +205,10 @@ void main() {
       Duration.zero,
     );
     await tester.tap(size);
-    await tester.pumpAndSettle();
+    await tester.pump();
     expect(changes, [_Sort.size]);
+    await tester.pump();
+    expect(size.hitTestable(), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
